@@ -1,0 +1,66 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "婚贝请柬"
+      }
+    },
+    {
+      "path": "pages/mv/index",
+      "style": {
+        "navigationBarTitleText": "高清MV"
+      }
+    },
+    {
+      "path": "pages/works/index",
+      "style": {
+        "navigationBarTitleText": "作品管理"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "婚贝请柬",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f5f5f5"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#e84a6e",
+    "borderStyle": "black",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tabs/home.png",
+        "selectedIconPath": "static/tabs/home-active.png"
+      },
+      {
+        "pagePath": "pages/mv/index",
+        "text": "高清MV",
+        "iconPath": "static/tabs/mv.png",
+        "selectedIconPath": "static/tabs/mv-active.png"
+      },
+      {
+        "pagePath": "pages/works/index",
+        "text": "作品管理",
+        "iconPath": "static/tabs/works.png",
+        "selectedIconPath": "static/tabs/works-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "static/tabs/mine.png",
+        "selectedIconPath": "static/tabs/mine-active.png"
+      }
+    ]
+  }
+}

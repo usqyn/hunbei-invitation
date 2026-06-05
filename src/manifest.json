@@ -1,0 +1,21 @@
+{
+  "name": "婚贝请柬",
+  "appid": "wx1234567890123456",
+  "description": "婚礼请柬制作小程序",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "h5": {
+    "title": "婚贝请柬",
+    "router": {
+      "mode": "hash"
+    }
+  },
+  "mp-weixin": {
+    "appid": "wx1234567890123456",
+    "setting": {
+      "urlCheck": false
+    },
+    "usingComponents": true
+  }
+}
