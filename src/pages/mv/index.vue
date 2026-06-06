@@ -126,17 +126,17 @@ const funnyMvs = ref([
   { 
     id: 1, 
     title: '我们要结婚啦', 
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=funny%20wedding%20video%20cover%20cartoon%20style%20red%20background&image_size=landscape_4_3' 
+    image: '/static/images/mv-covers/mv-1.svg' 
   },
   { 
     id: 2, 
     title: '我们结婚啦', 
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=chinese%20wedding%20couple%20cartoon%20illustration%20red%20theme&image_size=landscape_4_3' 
+    image: '/static/images/mv-covers/mv-2.svg' 
   },
   { 
     id: 3, 
     title: '搞怪开场', 
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=funny%20wedding%20animation%20colorful%20playful&image_size=landscape_4_3' 
+    image: '/static/images/mv-covers/mv-3.svg' 
   }
 ])
 
@@ -144,20 +144,20 @@ const romanticMvs = ref([
   { 
     id: 1, 
     title: '执子之手 与子偕老', 
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20scene%20sunset%20couple%20silhouette&image_size=landscape_16_9' 
+    image: '/static/images/mv-covers/mv-4.svg' 
   },
   { 
     id: 2, 
     title: '爱就一个字', 
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20love%20scene%20elegant%20minimal&image_size=landscape_16_9' 
+    image: '/static/images/mv-covers/mv-1.svg' 
   }
 ])
 
 const albums = ref([
-  { id: 1, image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20photo%20album%20cover%20elegant%20romantic&image_size=portrait_4_3' },
-  { id: 2, image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20couple%20album%20cover%20beautiful&image_size=portrait_4_3' },
-  { id: 3, image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=elegant%20wedding%20photo%20book%20cover&image_size=portrait_4_3' },
-  { id: 4, image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20album%20red%20gold&image_size=portrait_4_3' }
+  { id: 1, image: '/static/images/album-covers/album-1.svg' },
+  { id: 2, image: '/static/images/album-covers/album-2.svg' },
+  { id: 3, image: '/static/images/album-covers/album-1.svg' },
+  { id: 4, image: '/static/images/album-covers/album-2.svg' }
 ])
 
 const handleSearch = () => {

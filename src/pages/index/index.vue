@@ -100,25 +100,25 @@ const featuredCards = ref([
     id: 1, 
     title: '虚拟人婚礼', 
     date: '2050.05.20',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20romantic%20red%20theme%20chinese%20wedding%20invitation&image_size=portrait_4_3' 
+    image: '/static/images/templates/template-1.svg' 
   },
   { 
     id: 2, 
     title: '我们结婚啦', 
     date: '2050.05.18',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20white%20dress%20elegant%20invitation&image_size=portrait_4_3' 
+    image: '/static/images/templates/template-2.svg' 
   },
   { 
     id: 3, 
     title: '大喜的日子', 
     date: '2050.05.15',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20traditional%20chinese%20red%20wedding&image_size=portrait_4_3' 
+    image: '/static/images/templates/template-3.svg' 
   },
   { 
     id: 4, 
     title: '囍', 
     date: '2050.05.10',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20double%20happiness%20chinese%20style&image_size=portrait_4_3' 
+    image: '/static/images/templates/template-4.svg' 
   }
 ])
 

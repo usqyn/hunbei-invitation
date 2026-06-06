@@ -120,13 +120,13 @@ const works = ref([
     id: 1, 
     title: '我们的婚礼请柬', 
     date: '2025.05.20',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=elegant%20wedding%20invitation%20card%20design&image_size=portrait_4_3' 
+    image: '/static/images/templates/template-1.svg' 
   },
   { 
     id: 2, 
     title: '浪漫婚礼', 
     date: '2025.05.18',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20card%20red%20gold&image_size=portrait_4_3' 
+    image: '/static/images/templates/template-2.svg' 
   }
 ])
 
@@ -135,7 +135,7 @@ const drafts = ref([
     id: 1, 
     title: '未完成的请柬', 
     date: '2025.05.15',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20invitation%20draft%20minimal&image_size=portrait_4_3' 
+    image: '/static/images/templates/template-3.svg' 
   }
 ])
 
