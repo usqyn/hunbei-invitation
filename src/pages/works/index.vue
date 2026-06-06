@@ -24,7 +24,7 @@
           class="work-card"
           @click="handleWorkClick(work)"
         >
-          <image class="work-image" :src="work.image" mode="aspectFill" />
+          <image class="work-image" :src="work.image" mode="aspectFill" @error="onImageError" />
           <view class="work-info">
             <text class="work-title">{{ work.title }}</text>
             <text class="work-date">{{ work.date }}</text>
@@ -57,7 +57,7 @@
           class="work-card"
           @click="handleDraftClick(draft)"
         >
-          <image class="work-image" :src="draft.image" mode="aspectFill" />
+          <image class="work-image" :src="draft.image" mode="aspectFill" @error="onImageError" />
           <view class="work-info">
             <text class="work-title">{{ draft.title }}</text>
             <text class="work-date">草稿 · {{ draft.date }}</text>
@@ -84,7 +84,7 @@
           class="work-card"
           @click="handleWorkClick(fav)"
         >
-          <image class="work-image" :src="fav.image" mode="aspectFill" />
+          <image class="work-image" :src="fav.image" mode="aspectFill" @error="onImageError" />
           <view class="work-info">
             <text class="work-title">{{ fav.title }}</text>
             <text class="work-date">{{ fav.date }}</text>
@@ -186,6 +186,8 @@ const handleDelete = (draft: any) => {
 const handleCreate = () => {
   uni.showToast({ title: '开始制作请柬', icon: 'none' })
 }
+
+const onImageError = () => {}
 </script>
 
 <style lang="scss" scoped>

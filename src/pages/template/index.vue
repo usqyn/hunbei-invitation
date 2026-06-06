@@ -12,7 +12,7 @@
 
     <scroll-view class="preview-scroll" scroll-y>
       <view class="preview-container">
-        <image class="preview-image" :src="previewImage" mode="aspectFill"></image>
+        <image class="preview-image" :src="previewImage" mode="aspectFill" @error="onImageError"></image>
         
         <view class="template-info-overlay">
           <text class="groom-name">满小满</text>
@@ -83,6 +83,8 @@ const handleFavorite = () => {
 const handleCreate = () => {
   uni.navigateTo({ url: '/pages/editor/index' })
 }
+
+const onImageError = () => {}
 </script>
 
 <style lang="scss" scoped>

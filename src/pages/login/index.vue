@@ -13,7 +13,7 @@
         <scroll-view class="template-scroll" scroll-x>
           <view class="template-list">
             <view v-for="i in 9" :key="i" class="template-item">
-              <image class="template-img" :src="getTemplateImg(i)" mode="aspectFill"></image>
+              <image class="template-img" :src="getTemplateImg(i)" mode="aspectFill" @error="onImageError"></image>
             </view>
           </view>
         </scroll-view>
@@ -94,6 +94,8 @@ const getTemplateImg = (i: number) => {
   ]
   return `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(prompts[i-1])}&image_size=portrait_4_3`
 }
+
+const onImageError = () => {}
 </script>
 
 <style lang="scss" scoped>

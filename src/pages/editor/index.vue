@@ -22,7 +22,7 @@
             <view class="page-content">
               <!-- 封面板块 -->
               <view class="section cover-section">
-                <image class="cover-image" :src="templateData.coverImage" mode="aspectFill"></image>
+                <image class="cover-image" :src="templateData.coverImage" mode="aspectFill" @error="onImageError"></image>
                 <view class="cover-overlay">
                   <text class="shuangxi-decor">囍</text>
                   <text class="cover-title">我们结婚啦</text>
@@ -60,7 +60,7 @@
 
               <!-- 照片板块1 -->
               <view class="section photo-section">
-                <image class="photo-image" :src="templateData.photo1" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo1" mode="aspectFill" @error="onImageError"></image>
                 <view class="photo-text-overlay">
                   <text class="photo-title">不早不晚</text>
                   <text class="photo-subtitle">刚好是你</text>
@@ -74,7 +74,7 @@
 
               <!-- 照片板块2 -->
               <view class="section photo-section">
-                <image class="photo-image" :src="templateData.photo2" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo2" mode="aspectFill" @error="onImageError"></image>
               </view>
 
               <!-- 爱情语录板块 -->
@@ -91,7 +91,7 @@
 
               <!-- 照片板块3 -->
               <view class="section photo-section photo-with-decor">
-                <image class="photo-image" :src="templateData.photo3" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo3" mode="aspectFill" @error="onImageError"></image>
                 <view class="decor-element flower-decor">💐</view>
                 <view class="decor-element love-decor">LOVE</view>
               </view>
@@ -107,7 +107,7 @@
 
               <!-- 照片板块4 -->
               <view class="section photo-section">
-                <image class="photo-image" :src="templateData.photo4" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo4" mode="aspectFill" @error="onImageError"></image>
               </view>
 
               <!-- 甜蜜语录板块 -->
@@ -140,7 +140,7 @@
 
               <!-- 照片板块5 -->
               <view class="section photo-section">
-                <image class="photo-image" :src="templateData.photo5" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo5" mode="aspectFill" @error="onImageError"></image>
                 <view class="photo-text-overlay">
                   <text class="photo-title">欢迎参加</text>
                   <text class="photo-subtitle">我们的婚礼</text>
@@ -163,7 +163,7 @@
 
               <!-- 照片板块6 -->
               <view class="section photo-section">
-                <image class="photo-image" :src="templateData.photo6" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo6" mode="aspectFill" @error="onImageError"></image>
               </view>
 
               <!-- 日历板块 -->
@@ -207,7 +207,7 @@
 
               <!-- 照片板块7 -->
               <view class="section photo-section">
-                <image class="photo-image" :src="templateData.photo7" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo7" mode="aspectFill" @error="onImageError"></image>
               </view>
 
               <!-- 地址信息板块 -->
@@ -254,7 +254,7 @@
 
               <!-- 照片板块8 -->
               <view class="section photo-section final-photo-section">
-                <image class="photo-image" :src="templateData.photo8" mode="aspectFill"></image>
+                <image class="photo-image" :src="templateData.photo8" mode="aspectFill" @error="onImageError"></image>
               </view>
 
               <!-- 签到板块 -->
@@ -308,7 +308,7 @@
                   @click="openEditor(idx)"
                 >
                   <view v-if="element.type === 'image'" class="element-preview">
-                    <image class="preview-img" :src="element.text" mode="aspectFill"></image>
+                    <image class="preview-img" :src="element.text" mode="aspectFill" @error="onImageError"></image>
                     <view class="replace-icon">🔄</view>
                   </view>
                   <view v-else-if="element.type === 'basic'" class="element-text-preview">
@@ -335,7 +335,7 @@
                   class="material-item"
                   @click="selectMaterial(material)"
                 >
-                  <image class="material-img" :src="material.url" mode="aspectFill"></image>
+                  <image class="material-img" :src="material.url" mode="aspectFill" @error="onImageError"></image>
                   <text class="material-name">{{ material.name }}</text>
                 </view>
               </view>
@@ -935,6 +935,8 @@ onUnmounted(() => {
     clearInterval(timer)
   }
 })
+
+const onImageError = () => {}
 </script>
 
 <style lang="scss" scoped>

@@ -48,7 +48,7 @@
             class="mv-card"
             @click="handleMvClick(mv)"
           >
-            <image class="mv-image" :src="mv.image" mode="aspectFill" />
+            <image class="mv-image" :src="mv.image" mode="aspectFill" @error="onImageError" />
             <view class="mv-overlay">
               <view class="play-btn">▶</view>
               <view class="mv-badge">MV</view>
@@ -73,7 +73,7 @@
           class="romantic-card"
           @click="handleMvClick(mv)"
         >
-          <image class="romantic-image" :src="mv.image" mode="aspectFill" />
+          <image class="romantic-image" :src="mv.image" mode="aspectFill" @error="onImageError" />
           <view class="romantic-overlay">
             <view class="play-btn">▶</view>
             <view class="mv-badge">MV</view>
@@ -98,7 +98,7 @@
             class="album-card"
             @click="handleAlbumClick(album)"
           >
-            <image class="album-image" :src="album.image" mode="aspectFill" />
+            <image class="album-image" :src="album.image" mode="aspectFill" @error="onImageError" />
           </view>
         </view>
       </scroll-view>
@@ -181,6 +181,8 @@ const handleAlbumClick = (album: any) => {
 const handleMore = (type: string) => {
   uni.showToast({ title: '查看更多' + type, icon: 'none' })
 }
+
+const onImageError = () => {}
 </script>
 
 <style lang="scss" scoped>

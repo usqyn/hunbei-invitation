@@ -62,7 +62,7 @@
             class="invitation-card"
             @click="handleCardClick(card)"
           >
-            <image class="card-image" :src="card.image" mode="aspectFill" />
+            <image class="card-image" :src="card.image" mode="aspectFill" @error="onImageError" />
             <view class="card-info">
               <text class="card-title">{{ card.title }}</text>
               <text class="card-date">{{ card.date }}</text>
@@ -134,6 +134,11 @@ const handleCategoryClick = (item: any) => {
 
 const handleCardClick = (card: any) => {
   uni.navigateTo({ url: '/pages/template/index' })
+}
+
+const onImageError = (e: any) => {
+  const target = e.target as any
+  // 静默处理图片加载失败
 }
 </script>
 

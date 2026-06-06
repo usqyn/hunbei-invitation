@@ -16,6 +16,10 @@
     "setting": {
       "urlCheck": false
     },
-    "usingComponents": true
+    "usingComponents": true,
+    "networkTimeout": {
+      "request": 10000,
+      "downloadFile": 10000
+    }
   }
 }
