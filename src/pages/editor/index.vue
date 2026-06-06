@@ -20,33 +20,258 @@
         <view class="canvas-container">
           <view class="canvas-preview">
             <view class="page-content">
-              <image class="bg-image" :src="bgImage" mode="aspectFill"></image>
-              
-              <view class="text-overlay">
-                <text class="welcome-text">Welcome to our wedding</text>
-                <text class="main-title">好久不见</text>
-                <text class="sub-title">婚礼见~</text>
-              </view>
-
-              <view class="couple-section">
-                <view class="person-item">
-                  <text class="person-name">{{ basicInfo.groomName || '满小满' }}</text>
-                  <text class="person-role">GROOM</text>
-                </view>
-                <text class="couple-divider">♥</text>
-                <view class="person-item">
-                  <text class="person-name">{{ basicInfo.brideName || '美小美' }}</text>
-                  <text class="person-role">BRIDE</text>
+              <!-- 封面板块 -->
+              <view class="section cover-section">
+                <image class="cover-image" :src="templateData.coverImage" mode="aspectFill"></image>
+                <view class="cover-overlay">
+                  <text class="shuangxi-decor">囍</text>
+                  <text class="cover-title">我们结婚啦</text>
+                  <text class="cover-subtitle">Welcome to our wedding</text>
                 </view>
               </view>
 
-              <view class="date-section">
-                <text class="wedding-date">{{ basicInfo.weddingDate || '2050.05.20' }}</text>
-                <text class="wedding-location">{{ basicInfo.detailAddress || '婚贝大酒店A栋9F幸福宴会厅' }}</text>
+              <!-- 新人信息板块 -->
+              <view class="section couple-info-section">
+                <view class="couple-info-content">
+                  <view class="person-info">
+                    <text class="person-name">{{ basicInfo.groomName || '满小满' }}</text>
+                    <text class="person-role">新郎</text>
+                  </view>
+                  <text class="heart-divider">♥</text>
+                  <view class="person-info">
+                    <text class="person-name">{{ basicInfo.brideName || '美小美' }}</text>
+                    <text class="person-role">新娘</text>
+                  </view>
+                </view>
+                <text class="wedding-date">{{ basicInfo.weddingDate || '2050/05/20' }}</text>
               </view>
 
-              <view class="story-section">
-                <text class="story-title">OUR LOVE STORY</text>
+              <!-- 爱情故事板块 -->
+              <view class="section story-section">
+                <text class="story-text">我们始终相信</text>
+                <text class="story-text">最好的爱情一定是双向奔赴</text>
+                <text class="story-text">在纯净通透的光彩中相遇</text>
+                <text class="story-text">拾起每一秒爱的记忆</text>
+                <text class="story-text">我们决定携手共赴爱之旅</text>
+                <text class="story-text">诚挚邀请最挚爱的亲友</text>
+                <text class="story-text">来一场关于爱的旅行</text>
+                <text class="story-text">见证我们爱的启程</text>
+              </view>
+
+              <!-- 照片板块1 -->
+              <view class="section photo-section">
+                <image class="photo-image" :src="templateData.photo1" mode="aspectFill"></image>
+                <view class="photo-text-overlay">
+                  <text class="photo-title">不早不晚</text>
+                  <text class="photo-subtitle">刚好是你</text>
+                </view>
+              </view>
+
+              <!-- 装饰分割线 -->
+              <view class="section decor-section">
+                <text class="decor-text">—— M & M ——</text>
+              </view>
+
+              <!-- 照片板块2 -->
+              <view class="section photo-section">
+                <image class="photo-image" :src="templateData.photo2" mode="aspectFill"></image>
+              </view>
+
+              <!-- 爱情语录板块 -->
+              <view class="section quote-section">
+                <text class="quote-text">爱，让我和你，变成了我们</text>
+                <text class="quote-text">让所有的「今天」，变成了「最好的一天」</text>
+              </view>
+
+              <!-- 红色装饰标题 -->
+              <view class="section red-title-section">
+                <text class="red-title">我们有的是以后</text>
+                <text class="red-title-small">以后都是我们</text>
+              </view>
+
+              <!-- 照片板块3 -->
+              <view class="section photo-section photo-with-decor">
+                <image class="photo-image" :src="templateData.photo3" mode="aspectFill"></image>
+                <view class="decor-element flower-decor">💐</view>
+                <view class="decor-element love-decor">LOVE</view>
+              </view>
+
+              <!-- 浪漫语录板块 -->
+              <view class="section romantic-quote-section">
+                <text class="romantic-text">你不是爱情的终点，只是爱情的原动力</text>
+                <text class="romantic-text">我将这爱情献给路旁的花朵</text>
+                <text class="romantic-text">献给玻璃酒杯里摇晃着的晶亮阳光</text>
+                <text class="romantic-text">献给教堂的红色圆顶</text>
+                <text class="romantic-text">因为你，我爱上了这个世界</text>
+              </view>
+
+              <!-- 照片板块4 -->
+              <view class="section photo-section">
+                <image class="photo-image" :src="templateData.photo4" mode="aspectFill"></image>
+              </view>
+
+              <!-- 甜蜜语录板块 -->
+              <view class="section sweet-quote-section">
+                <text class="sweet-text">🍬 你说最好的人会到身边</text>
+                <text class="sweet-text">此刻我也这样想</text>
+                <text class="sweet-text">幸福放慢倍数，这一帧只属于我们 🍬</text>
+                <text class="sweet-text">🍬 是我文案里的主角，是我故事里的人</text>
+              </view>
+
+              <!-- 倒计时板块 -->
+              <view class="section countdown-section">
+                <view class="countdown-box">
+                  <text class="countdown-num">{{ countdown.days }}</text>
+                  <text class="countdown-label">天</text>
+                </view>
+                <view class="countdown-box">
+                  <text class="countdown-num">{{ countdown.hours }}</text>
+                  <text class="countdown-label">时</text>
+                </view>
+                <view class="countdown-box">
+                  <text class="countdown-num">{{ countdown.minutes }}</text>
+                  <text class="countdown-label">分</text>
+                </view>
+                <view class="countdown-box">
+                  <text class="countdown-num">{{ countdown.seconds }}</text>
+                  <text class="countdown-label">秒</text>
+                </view>
+              </view>
+
+              <!-- 照片板块5 -->
+              <view class="section photo-section">
+                <image class="photo-image" :src="templateData.photo5" mode="aspectFill"></image>
+                <view class="photo-text-overlay">
+                  <text class="photo-title">欢迎参加</text>
+                  <text class="photo-subtitle">我们的婚礼</text>
+                </view>
+              </view>
+
+              <!-- 邀请语录板块 -->
+              <view class="section invitation-quote-section">
+                <text class="invitation-text">本着结婚对于我们来说是开心和重要的事儿</text>
+                <text class="invitation-text">希望各位朋友能够一起见证</text>
+                <text class="invitation-text">所以想把这份开心分享给各位朋友</text>
+              </view>
+
+              <!-- 囍字装饰板块 -->
+              <view class="section shuangxi-decor-section">
+                <text class="big-shuangxi">囍</text>
+                <text class="welcome-text">WELCOME TO</text>
+                <text class="welcome-text">OUR WEDDING</text>
+              </view>
+
+              <!-- 照片板块6 -->
+              <view class="section photo-section">
+                <image class="photo-image" :src="templateData.photo6" mode="aspectFill"></image>
+              </view>
+
+              <!-- 日历板块 -->
+              <view class="section calendar-section">
+                <view class="calendar-header">
+                  <text class="calendar-month">09/14</text>
+                  <text class="calendar-year">2027</text>
+                </view>
+                <view class="calendar-weekdays">
+                  <text class="weekday">一</text>
+                  <text class="weekday">二</text>
+                  <text class="weekday">三</text>
+                  <text class="weekday">四</text>
+                  <text class="weekday">五</text>
+                  <text class="weekday">六</text>
+                  <text class="weekday">日</text>
+                </view>
+                <view class="calendar-days">
+                  <text class="calendar-day">1</text>
+                  <text class="calendar-day">2</text>
+                  <text class="calendar-day">3</text>
+                  <text class="calendar-day">4</text>
+                  <text class="calendar-day">5</text>
+                  <text class="calendar-day">6</text>
+                  <text class="calendar-day">7</text>
+                  <text class="calendar-day">8</text>
+                  <text class="calendar-day">9</text>
+                  <text class="calendar-day">10</text>
+                  <text class="calendar-day">11</text>
+                  <text class="calendar-day">12</text>
+                  <text class="calendar-day highlight-day">13</text>
+                  <text class="calendar-day">14</text>
+                  <text class="calendar-day">15</text>
+                  <text class="calendar-day">16</text>
+                  <text class="calendar-day">17</text>
+                  <text class="calendar-day">18</text>
+                  <text class="calendar-day">19</text>
+                  <text class="calendar-day">20</text>
+                </view>
+              </view>
+
+              <!-- 照片板块7 -->
+              <view class="section photo-section">
+                <image class="photo-image" :src="templateData.photo7" mode="aspectFill"></image>
+              </view>
+
+              <!-- 地址信息板块 -->
+              <view class="section address-section">
+                <text class="address-label">📍 ADDRESS</text>
+                <text class="address-detail">{{ basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
+              </view>
+
+              <!-- 地图板块 -->
+              <view class="section map-section" @click="handleLocation">
+                <view class="map-placeholder">
+                  <text class="map-text">{{ basicInfo.location || '点击选择位置' }}</text>
+                  <view class="map-marker">📍</view>
+                </view>
+              </view>
+
+              <!-- 婚礼信息板块 -->
+              <view class="section wedding-info-section">
+                <view class="info-item">
+                  <text class="info-icon">🔴</text>
+                  <view class="info-content">
+                    <text class="info-label">婚礼时间</text>
+                    <text class="info-value">{{ basicInfo.weddingDate || '2050年5月20日 星期六' }}</text>
+                    <text class="info-value">农历四月廿三 12:00PM</text>
+                  </view>
+                </view>
+                <view class="info-item">
+                  <text class="info-icon">🔴</text>
+                  <view class="info-content">
+                    <text class="info-label">婚礼地点</text>
+                    <text class="info-value">{{ basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 浪漫语录板块 -->
+              <view class="section final-romantic-section">
+                <text class="final-romantic-text">漫长人生零零碎碎的普通又温暖</text>
+                <text class="final-romantic-text">在爱情中，我用最浪漫的方式登场</text>
+                <text class="final-romantic-text">💐 最惊艳的样子亮相 💐</text>
+                <text class="final-romantic-text">成为往后你人生中的</text>
+                <text class="final-romantic-text">细水长流 携手同行的那个人</text>
+              </view>
+
+              <!-- 照片板块8 -->
+              <view class="section photo-section final-photo-section">
+                <image class="photo-image" :src="templateData.photo8" mode="aspectFill"></image>
+              </view>
+
+              <!-- 签到板块 -->
+              <view class="section signin-section">
+                <text class="signin-title">好久不见</text>
+                <text class="signin-subtitle">婚礼见~</text>
+                <view class="signin-form">
+                  <input class="signin-input" placeholder="姓名" v-model="signinForm.name" />
+                  <input class="signin-input" placeholder="出席人数" v-model="signinForm.count" />
+                  <button class="signin-btn" @click="handleSignin">提交</button>
+                </view>
+              </view>
+
+              <!-- 底部囍字板块 -->
+              <view class="section bottom-shuangxi-section">
+                <text class="bottom-shuangxi">囍</text>
+                <text class="bottom-couple">{{ basicInfo.groomName || '满' }} & {{ basicInfo.brideName || '美' }}</text>
               </view>
             </view>
           </view>
@@ -342,13 +567,6 @@
               </view>
             </view>
 
-            <view v-if="basicInfo.location" class="map-preview">
-              <view class="map-placeholder">
-                <text class="map-location-text">{{ basicInfo.location }}</text>
-                <view class="map-marker">📍</view>
-              </view>
-            </view>
-
             <view class="form-item">
               <view class="form-label">
                 <text class="label-text">详细地址</text>
@@ -453,9 +671,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 
-const bgImage = 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20romantic%20red%20theme%20chinese%20wedding%20invitation&image_size=portrait_4_3'
+const templateData = reactive({
+  coverImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20romantic%20red%20theme%20chinese%20wedding%20invitation&image_size=portrait_4_3',
+  photo1: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20main%20red%20theme&image_size=portrait_4_3',
+  photo2: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20second&image_size=portrait_4_3',
+  photo3: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20romantic%20white%20dress&image_size=portrait_4_3',
+  photo4: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20outdoor%20garden&image_size=portrait_4_3',
+  photo5: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20happy%20moment&image_size=portrait_4_3',
+  photo6: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20ceremony&image_size=portrait_4_3',
+  photo7: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20kiss&image_size=portrait_4_3',
+  photo8: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20final%20portrait&image_size=portrait_4_3'
+})
 
 const showTextEditor = ref(false)
 const showBasicInfoEditor = ref(false)
@@ -477,6 +705,20 @@ const basicInfo = reactive({
   detailAddress: ''
 })
 
+const signinForm = reactive({
+  name: '',
+  count: ''
+})
+
+const countdown = reactive({
+  days: '00',
+  hours: '00',
+  minutes: '00',
+  seconds: '00'
+})
+
+let timer: number | null = null
+
 const panelTabs = [
   { key: 'edit', name: '自由编辑', icon: '🧩' },
   { key: 'material', name: '素材库', icon: '🖼' },
@@ -485,34 +727,19 @@ const panelTabs = [
 ]
 
 const editableElements = reactive([
-  {
-    type: 'image',
-    text: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20main%20red%20theme&image_size=square',
-    x: 50,
-    y: 100,
-    fontSize: 32,
-    color: '#fff',
-    width: 200,
-    height: 150
-  },
-  {
-    type: 'image',
-    text: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20second&image_size=square',
-    x: 50,
-    y: 100,
-    fontSize: 32,
-    color: '#fff',
-    width: 200,
-    height: 150
-  },
-  {
-    type: 'basic',
-    text: '完善基本信息'
-  },
+  { type: 'image', text: templateData.coverImage },
+  { type: 'image', text: templateData.photo1 },
+  { type: 'image', text: templateData.photo2 },
+  { type: 'image', text: templateData.photo3 },
+  { type: 'image', text: templateData.photo4 },
+  { type: 'image', text: templateData.photo5 },
+  { type: 'image', text: templateData.photo6 },
+  { type: 'image', text: templateData.photo7 },
+  { type: 'image', text: templateData.photo8 },
+  { type: 'basic', text: '完善基本信息' },
   { type: 'text', text: '我们结婚啦' },
   { type: 'text', text: 'Welcome to our wedding' },
-  { type: 'text', text: '好久不见' },
-  { type: 'text', text: '婚礼见~' }
+  { type: 'text', text: '不早不晚 刚好是你' }
 ])
 
 const materialList = [
@@ -521,7 +748,9 @@ const materialList = [
   { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=chinese%20wedding%20double%20happiness%20decoration%20red&image_size=square', name: '囍字装饰' },
   { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20heart%20decoration%20flower%20hearts%20red&image_size=square', name: '爱心装饰' },
   { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20ring%20gold%20ring%20couple&image_size=square', name: '戒指' },
-  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=beautiful%20wedding%20flowers%20bouquet%20red%20roses&image_size=square', name: '玫瑰花束' }
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=beautiful%20wedding%20flowers%20bouquet%20red%20roses&image_size=square', name: '玫瑰花束' },
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20fireworks%20celebration&image_size=square', name: '烟花装饰' },
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20lace%20elegant%20decoration&image_size=square', name: '蕾丝装饰' }
 ]
 
 const settings = reactive({
@@ -662,6 +891,50 @@ const handleLocation = () => {
     }
   })
 }
+
+const handleSignin = () => {
+  if (!signinForm.name) {
+    uni.showToast({ title: '请填写姓名', icon: 'none' })
+    return
+  }
+  uni.showToast({ title: '签到成功', icon: 'success' })
+  signinForm.name = ''
+  signinForm.count = ''
+}
+
+const updateCountdown = () => {
+  const targetDate = new Date('2027-09-14T12:00:00').getTime()
+  const now = new Date().getTime()
+  const diff = targetDate - now
+
+  if (diff > 0) {
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+    countdown.days = String(days).padStart(2, '0')
+    countdown.hours = String(hours).padStart(2, '0')
+    countdown.minutes = String(minutes).padStart(2, '0')
+    countdown.seconds = String(seconds).padStart(2, '0')
+  } else {
+    countdown.days = '00'
+    countdown.hours = '00'
+    countdown.minutes = '00'
+    countdown.seconds = '00'
+  }
+}
+
+onMounted(() => {
+  updateCountdown()
+  timer = setInterval(updateCountdown, 1000) as unknown as number
+})
+
+onUnmounted(() => {
+  if (timer) {
+    clearInterval(timer)
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -739,19 +1012,28 @@ const handleLocation = () => {
 
 .canvas-preview {
   width: 100%;
-  min-height: 1200rpx;
   border-radius: 12rpx;
   overflow: hidden;
   position: relative;
+  background: #fff;
 }
 
 .page-content {
   width: 100%;
-  min-height: 1200rpx;
   position: relative;
 }
 
-.bg-image {
+.section {
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.cover-section {
+  height: 1000rpx;
+}
+
+.cover-image {
   width: 100%;
   height: 100%;
   position: absolute;
@@ -759,49 +1041,55 @@ const handleLocation = () => {
   left: 0;
 }
 
-.text-overlay {
+.cover-overlay {
   position: absolute;
-  top: 80rpx;
+  top: 0;
   left: 0;
   right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
 }
 
-.welcome-text {
+.shuangxi-decor {
+  font-size: 120rpx;
+  color: #e84a6e;
+  font-weight: bold;
+  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.3);
+}
+
+.cover-title {
+  font-size: 60rpx;
+  color: #fff;
+  font-weight: bold;
+  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
+  margin-top: 40rpx;
+}
+
+.cover-subtitle {
   font-size: 32rpx;
   color: #fff;
   text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
+  margin-top: 20rpx;
   letter-spacing: 8rpx;
 }
 
-.main-title {
-  font-size: 72rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-  margin-top: 20rpx;
-  font-weight: bold;
+.couple-info-section {
+  padding: 80rpx 40rpx;
+  background: #fff;
 }
 
-.sub-title {
-  font-size: 48rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-}
-
-.couple-section {
-  position: absolute;
-  top: 550rpx;
-  left: 0;
-  right: 0;
+.couple-info-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 40rpx;
+  gap: 60rpx;
 }
 
-.person-item {
+.person-info {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -809,27 +1097,60 @@ const handleLocation = () => {
 
 .person-name {
   font-size: 44rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
+  color: #333;
   font-weight: 600;
 }
 
 .person-role {
-  font-size: 28rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-  letter-spacing: 4rpx;
+  font-size: 24rpx;
+  color: #999;
   margin-top: 10rpx;
 }
 
-.couple-divider {
-  font-size: 48rpx;
+.heart-divider {
+  font-size: 40rpx;
   color: #e84a6e;
 }
 
-.date-section {
+.wedding-date {
+  display: block;
+  text-align: center;
+  font-size: 36rpx;
+  color: #e84a6e;
+  margin-top: 40rpx;
+  font-weight: 600;
+}
+
+.story-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.story-text {
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.photo-section {
+  width: 100%;
+  height: 900rpx;
+  position: relative;
+}
+
+.photo-image {
+  width: 100%;
+  height: 100%;
+}
+
+.photo-text-overlay {
   position: absolute;
-  top: 700rpx;
+  bottom: 80rpx;
   left: 0;
   right: 0;
   display: flex;
@@ -837,33 +1158,434 @@ const handleLocation = () => {
   align-items: center;
 }
 
-.wedding-date {
-  font-size: 36rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-  letter-spacing: 12rpx;
+.photo-title {
+  font-size: 56rpx;
+  color: #e84a6e;
+  font-weight: bold;
+  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.3);
 }
 
-.wedding-location {
-  font-size: 28rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-  margin-top: 15rpx;
+.photo-subtitle {
+  font-size: 48rpx;
+  color: #e84a6e;
+  font-weight: bold;
+  margin-top: 10rpx;
+  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.3);
 }
 
-.story-section {
-  position: absolute;
-  bottom: 100rpx;
-  left: 0;
-  right: 0;
+.decor-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.decor-text {
+  font-size: 24rpx;
+  color: #e84a6e;
+  font-weight: 600;
+  letter-spacing: 8rpx;
+}
+
+.quote-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.quote-text {
+  font-size: 30rpx;
+  color: #333;
+  line-height: 1.8;
   text-align: center;
 }
 
-.story-title {
+.red-title-section {
+  padding: 60rpx 40rpx;
+  background: #e84a6e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.red-title {
+  font-size: 40rpx;
+  color: #fff;
+  font-weight: bold;
+}
+
+.red-title-small {
   font-size: 28rpx;
   color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-  letter-spacing: 20rpx;
+  margin-top: 10rpx;
+}
+
+.photo-with-decor {
+  position: relative;
+}
+
+.flower-decor {
+  position: absolute;
+  bottom: 100rpx;
+  right: 40rpx;
+  font-size: 80rpx;
+}
+
+.love-decor {
+  position: absolute;
+  top: 150rpx;
+  right: 40rpx;
+  font-size: 40rpx;
+  color: #e84a6e;
+  font-weight: bold;
+  letter-spacing: 10rpx;
+  writing-mode: vertical-rl;
+}
+
+.romantic-quote-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.romantic-text {
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.sweet-quote-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30rpx;
+}
+
+.sweet-text {
+  font-size: 30rpx;
+  color: #333;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.countdown-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  justify-content: center;
+  gap: 30rpx;
+}
+
+.countdown-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 4rpx solid #e84a6e;
+  border-radius: 16rpx;
+  padding: 20rpx 30rpx;
+  min-width: 100rpx;
+}
+
+.countdown-num {
+  font-size: 48rpx;
+  color: #e84a6e;
+  font-weight: bold;
+}
+
+.countdown-label {
+  font-size: 24rpx;
+  color: #e84a6e;
+  margin-top: 10rpx;
+}
+
+.invitation-quote-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.invitation-text {
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.shuangxi-decor-section {
+  padding: 80rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.big-shuangxi {
+  font-size: 160rpx;
+  color: #e84a6e;
+  font-weight: bold;
+}
+
+.welcome-text {
+  font-size: 28rpx;
+  color: #e84a6e;
+  letter-spacing: 12rpx;
+}
+
+.calendar-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.calendar-header {
+  display: flex;
+  gap: 20rpx;
+  margin-bottom: 30rpx;
+}
+
+.calendar-month {
+  font-size: 48rpx;
+  color: #e84a6e;
+  font-weight: bold;
+}
+
+.calendar-year {
+  font-size: 32rpx;
+  color: #999;
+}
+
+.calendar-weekdays {
+  display: flex;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.weekday {
+  width: 60rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.calendar-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  width: 560rpx;
+}
+
+.calendar-day {
+  width: 60rpx;
+  height: 60rpx;
+  text-align: center;
+  line-height: 60rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.highlight-day {
+  background: #e84a6e;
+  color: #fff;
+  border-radius: 50%;
+}
+
+.address-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.address-label {
+  font-size: 24rpx;
+  color: #e84a6e;
+  letter-spacing: 8rpx;
+}
+
+.address-detail {
+  font-size: 32rpx;
+  color: #333;
+  font-weight: 600;
+}
+
+.map-section {
+  height: 400rpx;
+  background: #e8f4ff;
+}
+
+.map-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.map-text {
+  font-size: 28rpx;
+  color: #333;
+  text-align: center;
+  padding: 0 40rpx;
+}
+
+.map-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48rpx;
+}
+
+.wedding-info-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 40rpx;
+}
+
+.info-item {
+  display: flex;
+  gap: 20rpx;
+}
+
+.info-icon {
+  font-size: 32rpx;
+  margin-top: 5rpx;
+}
+
+.info-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.info-label {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 600;
+}
+
+.info-value {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.final-romantic-section {
+  padding: 60rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.final-romantic-text {
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.final-photo-section {
+  height: 900rpx;
+}
+
+.signin-section {
+  padding: 80rpx 40rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.signin-title {
+  font-size: 60rpx;
+  color: #e84a6e;
+  font-weight: bold;
+}
+
+.signin-subtitle {
+  font-size: 48rpx;
+  color: #e84a6e;
+  font-weight: bold;
+  margin-top: 10rpx;
+}
+
+.signin-form {
+  margin-top: 60rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 30rpx;
+  width: 100%;
+}
+
+.signin-input {
+  width: 100%;
+  height: 90rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 12rpx;
+  padding: 0 30rpx;
+  font-size: 30rpx;
+  box-sizing: border-box;
+}
+
+.signin-btn {
+  width: 100%;
+  height: 90rpx;
+  background: #e84a6e;
+  color: #fff;
+  border: none;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+
+  &::after {
+    border: none;
+  }
+}
+
+.bottom-shuangxi-section {
+  padding: 80rpx 40rpx 120rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bottom-shuangxi {
+  font-size: 160rpx;
+  color: #e84a6e;
+  font-weight: bold;
+}
+
+.bottom-couple {
+  font-size: 32rpx;
+  color: #e84a6e;
+  margin-top: 20rpx;
+  font-weight: 600;
+  letter-spacing: 8rpx;
 }
 
 .right-panel {
@@ -1340,37 +2062,6 @@ const handleLocation = () => {
 .location-text {
   font-size: 28rpx;
   color: #e84a6e;
-}
-
-.map-preview {
-  margin-top: 20rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-}
-
-.map-placeholder {
-  width: 100%;
-  height: 300rpx;
-  background: linear-gradient(135deg, #e8f4ff 0%, #d4edda 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.map-location-text {
-  font-size: 28rpx;
-  color: #333;
-  text-align: center;
-  padding: 0 40rpx;
-}
-
-.map-marker {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 48rpx;
 }
 
 .text-editor-popup {
