@@ -23,6 +23,24 @@
       "style": {
         "navigationBarTitleText": "我的"
       }
+    },
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "婚贝请柬"
+      }
+    },
+    {
+      "path": "pages/template/index",
+      "style": {
+        "navigationBarTitleText": "婚贝请柬"
+      }
+    },
+    {
+      "path": "pages/editor/index",
+      "style": {
+        "navigationBarTitleText": "编辑器"
+      }
     }
   ],
   "globalStyle": {

@@ -133,7 +133,7 @@ const handleCategoryClick = (item: any) => {
 }
 
 const handleCardClick = (card: any) => {
-  uni.showToast({ title: '查看: ' + card.title, icon: 'none' })
+  uni.navigateTo({ url: '/pages/template/index' })
 }
 </script>
 
