@@ -41,6 +41,12 @@
       "style": {
         "navigationBarTitleText": "编辑器"
       }
+    },
+    {
+      "path": "pages/music/index",
+      "style": {
+        "navigationBarTitleText": "音乐库"
+      }
     }
   ],
   "globalStyle": {
