@@ -56,7 +56,7 @@
 import { ref } from 'vue'
 
 const activeTab = ref('preview')
-const previewImage = 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20couple%20photo%20wedding%20invitation%20design%20elegant&image_size=portrait_4_3'
+const previewImage = 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20romantic%20red%20theme%20chinese%20wedding%20invitation&image_size=portrait_4_3'
 
 const goBack = () => {
   uni.navigateBack()

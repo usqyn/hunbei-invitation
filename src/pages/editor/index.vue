@@ -455,7 +455,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 
-const bgImage = 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20couple%20photo%20wedding%20invitation%20design%20elegant&image_size=portrait_4_3'
+const bgImage = 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20romantic%20red%20theme%20chinese%20wedding%20invitation&image_size=portrait_4_3'
 
 const showTextEditor = ref(false)
 const showBasicInfoEditor = ref(false)
@@ -487,7 +487,17 @@ const panelTabs = [
 const editableElements = reactive([
   {
     type: 'image',
-    text: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20couple%20photo%20small&image_size=square',
+    text: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20main%20red%20theme&image_size=square',
+    x: 50,
+    y: 100,
+    fontSize: 32,
+    color: '#fff',
+    width: 200,
+    height: 150
+  },
+  {
+    type: 'image',
+    text: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20second&image_size=square',
     x: 50,
     y: 100,
     fontSize: 32,
@@ -499,18 +509,19 @@ const editableElements = reactive([
     type: 'basic',
     text: '完善基本信息'
   },
+  { type: 'text', text: '我们结婚啦' },
   { type: 'text', text: 'Welcome to our wedding' },
   { type: 'text', text: '好久不见' },
   { type: 'text', text: '婚礼见~' }
 ])
 
 const materialList = [
-  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20decoration%20elegant%20flower&image_size=square', name: '装饰1' },
-  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20ring%20gold&image_size=square', name: '戒指' },
-  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=beautiful%20wedding%20flowers%20bouquet&image_size=square', name: '花束' },
-  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=love%20heart%20romantic%20decoration&image_size=square', name: '爱心' },
-  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20dress%20elegant%20white&image_size=square', name: '婚纱' },
-  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20cake%20beautiful%20elegant&image_size=square', name: '蛋糕' }
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20photo%201&image_size=square', name: '新人合影1' },
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=virtual%20human%20wedding%20couple%20photo%20photo%202&image_size=square', name: '新人合影2' },
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=chinese%20wedding%20double%20happiness%20decoration%20red&image_size=square', name: '囍字装饰' },
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=romantic%20wedding%20heart%20decoration%20flower%20hearts%20red&image_size=square', name: '爱心装饰' },
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wedding%20ring%20gold%20ring%20couple&image_size=square', name: '戒指' },
+  { url: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=beautiful%20wedding%20flowers%20bouquet%20red%20roses&image_size=square', name: '玫瑰花束' }
 ]
 
 const settings = reactive({
