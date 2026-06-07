@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff8f0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fff0e6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="800" height="1200" fill="url(#bg2)"/>
+  
+  <text x="400" y="100" font-size="24" fill="#8b4513" text-anchor="middle">WELCOME TO OUR WEDDING</text>
+  <text x="400" y="150" font-size="64" fill="#cd853f" text-anchor="middle" font-family="STKaiti">囍</text>
+  
+  <rect x="80" y="200" width="640" height="450" rx="24" fill="#ffffff" stroke="#cd853f" stroke-width="3"/>
+  
+  <rect x="100" y="220" width="600" height="410" rx="16" fill="#fffaf0"/>
+  <text x="400" y="420" font-size="52" fill="#cd853f" text-anchor="middle" font-family="STKaiti">浪漫婚礼</text>
+  <text x="400" y="480" font-size="28" fill="#8b4513" text-anchor="middle">Romantic Wedding</text>
+  
+  <text x="150" y="720" font-size="28" fill="#666666">我们始终相信</text>
+  <text x="150" y="760" font-size="28" fill="#666666">最好的爱情一定是双向奔赴</text>
+  <text x="150" y="800" font-size="28" fill="#666666">在纯净通透的光彩中相遇</text>
+  <text x="150" y="840" font-size="28" fill="#666666">拾起每一秒爱的记忆</text>
+  
+  <text x="650" y="720" font-size="24" fill="#cd853f" text-anchor="end">满小满</text>
+  <text x="650" y="760" font-size="20" fill="#999999" text-anchor="end">GROOM</text>
+  <text x="650" y="800" font-size="24" fill="#cd853f" text-anchor="end">美小美</text>
+  <text x="650" y="840" font-size="20" fill="#999999" text-anchor="end">BRIDE</text>
+  
+  <rect x="80" y="900" width="640" height="250" rx="20" fill="#ffffff" stroke="#cd853f" stroke-width="2"/>
+  
+  <rect x="100" y="920" width="600" height="210" rx="12" fill="#fffaf0"/>
+  <text x="400" y="1020" font-size="40" fill="#cd853f" text-anchor="middle" font-family="STKaiti">爱，让我和你变成了我们</text>
+  
+  <text x="400" y="1180" font-size="24" fill="#cd853f" text-anchor="middle">❤️</text>
+</svg>

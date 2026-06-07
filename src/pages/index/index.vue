@@ -98,27 +98,27 @@ const tabs = ref(['网红爆款', 'MV精选', '限时免费', '每周上新'])
 const featuredCards = ref([
   { 
     id: 1, 
-    title: '虚拟人婚礼', 
+    title: '我们结婚啦', 
     date: '2050.05.20',
-    image: '/static/images/templates/template-1.svg' 
+    image: '/static/images/templates/wedding-1.svg' 
   },
   { 
     id: 2, 
-    title: '我们结婚啦', 
+    title: '浪漫婚礼', 
     date: '2050.05.18',
-    image: '/static/images/templates/template-2.svg' 
+    image: '/static/images/templates/wedding-2.svg' 
   },
   { 
     id: 3, 
-    title: '大喜的日子', 
+    title: '喜结连理', 
     date: '2050.05.15',
-    image: '/static/images/templates/template-3.svg' 
+    image: '/static/images/templates/wedding-3.svg' 
   },
   { 
     id: 4, 
-    title: '囍', 
+    title: '爱的承诺', 
     date: '2050.05.10',
-    image: '/static/images/templates/template-4.svg' 
+    image: '/static/images/templates/wedding-4.svg' 
   }
 ])
 

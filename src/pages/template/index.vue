@@ -56,7 +56,7 @@
 import { ref } from 'vue'
 
 const activeTab = ref('preview')
-const previewImage = '/static/images/templates/template-1.svg'
+const previewImage = '/static/images/templates/wedding-1.svg'
 
 const goBack = () => {
   uni.navigateBack()

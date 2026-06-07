@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="bg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff5f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffe4e8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="800" height="1200" fill="url(#bg1)"/>
+  
+  <text x="400" y="80" font-size="36" fill="#e84a6e" text-anchor="middle" font-weight="bold">INVITATION</text>
+  <text x="400" y="120" font-size="72" fill="#c44569" text-anchor="middle" font-family="STKaiti, KaiTi">囍</text>
+  
+  <rect x="100" y="180" width="600" height="400" rx="20" fill="#ffffff" stroke="#e84a6e" stroke-width="2"/>
+  
+  <rect x="120" y="200" width="560" height="360" rx="10" fill="#ffe4e8"/>
+  <text x="400" y="380" font-size="48" fill="#e84a6e" text-anchor="middle" font-family="STKaiti">新郎 & 新娘</text>
+  <text x="400" y="440" font-size="28" fill="#c44569" text-anchor="middle">Wedding Photo</text>
+  
+  <text x="400" y="580" font-size="56" fill="#e84a6e" text-anchor="middle" font-family="STKaiti">结婚啦</text>
+  <text x="400" y="640" font-size="28" fill="#c44569" text-anchor="middle">We are married</text>
+  
+  <text x="150" y="720" font-size="24" fill="#666666">2050/05/20</text>
+  <text x="650" y="720" font-size="20" fill="#999999" text-anchor="end">满小满 & 美小美</text>
+  
+  <rect x="100" y="780" width="600" height="350" rx="20" fill="#ffffff" stroke="#e84a6e" stroke-width="2"/>
+  
+  <rect x="120" y="800" width="560" height="310" rx="10" fill="#ffe4e8"/>
+  <text x="400" y="950" font-size="36" fill="#e84a6e" text-anchor="middle" font-family="STKaiti">不早不晚 刚好是你</text>
+  
+  <text x="400" y="1100" font-size="24" fill="#999999" text-anchor="middle">Love Story</text>
+  <text x="400" y="1150" font-size="20" fill="#cccccc" text-anchor="middle">—— M & M ——</text>
+</svg>

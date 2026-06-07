@@ -120,13 +120,13 @@ const works = ref([
     id: 1, 
     title: '我们的婚礼请柬', 
     date: '2025.05.20',
-    image: '/static/images/templates/template-1.svg' 
+    image: '/static/images/templates/wedding-1.svg' 
   },
   { 
     id: 2, 
     title: '浪漫婚礼', 
     date: '2025.05.18',
-    image: '/static/images/templates/template-2.svg' 
+    image: '/static/images/templates/wedding-2.svg' 
   }
 ])
 
@@ -135,7 +135,7 @@ const drafts = ref([
     id: 1, 
     title: '未完成的请柬', 
     date: '2025.05.15',
-    image: '/static/images/templates/template-3.svg' 
+    image: '/static/images/templates/wedding-3.svg' 
   }
 ])
 

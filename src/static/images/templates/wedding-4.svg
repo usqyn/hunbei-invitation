@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="bg4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f3e5f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e1bee7;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="800" height="1200" fill="url(#bg4)"/>
+  
+  <text x="400" y="80" font-size="28" fill="#7b1fa2" text-anchor="middle">OUR WEDDING</text>
+  
+  <rect x="60" y="120" width="680" height="400" rx="24" fill="#ffffff" stroke="#7b1fa2" stroke-width="3"/>
+  <rect x="80" y="140" width="640" height="360" rx="16" fill="#f3e5f5"/>
+  <text x="400" y="320" font-size="56" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">喜结连理</text>
+  <text x="400" y="380" font-size="26" fill="#6a1b9a" text-anchor="middle">Happy Wedding</text>
+  
+  <text x="400" y="520" font-size="80" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">囍</text>
+  
+  <rect x="100" y="620" width="280" height="120" rx="12" fill="#ffffff" stroke="#7b1fa2" stroke-width="2"/>
+  <text x="240" y="680" font-size="28" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">新郎</text>
+  <text x="240" y="720" font-size="24" fill="#6a1b9a" text-anchor="middle">满小满</text>
+  
+  <rect x="420" y="620" width="280" height="120" rx="12" fill="#ffffff" stroke="#7b1fa2" stroke-width="2"/>
+  <text x="560" y="680" font-size="28" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">新娘</text>
+  <text x="560" y="720" font-size="24" fill="#6a1b9a" text-anchor="middle">美小美</text>
+  
+  <rect x="60" y="800" width="680" height="280" rx="16" fill="#ffffff" stroke="#7b1fa2" stroke-width="2"/>
+  <rect x="80" y="820" width="640" height="240" rx="10" fill="#f3e5f5"/>
+  
+  <text x="400" y="920" font-size="32" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">你不是爱情的终点，只是爱情的原动力</text>
+  <text x="400" y="970" font-size="28" fill="#6a1b9a" text-anchor="middle" font-family="STKaiti">因为你，我爱上了这个世界</text>
+  
+  <text x="400" y="1150" font-size="26" fill="#7b1fa2" text-anchor="middle">❤️ 感谢有你 ❤️</text>
+</svg>

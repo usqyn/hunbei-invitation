@@ -674,15 +674,15 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 
 const templateData = reactive({
-  coverImage: '/static/images/templates/template-1.svg',
-  photo1: '/static/images/templates/template-2.svg',
-  photo2: '/static/images/templates/template-3.svg',
-  photo3: '/static/images/templates/template-4.svg',
-  photo4: '/static/images/templates/template-1.svg',
-  photo5: '/static/images/templates/template-2.svg',
-  photo6: '/static/images/templates/template-3.svg',
-  photo7: '/static/images/templates/template-4.svg',
-  photo8: '/static/images/templates/template-1.svg'
+  coverImage: '/static/images/templates/wedding-1.svg',
+  photo1: '/static/images/templates/wedding-2.svg',
+  photo2: '/static/images/templates/wedding-3.svg',
+  photo3: '/static/images/templates/wedding-4.svg',
+  photo4: '/static/images/templates/wedding-1.svg',
+  photo5: '/static/images/templates/wedding-2.svg',
+  photo6: '/static/images/templates/wedding-3.svg',
+  photo7: '/static/images/templates/wedding-4.svg',
+  photo8: '/static/images/templates/wedding-1.svg'
 })
 
 const showTextEditor = ref(false)
@@ -727,15 +727,15 @@ const panelTabs = [
 ]
 
 const editableElements = reactive([
-  { type: 'image', text: '/static/images/templates/template-1.svg' },
-  { type: 'image', text: '/static/images/templates/template-2.svg' },
-  { type: 'image', text: '/static/images/templates/template-3.svg' },
-  { type: 'image', text: '/static/images/templates/template-4.svg' },
-  { type: 'image', text: '/static/images/templates/template-1.svg' },
-  { type: 'image', text: '/static/images/templates/template-2.svg' },
-  { type: 'image', text: '/static/images/templates/template-3.svg' },
-  { type: 'image', text: '/static/images/templates/template-4.svg' },
-  { type: 'image', text: '/static/images/templates/template-1.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-1.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-2.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-3.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-4.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-1.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-2.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-3.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-4.svg' },
+  { type: 'image', text: '/static/images/templates/wedding-1.svg' },
   { type: 'basic', text: '完善基本信息' },
   { type: 'text', text: '我们结婚啦' },
   { type: 'text', text: 'Welcome to our wedding' },
@@ -743,14 +743,14 @@ const editableElements = reactive([
 ])
 
 const materialList = [
-  { url: '/static/images/templates/template-1.svg', name: '新人合影1' },
-  { url: '/static/images/templates/template-2.svg', name: '新人合影2' },
-  { url: '/static/images/templates/template-3.svg', name: '囍字装饰' },
-  { url: '/static/images/templates/template-4.svg', name: '爱心装饰' },
-  { url: '/static/images/templates/template-1.svg', name: '戒指' },
-  { url: '/static/images/templates/template-2.svg', name: '玫瑰花束' },
-  { url: '/static/images/templates/template-3.svg', name: '烟花装饰' },
-  { url: '/static/images/templates/template-4.svg', name: '蕾丝装饰' }
+  { url: '/static/images/templates/wedding-1.svg', name: '婚礼模板1' },
+  { url: '/static/images/templates/wedding-2.svg', name: '婚礼模板2' },
+  { url: '/static/images/templates/wedding-3.svg', name: '婚礼模板3' },
+  { url: '/static/images/templates/wedding-4.svg', name: '婚礼模板4' },
+  { url: '/static/images/templates/wedding-1.svg', name: '浪漫主题' },
+  { url: '/static/images/templates/wedding-2.svg', name: '喜庆主题' },
+  { url: '/static/images/templates/wedding-3.svg', name: '粉色主题' },
+  { url: '/static/images/templates/wedding-4.svg', name: '紫色主题' }
 ]
 
 const settings = reactive({
