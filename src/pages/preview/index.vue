@@ -1,344 +1,441 @@
 <template>
-  <view class="page">
-    <view class="invitation-wrapper">
-      <view class="invitation-content" v-if="previewData">
-        <view class="cover-section">
-          <image class="cover-image" :src="previewData.coverImage" mode="aspectFill"></image>
-          <view class="cover-overlay">
-            <text class="shuangxi">囍</text>
-            <text class="cover-title">我们结婚啦</text>
-            <text class="cover-subtitle">Welcome to our wedding</text>
-          </view>
-        </view>
+  <view class="preview-page">
+    <view class="preview-header">
+      <view class="header-back" @click="goBack">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">适我愿兮 · 婚...</text>
+      <view class="header-action">
+        <text class="action-icon">⋯</text>
+      </view>
+    </view>
 
-        <view class="couple-section">
-          <view class="couple-row">
-            <view class="person">
-              <text class="person-name">{{ previewData.groomName || '满小满' }}</text>
-              <text class="person-label">新郎</text>
-            </view>
-            <text class="heart">♥</text>
-            <view class="person">
-              <text class="person-name">{{ previewData.brideName || '美小美' }}</text>
-              <text class="person-label">新娘</text>
-            </view>
-          </view>
-        </view>
+    <view class="tab-bar">
+      <view
+        v-for="tab in tabList"
+        :key="tab.key"
+        class="tab-item"
+        :class="{ active: currentTab === tab.key }"
+        @click="currentTab = tab.key"
+      >
+        <text class="tab-text">{{ tab.name }}</text>
+      </view>
+    </view>
 
-        <view class="info-section">
-          <text class="section-label">婚礼信息</text>
-          <view class="info-row">
-            <text class="info-icon">📅</text>
-            <text class="info-text">{{ previewData.weddingDate || '2050年5月20日' }}</text>
-          </view>
-          <view class="info-row">
-            <text class="info-icon">📍</text>
-            <text class="info-text">{{ previewData.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
-          </view>
-        </view>
+    <scroll-view class="preview-content" scroll-y>
+      <view v-if="currentTab === 'template'" class="template-preview">
+        <view class="preview-image-wrapper">
+          <image class="preview-image" :src="templateImage" mode="aspectFill"></image>
 
-        <view class="map-section">
-          <view class="map-placeholder">
-            <text class="map-text">{{ previewData.location || '点击查看地图导航' }}</text>
+          <view class="image-overlay-top">
+            <text class="overlay-title">Welcome to our wedding</text>
+            <text class="overlay-sub">好久不见</text>
+            <text class="overlay-name">婚礼见~</text>
           </view>
-        </view>
 
-        <view class="countdown-section">
-          <text class="countdown-label">距婚礼还有</text>
-          <view class="countdown-row">
-            <view class="countdown-box">
-              <text class="countdown-num">{{ countdown.days }}</text>
-              <text class="countdown-unit">天</text>
+          <view class="image-overlay-bottom">
+            <text class="overlay-groom">满小满</text>
+            <text class="overlay-and">囍</text>
+            <text class="overlay-bride">美小美</text>
+            <text class="overlay-date">2050.05.20</text>
+          </view>
+
+          <view class="image-bottom-left">
+            <view class="stat-item">
+              <text class="stat-icon">🖼️</text>
+              <text class="stat-value">15图</text>
             </view>
-            <text class="countdown-colon">:</text>
-            <view class="countdown-box">
-              <text class="countdown-num">{{ countdown.hours }}</text>
-              <text class="countdown-unit">时</text>
+            <view class="stat-item">
+              <text class="stat-icon">❤️</text>
+              <text class="stat-value">64.39w人喜欢</text>
             </view>
-            <text class="countdown-colon">:</text>
-            <view class="countdown-box">
-              <text class="countdown-num">{{ countdown.minutes }}</text>
-              <text class="countdown-unit">分</text>
+          </view>
+
+          <view class="image-bottom-right">
+            <view class="action-circle" @click="handleShare">
+              <text class="action-emoji">🔗</text>
             </view>
-            <text class="countdown-colon">:</text>
-            <view class="countdown-box">
-              <text class="countdown-num">{{ countdown.seconds }}</text>
-              <text class="countdown-unit">秒</text>
+            <view class="action-circle" @click="handleFavorite">
+              <text class="action-emoji">⭐</text>
             </view>
           </view>
         </view>
       </view>
 
-      <view class="bottom-actions">
-        <button class="action-btn primary" @click="handleCreate">我也要制作</button>
-        <button class="action-btn" @click="handleShare">分享好友</button>
+      <view v-else class="similar-list">
+        <view class="similar-item" v-for="(item, idx) in similarTemplates" :key="idx">
+          <view class="similar-image-wrap">
+            <image class="similar-image" :src="item.image" mode="aspectFill"></image>
+            <view class="similar-overlay">
+              <text class="similar-title">{{ item.title }}</text>
+              <text class="similar-sub">{{ item.subtitle }}</text>
+            </view>
+            <view class="similar-stats">
+              <text class="similar-stat-icon">❤️</text>
+              <text class="similar-stat-value">{{ item.likes }}人喜欢</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="preview-footer">
+      <view class="create-button" @click="handleCreate">
+        <text class="button-text">立即制作</text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { ref } from 'vue'
 
-const previewData = ref<any>(null)
-let timer: number | null = null
+const currentTab = ref('template')
+const isFavorite = ref(false)
 
-const countdown = reactive({
-  days: '00',
-  hours: '00',
-  minutes: '00',
-  seconds: '00'
-})
+const tabList = ref([
+  { key: 'template', name: '模板预览' },
+  { key: 'similar', name: '相似推荐' },
+])
 
-onLoad((query) => {
-  if (query?.data) {
-    try {
-      previewData.value = JSON.parse(decodeURIComponent(query.data))
-    } catch {
-      previewData.value = null
-    }
-  }
-  updateCountdown()
-  timer = setInterval(updateCountdown, 1000) as unknown as number
-})
+const templateImage = '/static/images/templates/wedding-1.svg'
 
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+const similarTemplates = ref([
+  { title: '我们结婚啦', subtitle: 'Welcome to our wedding', likes: '52.86w', image: '/static/images/templates/wedding-1.svg' },
+  { title: '浪漫婚礼', subtitle: 'FOREVER TOGETHER', likes: '48.12w', image: '/static/images/templates/wedding-2.svg' },
+  { title: '圣洁婚礼', subtitle: 'HOLY MATRIMONY', likes: '35.76w', image: '/static/images/templates/wedding-3.svg' },
+  { title: '喜结良缘', subtitle: 'HAPPY MARRIAGE', likes: '62.43w', image: '/static/images/templates/wedding-4.svg' },
+])
 
-const updateCountdown = () => {
-  const targetDate = new Date('2027-09-14T12:00:00').getTime()
-  const now = new Date().getTime()
-  const diff = targetDate - now
-  if (diff > 0) {
-    countdown.days = String(Math.floor(diff / (1000 * 60 * 60 * 24))).padStart(2, '0')
-    countdown.hours = String(Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))).padStart(2, '0')
-    countdown.minutes = String(Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0')
-    countdown.seconds = String(Math.floor((diff % (1000 * 60)) / 1000)).padStart(2, '0')
-  }
-}
-
-const handleCreate = () => {
-  uni.switchTab({ url: '/pages/index/index' })
+const goBack = () => {
+  uni.navigateBack()
 }
 
 const handleShare = () => {
-  uni.showToast({ title: '分享链接已复制', icon: 'success' })
+  uni.showToast({ title: '分享模板', icon: 'none' })
+}
+
+const handleFavorite = () => {
+  isFavorite.value = !isFavorite.value
+  uni.showToast({ title: isFavorite.value ? '已收藏' : '取消收藏', icon: 'none' })
+}
+
+const handleCreate = () => {
+  uni.navigateTo({ url: '/pages/editor/index' })
 }
 </script>
 
 <style lang="scss" scoped>
-.page {
+.preview-page {
   min-height: 100vh;
   background: #f5f5f5;
-}
-
-.invitation-wrapper {
-  max-width: 750rpx;
-  margin: 0 auto;
-}
-
-.invitation-content {
-  background: #fff;
-  margin: 30rpx;
-  border-radius: 24rpx;
-  overflow: hidden;
-  box-shadow: 0 8rpx 40rpx rgba(0, 0, 0, 0.06);
-}
-
-.cover-section {
-  position: relative;
-  height: 800rpx;
-}
-
-.cover-image {
-  width: 100%;
-  height: 100%;
-}
-
-.cover-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.header-back {
+  min-width: 60rpx;
+  display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.shuangxi {
-  font-size: 80rpx;
-  color: #e84a6e;
-  font-weight: bold;
-  margin-bottom: 20rpx;
-}
-
-.cover-title {
+.back-icon {
   font-size: 56rpx;
-  color: #fff;
-  font-weight: 600;
+  color: #333;
+  font-weight: 300;
+  line-height: 1;
 }
 
-.cover-subtitle {
+.header-title {
   font-size: 28rpx;
-  color: rgba(255, 255, 255, 0.8);
-  margin-top: 16rpx;
-}
-
-.couple-section {
-  padding: 60rpx 40rpx;
+  font-weight: 600;
+  color: #333;
   text-align: center;
 }
 
-.couple-row {
+.header-action {
+  min-width: 60rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 40rpx;
 }
 
-.person-name {
-  font-size: 44rpx;
-  font-weight: 600;
-  color: #333;
-  display: block;
-}
-
-.person-label {
-  font-size: 24rpx;
-  color: #999;
-  margin-top: 8rpx;
-  display: block;
-}
-
-.heart {
+.action-icon {
   font-size: 36rpx;
-  color: #e84a6e;
+  color: #666;
 }
 
-.info-section {
-  padding: 40rpx;
-  background: #fafafa;
-  margin: 0 30rpx;
-  border-radius: 16rpx;
-}
-
-.section-label {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #333;
-  display: block;
-  margin-bottom: 24rpx;
-}
-
-.info-row {
+.tab-bar {
   display: flex;
-  align-items: center;
-  gap: 16rpx;
-  margin-bottom: 16rpx;
+  background: #fff;
+  padding: 0 32rpx 16rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
 }
 
-.info-icon {
-  font-size: 32rpx;
+.tab-item {
+  padding: 20rpx 24rpx;
+  position: relative;
+
+  &.active {
+    .tab-text {
+      color: #e84a6e;
+      font-weight: 600;
+    }
+  }
 }
 
-.info-text {
+.tab-text {
   font-size: 28rpx;
   color: #666;
 }
 
-.map-section {
-  margin: 30rpx;
-  padding: 60rpx;
-  background: #f0f0f0;
-  border-radius: 16rpx;
+.preview-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.template-preview {
+  padding: 24rpx 32rpx;
+}
+
+.preview-image-wrapper {
+  width: 100%;
+  height: 900rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe4e8 100%);
+  box-shadow: 0 8rpx 32rpx rgba(232, 74, 110, 0.1);
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+}
+
+.image-overlay-top {
+  position: absolute;
+  top: 80rpx;
+  left: 0;
+  right: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-}
-
-.map-placeholder {
-  text-align: center;
-}
-
-.map-text {
-  font-size: 26rpx;
-  color: #999;
-}
-
-.countdown-section {
-  padding: 40rpx;
-  text-align: center;
-}
-
-.countdown-label {
-  font-size: 26rpx;
-  color: #999;
-  display: block;
-  margin-bottom: 24rpx;
-}
-
-.countdown-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 12rpx;
 }
 
-.countdown-box {
-  background: #e84a6e;
-  border-radius: 12rpx;
-  padding: 16rpx 24rpx;
-  text-align: center;
+.overlay-title {
+  font-size: 22rpx;
+  color: #333;
+  letter-spacing: 4rpx;
 }
 
-.countdown-num {
-  font-size: 40rpx;
-  color: #fff;
-  font-weight: 700;
-  display: block;
+.overlay-sub {
+  font-size: 56rpx;
+  color: #333;
+  font-weight: bold;
+  font-family: STKaiti, KaiTi, serif;
+  margin-top: 8rpx;
 }
 
-.countdown-unit {
-  font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.8);
-  display: block;
-}
-
-.countdown-colon {
-  font-size: 36rpx;
+.overlay-name {
+  font-size: 44rpx;
   color: #e84a6e;
-  font-weight: 700;
+  font-weight: bold;
+  font-family: STKaiti, KaiTi, serif;
 }
 
-.bottom-actions {
-  padding: 30rpx;
+.image-overlay-bottom {
+  position: absolute;
+  bottom: 180rpx;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.overlay-groom {
+  font-size: 32rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.overlay-and {
+  font-size: 56rpx;
+  color: #e84a6e;
+  font-weight: bold;
+  margin: 8rpx 0;
+}
+
+.overlay-bride {
+  font-size: 32rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.overlay-date {
+  font-size: 24rpx;
+  color: #666;
+  margin-top: 12rpx;
+  letter-spacing: 2rpx;
+}
+
+.image-bottom-left {
+  position: absolute;
+  bottom: 24rpx;
+  left: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.stat-icon {
+  font-size: 22rpx;
+}
+
+.stat-value {
+  font-size: 22rpx;
+  color: #fff;
+}
+
+.image-bottom-right {
+  position: absolute;
+  bottom: 24rpx;
+  right: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.action-circle {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-emoji {
+  font-size: 28rpx;
+}
+
+.preview-footer {
+  padding: 20rpx 32rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -2rpx 16rpx rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+}
+
+.create-button {
+  width: 100%;
+  height: 88rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.3);
+}
+
+.button-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 4rpx;
+}
+
+.similar-list {
+  padding: 24rpx 32rpx;
   display: flex;
   flex-direction: column;
   gap: 20rpx;
-  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
 }
 
-.action-btn {
-  height: 90rpx;
-  line-height: 90rpx;
-  border-radius: 45rpx;
-  font-size: 32rpx;
-  font-weight: 500;
-  border: 2rpx solid #e84a6e;
-  color: #e84a6e;
-  background: #fff;
-  text-align: center;
+.similar-item {
+  width: 100%;
+}
 
-  &.primary {
-    background: linear-gradient(135deg, #e84a6e, #c44569);
-    color: #fff;
-    border: none;
-  }
+.similar-image-wrap {
+  width: 100%;
+  height: 500rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+}
 
-  &::after {
-    border: none;
-  }
+.similar-image {
+  width: 100%;
+  height: 100%;
+}
+
+.similar-overlay {
+  position: absolute;
+  top: 60rpx;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.similar-title {
+  font-size: 40rpx;
+  color: #333;
+  font-weight: bold;
+  font-family: STKaiti, KaiTi, serif;
+}
+
+.similar-sub {
+  font-size: 18rpx;
+  color: #666;
+  letter-spacing: 2rpx;
+}
+
+.similar-stats {
+  position: absolute;
+  bottom: 20rpx;
+  left: 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.similar-stat-icon {
+  font-size: 20rpx;
+}
+
+.similar-stat-value {
+  font-size: 20rpx;
+  color: #fff;
 }
 </style>

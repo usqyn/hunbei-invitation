@@ -1,102 +1,62 @@
 <template>
-  <view class="page">
-    <view class="header">
-      <view class="back-btn" @click="goBack">
+  <view class="music-page">
+    <view class="music-header">
+      <view class="header-back" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
-      <view class="header-title">音乐库</view>
-      <view class="header-right">
-        <view class="search-btn" @click="showSearch = !showSearch">
-          <text class="btn-icon">🔍</text>
-        </view>
+      <text class="header-title">音乐库</text>
+      <view class="header-upload" @click="handleUpload">
+        <text class="upload-text">本地上传</text>
       </view>
     </view>
 
-    <view v-if="showSearch" class="search-bar">
-      <view class="search-input-wrapper">
-        <text class="search-icon">🔍</text>
-        <input 
-          class="search-input" 
-          placeholder="搜索歌曲" 
-          v-model="searchText"
-          @input="onSearch"
-        />
-        <text v-if="searchText" class="clear-icon" @click="clearSearch">✕</text>
-      </view>
-    </view>
-
-    <view class="tabs">
-      <view 
-        v-for="tab in tabs" 
+    <view class="music-tabs">
+      <view
+        v-for="tab in tabList"
         :key="tab.key"
         class="tab-item"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
+        :class="{ active: currentTab === tab.key }"
+        @click="currentTab = tab.key"
       >
         <text class="tab-text">{{ tab.name }}</text>
+        <view v-if="currentTab === tab.key" class="tab-underline"></view>
       </view>
-    </view>
-
-    <view class="filter-tags">
-      <scroll-view scroll-x class="tags-scroll">
-        <view class="tags-list">
-          <view 
-            v-for="tag in tags" 
-            :key="tag"
-            class="tag-item"
-            :class="{ active: activeTag === tag }"
-            @click="activeTag = tag"
-          >
-            <text class="tag-text">{{ tag }}</text>
-          </view>
-        </view>
-      </scroll-view>
     </view>
 
     <scroll-view class="music-list" scroll-y>
-      <view v-if="currentMusic" class="current-music">
-        <view class="playing-icon">🎵</view>
-        <text class="music-name">{{ currentMusic.name }}</text>
-        <view class="music-badge">使用中</view>
-        <view class="check-icon">✓</view>
-      </view>
-
-      <view v-if="filteredMusicList.length === 0" class="empty-state">
-        <text class="empty-text">暂无音乐</text>
-      </view>
-
-      <view 
-        v-for="music in filteredMusicList" 
-        :key="music.id"
+      <view
+        v-for="(song, idx) in filteredMusicList"
+        :key="idx"
         class="music-item"
-        @click="selectMusic(music)"
+        :class="{ 'is-using': currentSongIndex === idx }"
+        @click="handleSelectSong(idx)"
       >
-        <view class="music-info">
-          <text class="music-name">{{ music.name }}</text>
+        <view class="music-icon">
+          <text class="icon-text">🎵</text>
         </view>
-        <view v-if="music.hot" class="hot-badge">HOT</view>
-        <view class="select-icon" :class="{ selected: selectedMusic === music.id }">
-          <text v-if="selectedMusic === music.id">✓</text>
+        <view class="music-info">
+          <text class="music-name">{{ song.name }}</text>
+          <text v-if="song.isHot" class="music-hot">HOT</text>
+        </view>
+        <view v-if="currentSongIndex === idx" class="music-using">
+          <text class="using-text">使用中</text>
         </view>
       </view>
     </scroll-view>
 
-    <view class="player-bar">
-      <view class="vinyl" :class="{ spinning: isPlaying }">
-        <view class="vinyl-inner">
-          <text class="player-btn" @click="togglePlay">{{ isPlaying ? '❚❚' : '▶' }}</text>
+    <view class="music-player">
+      <view class="player-left">
+        <view class="vinyl-icon">
+          <text class="vinyl-emoji">💿</text>
         </view>
+        <text class="player-name">{{ currentSong ? currentSong.name : '选择音乐' }}</text>
       </view>
-      <view class="player-info">
-        <text class="player-name">{{ currentMusic?.name || '未选择音乐' }}</text>
-        <view class="progress-bar" @click="seekTo">
-          <view class="progress-fill" :style="{ width: progress + '%' }"></view>
-          <view class="progress-thumb" :style="{ left: progress + '%' }"></view>
+      <view class="player-right">
+        <view class="progress-bar">
+          <view class="progress-fill"></view>
+          <view class="progress-dot"></view>
         </view>
-        <view class="time-info">
-          <text class="current-time">{{ formatTime(currentTime) }}</text>
-          <text class="total-time">{{ formatTime(totalTime) }}</text>
-        </view>
+        <text class="time-text">00:00</text>
       </view>
     </view>
   </view>
@@ -104,427 +64,305 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { MUSIC_TABS, MUSIC_TAGS, MUSIC_LIST, DEFAULT_MUSIC } from '@/constants'
 
-const activeTab = ref('music')
-const activeTag = ref('全部')
-const selectedMusic = ref(1)
-const isPlaying = ref(true)
-const progress = ref(5)
-const currentTime = ref(2)
-const totalTime = ref(169)
-const showSearch = ref(false)
-const searchText = ref('')
+const currentTab = ref('all')
+const currentSongIndex = ref(0)
 
-const tabs = MUSIC_TABS
+const tabList = ref([
+  { key: 'all', name: '全部' },
+  { key: 'happy', name: '欢快' },
+  { key: 'quiet', name: '安静' },
+  { key: 'douyin', name: '抖音' },
+])
 
-const tags = MUSIC_TAGS
-
-const currentMusic = ref(DEFAULT_MUSIC)
-
-const musicList = ref(MUSIC_LIST)
+const musicList = ref([
+  { name: '告白气球', isHot: true, category: 'happy' },
+  { name: '我们结婚啦', isHot: true, category: 'happy' },
+  { name: '执子之手', isHot: true, category: 'happy' },
+  { name: "It's You", isHot: true, category: 'quiet' },
+  { name: '我是如此相信', isHot: true, category: 'quiet' },
+  { name: '就是爱你', isHot: true, category: 'happy' },
+  { name: '因你而在', isHot: true, category: 'happy' },
+  { name: 'Lucky Me', isHot: true, category: 'douyin' },
+  { name: '繁花', isHot: true, category: 'quiet' },
+  { name: '爱你', isHot: true, category: 'happy' },
+])
 
 const filteredMusicList = computed(() => {
-  let result = musicList.value
-  
-  if (activeTag.value !== '全部') {
-    result = result.filter(m => m.tag === activeTag.value)
+  if (currentTab.value === 'all') return musicList.value
+  return musicList.value.filter(s => s.category === currentTab.value)
+})
+
+const currentSong = computed(() => {
+  if (currentSongIndex.value >= 0 && currentSongIndex.value < musicList.value.length) {
+    return musicList.value[currentSongIndex.value]
   }
-  
-  if (searchText.value) {
-    const keyword = searchText.value.toLowerCase()
-    result = result.filter(m => m.name.toLowerCase().includes(keyword))
-  }
-  
-  return result
+  return null
 })
 
 const goBack = () => {
   uni.navigateBack()
 }
 
-const selectMusic = (music: any) => {
-  selectedMusic.value = music.id
-  currentMusic.value = music
-  totalTime.value = Math.floor(Math.random() * 180) + 120
-  currentTime.value = 0
-  progress.value = 0
-  isPlaying.value = true
-  uni.showToast({ title: '已选择: ' + music.name, icon: 'none' })
+const handleUpload = () => {
+  uni.showToast({ title: '本地上传', icon: 'none' })
 }
 
-const togglePlay = () => {
-  isPlaying.value = !isPlaying.value
-}
-
-const formatTime = (seconds: number) => {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-}
-
-const onSearch = () => {}
-
-const clearSearch = () => {
-  searchText.value = ''
-}
-
-const seekTo = (e: any) => {
-  const touchX = e.touches ? e.touches[0].clientX : e.clientX
-  const containerWidth = e.currentTarget.offsetWidth
-  const percent = (touchX / containerWidth) * 100
-  progress.value = Math.min(100, Math.max(0, percent))
-  currentTime.value = Math.floor((progress.value / 100) * totalTime.value)
+const handleSelectSong = (idx: number) => {
+  currentSongIndex.value = idx
+  uni.showToast({ title: '已切换歌曲', icon: 'success' })
 }
 </script>
 
 <style lang="scss" scoped>
-.page {
+.music-page {
   min-height: 100vh;
   background: #f5f5f5;
   display: flex;
   flex-direction: column;
 }
 
-.header {
+.music-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20rpx 30rpx;
-  background: #ffffff;
+  padding: 24rpx 32rpx;
+  background: #fff;
+  flex-shrink: 0;
 }
 
-.back-btn {
-  width: 80rpx;
-  height: 80rpx;
+.header-back {
+  min-width: 60rpx;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .back-icon {
-  font-size: 60rpx;
+  font-size: 56rpx;
   color: #333;
   font-weight: 300;
+  line-height: 1;
 }
 
 .header-title {
-  font-size: 36rpx;
+  font-size: 32rpx;
   font-weight: 600;
   color: #333;
 }
 
-.header-right {
+.header-upload {
+  min-width: 120rpx;
+  text-align: right;
+}
+
+.upload-text {
+  font-size: 26rpx;
+  color: #e84a6e;
+  font-weight: 500;
+}
+
+.music-tabs {
   display: flex;
-  gap: 20rpx;
-}
-
-.search-btn {
-  width: 80rpx;
-  height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-icon {
-  font-size: 40rpx;
-}
-
-.search-bar {
-  background: #ffffff;
-  padding: 15rpx 30rpx;
-  border-bottom: 1px solid #eee;
-}
-
-.search-input-wrapper {
-  display: flex;
-  align-items: center;
-  background: #f5f5f5;
-  border-radius: 40rpx;
-  padding: 15rpx 25rpx;
-}
-
-.search-icon {
-  font-size: 32rpx;
-  margin-right: 15rpx;
-}
-
-.search-input {
-  flex: 1;
-  font-size: 28rpx;
-}
-
-.clear-icon {
-  font-size: 28rpx;
-  color: #999;
-  padding: 10rpx;
-}
-
-.tabs {
-  display: flex;
-  background: #ffffff;
-  padding: 0 30rpx;
-  gap: 60rpx;
-  border-bottom: 1px solid #eee;
+  background: #fff;
+  padding: 0 32rpx 16rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
 }
 
 .tab-item {
-  padding: 25rpx 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20rpx 0;
   position: relative;
 
   &.active {
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 6rpx;
-      background: #e84a6e;
-      border-radius: 3rpx;
+    .tab-text {
+      color: #e84a6e;
+      font-weight: 600;
     }
   }
 }
 
 .tab-text {
-  font-size: 34rpx;
-  font-weight: 500;
-
-  .active & {
-    color: #e84a6e;
-  }
-}
-
-.filter-tags {
-  background: #ffffff;
-  padding: 20rpx 0;
-}
-
-.tags-scroll {
-  white-space: nowrap;
-}
-
-.tags-list {
-  display: inline-flex;
-  gap: 20rpx;
-  padding: 0 30rpx;
-}
-
-.tag-item {
-  padding: 15rpx 30rpx;
-  background: #f5f5f5;
-  border-radius: 30rpx;
-  border: 2rpx solid transparent;
-
-  &.active {
-    background: #ffe4e8;
-    border-color: #e84a6e;
-  }
-}
-
-.tag-text {
   font-size: 28rpx;
   color: #666;
+}
 
-  .active & {
-    color: #e84a6e;
-    font-weight: 500;
-  }
+.tab-underline {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40rpx;
+  height: 4rpx;
+  background: #e84a6e;
+  border-radius: 2rpx;
 }
 
 .music-list {
   flex: 1;
-  height: 0;
-  padding: 20rpx;
-  padding-bottom: 180rpx;
-}
-
-.current-music {
-  display: flex;
-  align-items: center;
-  padding: 25rpx;
-  background: #fff0f3;
-  border-radius: 16rpx;
-  margin-bottom: 20rpx;
-}
-
-.playing-icon {
-  font-size: 36rpx;
-  margin-right: 20rpx;
-}
-
-.music-name {
-  flex: 1;
-  font-size: 30rpx;
-  color: #333;
-}
-
-.music-badge {
-  background: #e84a6e;
-  color: #fff;
-  padding: 8rpx 16rpx;
-  border-radius: 8rpx;
-  font-size: 22rpx;
-  margin-right: 20rpx;
-}
-
-.check-icon {
-  color: #e84a6e;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
-.empty-state {
-  padding: 100rpx;
-  text-align: center;
-}
-
-.empty-text {
-  font-size: 30rpx;
-  color: #999;
+  padding: 16rpx 0;
+  overflow-y: auto;
 }
 
 .music-item {
   display: flex;
   align-items: center;
-  padding: 30rpx;
-  background: #ffffff;
-  border-radius: 16rpx;
-  margin-bottom: 15rpx;
+  padding: 24rpx 32rpx;
+  background: #fff;
+  margin-bottom: 12rpx;
+  transition: background 0.2s ease;
+
+  &.is-using {
+    background: #fff5f5;
+
+    .music-name {
+      color: #e84a6e;
+    }
+  }
+
+  &:active {
+    background: #fafafa;
+  }
+}
+
+.music-icon {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff0f5;
+  border-radius: 12rpx;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+}
+
+.icon-text {
+  font-size: 32rpx;
 }
 
 .music-info {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
 }
 
-.hot-badge {
-  background: #ff6b8a;
+.music-name {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.music-hot {
+  font-size: 18rpx;
   color: #fff;
-  padding: 6rpx 12rpx;
-  border-radius: 6rpx;
-  font-size: 20rpx;
-  margin-right: 20rpx;
-}
-
-.select-icon {
-  width: 44rpx;
-  height: 44rpx;
-  border: 3rpx solid #ddd;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: transparent;
-
-  &.selected {
-    background: #e84a6e;
-    border-color: #e84a6e;
-    color: #fff;
-    font-size: 24rpx;
-  }
-}
-
-.player-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #ffffff;
-  padding: 20rpx 30rpx;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  border-top: 1px solid #eee;
-}
-
-.vinyl {
-  width: 100rpx;
-  height: 100rpx;
-  background: #333;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 10rpx;
-    border: 3rpx solid rgba(255,255,255,0.1);
-    border-radius: 50%;
-  }
-
-  &.spinning {
-    animation: spin 3s linear infinite;
-  }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.vinyl-inner {
-  width: 60rpx;
-  height: 60rpx;
   background: #e84a6e;
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.music-using {
+  flex-shrink: 0;
+  padding: 8rpx 20rpx;
+  background: #ffe4e8;
+  border-radius: 20rpx;
+  border: 1rpx solid #ffc0cb;
+}
+
+.using-text {
+  font-size: 22rpx;
+  color: #e84a6e;
+  font-weight: 500;
+}
+
+.music-player {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 32rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -2rpx 16rpx rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+  gap: 16rpx;
+}
+
+.player-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.vinyl-icon {
+  width: 56rpx;
+  height: 56rpx;
   border-radius: 50%;
+  background: linear-gradient(135deg, #222 0%, #444 100%);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.player-btn {
-  font-size: 24rpx;
-  color: #fff;
-}
-
-.player-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
+.vinyl-emoji {
+  font-size: 32rpx;
 }
 
 .player-name {
-  font-size: 28rpx;
+  font-size: 26rpx;
   color: #333;
+  max-width: 200rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
 }
 
 .progress-bar {
+  flex: 1;
   height: 8rpx;
-  background: #eee;
+  background: #f0f0f0;
   border-radius: 4rpx;
   position: relative;
 }
 
 .progress-fill {
+  width: 30%;
   height: 100%;
-  background: linear-gradient(90deg, #e84a6e, #ff6b8a);
+  background: linear-gradient(90deg, #e84a6e 0%, #ff6b8a 100%);
   border-radius: 4rpx;
 }
 
-.progress-thumb {
+.progress-dot {
+  width: 16rpx;
+  height: 16rpx;
+  background: #fff;
+  border-radius: 50%;
+  border: 2rpx solid #e84a6e;
   position: absolute;
+  left: 30%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 20rpx;
-  height: 20rpx;
-  background: #e84a6e;
-  border-radius: 50%;
-  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.2);
+  box-shadow: 0 2rpx 4rpx rgba(232, 74, 110, 0.3);
 }
 
-.time-info {
-  display: flex;
-  justify-content: space-between;
-}
-
-.current-time, .total-time {
+.time-text {
   font-size: 22rpx;
   color: #999;
+  flex-shrink: 0;
+  min-width: 80rpx;
+  text-align: right;
 }
 </style>
