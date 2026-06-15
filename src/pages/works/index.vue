@@ -5,22 +5,22 @@
       <text class="empty-text">登录后才可以看到作品记录哦</text>
       <button class="login-btn" @click="handleLogin">立即登录</button>
     </view>
-    
+
     <view v-else class="works-content">
       <view class="tabs">
-        <text 
-          v-for="tab in tabs" 
-          :key="tab.key" 
+        <text
+          v-for="tab in tabList"
+          :key="tab.key"
           class="tab-item"
           :class="{ active: activeTab === tab.key }"
           @click="activeTab = tab.key"
         >{{ tab.name }}</text>
       </view>
-      
+
       <view class="works-list" v-if="activeTab === 'all'">
-        <view 
-          v-for="work in works" 
-          :key="work.id" 
+        <view
+          v-for="work in worksStore.works"
+          :key="work.id"
           class="work-card"
           @click="handleWorkClick(work)"
         >
@@ -38,22 +38,22 @@
             </view>
           </view>
         </view>
-        
-        <view v-if="works.length === 0" class="empty-state">
+
+        <view v-if="worksStore.works.length === 0" class="empty-state">
           <view class="empty-icon">📭</view>
           <text class="empty-text">暂无作品</text>
           <button class="create-btn" @click="handleCreate">去制作</button>
         </view>
       </view>
-      
+
       <view class="works-list" v-if="activeTab === 'draft'">
-        <view v-if="drafts.length === 0" class="empty-state">
+        <view v-if="worksStore.drafts.length === 0" class="empty-state">
           <view class="empty-icon">📝</view>
           <text class="empty-text">暂无草稿</text>
         </view>
-        <view 
-          v-for="draft in drafts" 
-          :key="draft.id" 
+        <view
+          v-for="draft in worksStore.drafts"
+          :key="draft.id"
           class="work-card"
           @click="handleDraftClick(draft)"
         >
@@ -72,15 +72,15 @@
           </view>
         </view>
       </view>
-      
+
       <view class="works-list" v-if="activeTab === 'favorite'">
-        <view v-if="favorites.length === 0" class="empty-state">
+        <view v-if="worksStore.favorites.length === 0" class="empty-state">
           <view class="empty-icon">❤️</view>
           <text class="empty-text">暂无收藏</text>
         </view>
-        <view 
-          v-for="fav in favorites" 
-          :key="fav.id" 
+        <view
+          v-for="fav in worksStore.favorites"
+          :key="fav.id"
           class="work-card"
           @click="handleWorkClick(fav)"
         >
@@ -107,65 +107,44 @@
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
+import { useWorksStore } from '@/stores/works'
 
 const userStore = useUserStore()
+const worksStore = useWorksStore()
 const { isLoggedIn } = storeToRefs(userStore)
 const activeTab = ref('all')
 
-const tabs = ref([
+const tabList = ref([
   { key: 'all', name: '全部' },
   { key: 'draft', name: '草稿' },
   { key: 'favorite', name: '收藏' }
 ])
-
-const works = ref([
-  { 
-    id: 1, 
-    title: '我们的婚礼请柬', 
-    date: '2025.05.20',
-    image: '/static/images/templates/wedding-1.svg' 
-  },
-  { 
-    id: 2, 
-    title: '浪漫婚礼', 
-    date: '2025.05.18',
-    image: '/static/images/templates/wedding-2.svg' 
-  }
-])
-
-const drafts = ref([
-  { 
-    id: 1, 
-    title: '未完成的请柬', 
-    date: '2025.05.15',
-    image: '/static/images/templates/wedding-3.svg' 
-  }
-])
-
-const favorites = ref([])
 
 const handleLogin = () => {
   uni.navigateTo({ url: '/pages/login/index' })
 }
 
 const handleWorkClick = (work: any) => {
-  uni.showToast({ title: '查看作品: ' + work.title, icon: 'none' })
+  uni.navigateTo({ url: `/pages/preview/index?id=${work.id}` })
 }
 
 const handleDraftClick = (draft: any) => {
-  uni.showToast({ title: '继续编辑: ' + draft.title, icon: 'none' })
+  uni.navigateTo({ url: `/pages/editor/index?id=${draft.id}` })
 }
 
 const handlePreview = (work: any) => {
-  uni.showToast({ title: '预览: ' + work.title, icon: 'none' })
+  uni.navigateTo({ url: `/pages/preview/index?id=${work.id}` })
 }
 
 const handleShare = (work: any) => {
-  uni.showToast({ title: '分享: ' + work.title, icon: 'none' })
+  uni.setClipboardData({
+    data: `https://www.hunbei.com/invitation/${work.id}`,
+    success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
+  })
 }
 
 const handleEdit = (draft: any) => {
-  uni.showToast({ title: '编辑草稿: ' + draft.title, icon: 'none' })
+  uni.navigateTo({ url: `/pages/editor/index?id=${draft.id}` })
 }
 
 const handleDelete = (draft: any) => {
@@ -174,7 +153,7 @@ const handleDelete = (draft: any) => {
     content: '确定要删除这个草稿吗？',
     success: (res) => {
       if (res.confirm) {
-        drafts.value = drafts.value.filter(item => item.id !== draft.id)
+        worksStore.deleteWork(draft.id)
         uni.showToast({ title: '已删除', icon: 'success' })
       }
     }
@@ -182,7 +161,7 @@ const handleDelete = (draft: any) => {
 }
 
 const handleCreate = () => {
-  uni.showToast({ title: '开始制作请柬', icon: 'none' })
+  uni.navigateTo({ url: '/pages/editor/index' })
 }
 
 const onImageError = () => {}
@@ -244,11 +223,11 @@ const onImageError = () => {}
   font-size: 28rpx;
   color: #999999;
   position: relative;
-  
+
   &.active {
     color: #e84a6e;
     font-weight: 500;
-    
+
     &::after {
       content: '';
       position: absolute;
@@ -311,12 +290,12 @@ const onImageError = () => {}
   background: #f5f5f5;
   font-size: 26rpx;
   color: #666666;
-  
+
   &.primary {
     background: #e84a6e;
     color: #ffffff;
   }
-  
+
   &.danger {
     background: #fef2f2;
     color: #ef4444;

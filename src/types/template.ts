@@ -15,6 +15,8 @@ export interface TemplateData {
   photo4: string
   photoTitle: string
   photoSubtitle: string
+  footerText: string
+  footerSubText: string
 }
 
 export interface BasicInfo {

@@ -6,20 +6,20 @@
       </view>
       <view class="header-title">适我愿兮❤️婚...</view>
       <view class="header-right">
-        <view class="share-icon">🔗</view>
+        <view class="share-icon" @click="handleShare">🔗</view>
       </view>
     </view>
 
     <scroll-view class="preview-scroll" scroll-y>
       <view class="preview-container">
         <image class="preview-image" :src="previewImage" mode="aspectFill" @error="onImageError"></image>
-        
+
         <view class="template-info-overlay">
-          <text class="groom-name">满小满</text>
+          <text class="groom-name">{{ templateStore.basicInfo.groomName || '满小满' }}</text>
           <text class="divider">囍</text>
-          <text class="bride-name">美小美</text>
-          <text class="wedding-date">2050.05.20</text>
-          <text class="wedding-location">婚贝大酒店A栋9F幸福宴会厅</text>
+          <text class="bride-name">{{ templateStore.basicInfo.brideName || '美小美' }}</text>
+          <text class="wedding-date">{{ templateStore.basicInfo.weddingDate || '2050.05.20' }}</text>
+          <text class="wedding-location">{{ templateStore.basicInfo.detailAddress || '婚贝大酒店A栋9F幸福宴会厅' }}</text>
         </view>
       </view>
     </scroll-view>
@@ -43,8 +43,8 @@
           <text class="action-text">分享</text>
         </view>
         <view class="action-btn" @click="handleFavorite">
-          <text class="action-icon">⭐</text>
-          <text class="action-text">收藏</text>
+          <text class="action-icon">{{ isFav ? '⭐' : '☆' }}</text>
+          <text class="action-text">{{ isFav ? '已收藏' : '收藏' }}</text>
         </view>
         <button class="create-btn" @click="handleCreate">立即制作</button>
       </view>
@@ -53,10 +53,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useTemplateStore } from '@/stores/template'
+import { useWorksStore } from '@/stores/works'
+
+const templateStore = useTemplateStore()
+const worksStore = useWorksStore()
 
 const activeTab = ref('preview')
 const previewImage = '/static/images/templates/wedding-1.svg'
+const isFav = ref(false)
+const templateType = ref('invitation')
+
+onMounted(() => {
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  if (curPage?.$page?.options?.type) {
+    templateType.value = curPage.$page.options.type
+  }
+})
 
 const goBack = () => {
   uni.navigateBack()
@@ -67,17 +82,18 @@ const switchTab = (tab: string) => {
 }
 
 const handleShare = () => {
-  uni.showToast({
-    title: '分享成功',
-    icon: 'success'
+  uni.setClipboardData({
+    data: 'https://www.hunbei.com/invitation/template/1',
+    success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
   })
 }
 
 const handleFavorite = () => {
-  uni.showToast({
-    title: '已收藏',
-    icon: 'success'
-  })
+  isFav.value = !isFav.value
+  if (isFav.value) {
+    worksStore.toggleFavorite(1)
+  }
+  uni.showToast({ title: isFav.value ? '已收藏' : '取消收藏', icon: 'success' })
 }
 
 const handleCreate = () => {

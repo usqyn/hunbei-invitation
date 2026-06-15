@@ -13,56 +13,86 @@
         <scroll-view class="preview-scroll" scroll-y>
           <view class="preview-card">
             <view class="page-content">
-              <view class="section cover-section">
-                <image class="cover-image" :src="templateStore.templateData.coverImage" mode="aspectFill" @error="onImageError"></image>
+              <!-- Cover -->
+              <view class="section cover-section" @click="onPreviewClick(0)">
+                <image class="cover-image" :src="t.templateData.coverImage" mode="aspectFill" @error="onImageError"></image>
+                <view v-if="selectedPreviewIdx === 0" class="preview-active-border"></view>
                 <view class="cover-overlay">
-                  <text class="welcome-text">Welcome to our wedding</text>
-                  <text class="main-title">好久不见</text>
-                  <text class="sub-title">婚礼见~</text>
+                  <text class="welcome-text" @click.stop="onPreviewClick(7)">{{ t.templateData.coverSubtitle }}</text>
+                  <text
+                    class="main-title"
+                    :style="previewStyle(6)"
+                    @click.stop="onPreviewClick(6)"
+                  >{{ t.templateData.coverTitle }}</text>
                 </view>
               </view>
 
-              <view class="section couple-info-section">
+              <!-- Couple info -->
+              <view class="section couple-info-section" @click="onPreviewClick(5)">
+                <view v-if="selectedPreviewIdx === 5" class="preview-active-border"></view>
                 <view class="couple-names">
-                  <text class="name">{{ templateStore.basicInfo.groomName || '满小满' }}</text>
+                  <text class="name">{{ t.basicInfo.groomName || '新郎' }}</text>
                   <text class="groom-bride">GROOM</text>
                 </view>
                 <text class="shuangxi-icon">囍</text>
                 <view class="couple-names">
-                  <text class="name">{{ templateStore.basicInfo.brideName || '美小美' }}</text>
+                  <text class="name">{{ t.basicInfo.brideName || '新娘' }}</text>
                   <text class="groom-bride">BRIDE</text>
                 </view>
-                <text class="wedding-date">{{ templateStore.basicInfo.weddingDate || '2050.05.20' }}</text>
-                <text class="wedding-address">{{ templateStore.basicInfo.detailAddress || '婚贝大酒店A栋9F幸福宴会厅' }}</text>
+                <text class="wedding-date">{{ t.basicInfo.weddingDate || '选择婚礼日期' }}</text>
+                <text class="wedding-address">{{ t.basicInfo.detailAddress || '填写婚礼地址' }}</text>
               </view>
 
+              <!-- Footer border -->
               <view class="section footer-border">
                 <text class="footer-text-left">WEDDING</text>
                 <text class="footer-text-center">INVITATION</text>
                 <text class="footer-text-right">2050</text>
               </view>
 
-              <view class="section photo-section">
-                <image class="photo-image" :src="templateStore.templateData.photo1" mode="aspectFill" @error="onImageError"></image>
+              <!-- Photo 1 -->
+              <view class="section photo-section" @click="onPreviewClick(1)">
+                <image class="photo-image" :src="t.templateData.photo1" mode="aspectFill" @error="onImageError"></image>
+                <view v-if="selectedPreviewIdx === 1" class="preview-active-border"></view>
                 <view class="photo-overlay">
-                  <text class="photo-title">合卺</text>
-                  <text class="photo-sub">He jin &amp; Ju hua</text>
-                  <text class="photo-content">To dear family and friends</text>
+                  <text
+                    class="photo-title"
+                    :style="previewStyle(8)"
+                    @click.stop="onPreviewClick(8)"
+                  >{{ t.templateData.photoTitle }}</text>
+                  <text
+                    class="photo-sub"
+                    :style="previewStyle(9)"
+                    @click.stop="onPreviewClick(9)"
+                  >{{ t.templateData.photoSubtitle }}</text>
                 </view>
               </view>
 
+              <!-- Love story -->
               <view class="section love-story-section">
                 <text class="story-title">我的情书</text>
                 <text class="story-sub">OUR LOVE STORY</text>
               </view>
 
-              <view class="section photo-section small">
-                <image class="photo-image" :src="templateStore.templateData.photo2" mode="aspectFill" @error="onImageError"></image>
+              <!-- Photo 2 -->
+              <view class="section photo-section small" @click="onPreviewClick(2)">
+                <image class="photo-image" :src="t.templateData.photo2" mode="aspectFill" @error="onImageError"></image>
+                <view v-if="selectedPreviewIdx === 2" class="preview-active-border"></view>
               </view>
 
-              <view class="section simple-section">
-                <text class="simple-title">满小满</text>
-                <text class="simple-sub">GROOM</text>
+              <!-- Simple footer -->
+              <view class="section simple-section" @click="onPreviewClick(10)">
+                <view v-if="selectedPreviewIdx === 10" class="preview-active-border"></view>
+                <text
+                  class="simple-title"
+                  :style="previewStyle(10)"
+                  @click.stop="onPreviewClick(10)"
+                >{{ t.templateData.footerText }}</text>
+                <text
+                  class="simple-sub"
+                  :style="previewStyle(11)"
+                  @click.stop="onPreviewClick(11)"
+                >{{ t.templateData.footerSubText }}</text>
               </view>
             </view>
           </view>
@@ -70,20 +100,6 @@
       </view>
 
       <view class="sidebar-area">
-        <view class="sidebar-top">
-          <view class="edit-switch-row">
-            <text class="switch-label">自由编辑</text>
-            <view class="switch-toggle" :class="{ active: isFreeEdit }" @click="isFreeEdit = !isFreeEdit">
-              <view class="switch-dot"></view>
-            </view>
-          </view>
-          <view class="edit-content-btn" @click="handleOpenBasicInfo">
-            <text class="btn-icon">✏️</text>
-            <text class="btn-text">修改对应内容</text>
-            <text class="btn-arrow">›</text>
-          </view>
-        </view>
-
         <scroll-view class="sidebar-pages" scroll-y>
           <view
             v-for="(page, idx) in pageList"
@@ -109,6 +125,17 @@
             </view>
           </view>
         </scroll-view>
+
+        <view class="sidebar-actions">
+          <view class="edit-content-btn" @click="handleOpenBasicInfo">
+            <text class="btn-icon">✏️</text>
+            <text class="btn-text">修改内容</text>
+          </view>
+          <view class="edit-content-btn" @click="editorStore.activePanelTab = 'edit'">
+            <text class="btn-icon">🧩</text>
+            <text class="btn-text">自由编辑</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -130,57 +157,17 @@
       </view>
     </view>
 
+    <!-- Settings Popup -->
     <view v-if="showSettings" class="popup-overlay" @click="showSettings = false">
       <view class="popup-content settings-popup" @click.stop>
         <view class="popup-title">作品设置</view>
         <view class="settings-list">
-          <view class="setting-item">
+          <view v-for="s in settingDefs" :key="s.key" class="setting-item">
             <view class="setting-info">
-              <text class="setting-name">开启弹幕工具栏</text>
-              <text class="setting-desc">提示：关闭底部工具栏后，礼物/礼金/点赞/弹幕功能同步关闭相关功能</text>
+              <text class="setting-name">{{ s.name }}</text>
+              <text v-if="s.desc" class="setting-desc">{{ s.desc }}</text>
             </view>
-            <view class="setting-switch" :class="{ active: templateStore.settings.danmaku }" @click="templateStore.toggleSetting('danmaku')">
-              <view class="switch-thumb"></view>
-            </view>
-          </view>
-          <view class="setting-item">
-            <view class="setting-info">
-              <text class="setting-name">礼物功能</text>
-            </view>
-            <view class="setting-switch" :class="{ active: templateStore.settings.giftAlbum }" @click="templateStore.toggleSetting('giftAlbum')">
-              <view class="switch-thumb"></view>
-            </view>
-          </view>
-          <view class="setting-item">
-            <view class="setting-info">
-              <text class="setting-name">礼物尾页</text>
-            </view>
-            <view class="setting-switch" :class="{ active: templateStore.settings.giftBuy }" @click="templateStore.toggleSetting('giftBuy')">
-              <view class="switch-thumb"></view>
-            </view>
-          </view>
-          <view class="setting-item">
-            <view class="setting-info">
-              <text class="setting-name">礼金功能</text>
-            </view>
-            <view class="setting-switch" :class="{ active: templateStore.settings.moneyGift }" @click="templateStore.toggleSetting('moneyGift')">
-              <view class="switch-thumb"></view>
-            </view>
-          </view>
-          <view class="setting-item">
-            <view class="setting-info">
-              <text class="setting-name">点赞功能</text>
-            </view>
-            <view class="setting-switch" :class="{ active: templateStore.settings.like }" @click="templateStore.toggleSetting('like')">
-              <view class="switch-thumb"></view>
-            </view>
-          </view>
-          <view class="setting-item">
-            <view class="setting-info">
-              <text class="setting-name">相册功能</text>
-              <text class="setting-desc">提示：打开时访客可查看邀请函中使用的图片相册</text>
-            </view>
-            <view class="setting-switch" :class="{ active: templateStore.settings.album }" @click="templateStore.toggleSetting('album')">
+            <view class="setting-switch" :class="{ active: t.settings[s.key] }" @click="t.toggleSetting(s.key)">
               <view class="switch-thumb"></view>
             </view>
           </view>
@@ -188,70 +175,110 @@
       </view>
     </view>
 
-    <view v-if="showBasicInfo" class="popup-overlay" @click="showBasicInfo = false">
-      <view class="popup-content basicinfo-popup" @click.stop>
-        <view class="popup-header">
-          <view class="popup-back" @click="showBasicInfo = false">
-            <text class="back-arrow">‹</text>
-          </view>
-          <text class="popup-header-title">完善基本信息</text>
-          <view class="popup-confirm" @click="handleConfirmBasicInfo">
-            <text class="confirm-text">完成</text>
-          </view>
+    <!-- Basic Info Form -->
+    <BasicInfoForm
+      :visible="showBasicInfo"
+      :basic-info="t.basicInfo"
+      @close="showBasicInfo = false"
+      @confirm="handleConfirmBasicInfo"
+      @location="handleLocation"
+      @date-picker="handleDatePicker"
+      @update="onBasicInfoUpdate"
+    />
+
+    <!-- Right Panel -->
+    <RightPanel
+      v-if="showRightPanel"
+      :active-panel-tab="editorStore.activePanelTab"
+      :editable-elements="editorStore.editableElements"
+      :selected-element="editorStore.selectedElement"
+      :material-list="editorStore.materialList"
+      :current-font="editorStore.currentFont"
+      :current-color="editorStore.currentColor"
+      :current-font-size="editorStore.currentFontSize"
+      :current-spacing="editorStore.currentSpacing"
+      :current-line-height="editorStore.currentLineHeight"
+      :settings="t.settings"
+      @update:active-panel-tab="editorStore.activePanelTab = $event"
+      @open-editor="editorStore.openEditor"
+      @select-material="onSelectMaterial"
+      @show-font-picker="showFontPickerModal = true"
+      @show-color-picker="showColorPickerModal = true"
+      @decrease-font-size="editorStore.decreaseFontSize"
+      @increase-font-size="editorStore.increaseFontSize"
+      @decrease-spacing="editorStore.decreaseSpacing"
+      @increase-spacing="editorStore.increaseSpacing"
+      @decrease-line-height="editorStore.decreaseLineHeight"
+      @increase-line-height="editorStore.increaseLineHeight"
+      @reset-style="editorStore.resetStyle"
+      @toggle-setting="t.toggleSetting"
+    />
+
+    <!-- Text Editor Popup -->
+    <TextEditorPopup
+      :visible="editorStore.showTextEditor"
+      :editing-text="editorStore.editingText"
+      :current-font="editorStore.currentFont"
+      :current-color="editorStore.currentColor"
+      :current-font-size="editorStore.currentFontSize"
+      :current-spacing="editorStore.currentSpacing"
+      :current-line-height="editorStore.currentLineHeight"
+      @close="editorStore.closeTextEditor"
+      @confirm="editorStore.confirmTextEdit"
+      @input="editorStore.editingText = $event"
+      @show-font-picker="showFontPickerModal = true"
+      @show-color-picker="showColorPickerModal = true"
+      @decrease-font-size="editorStore.decreaseFontSize"
+      @increase-font-size="editorStore.increaseFontSize"
+      @decrease-spacing="editorStore.decreaseSpacing"
+      @increase-spacing="editorStore.increaseSpacing"
+      @decrease-line-height="editorStore.decreaseLineHeight"
+      @increase-line-height="editorStore.increaseLineHeight"
+      @reset-style="editorStore.resetStyle"
+    />
+
+    <!-- Font Picker Modal -->
+    <view v-if="showFontPickerModal" class="modal-overlay" @click="showFontPickerModal = false">
+      <view class="modal-content" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">选择字体</text>
+          <text class="modal-close" @click="showFontPickerModal = false">完成</text>
         </view>
-
-        <scroll-view class="form-scroll" scroll-y>
-          <view class="form-content">
-            <view class="form-item">
-              <text class="form-label">新郎姓名</text>
-              <input class="form-input" v-model="templateStore.basicInfo.groomName" placeholder="请输入新郎真实姓名" placeholder-class="input-placeholder" maxlength="30" />
-              <text class="char-count">{{ (templateStore.basicInfo.groomName || '').length }}/30</text>
-            </view>
-
-            <view class="form-item">
-              <text class="form-label">新娘姓名</text>
-              <input class="form-input" v-model="templateStore.basicInfo.brideName" placeholder="请输入新娘真实姓名" placeholder-class="input-placeholder" maxlength="30" />
-              <text class="char-count">{{ (templateStore.basicInfo.brideName || '').length }}/30</text>
-            </view>
-
-            <view class="form-item" @click="handleDatePicker">
-              <text class="form-label">婚礼时间</text>
-              <view class="form-value">
-                <text v-if="templateStore.basicInfo.weddingDate" class="value-text">{{ templateStore.basicInfo.weddingDate }}</text>
-                <text v-else class="input-placeholder">请选择婚礼时间</text>
-                <text class="value-arrow">›</text>
-              </view>
-            </view>
-
-            <view class="form-item" @click="handleLocation">
-              <text class="form-label">位置导航</text>
-              <view class="form-value">
-                <view class="location-input">
-                  <text v-if="templateStore.basicInfo.location" class="value-text">{{ templateStore.basicInfo.location }}</text>
-                  <text v-else class="input-placeholder">搜索定位导航位置</text>
-                </view>
-                <view class="location-btn">
-                  <text class="location-icon">📍</text>
-                  <text class="location-label">定位</text>
-                </view>
-              </view>
-            </view>
-
-            <view class="map-preview">
-              <view class="map-bg">
-                <view class="map-marker-area">
-                  <text class="map-pin">📍</text>
-                  <text class="map-venue">{{ templateStore.basicInfo.location || '李 大管家品牌酒店' }}</text>
-                </view>
-              </view>
-            </view>
-
-            <view class="form-item">
-              <text class="form-label">详细地址</text>
-              <input class="form-input" v-model="templateStore.basicInfo.detailAddress" placeholder="例：婚贝大酒店9F幸福宴会厅" placeholder-class="input-placeholder" />
-            </view>
+        <scroll-view class="modal-scroll" scroll-y>
+          <view
+            v-for="font in FONT_LIST"
+            :key="font"
+            class="modal-option"
+            :class="{ active: editorStore.currentFont === font }"
+            @click="onSelectFont(font)"
+          >
+            <text class="modal-option-text" :style="{ fontFamily: font === '华文楷体' ? 'STKaiti,KaiTi,serif' : font === '华文行楷' ? 'STXingkai,cursive' : font === '华文隶书' ? 'STLiti,cursive' : 'sans-serif' }">{{ font }}</text>
+            <text v-if="editorStore.currentFont === font" class="modal-check">✓</text>
           </view>
         </scroll-view>
+      </view>
+    </view>
+
+    <!-- Color Picker Modal -->
+    <view v-if="showColorPickerModal" class="modal-overlay" @click="showColorPickerModal = false">
+      <view class="modal-content" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">选择颜色</text>
+          <text class="modal-close" @click="showColorPickerModal = false">完成</text>
+        </view>
+        <view class="color-grid">
+          <view
+            v-for="color in COLOR_LIST"
+            :key="color"
+            class="color-item"
+            :class="{ active: editorStore.currentColor === color }"
+            @click="onSelectColor(color)"
+          >
+            <view class="color-swatch" :style="{ background: color, border: color === '#ffffff' ? '2rpx solid #ddd' : 'none' }">
+              <text v-if="editorStore.currentColor === color" class="color-check">✓</text>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
   </view>
@@ -260,62 +287,137 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useTemplateStore } from '@/stores/template'
+import { useEditorStore } from '@/stores/editor'
+import { useWorksStore } from '@/stores/works'
+import { FONT_LIST, COLOR_LIST } from '@/constants/editor'
+import BasicInfoForm from './components/BasicInfoForm.vue'
+import RightPanel from './components/RightPanel.vue'
+import TextEditorPopup from './components/TextEditorPopup.vue'
 
-const templateStore = useTemplateStore()
+// Map: preview element index -> editableElements index (or -1 for basic info)
+const PREVIEW_MAP: Record<number, number> = {
+  0: 0,   // cover image -> coverImage
+  1: 1,   // photo1
+  2: 2,   // photo2
+  5: -1,  // couple info -> basic info form
+  6: 6,   // coverTitle
+  7: 7,   // coverSubtitle
+  8: 8,   // photoTitle
+  9: 9,   // photoSubtitle
+  10: 10, // footerText
+  11: 11, // footerSubText
+}
+
+const t = useTemplateStore()
+const editorStore = useEditorStore()
+const worksStore = useWorksStore()
 
 const isFreeEdit = ref(false)
 const currentPageIndex = ref(0)
 const showSettings = ref(false)
 const showBasicInfo = ref(false)
+const showRightPanel = ref(true)
+const showFontPickerModal = ref(false)
+const showColorPickerModal = ref(false)
+const selectedPreviewIdx = ref<number | null>(null)
 
 const pageList = ref([
-  { type: 'cover', label: '封面', image: templateStore.templateData.coverImage },
+  { type: 'cover', label: '封面', image: t.templateData.coverImage },
   { type: 'info', label: '新人信息' },
   { type: 'footer', label: 'WEDDING' },
-  { type: 'photo', label: '合卺', image: templateStore.templateData.photo1 },
+  { type: 'photo', label: '合卺', image: t.templateData.photo1 },
   { type: 'story', label: '我的情书' },
-  { type: 'photo', label: '满小满', image: templateStore.templateData.photo2 },
+  { type: 'photo', label: '满小满', image: t.templateData.photo2 },
   { type: 'simple', label: 'GROOM' },
 ])
 
-const goBack = () => {
-  uni.navigateBack()
+const settingDefs = [
+  { key: 'danmaku', name: '开启弹幕工具栏', desc: '关闭后底部工具栏同步关闭' },
+  { key: 'giftAlbum', name: '礼物相册' },
+  { key: 'giftBuy', name: '礼物购买' },
+  { key: 'moneyGift', name: '礼金功能' },
+  { key: 'like', name: '点赞功能' },
+  { key: 'album', name: '相册功能' },
+]
+
+function previewStyle(previewIdx: number) {
+  if (selectedPreviewIdx.value !== previewIdx) return {}
+  return {
+    fontSize: editorStore.currentFontSize + 'rpx',
+    color: editorStore.currentColor,
+    letterSpacing: editorStore.currentSpacing + 'rpx',
+    lineHeight: editorStore.currentLineHeight,
+  }
 }
 
-const handleMusic = () => {
-  uni.navigateTo({ url: '/pages/music/index' })
+function onPreviewClick(previewIdx: number) {
+  const elIdx = PREVIEW_MAP[previewIdx]
+  if (elIdx === undefined) return
+  selectedPreviewIdx.value = previewIdx
+  if (elIdx === -1) {
+    showBasicInfo.value = true
+    return
+  }
+  editorStore.openEditor(elIdx)
 }
+
+function onSelectMaterial(material: { url: string; name: string }) {
+  editorStore.selectMaterial(material)
+  selectedPreviewIdx.value = null
+}
+
+function onSelectFont(font: string) {
+  editorStore.currentFont = font
+  showFontPickerModal.value = false
+}
+
+function onSelectColor(color: string) {
+  editorStore.currentColor = color
+  showColorPickerModal.value = false
+}
+
+const goBack = () => { uni.navigateBack() }
+
+const handleMusic = () => { uni.navigateTo({ url: '/pages/music/index' }) }
 
 const handleSave = () => {
+  worksStore.saveAsWork({
+    id: Date.now(),
+    title: t.basicInfo.groomName ? `${t.basicInfo.groomName} & ${t.basicInfo.brideName} 的婚礼请柬` : '我们的婚礼请柬',
+    date: t.basicInfo.weddingDate || new Date().toISOString().slice(0, 10).replace(/-/g, '.'),
+    image: t.templateData.coverImage,
+    status: 'draft',
+    updatedAt: new Date().toISOString(),
+  })
+  t.persist()
   uni.showToast({ title: '已保存', icon: 'success' })
 }
 
-const handlePreviewShare = () => {
-  uni.navigateTo({ url: '/pages/preview/index' })
-}
+const handlePreviewShare = () => { uni.navigateTo({ url: '/pages/preview/index' }) }
 
-const handleOpenBasicInfo = () => {
-  showBasicInfo.value = true
-}
+const handleOpenBasicInfo = () => { showBasicInfo.value = true }
 
 const handleConfirmBasicInfo = () => {
   showBasicInfo.value = false
+  t.persist()
   uni.showToast({ title: '已保存', icon: 'success' })
 }
 
-const handleDatePicker = () => {
-  uni.showToast({ title: '选择日期', icon: 'none' })
+const handleDatePicker = () => {}
+
+const onBasicInfoUpdate = (field: string, value: string) => {
+  if (field === 'weddingDate') {
+    t.basicInfo.weddingDate = value
+  }
 }
 
 const handleLocation = () => {
   try {
     uni.chooseLocation({
-      success: (res: any) => {
-        templateStore.basicInfo.location = res.name || res.address
-      }
+      success: (res: any) => { t.basicInfo.location = res.name || res.address }
     })
   } catch (e) {
-    uni.showToast({ title: '选择位置', icon: 'none' })
+    uni.showToast({ title: '选择位置失败', icon: 'none' })
   }
 }
 
@@ -328,6 +430,7 @@ const onImageError = () => {}
   background: #f5f5f5;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .editor-header {
@@ -340,29 +443,12 @@ const onImageError = () => {}
 }
 
 .header-back {
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 60rpx; height: 60rpx;
+  display: flex; align-items: center; justify-content: center;
 }
-
-.back-icon {
-  font-size: 56rpx;
-  color: #333;
-  font-weight: 300;
-  line-height: 1;
-}
-
-.header-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.header-right {
-  width: 60rpx;
-}
+.back-icon { font-size: 56rpx; color: #333; font-weight: 300; line-height: 1; }
+.header-title { font-size: 32rpx; font-weight: 600; color: #333; }
+.header-right { width: 60rpx; }
 
 .editor-body {
   flex: 1;
@@ -378,25 +464,12 @@ const onImageError = () => {}
   background: #fff;
   border-radius: 16rpx;
   overflow: hidden;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05);
   min-width: 0;
 }
-
-.preview-scroll {
-  height: 100%;
-  width: 100%;
-}
-
-.preview-card {
-  width: 100%;
-  padding: 16rpx;
-  box-sizing: border-box;
-}
-
-.page-content {
-  width: 100%;
-  position: relative;
-}
+.preview-scroll { height: 100%; width: 100%; }
+.preview-card { width: 100%; padding: 16rpx; box-sizing: border-box; }
+.page-content { width: 100%; position: relative; }
 
 .section {
   width: 100%;
@@ -404,51 +477,33 @@ const onImageError = () => {}
   overflow: hidden;
 }
 
+.preview-active-border {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border: 4rpx solid #e84a6e;
+  border-radius: 8rpx;
+  z-index: 10;
+  pointer-events: none;
+}
+
 .cover-section {
   height: 560rpx;
   border-radius: 8rpx;
   overflow: hidden;
 }
-
 .cover-image {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
+  width: 100%; height: 100%;
+  position: absolute; top: 0; left: 0;
 }
-
 .cover-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
-
 .welcome-text {
-  font-size: 18rpx;
-  color: #333;
-  letter-spacing: 4rpx;
+  font-size: 18rpx; color: #333; letter-spacing: 4rpx;
 }
-
 .main-title {
-  font-size: 56rpx;
-  color: #333;
-  font-weight: bold;
-  margin-top: 16rpx;
-  font-family: STKaiti, KaiTi, serif;
-}
-
-.sub-title {
-  font-size: 40rpx;
-  color: #e84a6e;
-  font-weight: bold;
-  margin-top: 8rpx;
+  font-size: 56rpx; color: #333; font-weight: bold; margin-top: 16rpx;
   font-family: STKaiti, KaiTi, serif;
 }
 
@@ -456,619 +511,190 @@ const onImageError = () => {}
   padding: 48rpx 24rpx 32rpx;
   background: #fff;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 16rpx;
+  align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 16rpx;
 }
-
 .couple-names {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: flex; flex-direction: column; align-items: center;
 }
-
-.name {
-  font-size: 32rpx;
-  color: #333;
-  font-weight: 600;
-}
-
-.groom-bride {
-  font-size: 14rpx;
-  color: #999;
-  letter-spacing: 2rpx;
-  margin-top: 4rpx;
-}
-
-.shuangxi-icon {
-  font-size: 56rpx;
-  color: #e84a6e;
-  font-weight: bold;
-  margin: 0 24rpx;
-}
-
+.name { font-size: 32rpx; color: #333; font-weight: 600; }
+.groom-bride { font-size: 14rpx; color: #999; letter-spacing: 2rpx; margin-top: 4rpx; }
+.shuangxi-icon { font-size: 56rpx; color: #e84a6e; font-weight: bold; margin: 0 24rpx; }
 .wedding-date {
-  width: 100%;
-  text-align: center;
-  font-size: 24rpx;
-  color: #333;
-  margin-top: 24rpx;
-  font-weight: 500;
+  width: 100%; text-align: center; font-size: 24rpx; color: #333;
+  margin-top: 24rpx; font-weight: 500;
 }
-
 .wedding-address {
-  width: 100%;
-  text-align: center;
-  font-size: 18rpx;
-  color: #999;
-  margin-top: 8rpx;
+  width: 100%; text-align: center; font-size: 18rpx; color: #999; margin-top: 8rpx;
 }
 
 .footer-border {
-  padding: 24rpx;
-  background: #fff;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1rpx solid #eee;
-  border-bottom: 1rpx solid #eee;
+  padding: 24rpx; background: #fff;
+  display: flex; justify-content: space-between; align-items: center;
+  border-top: 1rpx solid #eee; border-bottom: 1rpx solid #eee;
 }
-
-.footer-text-left,
-.footer-text-center,
-.footer-text-right {
-  font-size: 18rpx;
-  color: #999;
-  letter-spacing: 2rpx;
-  font-weight: 500;
+.footer-text-left, .footer-text-center, .footer-text-right {
+  font-size: 18rpx; color: #999; letter-spacing: 2rpx; font-weight: 500;
 }
 
 .photo-section {
-  height: 400rpx;
-  border-radius: 8rpx;
-  overflow: hidden;
-  margin-top: 16rpx;
-
-  &.small {
-    height: 280rpx;
-  }
+  height: 400rpx; border-radius: 8rpx; overflow: hidden; margin-top: 16rpx;
+  &.small { height: 280rpx; }
 }
-
-.photo-image {
-  width: 100%;
-  height: 100%;
-}
-
+.photo-image { width: 100%; height: 100%; }
 .photo-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.3);
 }
-
 .photo-title {
-  font-size: 48rpx;
-  color: #fff;
-  font-weight: bold;
-  font-family: STKaiti, KaiTi, serif;
+  font-size: 48rpx; color: #fff; font-weight: bold; font-family: STKaiti, KaiTi, serif;
 }
-
-.photo-sub {
-  font-size: 20rpx;
-  color: #fff;
-  letter-spacing: 4rpx;
-  margin-top: 8rpx;
-}
-
-.photo-content {
-  font-size: 18rpx;
-  color: rgba(255, 255, 255, 0.8);
-  margin-top: 24rpx;
-  letter-spacing: 2rpx;
-}
+.photo-sub { font-size: 20rpx; color: #fff; letter-spacing: 4rpx; margin-top: 8rpx; }
 
 .love-story-section {
-  padding: 80rpx 24rpx;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  padding: 80rpx 24rpx; background: #fff;
+  display: flex; flex-direction: column; align-items: center;
 }
-
-.story-title {
-  font-size: 32rpx;
-  color: #333;
-  font-weight: 500;
-}
-
-.story-sub {
-  font-size: 18rpx;
-  color: #999;
-  letter-spacing: 4rpx;
-  margin-top: 8rpx;
-}
+.story-title { font-size: 32rpx; color: #333; font-weight: 500; }
+.story-sub { font-size: 18rpx; color: #999; letter-spacing: 4rpx; margin-top: 8rpx; }
 
 .simple-section {
-  padding: 60rpx 24rpx;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  padding: 60rpx 24rpx; background: #fff;
+  display: flex; flex-direction: column; align-items: center;
 }
-
-.simple-title {
-  font-size: 28rpx;
-  color: #333;
-  font-weight: 500;
-}
-
-.simple-sub {
-  font-size: 14rpx;
-  color: #999;
-  letter-spacing: 4rpx;
-  margin-top: 8rpx;
-}
+.simple-title { font-size: 28rpx; color: #333; font-weight: 500; }
+.simple-sub { font-size: 14rpx; color: #999; letter-spacing: 4rpx; margin-top: 8rpx; }
 
 .sidebar-area {
-  width: 220rpx;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
+  width: 280rpx;
+  display: flex; flex-direction: column;
+  flex-shrink: 0; gap: 12rpx;
 }
-
-.sidebar-top {
-  background: #fff;
-  border-radius: 16rpx 16rpx 0 0;
-  padding: 16rpx 12rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
-  flex-shrink: 0;
-}
-
-.edit-switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8rpx 4rpx;
-}
-
-.switch-label {
-  font-size: 20rpx;
-  color: #333;
-}
-
-.switch-toggle {
-  width: 60rpx;
-  height: 32rpx;
-  border-radius: 16rpx;
-  background: #e0e0e0;
-  position: relative;
-  transition: background 0.2s ease;
-
-  &.active {
-    background: #e84a6e;
-
-    .switch-dot {
-      left: 30rpx;
-    }
-  }
-}
-
-.switch-dot {
-  width: 26rpx;
-  height: 26rpx;
-  border-radius: 50%;
-  background: #fff;
-  position: absolute;
-  top: 3rpx;
-  left: 3rpx;
-  box-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.15);
-  transition: left 0.2s ease;
-}
-
-.edit-content-btn {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  padding: 16rpx 8rpx;
-  background: #fff5f5;
-  border-radius: 8rpx;
-  margin-top: 12rpx;
-  border: 1rpx solid #ffe4e8;
-}
-
-.btn-icon {
-  font-size: 22rpx;
-}
-
-.btn-text {
-  flex: 1;
-  font-size: 20rpx;
-  color: #e84a6e;
-  font-weight: 500;
-}
-
-.btn-arrow {
-  font-size: 28rpx;
-  color: #e84a6e;
-  font-weight: 300;
-}
-
 .sidebar-pages {
-  flex: 1;
-  background: #fff;
-  border-radius: 0 0 16rpx 16rpx;
-  padding: 12rpx 16rpx 16rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
-  min-height: 0;
+  flex: 1; background: #fff; border-radius: 16rpx;
+  padding: 12rpx 16rpx; min-height: 0;
 }
-
 .page-thumb {
-  width: 100%;
-  height: 240rpx;
-  border-radius: 8rpx;
-  margin-bottom: 16rpx;
-  overflow: hidden;
+  width: 100%; height: 160rpx; border-radius: 8rpx; margin-bottom: 12rpx; overflow: hidden;
   border: 4rpx solid transparent;
-  transition: border-color 0.2s ease;
-
-  &.active {
-    border-color: #e84a6e;
-  }
+  &.active { border-color: #e84a6e; }
 }
-
-.thumb-image {
-  width: 100%;
-  height: 100%;
-}
-
+.thumb-image { width: 100%; height: 100%; }
 .thumb-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8rpx;
   background: linear-gradient(135deg, #fff5f5 0%, #ffe4e8 100%);
 }
+.info-thumb { background: linear-gradient(135deg, #fff8f0 0%, #ffe8d4 100%); }
+.footer-thumb { background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); }
+.story-thumb { background: linear-gradient(135deg, #f8f5ff 0%, #e8d4ff 100%); }
+.photo-thumb { background: linear-gradient(135deg, #e8f4ff 0%, #d4e8ff 100%); }
+.thumb-icon { font-size: 36rpx; }
+.thumb-label { font-size: 18rpx; color: #666; text-align: center; }
 
-.info-thumb {
-  background: linear-gradient(135deg, #fff8f0 0%, #ffe8d4 100%);
+.sidebar-actions {
+  display: flex; gap: 12rpx;
 }
-
-.footer-thumb {
-  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+.edit-content-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6rpx;
+  padding: 16rpx 8rpx; background: #fff5f5; border-radius: 12rpx; border: 1rpx solid #ffe4e8;
 }
-
-.story-thumb {
-  background: linear-gradient(135deg, #f8f5ff 0%, #e8d4ff 100%);
-}
-
-.photo-thumb {
-  background: linear-gradient(135deg, #e8f4ff 0%, #d4e8ff 100%);
-}
-
-.thumb-icon {
-  font-size: 36rpx;
-}
-
-.thumb-label {
-  font-size: 18rpx;
-  color: #666;
-  text-align: center;
-}
+.btn-icon { font-size: 22rpx; }
+.btn-text { font-size: 20rpx; color: #e84a6e; font-weight: 500; }
 
 .editor-footer {
-  display: flex;
-  align-items: center;
-  padding: 20rpx 30rpx;
-  background: #fff;
+  display: flex; align-items: center;
+  padding: 20rpx 30rpx; background: #fff;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  box-shadow: 0 -2rpx 8rpx rgba(0, 0, 0, 0.03);
-  flex-shrink: 0;
-  gap: 12rpx;
+  box-shadow: 0 -2rpx 8rpx rgba(0,0,0,0.03);
+  flex-shrink: 0; gap: 12rpx;
 }
-
 .footer-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6rpx;
-  padding: 8rpx 16rpx;
+  display: flex; flex-direction: column; align-items: center; gap: 6rpx; padding: 8rpx 16rpx;
 }
-
-.footer-icon {
-  font-size: 36rpx;
-}
-
-.footer-label {
-  font-size: 22rpx;
-  color: #666;
-}
-
+.footer-icon { font-size: 36rpx; }
+.footer-label { font-size: 22rpx; color: #666; }
 .preview-btn {
   margin-left: auto;
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  color: #fff;
-  border-radius: 40rpx;
-  padding: 20rpx 40rpx;
-  box-shadow: 0 4rpx 16rpx rgba(232, 74, 110, 0.3);
+  color: #fff; border-radius: 40rpx; padding: 20rpx 40rpx;
+  box-shadow: 0 4rpx 16rpx rgba(232,74,110,0.3);
 }
-
-.preview-text {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #fff;
-}
+.preview-text { font-size: 28rpx; font-weight: 600; color: #fff; }
 
 .popup-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: flex-end;
-  z-index: 1000;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; z-index: 1000;
 }
-
 .popup-content {
-  width: 100%;
-  background: #fff;
-  border-radius: 32rpx 32rpx 0 0;
-  max-height: 80vh;
+  width: 100%; background: #fff;
+  border-radius: 32rpx 32rpx 0 0; max-height: 80vh;
 }
-
-.settings-popup {
-  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
-}
-
+.settings-popup { padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom)); }
 .popup-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-  text-align: center;
-  margin-bottom: 32rpx;
+  font-size: 32rpx; font-weight: 600; color: #333;
+  text-align: center; margin-bottom: 32rpx;
 }
-
-.settings-list {
-  display: flex;
-  flex-direction: column;
-}
-
+.settings-list { display: flex; flex-direction: column; }
 .setting-item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 28rpx 0;
-  border-bottom: 1rpx solid #f0f0f0;
-  gap: 24rpx;
-
-  &:last-child {
-    border-bottom: none;
-  }
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 28rpx 0; border-bottom: 1rpx solid #f0f0f0; gap: 24rpx;
+  &:last-child { border-bottom: none; }
 }
-
-.setting-info {
-  flex: 1;
-}
-
-.setting-name {
-  font-size: 28rpx;
-  color: #333;
-  font-weight: 500;
-  display: block;
-}
-
-.setting-desc {
-  font-size: 22rpx;
-  color: #999;
-  margin-top: 8rpx;
-  display: block;
-  line-height: 1.4;
-}
-
+.setting-info { flex: 1; }
+.setting-name { font-size: 28rpx; color: #333; font-weight: 500; display: block; }
+.setting-desc { font-size: 22rpx; color: #999; margin-top: 8rpx; display: block; line-height: 1.4; }
 .setting-switch {
-  width: 88rpx;
-  height: 50rpx;
-  border-radius: 25rpx;
-  background: #e0e0e0;
-  position: relative;
-  flex-shrink: 0;
-  transition: background 0.2s ease;
-  margin-top: 4rpx;
-
+  width: 88rpx; height: 50rpx; border-radius: 25rpx;
+  background: #e0e0e0; position: relative; flex-shrink: 0;
+  transition: background 0.2s ease; margin-top: 4rpx;
   &.active {
     background: #e84a6e;
-
-    .switch-thumb {
-      left: 42rpx;
-    }
+    .switch-thumb { left: 42rpx; }
   }
 }
-
 .switch-thumb {
-  width: 44rpx;
-  height: 44rpx;
-  border-radius: 50%;
-  background: #fff;
-  position: absolute;
-  top: 3rpx;
-  left: 3rpx;
-  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.15);
+  width: 44rpx; height: 44rpx; border-radius: 50%;
+  background: #fff; position: absolute; top: 3rpx; left: 3rpx;
+  box-shadow: 0 2rpx 6rpx rgba(0,0,0,0.15);
   transition: left 0.2s ease;
 }
 
-.basicinfo-popup {
-  display: flex;
-  flex-direction: column;
-  max-height: 85vh;
+/* Modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; z-index: 2000;
 }
+.modal-content {
+  width: 100%; background: #fff;
+  border-radius: 32rpx 32rpx 0 0; max-height: 60vh;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 28rpx 32rpx; border-bottom: 1rpx solid #f0f0f0;
+}
+.modal-title { font-size: 32rpx; font-weight: 600; color: #333; }
+.modal-close { font-size: 28rpx; color: #e84a6e; font-weight: 500; }
+.modal-scroll { padding: 16rpx 0; max-height: 50vh; }
+.modal-option {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 28rpx 32rpx; border-bottom: 1rpx solid #f5f5f5;
+  &.active { background: #fff5f5; }
+}
+.modal-option-text { font-size: 30rpx; color: #333; }
+.modal-check { font-size: 28rpx; color: #e84a6e; }
 
-.popup-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 28rpx 32rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-  flex-shrink: 0;
+.color-grid {
+  display: flex; flex-wrap: wrap; padding: 32rpx; gap: 24rpx;
 }
-
-.popup-back {
-  width: 80rpx;
+.color-item {
+  width: calc(20% - 20rpx);
+  display: flex; align-items: center; justify-content: center;
 }
-
-.back-arrow {
-  font-size: 56rpx;
-  color: #333;
-  font-weight: 300;
-  line-height: 1;
+.color-swatch {
+  width: 80rpx; height: 80rpx; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
 }
-
-.popup-header-title {
-  font-size: 34rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.popup-confirm {
-  width: 80rpx;
-  text-align: right;
-}
-
-.confirm-text {
-  font-size: 28rpx;
-  color: #e84a6e;
-  font-weight: 500;
-}
-
-.form-scroll {
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.form-content {
-  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
-}
-
-.form-item {
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #f0f0f0;
-}
-
-.form-label {
-  font-size: 28rpx;
-  color: #333;
-  font-weight: 500;
-  margin-bottom: 16rpx;
-  display: block;
-}
-
-.form-input {
-  width: 100%;
-  height: 64rpx;
-  font-size: 28rpx;
-  color: #333;
-}
-
-.input-placeholder {
-  font-size: 28rpx;
-  color: #bbb;
-}
-
-.char-count {
-  font-size: 22rpx;
-  color: #999;
-  text-align: right;
-  margin-top: 8rpx;
-  display: block;
-}
-
-.form-value {
-  display: flex;
-  align-items: center;
-  padding: 12rpx 0;
-}
-
-.location-input {
-  flex: 1;
-}
-
-.value-text {
-  font-size: 28rpx;
-  color: #333;
-}
-
-.value-arrow {
-  font-size: 36rpx;
-  color: #ccc;
-  font-weight: 300;
-  margin-left: 8rpx;
-}
-
-.location-btn {
-  display: flex;
-  align-items: center;
-  gap: 4rpx;
-  padding: 8rpx 16rpx;
-  background: #f5f5f5;
-  border-radius: 8rpx;
-  flex-shrink: 0;
-}
-
-.location-icon {
-  font-size: 24rpx;
-}
-
-.location-label {
-  font-size: 22rpx;
-  color: #666;
-}
-
-.map-preview {
-  margin-top: 24rpx;
-  height: 300rpx;
-  border-radius: 12rpx;
-  overflow: hidden;
-}
-
-.map-bg {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #e8f4ff 0%, #d4e8ff 50%, #c0d8ff 100%);
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.map-marker-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8rpx;
-  background: #fff;
-  padding: 16rpx 24rpx;
-  border-radius: 12rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
-}
-
-.map-pin {
-  font-size: 36rpx;
-}
-
-.map-venue {
-  font-size: 24rpx;
-  color: #333;
-  font-weight: 500;
-}
+.color-check { font-size: 32rpx; color: #fff; text-shadow: 0 1rpx 2rpx rgba(0,0,0,0.5); }
 </style>

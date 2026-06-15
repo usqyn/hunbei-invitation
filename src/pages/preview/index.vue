@@ -4,8 +4,8 @@
       <view class="header-back" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
-      <text class="header-title">适我愿兮 · 婚...</text>
-      <view class="header-action">
+      <text class="header-title">{{ templateStore.basicInfo.groomName || '满小满' }} · {{ templateStore.basicInfo.brideName || '美小美' }}</text>
+      <view class="header-action" @click="handleMore">
         <text class="action-icon">⋯</text>
       </view>
     </view>
@@ -25,19 +25,19 @@
     <scroll-view class="preview-content" scroll-y>
       <view v-if="currentTab === 'template'" class="template-preview">
         <view class="preview-image-wrapper">
-          <image class="preview-image" :src="templateImage" mode="aspectFill"></image>
+          <image class="preview-image" :src="templateStore.templateData.coverImage" mode="aspectFill" @error="onImageError"></image>
 
           <view class="image-overlay-top">
-            <text class="overlay-title">Welcome to our wedding</text>
+            <text class="overlay-title">{{ templateStore.templateData.coverSubtitle }}</text>
             <text class="overlay-sub">好久不见</text>
             <text class="overlay-name">婚礼见~</text>
           </view>
 
           <view class="image-overlay-bottom">
-            <text class="overlay-groom">满小满</text>
+            <text class="overlay-groom">{{ templateStore.basicInfo.groomName || '满小满' }}</text>
             <text class="overlay-and">囍</text>
-            <text class="overlay-bride">美小美</text>
-            <text class="overlay-date">2050.05.20</text>
+            <text class="overlay-bride">{{ templateStore.basicInfo.brideName || '美小美' }}</text>
+            <text class="overlay-date">{{ templateStore.basicInfo.weddingDate || '2050.05.20' }}</text>
           </view>
 
           <view class="image-bottom-left">
@@ -65,7 +65,7 @@
       <view v-else class="similar-list">
         <view class="similar-item" v-for="(item, idx) in similarTemplates" :key="idx">
           <view class="similar-image-wrap">
-            <image class="similar-image" :src="item.image" mode="aspectFill"></image>
+            <image class="similar-image" :src="item.image" mode="aspectFill" @error="onImageError"></image>
             <view class="similar-overlay">
               <text class="similar-title">{{ item.title }}</text>
               <text class="similar-sub">{{ item.subtitle }}</text>
@@ -89,6 +89,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useTemplateStore } from '@/stores/template'
+import { useWorksStore } from '@/stores/works'
+
+const templateStore = useTemplateStore()
+const worksStore = useWorksStore()
 
 const currentTab = ref('template')
 const isFavorite = ref(false)
@@ -97,8 +102,6 @@ const tabList = ref([
   { key: 'template', name: '模板预览' },
   { key: 'similar', name: '相似推荐' },
 ])
-
-const templateImage = '/static/images/templates/wedding-1.svg'
 
 const similarTemplates = ref([
   { title: '我们结婚啦', subtitle: 'Welcome to our wedding', likes: '52.86w', image: '/static/images/templates/wedding-1.svg' },
@@ -112,17 +115,27 @@ const goBack = () => {
 }
 
 const handleShare = () => {
-  uni.showToast({ title: '分享模板', icon: 'none' })
+  uni.setClipboardData({
+    data: 'https://www.hunbei.com/invitation/preview',
+    success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
+  })
 }
 
 const handleFavorite = () => {
   isFavorite.value = !isFavorite.value
+  worksStore.toggleFavorite(1)
   uni.showToast({ title: isFavorite.value ? '已收藏' : '取消收藏', icon: 'none' })
+}
+
+const handleMore = () => {
+  uni.showToast({ title: '更多选项', icon: 'none' })
 }
 
 const handleCreate = () => {
   uni.navigateTo({ url: '/pages/editor/index' })
 }
+
+const onImageError = () => {}
 </script>
 
 <style lang="scss" scoped>
@@ -161,6 +174,7 @@ const handleCreate = () => {
   font-weight: 600;
   color: #333;
   text-align: center;
+  flex: 1;
 }
 
 .header-action {

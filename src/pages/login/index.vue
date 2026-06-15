@@ -4,7 +4,7 @@
       <view class="back-btn" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
-      <view class="header-title">婚贝请柬</view>
+      <text class="header-title">登录</text>
       <view class="header-right"></view>
     </view>
 
@@ -18,11 +18,11 @@
       </view>
 
       <view class="agreement-section">
-        <view class="checkbox-wrapper" @click="toggleAgreement">
-          <view class="checkbox" :class="{ checked: agreed }">
+        <view class="agreement-row">
+          <view class="checkbox" :class="{ checked: agreed }" @click="toggleAgreement">
             <text v-if="agreed" class="check-icon">✓</text>
           </view>
-          <text class="agreement-text">本人已阅读并同意</text>
+          <text class="agreement-text">已阅读并同意</text>
           <text class="agreement-link">《用户协议》</text>
           <text class="agreement-text">和</text>
           <text class="agreement-link">《隐私协议》</text>
@@ -46,9 +46,31 @@
       </view>
 
       <view class="alt-login">
-        <view class="alt-item" @click="handleMpLogin">
+        <view class="alt-item" @click="showSmsForm = true">
           <text class="alt-icon">📱</text>
           <text class="alt-text">手机号登录</text>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="showSmsForm" class="popup-overlay" @click="showSmsForm = false">
+      <view class="popup-content" @click.stop>
+        <view class="popup-header">
+          <text class="popup-title">手机号登录</text>
+          <view class="popup-close" @click="showSmsForm = false">
+            <text class="close-icon">✕</text>
+          </view>
+        </view>
+        <view class="sms-form">
+          <input class="sms-input" v-model="phone" placeholder="请输入手机号" maxlength="11" type="number" />
+          <view class="code-row">
+            <input class="sms-input code-input" v-model="smsCode" placeholder="验证码" maxlength="6" type="number" />
+            <button class="code-btn" :disabled="countdown > 0" @click="sendCode">
+              <text v-if="countdown > 0">{{ countdown }}s</text>
+              <text v-else>获取验证码</text>
+            </button>
+          </view>
+          <button class="submit-btn" @click="handleSmsLogin">登录</button>
         </view>
       </view>
     </view>
@@ -59,6 +81,8 @@
 import { ref } from 'vue'
 import { useUserStore } from '@/stores/user'
 
+const userStore = useUserStore()
+
 const agreed = ref(false)
 const logging = ref(false)
 const showSmsForm = ref(false)
@@ -66,8 +90,6 @@ const phone = ref('')
 const smsCode = ref('')
 const countdown = ref(0)
 let timer: number | null = null
-
-const userStore = useUserStore()
 
 const toggleAgreement = () => {
   agreed.value = !agreed.value
@@ -91,9 +113,8 @@ const loginSuccess = () => {
   }, 1000)
 }
 
-// 微信小程序：getPhoneNumber 授权
 const onGetPhoneNumber = (e: any) => {
-  if (!agreed.value) return
+  if (!agreed.value || logging.value) return
   if (e.detail?.errMsg !== 'getPhoneNumber:ok') return
 
   logging.value = true
@@ -101,50 +122,72 @@ const onGetPhoneNumber = (e: any) => {
 
   uni.login({
     provider: 'weixin',
-    success: (loginRes) => {
-      const encryptedData = e.detail.encryptedData
-      const iv = e.detail.iv
-
-      // 实际项目中发送 code, encryptedData, iv 到后端解密
-      // 这里模拟登录成功
-      setTimeout(() => {
-        userStore.setLogin('wx_user_' + loginRes.code.slice(-6))
-        loginSuccess()
-      }, 800)
+    success: async (loginRes) => {
+      const ok = await userStore.doLogin({
+        encryptedData: e.detail.encryptedData,
+        iv: e.detail.iv,
+        code: loginRes.code,
+      })
+      if (ok) loginSuccess()
+      else { logging.value = false; uni.hideLoading() }
     },
     fail: () => {
       logging.value = false
       uni.hideLoading()
       uni.showToast({ title: '授权失败，请重试', icon: 'none' })
-    }
+    },
   })
 }
 
-// H5 环境：模拟登录
 const handleH5Login = (e: any) => {
   if (!agreed.value || logging.value) return
-
-  // H5 环境下没有 getPhoneNumber 响应
   if (e?.detail?.errMsg === undefined) {
     logging.value = true
     uni.showLoading({ title: '登录中...' })
-    setTimeout(() => {
-      userStore.setLogin('h5_user_demo')
+    setTimeout(async () => {
+      await userStore.doLogin({ phone: 'h5_user' })
       loginSuccess()
     }, 800)
   }
 }
 
-// 手机号手动登录（备选）
-const handleMpLogin = () => {
-  showSmsForm.value = true
+const sendCode = () => {
+  if (!phone.value || phone.value.length < 11) {
+    uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
+    return
+  }
+  countdown.value = 60
+  timer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      if (timer) clearInterval(timer)
+    }
+  }, 1000) as unknown as number
+  uni.showToast({ title: '验证码已发送', icon: 'success' })
+}
+
+const handleSmsLogin = async () => {
+  if (!phone.value || !smsCode.value) {
+    uni.showToast({ title: '请填写完整信息', icon: 'none' })
+    return
+  }
+  logging.value = true
+  uni.showLoading({ title: '登录中...' })
+  const ok = await userStore.doLogin({ phone: phone.value, code: smsCode.value })
+  if (ok) {
+    showSmsForm.value = false
+    loginSuccess()
+  } else {
+    logging.value = false
+    uni.hideLoading()
+  }
 }
 </script>
 
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #ffffff;
+  background: #fff;
 }
 
 .header {
@@ -152,7 +195,7 @@ const handleMpLogin = () => {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 30rpx;
-  background: #ffffff;
+  background: var(--color-bg-white);
 }
 
 .back-btn {
@@ -202,7 +245,7 @@ const handleMpLogin = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 30rpx;
+  margin-bottom: 24rpx;
 }
 
 .logo-icon {
@@ -226,7 +269,7 @@ const handleMpLogin = () => {
   margin-bottom: 40rpx;
 }
 
-.checkbox-wrapper {
+.agreement-row {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -336,5 +379,112 @@ const handleMpLogin = () => {
 .alt-text {
   font-size: 28rpx;
   color: var(--color-text-primary);
+}
+
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: flex-end;
+  z-index: 1000;
+}
+
+.popup-content {
+  width: 100%;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 40rpx 32rpx calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40rpx;
+}
+
+.popup-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.popup-close {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-icon {
+  font-size: 40rpx;
+  color: #999;
+}
+
+.sms-form {
+  display: flex;
+  flex-direction: column;
+  gap: 30rpx;
+}
+
+.sms-input {
+  width: 100%;
+  height: 90rpx;
+  border: 2rpx solid #eee;
+  border-radius: 16rpx;
+  padding: 0 30rpx;
+  font-size: 30rpx;
+  box-sizing: border-box;
+}
+
+.code-row {
+  display: flex;
+  gap: 20rpx;
+}
+
+.code-input {
+  flex: 1;
+}
+
+.code-btn {
+  flex-shrink: 0;
+  height: 90rpx;
+  line-height: 90rpx;
+  padding: 0 30rpx;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border: none;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+
+  &[disabled] {
+    opacity: 0.6;
+  }
+
+  &::after {
+    border: none;
+  }
+}
+
+.submit-btn {
+  width: 100%;
+  height: 90rpx;
+  background: var(--color-primary-gradient);
+  color: #fff;
+  border: none;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  margin-top: 20rpx;
+
+  &::after {
+    border: none;
+  }
 }
 </style>

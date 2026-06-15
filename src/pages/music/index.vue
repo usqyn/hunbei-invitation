@@ -46,27 +46,35 @@
 
     <view class="music-player">
       <view class="player-left">
-        <view class="vinyl-icon">
-          <text class="vinyl-emoji">💿</text>
+        <view class="vinyl-icon" @click="togglePlay">
+          <text class="vinyl-emoji">{{ isPlaying ? '⏸' : '▶️' }}</text>
         </view>
         <text class="player-name">{{ currentSong ? currentSong.name : '选择音乐' }}</text>
       </view>
       <view class="player-right">
-        <view class="progress-bar">
-          <view class="progress-fill"></view>
-          <view class="progress-dot"></view>
+        <view class="progress-bar" @click="seekProgress">
+          <view class="progress-fill" :style="{ width: progressPercent + '%' }"></view>
+          <view class="progress-dot" :style="{ left: progressPercent + '%' }"></view>
         </view>
-        <text class="time-text">00:00</text>
+        <text class="time-text">{{ currentTimeText }} / {{ durationText }}</text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
+import { useTemplateStore } from '@/stores/template'
+
+const templateStore = useTemplateStore()
 
 const currentTab = ref('all')
-const currentSongIndex = ref(0)
+const currentSongIndex = ref<number | null>(null)
+const isPlaying = ref(false)
+const progressPercent = ref(0)
+const currentTimeText = ref('00:00')
+const durationText = ref('00:00')
+let audioContext: any = null
 
 const tabList = ref([
   { key: 'all', name: '全部' },
@@ -76,16 +84,16 @@ const tabList = ref([
 ])
 
 const musicList = ref([
-  { name: '告白气球', isHot: true, category: 'happy' },
-  { name: '我们结婚啦', isHot: true, category: 'happy' },
-  { name: '执子之手', isHot: true, category: 'happy' },
-  { name: "It's You", isHot: true, category: 'quiet' },
-  { name: '我是如此相信', isHot: true, category: 'quiet' },
-  { name: '就是爱你', isHot: true, category: 'happy' },
-  { name: '因你而在', isHot: true, category: 'happy' },
-  { name: 'Lucky Me', isHot: true, category: 'douyin' },
-  { name: '繁花', isHot: true, category: 'quiet' },
-  { name: '爱你', isHot: true, category: 'happy' },
+  { id: 1, name: '告白气球', isHot: true, category: 'happy' },
+  { id: 2, name: '我们结婚啦', isHot: true, category: 'happy' },
+  { id: 3, name: '执子之手', isHot: true, category: 'happy' },
+  { id: 4, name: "It's You", isHot: true, category: 'quiet' },
+  { id: 5, name: '我是如此相信', isHot: true, category: 'quiet' },
+  { id: 6, name: '就是爱你', isHot: true, category: 'happy' },
+  { id: 7, name: '因你而在', isHot: true, category: 'happy' },
+  { id: 8, name: 'Lucky Me', isHot: true, category: 'douyin' },
+  { id: 9, name: '繁花', isHot: true, category: 'quiet' },
+  { id: 10, name: '爱你', isHot: true, category: 'happy' },
 ])
 
 const filteredMusicList = computed(() => {
@@ -94,10 +102,20 @@ const filteredMusicList = computed(() => {
 })
 
 const currentSong = computed(() => {
-  if (currentSongIndex.value >= 0 && currentSongIndex.value < musicList.value.length) {
+  if (currentSongIndex.value !== null && currentSongIndex.value < musicList.value.length) {
     return musicList.value[currentSongIndex.value]
   }
   return null
+})
+
+watch(currentSongIndex, () => {
+  if (audioContext) {
+    audioContext.stop()
+    audioContext = null
+  }
+  isPlaying.value = false
+  progressPercent.value = 0
+  currentTimeText.value = '00:00'
 })
 
 const goBack = () => {
@@ -105,13 +123,68 @@ const goBack = () => {
 }
 
 const handleUpload = () => {
-  uni.showToast({ title: '本地上传', icon: 'none' })
+  uni.chooseMedia({
+    count: 1,
+    mediaType: ['audio'],
+    success: (res) => {
+      const file = res.tempFiles[0]
+      musicList.value.push({ id: Date.now(), name: file.name || '本地音乐', isHot: false, category: 'all' })
+      uni.showToast({ title: '上传成功', icon: 'success' })
+    },
+    fail: () => {
+      uni.showToast({ title: '暂未选择文件', icon: 'none' })
+    }
+  })
 }
 
 const handleSelectSong = (idx: number) => {
   currentSongIndex.value = idx
-  uni.showToast({ title: '已切换歌曲', icon: 'success' })
+  templateStore.setSelectedMusic(musicList.value[idx].id)
+  isPlaying.value = true
+  durationText.value = '03:30'
+  simulateProgress()
 }
+
+const togglePlay = () => {
+  if (currentSongIndex.value === null) return
+  isPlaying.value = !isPlaying.value
+  if (isPlaying.value) {
+    simulateProgress()
+  }
+}
+
+let progressTimer: number | null = null
+
+const simulateProgress = () => {
+  if (progressTimer) clearInterval(progressTimer)
+  if (!isPlaying.value) return
+  progressTimer = setInterval(() => {
+    if (!isPlaying.value) {
+      if (progressTimer) clearInterval(progressTimer)
+      return
+    }
+    progressPercent.value += 0.5
+    const totalSec = Math.floor((progressPercent.value / 100) * 210)
+    const min = String(Math.floor(totalSec / 60)).padStart(2, '0')
+    const sec = String(totalSec % 60).padStart(2, '0')
+    currentTimeText.value = `${min}:${sec}`
+    if (progressPercent.value >= 100) {
+      if (progressTimer) clearInterval(progressTimer)
+      isPlaying.value = false
+    }
+  }, 300) as unknown as number
+}
+
+const seekProgress = (e: any) => {
+  const rect = e.target.getBoundingClientRect?.() || { left: 0, width: 300 }
+  const x = e.detail?.x || e.changedTouches?.[0]?.clientX || 0
+  const pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100))
+  progressPercent.value = pct
+}
+
+onUnmounted(() => {
+  if (progressTimer) clearInterval(progressTimer)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -214,7 +287,6 @@ const handleSelectSong = (idx: number) => {
   padding: 24rpx 32rpx;
   background: #fff;
   margin-bottom: 12rpx;
-  transition: background 0.2s ease;
 
   &.is-using {
     background: #fff5f5;
@@ -311,7 +383,7 @@ const handleSelectSong = (idx: number) => {
 }
 
 .vinyl-emoji {
-  font-size: 32rpx;
+  font-size: 24rpx;
 }
 
 .player-name {
@@ -336,13 +408,14 @@ const handleSelectSong = (idx: number) => {
   background: #f0f0f0;
   border-radius: 4rpx;
   position: relative;
+  cursor: pointer;
 }
 
 .progress-fill {
-  width: 30%;
   height: 100%;
   background: linear-gradient(90deg, #e84a6e 0%, #ff6b8a 100%);
   border-radius: 4rpx;
+  transition: width 0.3s ease;
 }
 
 .progress-dot {
@@ -352,17 +425,17 @@ const handleSelectSong = (idx: number) => {
   border-radius: 50%;
   border: 2rpx solid #e84a6e;
   position: absolute;
-  left: 30%;
   top: 50%;
   transform: translate(-50%, -50%);
   box-shadow: 0 2rpx 4rpx rgba(232, 74, 110, 0.3);
+  transition: left 0.3s ease;
 }
 
 .time-text {
   font-size: 22rpx;
   color: #999;
   flex-shrink: 0;
-  min-width: 80rpx;
+  min-width: 120rpx;
   text-align: right;
 }
 </style>

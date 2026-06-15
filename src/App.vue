@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
+import { onLaunch } from '@dcloudio/uni-app'
 
 onLaunch(() => {
-  console.log('App Launch')
-})
-
-onShow(() => {
-  console.log('App Show')
-})
-
-onHide(() => {
-  console.log('App Hide')
+  try {
+    const saved = uni.getStorageSync('hunbei_user')
+    if (saved?.token) {
+      uni.setStorageSync('token', saved.token)
+    }
+  } catch {}
 })
 </script>
 

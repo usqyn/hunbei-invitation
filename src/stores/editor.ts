@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { useTemplateStore } from './template'
-import { DEFAULT_EDITABLE_ELEMENTS, MATERIAL_LIST } from '@/constants'
+import { DEFAULT_EDITABLE_ELEMENTS, MATERIAL_LIST } from '@/constants/editor'
 import type { EditableElement, Material } from '@/types'
 
 export const useEditorStore = defineStore('editor', () => {
@@ -78,6 +78,30 @@ export const useEditorStore = defineStore('editor', () => {
     uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
+  function decreaseFontSize() {
+    if (currentFontSize.value > 8) currentFontSize.value--
+  }
+
+  function increaseFontSize() {
+    if (currentFontSize.value < 72) currentFontSize.value++
+  }
+
+  function decreaseSpacing() {
+    if (currentSpacing.value > 0) currentSpacing.value--
+  }
+
+  function increaseSpacing() {
+    if (currentSpacing.value < 20) currentSpacing.value++
+  }
+
+  function decreaseLineHeight() {
+    if (currentLineHeight.value > 1) currentLineHeight.value--
+  }
+
+  function increaseLineHeight() {
+    if (currentLineHeight.value < 10) currentLineHeight.value++
+  }
+
   return {
     showTextEditor, showBasicInfoEditor, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
@@ -85,5 +109,7 @@ export const useEditorStore = defineStore('editor', () => {
     editableElements, materialList,
     openEditor, closeTextEditor, confirmTextEdit,
     closeBasicInfoEditor, resetStyle, selectMaterial,
+    decreaseFontSize, increaseFontSize, decreaseSpacing,
+    increaseSpacing, decreaseLineHeight, increaseLineHeight,
   }
 })

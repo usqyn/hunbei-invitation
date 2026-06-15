@@ -60,15 +60,17 @@
               <text class="title-text">婚礼信息</text>
             </view>
 
-            <view class="form-item" @click="$emit('datePicker')">
+            <view class="form-item">
               <view class="form-label">
                 <text class="label-name">婚礼时间</text>
               </view>
-              <view class="input-wrapper clickable">
-                <text v-if="basicInfo.weddingDate" class="form-value">{{ basicInfo.weddingDate }}</text>
-                <text v-else class="input-placeholder">选择婚礼时间</text>
-                <text class="input-arrow">›</text>
-              </view>
+              <picker mode="date" :value="basicInfo.weddingDate" @change="onDateChange">
+                <view class="input-wrapper clickable">
+                  <text v-if="basicInfo.weddingDate" class="form-value">{{ basicInfo.weddingDate }}</text>
+                  <text v-else class="input-placeholder">选择婚礼时间</text>
+                  <text class="input-arrow">›</text>
+                </view>
+              </picker>
             </view>
 
             <view class="form-item" @click="$emit('location')">
@@ -119,12 +121,17 @@ defineProps<{
   basicInfo: BasicInfo
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   close: []
   confirm: []
   location: []
   datePicker: []
+  update: [field: string, value: string]
 }>()
+
+const onDateChange = (e: any) => {
+  emit('update', 'weddingDate', e.detail.value)
+}
 </script>
 
 <style lang="scss" scoped>

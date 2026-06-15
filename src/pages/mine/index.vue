@@ -1,7 +1,7 @@
 <template>
   <view class="page">
     <view class="header-bg"></view>
-    
+
     <view class="user-section">
       <view class="user-card">
         <view class="avatar" @click="handleAvatarClick">
@@ -17,7 +17,7 @@
         </view>
       </view>
     </view>
-    
+
     <view class="vip-card" @click="handleVip">
       <view class="vip-content">
         <view class="vip-icon">👑</view>
@@ -28,11 +28,11 @@
       </view>
       <view class="vip-btn">立即开通 ></view>
     </view>
-    
+
     <view class="quick-actions">
-      <view 
-        v-for="item in quickActions" 
-        :key="item.id" 
+      <view
+        v-for="item in quickActions"
+        :key="item.id"
         class="quick-item"
         @click="handleQuickAction(item)"
       >
@@ -42,13 +42,13 @@
         <text class="quick-name">{{ item.name }}</text>
       </view>
     </view>
-    
+
     <view class="tools-section">
       <view class="section-title">热门工具</view>
       <view class="tools-grid">
-        <view 
-          v-for="tool in hotTools" 
-          :key="tool.id" 
+        <view
+          v-for="tool in hotTools"
+          :key="tool.id"
           class="tool-item"
           @click="handleToolClick(tool)"
         >
@@ -59,11 +59,11 @@
         </view>
       </view>
     </view>
-    
+
     <view class="menu-section">
-      <view 
-        v-for="item in menuItems" 
-        :key="item.id" 
+      <view
+        v-for="item in menuItems"
+        :key="item.id"
         class="menu-item"
         @click="handleMenuItemClick(item)"
       >
@@ -72,7 +72,11 @@
         <text class="menu-arrow">›</text>
       </view>
     </view>
-    
+
+    <view v-if="isLoggedIn" class="logout-section">
+      <view class="logout-btn" @click="handleLogout">退出登录</view>
+    </view>
+
     <view class="footer">
       <text class="copyright">网页版 www.hunbei.com</text>
     </view>
@@ -114,8 +118,6 @@ const menuItems = ref([
 const handleAvatarClick = () => {
   if (!isLoggedIn.value) {
     uni.navigateTo({ url: '/pages/login/index' })
-  } else {
-    uni.showToast({ title: '查看个人资料', icon: 'none' })
   }
 }
 
@@ -132,15 +134,36 @@ const handleVip = () => {
 }
 
 const handleQuickAction = (item: any) => {
-  uni.showToast({ title: item.name, icon: 'none' })
+  if (item.name === '收藏') {
+    uni.switchTab({ url: '/pages/works/index' })
+  } else {
+    uni.showToast({ title: item.name, icon: 'none' })
+  }
 }
 
 const handleToolClick = (tool: any) => {
-  uni.showToast({ title: tool.name, icon: 'none' })
+  if (tool.name === '一键成请柬') {
+    uni.navigateTo({ url: '/pages/editor/index' })
+  } else {
+    uni.showToast({ title: tool.name, icon: 'none' })
+  }
 }
 
 const handleMenuItemClick = (item: any) => {
   uni.showToast({ title: item.name, icon: 'none' })
+}
+
+const handleLogout = () => {
+  uni.showModal({
+    title: '确认退出',
+    content: '确定要退出登录吗？',
+    success: (res) => {
+      if (res.confirm) {
+        userStore.logout()
+        uni.showToast({ title: '已退出', icon: 'success' })
+      }
+    }
+  })
 }
 </script>
 
@@ -347,7 +370,7 @@ const handleMenuItemClick = (item: any) => {
   align-items: center;
   padding: 28rpx 24rpx;
   border-bottom: 2rpx solid #f5f5f5;
-  
+
   &:last-child {
     border-bottom: none;
   }
@@ -367,6 +390,22 @@ const handleMenuItemClick = (item: any) => {
 .menu-arrow {
   font-size: 32rpx;
   color: #cccccc;
+}
+
+.logout-section {
+  padding: 24rpx;
+}
+
+.logout-btn {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  background: #fff;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: #ef4444;
+  font-weight: 500;
 }
 
 .footer {
