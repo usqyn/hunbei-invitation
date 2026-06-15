@@ -1,35 +1,94 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
   <defs>
     <linearGradient id="bg4" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f3e5f5;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#e1bee7;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#fff0f5;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ffe4ec;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffd4e0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="pinkGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d4a574;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c9956c;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="roseRed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b8a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e84a6e;stop-opacity:1" />
     </linearGradient>
   </defs>
-  
+
   <rect width="800" height="1200" fill="url(#bg4)"/>
+
+  <!-- 装饰心形散布 -->
+  <g opacity="0.15">
+    <text x="80" y="150" font-size="30" fill="#e84a6e">♥</text>
+    <text x="720" y="200" font-size="24" fill="#e84a6e">♥</text>
+    <text x="120" y="400" font-size="20" fill="#ff6b8a">♥</text>
+    <text x="680" y="450" font-size="28" fill="#e84a6e">♥</text>
+    <text x="60" y="700" font-size="22" fill="#ff6b8a">♥</text>
+    <text x="740" y="750" font-size="26" fill="#e84a6e">♥</text>
+    <text x="100" y="1000" font-size="24" fill="#ff6b8a">♥</text>
+    <text x="700" y="1050" font-size="20" fill="#e84a6e">♥</text>
+  </g>
+
+  <!-- 顶部装饰边框 -->
+  <rect x="80" y="80" width="640" height="4" fill="url(#roseRed)" opacity="0.6"/>
+  <rect x="120" y="96" width="560" height="1" fill="url(#pinkGold)" opacity="0.6"/>
+
+  <!-- 主标题区域 -->
+  <g transform="translate(400, 220)">
+    <text x="0" y="0" text-anchor="middle" font-size="20" fill="#d4a574" letter-spacing="8">SAVE THE DATE</text>
+  </g>
+
+  <!-- 主标题 -->
+  <text x="400" y="320" text-anchor="middle" font-size="72" fill="url(#roseRed)" font-family="STKaiti, KaiTi, serif" font-weight="bold">喜结良缘</text>
+  <text x="400" y="365" text-anchor="middle" font-size="22" fill="#c44569" letter-spacing="4">HAPPY MARRIAGE</text>
+
+  <!-- 装饰线 -->
+  <g transform="translate(400, 420)">
+    <line x1="-200" y1="0" x2="-60" y2="0" stroke="url(#pinkGold)" stroke-width="1" opacity="0.5"/>
+    <text x="-40" y="8" font-size="18" fill="#e84a6e">❀</text>
+    <text x="0" y="10" font-size="24" fill="#e84a6e">♥</text>
+    <text x="40" y="8" font-size="18" fill="#e84a6e">❀</text>
+    <line x1="60" y1="0" x2="200" y2="0" stroke="url(#pinkGold)" stroke-width="1" opacity="0.5"/>
+  </g>
+
+  <!-- 新人信息 -->
+  <g transform="translate(400, 560)">
+    <rect x="-240" y="-120" width="480" height="320" fill="#ffffff" rx="24" opacity="0.7"/>
+    <rect x="-220" y="-100" width="440" height="280" fill="none" stroke="url(#roseRed)" stroke-width="1" rx="20" opacity="0.3"/>
+
+    <!-- 新郎 -->
+    <text x="-130" y="-40" text-anchor="middle" font-size="44" fill="#c44569" font-family="STKaiti, KaiTi, serif">满小满</text>
+    <text x="-130" y="0" text-anchor="middle" font-size="18" fill="#d4a574" letter-spacing="4">GROOM</text>
+    
+    <!-- 中间装饰 -->
+    <text x="0" y="-10" text-anchor="middle" font-size="48" fill="url(#roseRed)">♥</text>
+    
+    <!-- 新娘 -->
+    <text x="130" y="-40" text-anchor="middle" font-size="44" fill="#c44569" font-family="STKaiti, KaiTi, serif">美小美</text>
+    <text x="130" y="0" text-anchor="middle" font-size="18" fill="#d4a574" letter-spacing="4">BRIDE</text>
+
+    <!-- 分隔线 -->
+    <line x1="-180" y1="50" x2="180" y2="50" stroke="url(#pinkGold)" stroke-width="1" opacity="0.4"/>
+    
+    <!-- 日期信息 -->
+    <text x="0" y="100" text-anchor="middle" font-size="22" fill="#d4a574" font-family="STKaiti, KaiTi, serif">婚礼吉日</text>
+    <text x="0" y="150" text-anchor="middle" font-size="36" fill="url(#roseRed)" font-weight="500">2050年5月20日</text>
+    <text x="0" y="185" text-anchor="middle" font-size="18" fill="#a08060" letter-spacing="4">农历四月廿三 · 星期六</text>
+  </g>
+
+  <!-- 邀请语 -->
+  <g transform="translate(400, 950)">
+    <text x="0" y="0" text-anchor="middle" font-size="24" fill="#c44569" font-family="STKaiti, KaiTi, serif">我们诚挚地邀请您</text>
+    <text x="0" y="40" text-anchor="middle" font-size="22" fill="#d4a574" font-family="STKaiti, KaiTi, serif">共同见证这幸福的时刻</text>
+  </g>
+
+  <!-- 底部装饰 -->
+  <g transform="translate(400, 1070)" opacity="0.7">
+    <text x="0" y="0" text-anchor="middle" font-size="18" fill="#e84a6e">❀ ❀ ❀ ❀ ❀</text>
+  </g>
+
+  <rect x="80" y="1110" width="640" height="1" fill="url(#pinkGold)" opacity="0.6"/>
+  <rect x="120" y="1120" width="560" height="4" fill="url(#roseRed)" opacity="0.6"/>
   
-  <text x="400" y="80" font-size="28" fill="#7b1fa2" text-anchor="middle">OUR WEDDING</text>
-  
-  <rect x="60" y="120" width="680" height="400" rx="24" fill="#ffffff" stroke="#7b1fa2" stroke-width="3"/>
-  <rect x="80" y="140" width="640" height="360" rx="16" fill="#f3e5f5"/>
-  <text x="400" y="320" font-size="56" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">喜结连理</text>
-  <text x="400" y="380" font-size="26" fill="#6a1b9a" text-anchor="middle">Happy Wedding</text>
-  
-  <text x="400" y="520" font-size="80" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">囍</text>
-  
-  <rect x="100" y="620" width="280" height="120" rx="12" fill="#ffffff" stroke="#7b1fa2" stroke-width="2"/>
-  <text x="240" y="680" font-size="28" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">新郎</text>
-  <text x="240" y="720" font-size="24" fill="#6a1b9a" text-anchor="middle">满小满</text>
-  
-  <rect x="420" y="620" width="280" height="120" rx="12" fill="#ffffff" stroke="#7b1fa2" stroke-width="2"/>
-  <text x="560" y="680" font-size="28" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">新娘</text>
-  <text x="560" y="720" font-size="24" fill="#6a1b9a" text-anchor="middle">美小美</text>
-  
-  <rect x="60" y="800" width="680" height="280" rx="16" fill="#ffffff" stroke="#7b1fa2" stroke-width="2"/>
-  <rect x="80" y="820" width="640" height="240" rx="10" fill="#f3e5f5"/>
-  
-  <text x="400" y="920" font-size="32" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">你不是爱情的终点，只是爱情的原动力</text>
-  <text x="400" y="970" font-size="28" fill="#6a1b9a" text-anchor="middle" font-family="STKaiti">因为你，我爱上了这个世界</text>
-  
-  <text x="400" y="1150" font-size="26" fill="#7b1fa2" text-anchor="middle">❤️ 感谢有你 ❤️</text>
+  <text x="400" y="1165" text-anchor="middle" font-size="20" fill="#d4a574" font-family="STKaiti, KaiTi, serif">百年好合 · 永结同心</text>
 </svg>

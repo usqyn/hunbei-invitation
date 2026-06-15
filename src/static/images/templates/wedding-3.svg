@@ -1,34 +1,78 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
   <defs>
-    <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#fce4ec;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#f8bbd9;stop-opacity:1" />
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f4f8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d4e8f0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="gold3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d4a574;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#b8956a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="blueGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#5a7a8a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3d5a6a;stop-opacity:1" />
     </linearGradient>
   </defs>
-  
+
   <rect width="800" height="1200" fill="url(#bg3)"/>
+
+  <!-- 装饰波浪线 -->
+  <path d="M 0 200 Q 200 150 400 200 T 800 200" stroke="url(#gold3)" stroke-width="1" fill="none" opacity="0.3"/>
+  <path d="M 0 250 Q 200 200 400 250 T 800 250" stroke="url(#gold3)" stroke-width="1" fill="none" opacity="0.2"/>
+
+  <!-- 顶部花环装饰 -->
+  <g transform="translate(400, 180)" opacity="0.8">
+    <circle cx="0" cy="0" r="60" fill="none" stroke="url(#blueGold)" stroke-width="1.5"/>
+    <text x="-50" y="-40" font-size="20" fill="#d4a574">❀</text>
+    <text x="30" y="-40" font-size="20" fill="#d4a574">❀</text>
+    <text x="-50" y="45" font-size="20" fill="#d4a574">❀</text>
+    <text x="30" y="45" font-size="20" fill="#d4a574">❀</text>
+  </g>
+
+  <!-- 主标题 -->
+  <text x="400" y="340" text-anchor="middle" font-size="56" fill="url(#blueGold)" font-family="STKaiti, KaiTi, serif">圣洁婚礼</text>
+  <text x="400" y="385" text-anchor="middle" font-size="18" fill="#5a7a8a" letter-spacing="6">HOLY MATRIMONY</text>
+
+  <!-- 分隔线 -->
+  <g transform="translate(400, 430)">
+    <line x1="-160" y1="0" x2="-40" y2="0" stroke="url(#blueGold)" stroke-width="1" opacity="0.5"/>
+    <circle cx="0" cy="0" r="5" fill="#d4a574"/>
+    <line x1="40" y1="0" x2="160" y2="0" stroke="url(#blueGold)" stroke-width="1" opacity="0.5"/>
+  </g>
+
+  <!-- 新人信息 -->
+  <g transform="translate(400, 580)">
+    <rect x="-220" y="-100" width="440" height="280" fill="#ffffff" rx="20" opacity="0.7"/>
+    <rect x="-200" y="-80" width="400" height="240" fill="none" stroke="url(#blueGold)" stroke-width="1" rx="16" opacity="0.4"/>
+    
+    <text x="-130" y="-20" text-anchor="middle" font-size="38" fill="#3d5a6a" font-family="STKaiti, KaiTi, serif">满小满</text>
+    <text x="-130" y="15" text-anchor="middle" font-size="16" fill="#5a7a8a" letter-spacing="3">GROOM</text>
+    
+    <text x="0" y="0" text-anchor="middle" font-size="36" fill="#d4a574">✦</text>
+    
+    <text x="130" y="-20" text-anchor="middle" font-size="38" fill="#3d5a6a" font-family="STKaiti, KaiTi, serif">美小美</text>
+    <text x="130" y="15" text-anchor="middle" font-size="16" fill="#5a7a8a" letter-spacing="3">BRIDE</text>
+
+    <line x1="-150" y1="55" x2="150" y2="55" stroke="#d4a574" stroke-width="1" opacity="0.4"/>
+    
+    <text x="0" y="95" text-anchor="middle" font-size="22" fill="#5a7a8a" font-family="STKaiti, KaiTi, serif">携手步入婚姻殿堂</text>
+    <text x="0" y="130" text-anchor="middle" font-size="28" fill="url(#blueGold)" font-weight="500">2050.05.20</text>
+  </g>
+
+  <!-- 装饰元素 -->
+  <g transform="translate(400, 880)" opacity="0.6">
+    <text x="0" y="0" text-anchor="middle" font-size="24" fill="#d4a574">✦ ❀ ✦ ❀ ✦</text>
+  </g>
+
+  <!-- 邀请信息 -->
+  <g transform="translate(400, 980)">
+    <text x="0" y="0" text-anchor="middle" font-size="22" fill="#5a7a8a" font-family="STKaiti, KaiTi, serif">诚挚邀请您</text>
+    <text x="0" y="35" text-anchor="middle" font-size="22" fill="#5a7a8a" font-family="STKaiti, KaiTi, serif">共同见证这神圣时刻</text>
+  </g>
+
+  <!-- 底部装饰 -->
+  <path d="M 0 1100 Q 200 1080 400 1100 T 800 1100" stroke="url(#gold3)" stroke-width="1" fill="none" opacity="0.3"/>
+  <path d="M 0 1150 Q 200 1130 400 1150 T 800 1150" stroke="url(#gold3)" stroke-width="1" fill="none" opacity="0.2"/>
   
-  <text x="400" y="60" font-size="20" fill="#ec407a" text-anchor="middle">LOVE STORY</text>
-  
-  <rect x="60" y="100" width="680" height="380" rx="20" fill="#ffffff" stroke="#ec407a" stroke-width="2"/>
-  <rect x="80" y="120" width="640" height="340" rx="12" fill="#fce4ec"/>
-  <text x="400" y="290" font-size="48" fill="#ec407a" text-anchor="middle" font-family="STKaiti">我们结婚啦</text>
-  <text x="400" y="350" font-size="24" fill="#c2185b" text-anchor="middle">We are getting married</text>
-  
-  <text x="400" y="480" font-size="72" fill="#ec407a" text-anchor="middle" font-family="STKaiti">囍</text>
-  
-  <text x="120" y="580" font-size="26" fill="#666666">日期：2050年5月20日</text>
-  <text x="120" y="620" font-size="26" fill="#666666">地点：幸福宴会厅</text>
-  
-  <text x="680" y="580" font-size="26" fill="#ec407a" text-anchor="end">💕 满小满</text>
-  <text x="680" y="620" font-size="26" fill="#ec407a" text-anchor="end">💕 美小美</text>
-  
-  <rect x="60" y="680" width="680" height="300" rx="16" fill="#ffffff" stroke="#ec407a" stroke-width="2"/>
-  <rect x="80" y="700" width="640" height="260" rx="10" fill="#fce4ec"/>
-  
-  <text x="400" y="780" font-size="36" fill="#ec407a" text-anchor="middle" font-family="STKaiti">你说最好的人会到身边</text>
-  <text x="400" y="830" font-size="32" fill="#c2185b" text-anchor="middle" font-family="STKaiti">此刻我也这样想</text>
-  <text x="400" y="880" font-size="24" fill="#999999" text-anchor="middle">幸福放慢倍数，这一帧只属于我们</text>
-  
-  <text x="400" y="1150" font-size="28" fill="#ec407a" text-anchor="middle">期待您的到来 ❤️</text>
+  <text x="400" y="1180" text-anchor="middle" font-size="20" fill="url(#blueGold)" font-family="STKaiti, KaiTi, serif">FOREVER LOVE</text>
 </svg>
