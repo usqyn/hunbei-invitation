@@ -105,8 +105,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useUserStore } from '@/stores/user'
 
-const isLoggedIn = ref(false)
+const userStore = useUserStore()
+const { isLoggedIn } = storeToRefs(userStore)
 const activeTab = ref('all')
 
 const tabs = ref([
@@ -142,12 +145,7 @@ const drafts = ref([
 const favorites = ref([])
 
 const handleLogin = () => {
-  uni.showLoading({ title: '登录中...' })
-  setTimeout(() => {
-    uni.hideLoading()
-    isLoggedIn.value = true
-    uni.showToast({ title: '登录成功', icon: 'success' })
-  }, 1000)
+  uni.navigateTo({ url: '/pages/login/index' })
 }
 
 const handleWorkClick = (work: any) => {

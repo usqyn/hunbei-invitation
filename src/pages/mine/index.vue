@@ -8,8 +8,8 @@
           <text class="avatar-icon">👤</text>
         </view>
         <view class="user-info">
-          <text class="user-name">{{ isLoggedIn ? '用户昵称' : '登录/注册' }}</text>
-          <text class="user-desc">{{ isLoggedIn ? '登录后继续更多操作' : '登录后继续更多操作' }}</text>
+          <text class="user-name">{{ isLoggedIn ? (nickname || '用户') : '登录/注册' }}</text>
+          <text class="user-desc">{{ isLoggedIn ? '管理你的作品和设置' : '登录后查看更多功能' }}</text>
         </view>
         <view class="user-actions">
           <view class="action-icon" @click="handleSetting">⚙️</view>
@@ -81,8 +81,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useUserStore } from '@/stores/user'
 
-const isLoggedIn = ref(false)
+const userStore = useUserStore()
+const { isLoggedIn, nickname } = storeToRefs(userStore)
 
 const quickActions = ref([
   { id: 1, name: '收藏', icon: '⭐', bgColor: '#fff3e0' },
@@ -110,12 +113,7 @@ const menuItems = ref([
 
 const handleAvatarClick = () => {
   if (!isLoggedIn.value) {
-    uni.showLoading({ title: '登录中...' })
-    setTimeout(() => {
-      uni.hideLoading()
-      isLoggedIn.value = true
-      uni.showToast({ title: '登录成功', icon: 'success' })
-    }, 1000)
+    uni.navigateTo({ url: '/pages/login/index' })
   } else {
     uni.showToast({ title: '查看个人资料', icon: 'none' })
   }

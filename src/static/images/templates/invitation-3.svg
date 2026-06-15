@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="pink-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fce4ec;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f8bbd0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="purple-text" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9c27b0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7b1fa2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1200" fill="url(#pink-bg)"/>
+  <rect x="30" y="30" width="740" height="1140" rx="24" fill="#ffffff" opacity="0.6"/>
+  <text x="400" y="120" font-size="22" fill="#9c27b0" text-anchor="middle" letter-spacing="6">SAVE THE DATE</text>
+  <text x="400" y="200" font-size="48" fill="url(#purple-text)" text-anchor="middle" font-family="STKaiti">我们结婚啦</text>
+  <text x="400" y="260" font-size="20" fill="#9c27b0" text-anchor="middle">❤️ 终于等到你 ❤️</text>
+  <rect x="100" y="320" width="600" height="400" rx="16" fill="#fce4ec" stroke="#ce93d8" stroke-width="1.5"/>
+  <text x="400" y="420" font-size="42" fill="#7b1fa2" text-anchor="middle" font-weight="bold">张三</text>
+  <text x="400" y="480" font-size="24" fill="#9c27b0" text-anchor="middle">新郎</text>
+  <text x="400" y="550" font-size="32" fill="#ce93d8" text-anchor="middle">✦  &amp;  ✦</text>
+  <text x="400" y="620" font-size="42" fill="#7b1fa2" text-anchor="middle" font-weight="bold">李四</text>
+  <text x="400" y="680" font-size="24" fill="#9c27b0" text-anchor="middle">新娘</text>
+  <text x="400" y="800" font-size="28" fill="#7b1fa2" text-anchor="middle" font-family="STKaiti">愿得一人心 白首不相离</text>
+  <line x1="200" y1="860" x2="600" y2="860" stroke="#ce93d8" stroke-width="1"/>
+  <text x="400" y="940" font-size="26" fill="#7b1fa2" text-anchor="middle">2050年5月20日 · 婚贝大酒店</text>
+  <text x="400" y="1010" font-size="24" fill="#9c27b0" text-anchor="middle">幸福路88号 · 幸福宴会厅</text>
+  <text x="400" y="1120" font-size="20" fill="#ce93d8" text-anchor="middle">— 期待您的到来 —</text>
+</svg>

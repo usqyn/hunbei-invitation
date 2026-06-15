@@ -7,12 +7,6 @@
       }
     },
     {
-      "path": "pages/mv/index",
-      "style": {
-        "navigationBarTitleText": "高清MV"
-      }
-    },
-    {
       "path": "pages/works/index",
       "style": {
         "navigationBarTitleText": "作品管理"
@@ -47,6 +41,12 @@
       "style": {
         "navigationBarTitleText": "音乐库"
       }
+    },
+    {
+      "path": "pages/preview/index",
+      "style": {
+        "navigationBarTitleText": "请帖预览"
+      }
     }
   ],
   "globalStyle": {
@@ -66,12 +66,6 @@
         "text": "首页",
         "iconPath": "static/tabs/home.png",
         "selectedIconPath": "static/tabs/home-active.png"
-      },
-      {
-        "pagePath": "pages/mv/index",
-        "text": "高清MV",
-        "iconPath": "static/tabs/mv.png",
-        "selectedIconPath": "static/tabs/mv-active.png"
       },
       {
         "pagePath": "pages/works/index",

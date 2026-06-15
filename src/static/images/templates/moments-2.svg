@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" style="stop-color:#ff9a9e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fecfef;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+  <rect width="800" height="1200" fill="url(#glow)"/>
+  <text x="400" y="140" font-size="72" fill="#fff" text-anchor="middle" font-weight="bold" opacity="0.9">👰</text>
+  <text x="400" y="280" font-size="48" fill="#5a2d3c" text-anchor="middle" font-family="STKaiti" font-weight="bold">请回答 2050</text>
+  <text x="400" y="350" font-size="24" fill="#7a4d5c" text-anchor="middle">我们的爱情故事 · 未完待续</text>
+  <rect x="80" y="420" width="640" height="280" rx="16" fill="#ffffff" opacity="0.7"/>
+  <text x="400" y="480" font-size="26" fill="#5a2d3c" text-anchor="middle">2015 · 初见</text>
+  <text x="400" y="530" font-size="22" fill="#7a4d5c" text-anchor="middle">那年夏天，我们在图书馆相遇</text>
+  <text x="400" y="580" font-size="26" fill="#5a2d3c" text-anchor="middle">2020 · 相恋</text>
+  <text x="400" y="630" font-size="22" fill="#7a4d5c" text-anchor="middle">五年陪伴，你说想和我共度余生</text>
+  <rect x="80" y="760" width="640" height="160" rx="16" fill="#ffffff" opacity="0.7"/>
+  <text x="400" y="830" font-size="26" fill="#5a2d3c" text-anchor="middle">2025 · 求婚</text>
+  <text x="400" y="880" font-size="22" fill="#7a4d5c" text-anchor="middle">Yes I do · 往后余生都是你</text>
+  <text x="400" y="1020" font-size="32" fill="#5a2d3c" text-anchor="middle" font-family="STKaiti">2050年5月20日 · 我们在婚贝等你</text>
+  <text x="400" y="1120" font-size="20" fill="#7a4d5c" text-anchor="middle">❤️ 张三 &amp; 李四 敬邀 ❤️</text>
+</svg>

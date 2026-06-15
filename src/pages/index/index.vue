@@ -24,19 +24,21 @@
     </view>
     
     <view class="feature-section">
-      <view class="feature-card mv-card">
+      <view class="feature-card invitation-card" @click="goToEditor('invitation')">
         <view class="feature-content">
-          <view class="feature-badge">高清MV</view>
-          <text class="feature-title">现场大屏 婚礼视频</text>
+          <view class="feature-badge">请帖制作</view>
+          <text class="feature-title">电子请帖 免费制作</text>
+          <text class="feature-desc">精美模板一键生成</text>
         </view>
-        <view class="feature-icon">▶</view>
+        <view class="feature-icon">💒</view>
       </view>
-      <view class="feature-card poster-card">
+      <view class="feature-card moments-card" @click="goToEditor('moments')">
         <view class="feature-content">
-          <view class="feature-badge">海报图片</view>
-          <text class="feature-title">婚礼海报 海报印刷</text>
+          <view class="feature-badge">朋友圈邀请</view>
+          <text class="feature-title">朋友圈邀请函</text>
+          <text class="feature-desc">故事+视频+H5分享</text>
         </view>
-        <view class="feature-icon">📷</view>
+        <view class="feature-icon">📱</view>
       </view>
     </view>
     
@@ -76,51 +78,14 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
 
 const searchText = ref('')
 const activeTab = ref('网红爆款')
 
-const categories = ref([
-  { id: 1, name: '婚礼邀请', icon: '💒', bgColor: '#ffe4e8' },
-  { id: 2, name: '高清MV', icon: '🎬', bgColor: '#e6f3ff' },
-  { id: 3, name: '父母邀请', icon: '👨👩', bgColor: '#fff3e6' },
-  { id: 4, name: '回门答谢', icon: '🏠', bgColor: '#e8f5e9' },
-  { id: 5, name: '出阁宴', icon: '🎎', bgColor: '#fce4ec' },
-  { id: 6, name: '生日请柬', icon: '🎂', bgColor: '#fff9c4' },
-  { id: 7, name: '百日宴', icon: '👶', bgColor: '#e3f2fd' },
-  { id: 8, name: '满月宴', icon: '🍼', bgColor: '#f3e5f5' },
-  { id: 9, name: '乔迁之喜', icon: '🏡', bgColor: '#e8eaf6' },
-  { id: 10, name: '全部分类', icon: '📋', bgColor: '#e0f2f1' }
-])
-
-const tabs = ref(['网红爆款', 'MV精选', '限时免费', '每周上新'])
-
-const featuredCards = ref([
-  { 
-    id: 1, 
-    title: '我们结婚啦', 
-    date: '2050.05.20',
-    image: '/static/images/templates/wedding-1.svg' 
-  },
-  { 
-    id: 2, 
-    title: '浪漫婚礼', 
-    date: '2050.05.18',
-    image: '/static/images/templates/wedding-2.svg' 
-  },
-  { 
-    id: 3, 
-    title: '喜结连理', 
-    date: '2050.05.15',
-    image: '/static/images/templates/wedding-3.svg' 
-  },
-  { 
-    id: 4, 
-    title: '爱的承诺', 
-    date: '2050.05.10',
-    image: '/static/images/templates/wedding-4.svg' 
-  }
-])
+const categories = ref(HOME_CATEGORIES)
+const tabs = ref(HOME_TABS)
+const featuredCards = ref(HOME_FEATURED_CARDS)
 
 const handleSearch = () => {
   if (searchText.value) {
@@ -133,7 +98,15 @@ const handleCategoryClick = (item: any) => {
 }
 
 const handleCardClick = (card: any) => {
-  uni.navigateTo({ url: '/pages/template/index' })
+  if (card.type === 'moments') {
+    uni.navigateTo({ url: '/pages/template/index?type=moments' })
+  } else {
+    uni.navigateTo({ url: '/pages/template/index?type=invitation' })
+  }
+}
+
+const goToEditor = (type: string) => {
+  uni.navigateTo({ url: `/pages/template/index?type=${type}` })
 }
 
 const onImageError = (e: any) => {
@@ -213,12 +186,14 @@ const onImageError = (e: any) => {
   justify-content: space-between;
 }
 
-.mv-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.invitation-card {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  cursor: pointer;
 }
 
-.poster-card {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+.moments-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  cursor: pointer;
 }
 
 .feature-content {
@@ -233,12 +208,18 @@ const onImageError = (e: any) => {
   border-radius: 20rpx;
   font-size: 20rpx;
   color: #ffffff;
+  align-self: flex-start;
 }
 
 .feature-title {
   font-size: 26rpx;
   color: #ffffff;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.feature-desc {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .feature-icon {

@@ -9,21 +9,12 @@
     </view>
 
     <view class="content">
-      <view class="templates-show">
-        <scroll-view class="template-scroll" scroll-x>
-          <view class="template-list">
-            <view v-for="i in 9" :key="i" class="template-item">
-              <image class="template-img" :src="getTemplateImg(i)" mode="aspectFill" @error="onImageError"></image>
-            </view>
-          </view>
-        </scroll-view>
-      </view>
-
       <view class="logo-section">
         <view class="logo">
           <text class="logo-icon">💝</text>
         </view>
         <text class="app-name">婚贝请柬</text>
+        <text class="app-desc">微信一键登录，制作专属婚礼请柬</text>
       </view>
 
       <view class="agreement-section">
@@ -38,17 +29,45 @@
         </view>
       </view>
 
-      <button class="login-btn" :class="{ disabled: !agreed }" @click="handleLogin">
-        手机号快捷登录
+      <button
+        class="login-btn"
+        :class="{ disabled: !agreed, loading: logging }"
+        :disabled="!agreed || logging"
+        open-type="getPhoneNumber"
+        @getphonenumber="onGetPhoneNumber"
+        @click="handleH5Login"
+      >
+        <text v-if="logging">登录中...</text>
+        <text v-else>微信一键登录</text>
       </button>
+
+      <view class="divider">
+        <text class="divider-text">其他方式</text>
+      </view>
+
+      <view class="alt-login">
+        <view class="alt-item" @click="handleMpLogin">
+          <text class="alt-icon">📱</text>
+          <text class="alt-text">手机号登录</text>
+        </view>
+      </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useUserStore } from '@/stores/user'
 
 const agreed = ref(false)
+const logging = ref(false)
+const showSmsForm = ref(false)
+const phone = ref('')
+const smsCode = ref('')
+const countdown = ref(0)
+let timer: number | null = null
+
+const userStore = useUserStore()
 
 const toggleAgreement = () => {
   agreed.value = !agreed.value
@@ -58,44 +77,68 @@ const goBack = () => {
   uni.navigateBack()
 }
 
-const handleLogin = () => {
-  if (!agreed.value) {
-    uni.showToast({
-      title: '请先阅读并同意协议',
-      icon: 'none'
-    })
-    return
-  }
-  
-  uni.showLoading({ title: '登录中...' })
+const loginSuccess = () => {
+  logging.value = false
+  uni.hideLoading()
+  uni.showToast({ title: '登录成功', icon: 'success' })
   setTimeout(() => {
-    uni.hideLoading()
-    uni.showToast({
-      title: '登录成功',
-      icon: 'success'
-    })
-    setTimeout(() => {
+    const pages = getCurrentPages()
+    if (pages.length > 1) {
+      uni.navigateBack()
+    } else {
       uni.switchTab({ url: '/pages/index/index' })
-    }, 1000)
+    }
   }, 1000)
 }
 
-const getTemplateImg = (i: number) => {
-  const prompts = [
-    'elegant wedding invitation card pink design',
-    'chinese traditional wedding invitation red gold',
-    'modern wedding invitation minimal design',
-    'vintage wedding invitation classic style',
-    'floral wedding invitation with flowers',
-    'chinese wedding double happiness red',
-    'romantic wedding invitation love theme',
-    'simple wedding invitation clean design',
-    'wedding invitation with photo'
-  ]
-  return `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(prompts[i-1])}&image_size=portrait_4_3`
+// 微信小程序：getPhoneNumber 授权
+const onGetPhoneNumber = (e: any) => {
+  if (!agreed.value) return
+  if (e.detail?.errMsg !== 'getPhoneNumber:ok') return
+
+  logging.value = true
+  uni.showLoading({ title: '登录中...' })
+
+  uni.login({
+    provider: 'weixin',
+    success: (loginRes) => {
+      const encryptedData = e.detail.encryptedData
+      const iv = e.detail.iv
+
+      // 实际项目中发送 code, encryptedData, iv 到后端解密
+      // 这里模拟登录成功
+      setTimeout(() => {
+        userStore.setLogin('wx_user_' + loginRes.code.slice(-6))
+        loginSuccess()
+      }, 800)
+    },
+    fail: () => {
+      logging.value = false
+      uni.hideLoading()
+      uni.showToast({ title: '授权失败，请重试', icon: 'none' })
+    }
+  })
 }
 
-const onImageError = () => {}
+// H5 环境：模拟登录
+const handleH5Login = (e: any) => {
+  if (!agreed.value || logging.value) return
+
+  // H5 环境下没有 getPhoneNumber 响应
+  if (e?.detail?.errMsg === undefined) {
+    logging.value = true
+    uni.showLoading({ title: '登录中...' })
+    setTimeout(() => {
+      userStore.setLogin('h5_user_demo')
+      loginSuccess()
+    }, 800)
+  }
+}
+
+// 手机号手动登录（备选）
+const handleMpLogin = () => {
+  showSmsForm.value = true
+}
 </script>
 
 <style lang="scss" scoped>
@@ -122,14 +165,14 @@ const onImageError = () => {}
 
 .back-icon {
   font-size: 60rpx;
-  color: #333;
+  color: var(--color-text-primary);
   font-weight: 300;
 }
 
 .header-title {
   font-size: 36rpx;
   font-weight: 600;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .header-right {
@@ -138,53 +181,23 @@ const onImageError = () => {}
 
 .content {
   padding: 0 40rpx;
-  padding-bottom: 100rpx;
-}
-
-.templates-show {
-  height: 700rpx;
-  overflow: hidden;
-  position: relative;
-}
-
-.template-scroll {
-  width: 100%;
-  height: 100%;
-}
-
-.template-list {
   display: flex;
-  gap: 30rpx;
-  padding: 40rpx 20rpx;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.template-item {
-  width: 200rpx;
-  height: 280rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  opacity: 0.4;
-}
-
-.template-img {
-  width: 100%;
-  height: 100%;
+  flex-direction: column;
+  align-items: center;
 }
 
 .logo-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 40rpx;
-  margin-bottom: 80rpx;
+  margin-top: 80rpx;
+  margin-bottom: 60rpx;
 }
 
 .logo {
-  width: 200rpx;
-  height: 200rpx;
-  background: linear-gradient(135deg, #ff6b8a 0%, #e84a6e 100%);
+  width: 160rpx;
+  height: 160rpx;
+  background: var(--color-primary-gradient);
   border-radius: 32rpx;
   display: flex;
   align-items: center;
@@ -193,16 +206,23 @@ const onImageError = () => {}
 }
 
 .logo-icon {
-  font-size: 120rpx;
+  font-size: 80rpx;
 }
 
 .app-name {
-  font-size: 56rpx;
+  font-size: 48rpx;
   font-weight: 600;
-  color: #333;
+  color: var(--color-text-primary);
+  margin-bottom: 16rpx;
+}
+
+.app-desc {
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
 }
 
 .agreement-section {
+  width: 100%;
   margin-bottom: 40rpx;
 }
 
@@ -211,48 +231,48 @@ const onImageError = () => {}
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 10rpx;
+  gap: 6rpx;
 }
 
 .checkbox {
-  width: 40rpx;
-  height: 40rpx;
+  width: 36rpx;
+  height: 36rpx;
   border: 3rpx solid #ccc;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 10rpx;
+  margin-right: 6rpx;
 
   &.checked {
-    background: #e84a6e;
-    border-color: #e84a6e;
+    background: var(--color-primary);
+    border-color: var(--color-primary);
   }
 }
 
 .check-icon {
   color: #fff;
-  font-size: 24rpx;
+  font-size: 22rpx;
   font-weight: bold;
 }
 
 .agreement-text {
-  font-size: 26rpx;
-  color: #999;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
 }
 
 .agreement-link {
-  font-size: 26rpx;
+  font-size: 24rpx;
   color: #4a90e2;
 }
 
 .login-btn {
   width: 100%;
-  height: 110rpx;
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  border-radius: 55rpx;
+  height: 100rpx;
+  background: var(--color-primary-gradient);
+  border-radius: 50rpx;
   border: none;
-  font-size: 36rpx;
+  font-size: 34rpx;
   font-weight: 600;
   color: #ffffff;
   display: flex;
@@ -261,11 +281,60 @@ const onImageError = () => {}
 
   &.disabled {
     background: #ddd;
-    color: #999;
+    color: var(--color-text-secondary);
+  }
+
+  &.loading {
+    opacity: 0.8;
   }
 
   &::after {
     border: none;
   }
+}
+
+.divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  margin: 40rpx 0;
+  gap: 20rpx;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1rpx;
+  background: #eee;
+}
+
+.divider-text {
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.alt-login {
+  width: 100%;
+}
+
+.alt-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 24rpx;
+  border: 2rpx solid #eee;
+  border-radius: 24rpx;
+}
+
+.alt-icon {
+  font-size: 32rpx;
+}
+
+.alt-text {
+  font-size: 28rpx;
+  color: var(--color-text-primary);
 }
 </style>

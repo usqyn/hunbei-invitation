@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="red-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b0000;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#cc0000;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="gold-text" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffaa00;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1200" fill="url(#red-bg)"/>
+  <rect x="30" y="30" width="740" height="1140" rx="16" fill="none" stroke="#ffd700" stroke-width="2"/>
+  <rect x="50" y="50" width="700" height="1100" rx="8" fill="none" stroke="#ffd700" stroke-width="1"/>
+  <text x="400" y="110" font-size="24" fill="#ffd700" text-anchor="middle" letter-spacing="12">请 柬</text>
+  <text x="400" y="200" font-size="80" fill="#ffd700" text-anchor="middle" font-family="STKaiti" font-weight="bold">囍</text>
+  <line x1="160" y1="260" x2="640" y2="260" stroke="#ffd700" stroke-width="1" opacity="0.5"/>
+  <text x="400" y="360" font-size="56" fill="#ffd700" text-anchor="middle" font-family="STKaiti" font-weight="bold">张 三 &amp; 李 四</text>
+  <text x="400" y="450" font-size="28" fill="#ffcccc" text-anchor="middle" font-family="STKaiti">结 婚 典 礼</text>
+  <rect x="160" y="520" width="480" height="280" rx="8" fill="#ffffff" opacity="0.08"/>
+  <text x="400" y="600" font-size="28" fill="#ffd700" text-anchor="middle">🎊 时间：2050年5月20日 12:00</text>
+  <text x="400" y="670" font-size="28" fill="#ffd700" text-anchor="middle">🎊 地点：婚贝大酒店幸福厅</text>
+  <text x="400" y="740" font-size="28" fill="#ffd700" text-anchor="middle">🎊 地址：幸福路88号</text>
+  <line x1="160" y1="860" x2="640" y2="860" stroke="#ffd700" stroke-width="1" opacity="0.3"/>
+  <text x="400" y="980" font-size="32" fill="#ffcccc" text-anchor="middle" font-family="STKaiti">诚挚邀请您届时莅临</text>
+  <text x="400" y="1050" font-size="24" fill="#ffd700" text-anchor="middle" font-family="STKaiti">您的到来 将为我俩的婚礼增添光彩</text>
+  <text x="400" y="1150" font-size="20" fill="#ffd700" text-anchor="middle">— 敬邀 —</text>
+</svg>

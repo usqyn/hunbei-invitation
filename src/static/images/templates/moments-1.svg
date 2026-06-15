@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="sky-bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#87ceeb;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#e0f7fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fff9c4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1200" fill="url(#sky-bg)"/>
+  <text x="400" y="120" font-size="18" fill="#5d8a8c" text-anchor="middle" letter-spacing="4">WE INVITE YOU TO</text>
+  <text x="400" y="220" font-size="64" fill="#2c6e6f" text-anchor="middle" font-family="STKaiti" font-weight="bold">我们的婚礼</text>
+  <text x="400" y="290" font-size="22" fill="#5d8a8c" text-anchor="middle">Our Wedding Story</text>
+  <rect x="80" y="360" width="640" height="400" rx="20" fill="#ffffff" opacity="0.8"/>
+  <text x="400" y="450" font-size="28" fill="#2c6e6f" text-anchor="middle" font-family="STKaiti">从相识到相知，从相知到相守</text>
+  <text x="400" y="510" font-size="28" fill="#2c6e6f" text-anchor="middle" font-family="STKaiti">我们一起走过的每一个瞬间</text>
+  <text x="400" y="570" font-size="28" fill="#2c6e6f" text-anchor="middle" font-family="STKaiti">都是生命中最美的风景</text>
+  <text x="400" y="640" font-size="28" fill="#2c6e6f" text-anchor="middle" font-family="STKaiti">现在，我们想邀请你</text>
+  <text x="400" y="700" font-size="28" fill="#2c6e6f" text-anchor="middle" font-family="STKaiti">一起见证我们的幸福时刻</text>
+  <rect x="100" y="820" width="600" height="300" rx="12" fill="#ffffff" opacity="0.6"/>
+  <text x="400" y="900" font-size="36" fill="#2c6e6f" text-anchor="middle" font-weight="bold">张三 &amp; 李四</text>
+  <text x="400" y="970" font-size="24" fill="#5d8a8c" text-anchor="middle">2050.05.20 · 婚贝大酒店</text>
+  <text x="400" y="1060" font-size="20" fill="#5d8a8c" text-anchor="middle">点击查收你的邀请函 →</text>
+</svg>
