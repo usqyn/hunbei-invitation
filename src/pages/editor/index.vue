@@ -9,6 +9,36 @@
     </view>
 
     <view class="editor-body">
+      <!-- 左侧编辑面板 -->
+      <view class="sidebar-area">
+        <RightPanel
+          :active-panel-tab="editorStore.activePanelTab"
+          :editable-elements="editorStore.editableElements"
+          :selected-element="editorStore.selectedElement"
+          :material-list="editorStore.materialList"
+          :current-font="editorStore.currentFont"
+          :current-color="editorStore.currentColor"
+          :current-font-size="editorStore.currentFontSize"
+          :current-spacing="editorStore.currentSpacing"
+          :current-line-height="editorStore.currentLineHeight"
+          :settings="t.settings"
+          @update:active-panel-tab="editorStore.activePanelTab = $event"
+          @open-editor="editorStore.openEditor"
+          @select-material="onSelectMaterial"
+          @show-font-picker="showFontPickerModal = true"
+          @show-color-picker="showColorPickerModal = true"
+          @decrease-font-size="editorStore.decreaseFontSize"
+          @increase-font-size="editorStore.increaseFontSize"
+          @decrease-spacing="editorStore.decreaseSpacing"
+          @increase-spacing="editorStore.increaseSpacing"
+          @decrease-line-height="editorStore.decreaseLineHeight"
+          @increase-line-height="editorStore.increaseLineHeight"
+          @reset-style="editorStore.resetStyle"
+          @toggle-setting="t.toggleSetting"
+        />
+      </view>
+
+      <!-- 右侧预览区 -->
       <view class="preview-area">
         <scroll-view class="preview-scroll" scroll-y>
           <view class="preview-card">
@@ -122,34 +152,6 @@
             </view>
           </view>
         </scroll-view>
-      </view>
-
-      <view class="sidebar-area">
-        <RightPanel
-          :active-panel-tab="editorStore.activePanelTab"
-          :editable-elements="editorStore.editableElements"
-          :selected-element="editorStore.selectedElement"
-          :material-list="editorStore.materialList"
-          :current-font="editorStore.currentFont"
-          :current-color="editorStore.currentColor"
-          :current-font-size="editorStore.currentFontSize"
-          :current-spacing="editorStore.currentSpacing"
-          :current-line-height="editorStore.currentLineHeight"
-          :settings="t.settings"
-          @update:active-panel-tab="editorStore.activePanelTab = $event"
-          @open-editor="editorStore.openEditor"
-          @select-material="onSelectMaterial"
-          @show-font-picker="showFontPickerModal = true"
-          @show-color-picker="showColorPickerModal = true"
-          @decrease-font-size="editorStore.decreaseFontSize"
-          @increase-font-size="editorStore.increaseFontSize"
-          @decrease-spacing="editorStore.decreaseSpacing"
-          @increase-spacing="editorStore.increaseSpacing"
-          @decrease-line-height="editorStore.decreaseLineHeight"
-          @increase-line-height="editorStore.increaseLineHeight"
-          @reset-style="editorStore.resetStyle"
-          @toggle-setting="t.toggleSetting"
-        />
       </view>
     </view>
 
