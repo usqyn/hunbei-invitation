@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 
 const templateStore = useTemplateStore()
@@ -74,7 +74,8 @@ const isPlaying = ref(false)
 const progressPercent = ref(0)
 const currentTimeText = ref('00:00')
 const durationText = ref('00:00')
-let audioContext: any = null
+
+let audio: UniApp.InnerAudioContext | null = null
 
 const tabList = ref([
   { key: 'all', name: '全部' },
@@ -84,16 +85,16 @@ const tabList = ref([
 ])
 
 const musicList = ref([
-  { id: 1, name: '告白气球', isHot: true, category: 'happy' },
-  { id: 2, name: '我们结婚啦', isHot: true, category: 'happy' },
-  { id: 3, name: '执子之手', isHot: true, category: 'happy' },
-  { id: 4, name: "It's You", isHot: true, category: 'quiet' },
-  { id: 5, name: '我是如此相信', isHot: true, category: 'quiet' },
-  { id: 6, name: '就是爱你', isHot: true, category: 'happy' },
-  { id: 7, name: '因你而在', isHot: true, category: 'happy' },
-  { id: 8, name: 'Lucky Me', isHot: true, category: 'douyin' },
-  { id: 9, name: '繁花', isHot: true, category: 'quiet' },
-  { id: 10, name: '爱你', isHot: true, category: 'happy' },
+  { id: 1, name: '告白气球', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=426342151.mp3' },
+  { id: 2, name: '我们结婚啦', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
+  { id: 3, name: '执子之手', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=1940188978.mp3' },
+  { id: 4, name: "It's You", isHot: true, category: 'quiet', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
+  { id: 5, name: '我是如此相信', isHot: true, category: 'quiet', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
+  { id: 6, name: '就是爱你', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
+  { id: 7, name: '因你而在', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
+  { id: 8, name: 'Lucky Me', isHot: true, category: 'douyin', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
+  { id: 9, name: '繁花', isHot: true, category: 'quiet', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
+  { id: 10, name: '爱你', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
 ])
 
 const filteredMusicList = computed(() => {
@@ -108,17 +109,20 @@ const currentSong = computed(() => {
   return null
 })
 
-watch(currentSongIndex, () => {
-  if (audioContext) {
-    audioContext.stop()
-    audioContext = null
+function stopAudio() {
+  if (audio) {
+    audio.stop()
+    audio.destroy()
+    audio = null
   }
   isPlaying.value = false
   progressPercent.value = 0
   currentTimeText.value = '00:00'
-})
+  durationText.value = '00:00'
+}
 
 const goBack = () => {
+  stopAudio()
   uni.navigateBack()
 }
 
@@ -138,52 +142,78 @@ const handleUpload = () => {
 }
 
 const handleSelectSong = (idx: number) => {
+  stopAudio()
+  const song = musicList.value[idx]
   currentSongIndex.value = idx
-  templateStore.setSelectedMusic(musicList.value[idx].id)
+  templateStore.setSelectedMusic(song.id)
+  if (!song.src) {
+    uni.showToast({ title: '该歌曲暂无音频源', icon: 'none' })
+    return
+  }
+  audio = uni.createInnerAudioContext()
+  audio.src = song.src
+  audio.autoplay = true
   isPlaying.value = true
-  durationText.value = '03:30'
-  simulateProgress()
+
+  audio.onCanplay(() => {
+    if (audio) {
+      const dur = audio.duration
+      if (dur && isFinite(dur)) {
+        const min = String(Math.floor(dur / 60)).padStart(2, '0')
+        const sec = String(Math.floor(dur % 60)).padStart(2, '0')
+        durationText.value = `${min}:${sec}`
+      }
+    }
+  })
+
+  audio.onTimeUpdate(() => {
+    if (audio) {
+      const dur = audio.duration
+      if (dur && isFinite(dur)) {
+        const pct = (audio.currentTime / dur) * 100
+        progressPercent.value = Math.min(pct, 100)
+        const totalSec = Math.floor(audio.currentTime)
+        const min = String(Math.floor(totalSec / 60)).padStart(2, '0')
+        const sec = String(totalSec % 60).padStart(2, '0')
+        currentTimeText.value = `${min}:${sec}`
+      }
+    }
+  })
+
+  audio.onError(() => {
+    uni.showToast({ title: '播放失败', icon: 'none' })
+    stopAudio()
+  })
+
+  audio.onEnded(() => {
+    stopAudio()
+  })
 }
 
 const togglePlay = () => {
-  if (currentSongIndex.value === null) return
-  isPlaying.value = !isPlaying.value
+  if (!audio || currentSongIndex.value === null) return
   if (isPlaying.value) {
-    simulateProgress()
+    audio.pause()
+    isPlaying.value = false
+  } else {
+    audio.play()
+    isPlaying.value = true
   }
 }
 
-let progressTimer: number | null = null
-
-const simulateProgress = () => {
-  if (progressTimer) clearInterval(progressTimer)
-  if (!isPlaying.value) return
-  progressTimer = setInterval(() => {
-    if (!isPlaying.value) {
-      if (progressTimer) clearInterval(progressTimer)
-      return
-    }
-    progressPercent.value += 0.5
-    const totalSec = Math.floor((progressPercent.value / 100) * 210)
-    const min = String(Math.floor(totalSec / 60)).padStart(2, '0')
-    const sec = String(totalSec % 60).padStart(2, '0')
-    currentTimeText.value = `${min}:${sec}`
-    if (progressPercent.value >= 100) {
-      if (progressTimer) clearInterval(progressTimer)
-      isPlaying.value = false
-    }
-  }, 300) as unknown as number
-}
-
 const seekProgress = (e: any) => {
+  if (!audio) return
   const rect = e.target.getBoundingClientRect?.() || { left: 0, width: 300 }
   const x = e.detail?.x || e.changedTouches?.[0]?.clientX || 0
   const pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100))
   progressPercent.value = pct
+  if (audio.duration && isFinite(audio.duration)) {
+    audio.seek((pct / 100) * audio.duration)
+  }
 }
 
 onUnmounted(() => {
-  if (progressTimer) clearInterval(progressTimer)
+  stopAudio()
 })
 </script>
 

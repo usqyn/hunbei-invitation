@@ -1,4 +1,4 @@
-import type { TemplateData, BasicInfo, TemplateSettings, EditableElement, Material } from '@/types'
+import type { TemplateData, BasicInfo, TemplateSettings, EditableElement, Material, ElementStyle } from '@/types'
 
 export const DEFAULT_TEMPLATE_DATA: TemplateData = {
   coverImage: '/static/images/templates/wedding-1.svg',
@@ -38,19 +38,27 @@ export const PANEL_TABS = [
   { key: 'settings', name: '设置', icon: '⚙️' },
 ]
 
+export const DEFAULT_ELEMENT_STYLE: ElementStyle = {
+  font: '思源宋体极细',
+  color: '#666666',
+  fontSize: 12,
+  spacing: 2,
+  lineHeight: 2,
+}
+
 export const DEFAULT_EDITABLE_ELEMENTS: EditableElement[] = [
   { type: 'image', text: '/static/images/templates/wedding-1.svg', dataKey: 'coverImage' },
   { type: 'image', text: '/static/images/templates/wedding-2.svg', dataKey: 'photo1' },
   { type: 'image', text: '/static/images/templates/wedding-3.svg', dataKey: 'photo2' },
   { type: 'image', text: '/static/images/templates/wedding-4.svg', dataKey: 'photo3' },
   { type: 'image', text: '/static/images/templates/wedding-1.svg', dataKey: 'photo4' },
-  { type: 'basic', text: '完善基本信息' },
-  { type: 'text', text: '好久不见', dataKey: 'coverTitle' },
-  { type: 'text', text: 'Welcome to our wedding', dataKey: 'coverSubtitle' },
-  { type: 'text', text: '合卺', dataKey: 'photoTitle' },
-  { type: 'text', text: 'He jin & Ju hua', dataKey: 'photoSubtitle' },
-  { type: 'text', text: '满小满', dataKey: 'footerText' },
-  { type: 'text', text: 'GROOM', dataKey: 'footerSubText' },
+  { type: 'basic', text: '完善基本信息', label: '基本信息' },
+  { type: 'text', text: '好久不见', dataKey: 'coverTitle', label: '封面标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#333333' } },
+  { type: 'text', text: 'Welcome to our wedding', dataKey: 'coverSubtitle', label: '封面副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 18, color: '#333333' } },
+  { type: 'text', text: '合卺', dataKey: 'photoTitle', label: '照片标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 48, color: '#ffffff' } },
+  { type: 'text', text: 'He jin & Ju hua', dataKey: 'photoSubtitle', label: '照片副标题', style: { ...DEFAULT_ELEMENT_STYLE, color: '#ffffff' } },
+  { type: 'text', text: '满小满', dataKey: 'footerText', label: '底部文本', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 28, color: '#333333' } },
+  { type: 'text', text: 'GROOM', dataKey: 'footerSubText', label: '底部副文本', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 14, color: '#999999' } },
 ]
 
 export const FONT_LIST = [

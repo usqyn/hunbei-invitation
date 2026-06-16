@@ -3,4 +3,5 @@ export interface Music {
   name: string
   hot?: boolean
   tag?: string
+  src?: string
 }

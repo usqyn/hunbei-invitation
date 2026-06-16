@@ -21,7 +21,7 @@
                   <text class="welcome-text" @click.stop="onPreviewClick(7)">{{ t.templateData.coverSubtitle }}</text>
                   <text
                     class="main-title"
-                    :style="previewStyle(6)"
+                    :style="getElementStyle(6)"
                     @click.stop="onPreviewClick(6)"
                   >{{ t.templateData.coverTitle }}</text>
                 </view>
@@ -57,12 +57,12 @@
                 <view class="photo-overlay">
                   <text
                     class="photo-title"
-                    :style="previewStyle(8)"
+                    :style="getElementStyle(8)"
                     @click.stop="onPreviewClick(8)"
                   >{{ t.templateData.photoTitle }}</text>
                   <text
                     class="photo-sub"
-                    :style="previewStyle(9)"
+                    :style="getElementStyle(9)"
                     @click.stop="onPreviewClick(9)"
                   >{{ t.templateData.photoSubtitle }}</text>
                 </view>
@@ -85,57 +85,71 @@
                 <view v-if="selectedPreviewIdx === 10" class="preview-active-border"></view>
                 <text
                   class="simple-title"
-                  :style="previewStyle(10)"
+                  :style="getElementStyle(10)"
                   @click.stop="onPreviewClick(10)"
                 >{{ t.templateData.footerText }}</text>
                 <text
                   class="simple-sub"
-                  :style="previewStyle(11)"
+                  :style="getElementStyle(11)"
                   @click.stop="onPreviewClick(11)"
                 >{{ t.templateData.footerSubText }}</text>
               </view>
             </view>
           </view>
         </scroll-view>
-      </view>
 
-      <view class="sidebar-area">
-        <scroll-view class="sidebar-pages" scroll-y>
+        <!-- Thumb strip -->
+        <scroll-view class="thumb-strip" scroll-x>
           <view
             v-for="(page, idx) in pageList"
             :key="idx"
-            class="page-thumb"
+            class="thumb-item"
             :class="{ active: currentPageIndex === idx }"
             @click="currentPageIndex = idx"
           >
-            <image v-if="page.type === 'cover'" class="thumb-image" :src="page.image" mode="aspectFill" @error="onImageError"></image>
+            <image v-if="page.type === 'cover'" class="thumb-img" :src="page.image" mode="aspectFill" @error="onImageError"></image>
             <view v-else-if="page.type === 'info'" class="thumb-placeholder info-thumb">
               <text class="thumb-icon">💑</text>
-              <text class="thumb-label">{{ page.label }}</text>
             </view>
             <view v-else-if="page.type === 'footer'" class="thumb-placeholder footer-thumb">
-              <text class="thumb-label">{{ page.label }}</text>
+              <text class="thumb-label">W</text>
             </view>
             <view v-else-if="page.type === 'story'" class="thumb-placeholder story-thumb">
               <text class="thumb-icon">💌</text>
-              <text class="thumb-label">{{ page.label }}</text>
             </view>
             <view v-else class="thumb-placeholder photo-thumb">
-              <text class="thumb-label">{{ page.label }}</text>
+              <text class="thumb-icon">🖼</text>
             </view>
           </view>
         </scroll-view>
+      </view>
 
-        <view class="sidebar-actions">
-          <view class="edit-content-btn" @click="handleOpenBasicInfo">
-            <text class="btn-icon">✏️</text>
-            <text class="btn-text">修改内容</text>
-          </view>
-          <view class="edit-content-btn" @click="editorStore.activePanelTab = 'edit'">
-            <text class="btn-icon">🧩</text>
-            <text class="btn-text">自由编辑</text>
-          </view>
-        </view>
+      <view class="sidebar-area">
+        <RightPanel
+          :active-panel-tab="editorStore.activePanelTab"
+          :editable-elements="editorStore.editableElements"
+          :selected-element="editorStore.selectedElement"
+          :material-list="editorStore.materialList"
+          :current-font="editorStore.currentFont"
+          :current-color="editorStore.currentColor"
+          :current-font-size="editorStore.currentFontSize"
+          :current-spacing="editorStore.currentSpacing"
+          :current-line-height="editorStore.currentLineHeight"
+          :settings="t.settings"
+          @update:active-panel-tab="editorStore.activePanelTab = $event"
+          @open-editor="editorStore.openEditor"
+          @select-material="onSelectMaterial"
+          @show-font-picker="showFontPickerModal = true"
+          @show-color-picker="showColorPickerModal = true"
+          @decrease-font-size="editorStore.decreaseFontSize"
+          @increase-font-size="editorStore.increaseFontSize"
+          @decrease-spacing="editorStore.decreaseSpacing"
+          @increase-spacing="editorStore.increaseSpacing"
+          @decrease-line-height="editorStore.decreaseLineHeight"
+          @increase-line-height="editorStore.increaseLineHeight"
+          @reset-style="editorStore.resetStyle"
+          @toggle-setting="t.toggleSetting"
+        />
       </view>
     </view>
 
@@ -186,34 +200,7 @@
       @update="onBasicInfoUpdate"
     />
 
-    <!-- Right Panel -->
-    <RightPanel
-      v-if="showRightPanel"
-      :active-panel-tab="editorStore.activePanelTab"
-      :editable-elements="editorStore.editableElements"
-      :selected-element="editorStore.selectedElement"
-      :material-list="editorStore.materialList"
-      :current-font="editorStore.currentFont"
-      :current-color="editorStore.currentColor"
-      :current-font-size="editorStore.currentFontSize"
-      :current-spacing="editorStore.currentSpacing"
-      :current-line-height="editorStore.currentLineHeight"
-      :settings="t.settings"
-      @update:active-panel-tab="editorStore.activePanelTab = $event"
-      @open-editor="editorStore.openEditor"
-      @select-material="onSelectMaterial"
-      @show-font-picker="showFontPickerModal = true"
-      @show-color-picker="showColorPickerModal = true"
-      @decrease-font-size="editorStore.decreaseFontSize"
-      @increase-font-size="editorStore.increaseFontSize"
-      @decrease-spacing="editorStore.decreaseSpacing"
-      @increase-spacing="editorStore.increaseSpacing"
-      @decrease-line-height="editorStore.decreaseLineHeight"
-      @increase-line-height="editorStore.increaseLineHeight"
-      @reset-style="editorStore.resetStyle"
-      @toggle-setting="t.toggleSetting"
-    />
-
+    
     <!-- Text Editor Popup -->
     <TextEditorPopup
       :visible="editorStore.showTextEditor"
@@ -316,7 +303,7 @@ const isFreeEdit = ref(false)
 const currentPageIndex = ref(0)
 const showSettings = ref(false)
 const showBasicInfo = ref(false)
-const showRightPanel = ref(true)
+
 const showFontPickerModal = ref(false)
 const showColorPickerModal = ref(false)
 const selectedPreviewIdx = ref<number | null>(null)
@@ -340,13 +327,26 @@ const settingDefs = [
   { key: 'album', name: '相册功能' },
 ]
 
-function previewStyle(previewIdx: number) {
-  if (selectedPreviewIdx.value !== previewIdx) return {}
+const FONT_MAP: Record<string, string> = {
+  '华文楷体': 'STKaiti,KaiTi,serif',
+  '华文行楷': 'STXingkai,cursive',
+  '华文隶书': 'STLiti,cursive',
+  '思源宋体极细': 'SourceHanSerifCN-ExtraLight,serif',
+  '思源宋体': 'SourceHanSerifCN-Regular,serif',
+  '思源黑体': 'SourceHanSansCN-Regular,sans-serif',
+}
+
+function getElementStyle(previewIdx: number) {
+  const elIdx = PREVIEW_MAP[previewIdx]
+  if (elIdx === undefined || elIdx < 0) return {}
+  const el = editorStore.editableElements[elIdx]
+  if (!el.style) return {}
   return {
-    fontSize: editorStore.currentFontSize + 'rpx',
-    color: editorStore.currentColor,
-    letterSpacing: editorStore.currentSpacing + 'rpx',
-    lineHeight: editorStore.currentLineHeight,
+    fontFamily: FONT_MAP[el.style.font] || 'sans-serif',
+    fontSize: el.style.fontSize + 'rpx',
+    color: el.style.color,
+    letterSpacing: el.style.spacing + 'rpx',
+    lineHeight: el.style.lineHeight,
   }
 }
 
@@ -367,12 +367,12 @@ function onSelectMaterial(material: { url: string; name: string }) {
 }
 
 function onSelectFont(font: string) {
-  editorStore.currentFont = font
+  editorStore.onFontChange(font)
   showFontPickerModal.value = false
 }
 
 function onSelectColor(color: string) {
-  editorStore.currentColor = color
+  editorStore.onColorChange(color)
   showColorPickerModal.value = false
 }
 
@@ -466,8 +466,10 @@ const onImageError = () => {}
   overflow: hidden;
   box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
-.preview-scroll { height: 100%; width: 100%; }
+.preview-scroll { flex: 1; width: 100%; min-height: 0; }
 .preview-card { width: 100%; padding: 16rpx; box-sizing: border-box; }
 .page-content { width: 100%; position: relative; }
 
@@ -567,41 +569,47 @@ const onImageError = () => {}
 .simple-sub { font-size: 14rpx; color: #999; letter-spacing: 4rpx; margin-top: 8rpx; }
 
 .sidebar-area {
-  width: 280rpx;
-  display: flex; flex-direction: column;
-  flex-shrink: 0; gap: 12rpx;
+  width: 520rpx;
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
 }
-.sidebar-pages {
-  flex: 1; background: #fff; border-radius: 16rpx;
-  padding: 12rpx 16rpx; min-height: 0;
+
+.thumb-strip {
+  height: 120rpx;
+  white-space: nowrap;
+  padding: 12rpx 16rpx;
+  box-sizing: border-box;
+  background: #fafafa;
+  border-top: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
 }
-.page-thumb {
-  width: 100%; height: 160rpx; border-radius: 8rpx; margin-bottom: 12rpx; overflow: hidden;
-  border: 4rpx solid transparent;
+.thumb-item {
+  display: inline-flex;
+  width: 80rpx; height: 80rpx;
+  border-radius: 8rpx;
+  margin-right: 8rpx;
+  overflow: hidden;
+  border: 3rpx solid transparent;
+  vertical-align: top;
   &.active { border-color: #e84a6e; }
 }
-.thumb-image { width: 100%; height: 100%; }
+.thumb-img { width: 100%; height: 100%; }
 .thumb-placeholder {
   width: 100%; height: 100%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8rpx;
+  display: flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, #fff5f5 0%, #ffe4e8 100%);
 }
 .info-thumb { background: linear-gradient(135deg, #fff8f0 0%, #ffe8d4 100%); }
 .footer-thumb { background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%); }
 .story-thumb { background: linear-gradient(135deg, #f8f5ff 0%, #e8d4ff 100%); }
 .photo-thumb { background: linear-gradient(135deg, #e8f4ff 0%, #d4e8ff 100%); }
-.thumb-icon { font-size: 36rpx; }
-.thumb-label { font-size: 18rpx; color: #666; text-align: center; }
-
-.sidebar-actions {
-  display: flex; gap: 12rpx;
-}
-.edit-content-btn {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6rpx;
-  padding: 16rpx 8rpx; background: #fff5f5; border-radius: 12rpx; border: 1rpx solid #ffe4e8;
-}
-.btn-icon { font-size: 22rpx; }
-.btn-text { font-size: 20rpx; color: #e84a6e; font-weight: 500; }
+.thumb-icon { font-size: 28rpx; }
+.thumb-label { font-size: 18rpx; color: #666; }
 
 .editor-footer {
   display: flex; align-items: center;

@@ -37,10 +37,20 @@ export interface TemplateSettings {
   [key: string]: boolean
 }
 
+export interface ElementStyle {
+  font: string
+  color: string
+  fontSize: number
+  spacing: number
+  lineHeight: number
+}
+
 export interface EditableElement {
   type: 'image' | 'text' | 'basic'
   text: string
   dataKey?: keyof TemplateData
+  label?: string
+  style?: ElementStyle
 }
 
 export interface Material {
