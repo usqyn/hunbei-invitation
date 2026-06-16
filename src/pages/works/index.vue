@@ -164,7 +164,9 @@ const handleCreate = () => {
   uni.navigateTo({ url: '/pages/editor/index' })
 }
 
-const onImageError = () => {}
+const onImageError = () => {
+  console.warn('Works page image load failed')
+}
 </script>
 
 <style lang="scss" scoped>

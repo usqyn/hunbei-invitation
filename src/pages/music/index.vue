@@ -103,8 +103,8 @@ const filteredMusicList = computed(() => {
 })
 
 const currentSong = computed(() => {
-  if (currentSongIndex.value !== null && currentSongIndex.value < musicList.value.length) {
-    return musicList.value[currentSongIndex.value]
+  if (currentSongIndex.value !== null && currentSongIndex.value < filteredMusicList.value.length) {
+    return filteredMusicList.value[currentSongIndex.value]
   }
   return null
 })
@@ -132,7 +132,7 @@ const handleUpload = () => {
     mediaType: ['audio'],
     success: (res) => {
       const file = res.tempFiles[0]
-      musicList.value.push({ id: Date.now(), name: file.name || '本地音乐', isHot: false, category: 'all' })
+      musicList.value.push({ id: Date.now(), name: file.name || '本地音乐', isHot: false, category: 'all', src: file.tempFilePath })
       uni.showToast({ title: '上传成功', icon: 'success' })
     },
     fail: () => {
@@ -143,7 +143,8 @@ const handleUpload = () => {
 
 const handleSelectSong = (idx: number) => {
   stopAudio()
-  const song = musicList.value[idx]
+  const song = filteredMusicList.value[idx]
+  if (!song) return
   currentSongIndex.value = idx
   templateStore.setSelectedMusic(song.id)
   if (!song.src) {

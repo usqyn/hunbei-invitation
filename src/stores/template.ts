@@ -2,40 +2,9 @@ import { defineStore } from 'pinia'
 import { reactive, ref } from 'vue'
 import { DEFAULT_TEMPLATE_DATA, DEFAULT_BASIC_INFO, DEFAULT_SETTINGS } from '@/constants/editor'
 import type { TemplateData, BasicInfo, TemplateSettings, Template } from '@/types'
+import { request } from '@/utils/request'
 
 const STORAGE_KEY = 'hunbei_template'
-
-function getToken(): string {
-  try { return uni.getStorageSync('token') || '' } catch { return '' }
-}
-
-function request<T = any>(options: {
-  url: string; method?: string; data?: any; header?: any; hideLoading?: boolean
-}): Promise<T> {
-  const token = getToken()
-  const header: Record<string, string> = { 'Content-Type': 'application/json', ...options.header }
-  if (token) header['Authorization'] = `Bearer ${token}`
-  if (!options.hideLoading) uni.showLoading({ title: '加载中...', mask: true })
-  return new Promise((resolve, reject) => {
-    uni.request({
-      url: 'https://api.hunbei.com' + options.url,
-      method: options.method || 'GET',
-      data: options.data,
-      header,
-      timeout: 15000,
-      success: (res: any) => {
-        if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data as T)
-        else if (res.statusCode === 401) {
-          try { uni.removeStorageSync('token') } catch {}
-          uni.reLaunch({ url: '/pages/login/index' })
-          reject(new Error('登录已过期'))
-        } else reject(new Error(`请求失败: ${res.statusCode}`))
-      },
-      fail: (err: any) => reject(new Error(err.errMsg || '网络异常')),
-      complete: () => { if (!options.hideLoading) uni.hideLoading() },
-    })
-  })
-}
 
 export const useTemplateStore = defineStore('template', () => {
   const templateData = reactive<TemplateData>({ ...DEFAULT_TEMPLATE_DATA })
@@ -72,7 +41,7 @@ export const useTemplateStore = defineStore('template', () => {
         settings: { ...settings },
         selectedMusicId: selectedMusicId.value,
       })
-    } catch {}
+    } catch (e) { console.error('template persist failed', e) }
   }
 
   function restore() {
@@ -84,13 +53,13 @@ export const useTemplateStore = defineStore('template', () => {
         if (saved.settings) Object.assign(settings, saved.settings)
         if (saved.selectedMusicId) selectedMusicId.value = saved.selectedMusicId
       }
-    } catch {}
+    } catch (e) { console.error('template restore failed', e) }
   }
 
   async function fetchTemplates(type?: string) {
     loading.value = true
     try { templateList.value = await request<Template[]>({ url: '/api/templates', data: { type, page: 1 } }) }
-    catch { templateList.value = [] }
+    catch (e) { console.error('fetchTemplates failed', e); templateList.value = [] }
     finally { loading.value = false }
   }
 

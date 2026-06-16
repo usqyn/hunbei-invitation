@@ -57,7 +57,7 @@ export const useEditorStore = defineStore('editor', () => {
     try {
       const styles = editableElements.map(e => e.style ? { ...e.style } : null)
       uni.setStorageSync(STORAGE_KEY, styles)
-    } catch {}
+    } catch (e) { console.error('persistStyles failed', e) }
   }
 
   function restoreStyles() {
@@ -70,7 +70,7 @@ export const useEditorStore = defineStore('editor', () => {
           }
         })
       }
-    } catch {}
+    } catch (e) { console.error('restoreStyles failed', e) }
   }
 
   function openEditor(idx: number) {

@@ -18,7 +18,7 @@ export const useWorksStore = defineStore('works', () => {
         drafts: drafts.value,
         favorites: favorites.value,
       })
-    } catch {}
+    } catch (e) { console.error('works persist failed', e) }
   }
 
   function restore() {
@@ -29,7 +29,7 @@ export const useWorksStore = defineStore('works', () => {
         if (saved.drafts) drafts.value = saved.drafts
         if (saved.favorites) favorites.value = saved.favorites
       }
-    } catch {}
+    } catch (e) { console.error('works restore failed', e) }
   }
 
   function addWork(work: Work) {
@@ -61,7 +61,7 @@ export const useWorksStore = defineStore('works', () => {
     if (idx !== -1) {
       favorites.value.splice(idx, 1)
     } else {
-      const work = works.value.find(w => w.id === id)
+      const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
       if (work) favorites.value.unshift(work)
     }
     persist()

@@ -97,6 +97,7 @@ const worksStore = useWorksStore()
 
 const currentTab = ref('template')
 const isFavorite = ref(false)
+const templateId = ref(1)
 
 const tabList = ref([
   { key: 'template', name: '模板预览' },
@@ -123,7 +124,7 @@ const handleShare = () => {
 
 const handleFavorite = () => {
   isFavorite.value = !isFavorite.value
-  worksStore.toggleFavorite(1)
+  worksStore.toggleFavorite(templateId.value)
   uni.showToast({ title: isFavorite.value ? '已收藏' : '取消收藏', icon: 'none' })
 }
 
@@ -135,7 +136,9 @@ const handleCreate = () => {
   uni.navigateTo({ url: '/pages/editor/index' })
 }
 
-const onImageError = () => {}
+const onImageError = () => {
+  console.warn('Preview image load failed')
+}
 </script>
 
 <style lang="scss" scoped>

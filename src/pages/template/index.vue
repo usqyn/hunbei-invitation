@@ -64,13 +64,13 @@ const activeTab = ref('preview')
 const previewImage = '/static/images/templates/wedding-1.svg'
 const isFav = ref(false)
 const templateType = ref('invitation')
+const templateId = ref(1)
 
 onMounted(() => {
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
-  if (curPage?.$page?.options?.type) {
-    templateType.value = curPage.$page.options.type
-  }
+  if (curPage?.$page?.options?.type) templateType.value = curPage.$page.options.type
+  if (curPage?.$page?.options?.id) templateId.value = Number(curPage.$page.options.id)
 })
 
 const goBack = () => {
@@ -91,7 +91,7 @@ const handleShare = () => {
 const handleFavorite = () => {
   isFav.value = !isFav.value
   if (isFav.value) {
-    worksStore.toggleFavorite(1)
+    worksStore.toggleFavorite(templateId.value)
   }
   uni.showToast({ title: isFav.value ? '已收藏' : '取消收藏', icon: 'success' })
 }
@@ -100,7 +100,9 @@ const handleCreate = () => {
   uni.navigateTo({ url: '/pages/editor/index' })
 }
 
-const onImageError = () => {}
+const onImageError = () => {
+  console.warn('Template preview image load failed')
+}
 </script>
 
 <style lang="scss" scoped>

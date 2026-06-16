@@ -51,7 +51,7 @@
                   <text class="welcome-text" @click.stop="onPreviewClick(7)">{{ t.templateData.coverSubtitle }}</text>
                   <text
                     class="main-title"
-                    :style="getElementStyle(6)"
+                    :style="elementStyles[6]"
                     @click.stop="onPreviewClick(6)"
                   >{{ t.templateData.coverTitle }}</text>
                 </view>
@@ -87,12 +87,12 @@
                 <view class="photo-overlay">
                   <text
                     class="photo-title"
-                    :style="getElementStyle(8)"
+                    :style="elementStyles[8]"
                     @click.stop="onPreviewClick(8)"
                   >{{ t.templateData.photoTitle }}</text>
                   <text
                     class="photo-sub"
-                    :style="getElementStyle(9)"
+                    :style="elementStyles[9]"
                     @click.stop="onPreviewClick(9)"
                   >{{ t.templateData.photoSubtitle }}</text>
                 </view>
@@ -115,12 +115,12 @@
                 <view v-if="selectedPreviewIdx === 10" class="preview-active-border"></view>
                 <text
                   class="simple-title"
-                  :style="getElementStyle(10)"
+                  :style="elementStyles[10]"
                   @click.stop="onPreviewClick(10)"
                 >{{ t.templateData.footerText }}</text>
                 <text
                   class="simple-sub"
-                  :style="getElementStyle(11)"
+                  :style="elementStyles[11]"
                   @click.stop="onPreviewClick(11)"
                 >{{ t.templateData.footerSubText }}</text>
               </view>
@@ -274,7 +274,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
@@ -338,19 +338,24 @@ const FONT_MAP: Record<string, string> = {
   '思源黑体': 'SourceHanSansCN-Regular,sans-serif',
 }
 
-function getElementStyle(previewIdx: number) {
-  const elIdx = PREVIEW_MAP[previewIdx]
-  if (elIdx === undefined || elIdx < 0) return {}
-  const el = editorStore.editableElements[elIdx]
-  if (!el.style) return {}
-  return {
-    fontFamily: FONT_MAP[el.style.font] || 'sans-serif',
-    fontSize: el.style.fontSize + 'rpx',
-    color: el.style.color,
-    letterSpacing: el.style.spacing + 'rpx',
-    lineHeight: el.style.lineHeight,
+const elementStyles = computed(() => {
+  const styles: Record<number, Record<string, string>> = {}
+  for (const previewIdxStr of Object.keys(PREVIEW_MAP)) {
+    const previewIdx = Number(previewIdxStr)
+    const elIdx = PREVIEW_MAP[previewIdx]
+    if (elIdx === undefined || elIdx < 0) continue
+    const el = editorStore.editableElements[elIdx]
+    if (!el.style) continue
+    styles[previewIdx] = {
+      fontFamily: FONT_MAP[el.style.font] || 'sans-serif',
+      fontSize: el.style.fontSize + 'rpx',
+      color: el.style.color,
+      letterSpacing: el.style.spacing + 'rpx',
+      lineHeight: el.style.lineHeight,
+    }
   }
-}
+  return styles
+})
 
 function onPreviewClick(previewIdx: number) {
   const elIdx = PREVIEW_MAP[previewIdx]
@@ -414,16 +419,15 @@ const onBasicInfoUpdate = (field: string, value: string) => {
 }
 
 const handleLocation = () => {
-  try {
-    uni.chooseLocation({
-      success: (res: any) => { t.basicInfo.location = res.name || res.address }
-    })
-  } catch (e) {
-    uni.showToast({ title: '选择位置失败', icon: 'none' })
-  }
+  uni.chooseLocation({
+    success: (res: any) => { t.basicInfo.location = res.name || res.address },
+    fail: () => { uni.showToast({ title: '选择位置失败', icon: 'none' }) },
+  })
 }
 
-const onImageError = () => {}
+const onImageError = () => {
+  console.warn('Editor image load failed')
+}
 </script>
 
 <style lang="scss" scoped>

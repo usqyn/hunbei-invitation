@@ -61,7 +61,7 @@
           <view 
             v-for="card in featuredCards" 
             :key="card.id" 
-            class="invitation-card"
+            class="scroll-card"
             @click="handleCardClick(card)"
           >
             <image class="card-image" :src="card.image" mode="aspectFill" @error="onImageError" />
@@ -83,9 +83,9 @@ import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/cat
 const searchText = ref('')
 const activeTab = ref('网红爆款')
 
-const categories = ref(HOME_CATEGORIES)
-const tabs = ref(HOME_TABS)
-const featuredCards = ref(HOME_FEATURED_CARDS)
+const categories = HOME_CATEGORIES
+const tabs = HOME_TABS
+const featuredCards = HOME_FEATURED_CARDS
 
 const handleSearch = () => {
   if (searchText.value) {
@@ -109,9 +109,8 @@ const goToEditor = (type: string) => {
   uni.navigateTo({ url: `/pages/template/index?type=${type}` })
 }
 
-const onImageError = (e: any) => {
-  const target = e.target as any
-  // 静默处理图片加载失败
+const onImageError = () => {
+  console.warn('Home page image load failed')
 }
 </script>
 
@@ -282,7 +281,7 @@ const onImageError = (e: any) => {
   gap: 20rpx;
 }
 
-.invitation-card {
+.scroll-card {
   width: 280rpx;
   border-radius: 16rpx;
   overflow: hidden;
