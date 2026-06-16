@@ -1,13 +1,11 @@
 <template>
   <view class="right-panel">
     <scroll-view class="panel-scroll" scroll-y>
-      <!-- 自由编辑 -->
       <view class="free-edit-btn" @click="onFreeEditToggle">
         <text class="free-edit-icon">🖼️</text>
         <text class="free-edit-text">自由编辑</text>
       </view>
 
-      <!-- 修改对应内容 -->
       <view class="content-header" @click="onToggleContent">
         <text class="content-title">修改对应内容</text>
         <text class="content-arrow" :class="{ open: contentOpen }">▼</text>
@@ -21,15 +19,12 @@
           :class="{ selected: selectedElement === idx }"
           @click="$emit('openEditor', idx)"
         >
-          <!-- 图片项 -->
           <view v-if="element.type === 'image'" class="image-item">
             <image class="item-image" :src="element.text" mode="aspectFill" @error="$emit('imageError')"></image>
             <view class="replace-icon-wrapper">
               <text class="replace-icon">🖼️</text>
             </view>
           </view>
-
-          <!-- 文字项 -->
           <view v-else class="text-item">
             <text class="item-text">{{ element.text }}</text>
           </view>
@@ -91,7 +86,7 @@ function onToggleContent() {
   background: #fff;
   display: flex;
   flex-direction: column;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   overflow: hidden;
 }
 
@@ -99,7 +94,7 @@ function onToggleContent() {
   flex: 1;
   height: 100%;
   min-height: 0;
-  padding: 16rpx;
+  padding: 12rpx;
 }
 
 /* 自由编辑按钮 */
@@ -107,20 +102,20 @@ function onToggleContent() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
-  padding: 20rpx;
+  gap: 8rpx;
+  padding: 14rpx 16rpx;
   background: #fff;
   border: 2rpx solid #e8e8e8;
-  border-radius: 12rpx;
-  margin-bottom: 20rpx;
+  border-radius: 10rpx;
+  margin-bottom: 14rpx;
 }
 
 .free-edit-icon {
-  font-size: 28rpx;
+  font-size: 24rpx;
 }
 
 .free-edit-text {
-  font-size: 26rpx;
+  font-size: 22rpx;
   color: #333;
   font-weight: 500;
 }
@@ -130,18 +125,18 @@ function onToggleContent() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12rpx 8rpx;
-  margin-bottom: 12rpx;
+  padding: 8rpx 4rpx;
+  margin-bottom: 10rpx;
 }
 
 .content-title {
-  font-size: 26rpx;
+  font-size: 22rpx;
   font-weight: 600;
   color: #333;
 }
 
 .content-arrow {
-  font-size: 16rpx;
+  font-size: 14rpx;
   color: #999;
   transition: transform 0.2s ease;
 
@@ -158,13 +153,13 @@ function onToggleContent() {
 .content-list {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 10rpx;
 }
 
 .content-item {
-  border-radius: 12rpx;
+  border-radius: 10rpx;
   overflow: hidden;
-  border: 3rpx solid transparent;
+  border: 2rpx solid transparent;
   transition: all 0.2s ease;
 
   &.selected {
@@ -176,9 +171,9 @@ function onToggleContent() {
 .image-item {
   position: relative;
   width: 100%;
-  height: 240rpx;
+  height: 180rpx;
   background: #f5f5f5;
-  border-radius: 12rpx;
+  border-radius: 10rpx;
   overflow: hidden;
 }
 
@@ -189,30 +184,30 @@ function onToggleContent() {
 
 .replace-icon-wrapper {
   position: absolute;
-  top: 12rpx;
-  right: 12rpx;
-  width: 48rpx;
-  height: 48rpx;
+  top: 8rpx;
+  right: 8rpx;
+  width: 40rpx;
+  height: 40rpx;
   background: rgba(0, 0, 0, 0.5);
-  border-radius: 8rpx;
+  border-radius: 6rpx;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .replace-icon {
-  font-size: 24rpx;
+  font-size: 20rpx;
 }
 
 /* 文字项 */
 .text-item {
   background: #fafafa;
-  border-radius: 12rpx;
-  padding: 16rpx 20rpx;
+  border-radius: 10rpx;
+  padding: 12rpx 14rpx;
 }
 
 .item-text {
-  font-size: 24rpx;
+  font-size: 20rpx;
   color: #333;
   line-height: 1.4;
   display: -webkit-box;

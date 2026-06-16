@@ -16,38 +16,38 @@
         <scroll-view class="preview-scroll" scroll-y>
           <view class="preview-card">
             <!-- Cover Section -->
-            <view class="section cover-section">
+            <view class="section cover-section" :class="{ 'active-section': editorStore.selectedElement === 0 }" @click="onOpenEditor(0)">
               <image class="cover-image" :src="editableElements[0].text" mode="aspectFill" @error="onImageError"></image>
               <view class="cover-top">
                 <text class="cover-top-left">OUR WEDDING</text>
                 <text class="cover-top-right">INVITATION</text>
               </view>
               <view class="cover-overlay">
-                <text class="cover-date" :style="elementStyles[1]">{{ editableElements[1].text }}</text>
-                <text class="cover-main-title" :style="elementStyles[2]">{{ editableElements[2].text }}</text>
-                <text class="cover-subtitle" :style="elementStyles[3]">{{ editableElements[3].text }}</text>
+                <text class="cover-date" :class="{ 'active-item': editorStore.selectedElement === 1 }" @click.stop="onOpenEditor(1)" :style="elementStyles[1]">{{ editableElements[1].text }}</text>
+                <text class="cover-main-title" :class="{ 'active-item': editorStore.selectedElement === 2 }" @click.stop="onOpenEditor(2)" :style="elementStyles[2]">{{ editableElements[2].text }}</text>
+                <text class="cover-subtitle" :class="{ 'active-item': editorStore.selectedElement === 3 }" @click.stop="onOpenEditor(3)" :style="elementStyles[3]">{{ editableElements[3].text }}</text>
                 <view class="cover-shuangxi-wrapper">
-                  <text class="shuangxi-text">{{ editableElements[4].text }}</text>
-                  <text class="arabic-left" :style="elementStyles[5]">{{ editableElements[5].text }}</text>
-                  <text class="arabic-right" :style="elementStyles[6]">{{ editableElements[6].text }}</text>
+                  <text class="shuangxi-text" :class="{ 'active-item': editorStore.selectedElement === 4 }" @click.stop="onOpenEditor(4)">{{ editableElements[4].text }}</text>
+                  <text class="arabic-left" :class="{ 'active-item': editorStore.selectedElement === 5 }" @click.stop="onOpenEditor(5)" :style="elementStyles[5]">{{ editableElements[5].text }}</text>
+                  <text class="arabic-right" :class="{ 'active-item': editorStore.selectedElement === 6 }" @click.stop="onOpenEditor(6)" :style="elementStyles[6]">{{ editableElements[6].text }}</text>
                 </view>
               </view>
             </view>
 
             <!-- Vinyl Record Section -->
-            <view class="section vinyl-section">
+            <view class="section vinyl-section" :class="{ 'active-section': editorStore.selectedElement === 7 }" @click="onOpenEditor(7)">
               <image class="vinyl-image" :src="editableElements[7].text" mode="aspectFill" @error="onImageError"></image>
             </view>
 
             <!-- Invitation Title -->
             <view class="section invite-title-section">
-              <text class="invite-title" :style="elementStyles[8]">{{ editableElements[8].text }}</text>
-              <text class="invite-title-en" :style="elementStyles[9]">{{ editableElements[9].text }}</text>
+              <text class="invite-title" :class="{ 'active-item': editorStore.selectedElement === 8 }" @click="onOpenEditor(8)" :style="elementStyles[8]">{{ editableElements[8].text }}</text>
+              <text class="invite-title-en" :class="{ 'active-item': editorStore.selectedElement === 9 }" @click="onOpenEditor(9)" :style="elementStyles[9]">{{ editableElements[9].text }}</text>
             </view>
 
             <!-- Body Paragraphs -->
             <view class="section body-text-section">
-              <text class="body-text" :style="elementStyles[10]">{{ editableElements[10].text }}</text>
+              <text class="body-text" :class="{ 'active-item': editorStore.selectedElement === 10 }" @click="onOpenEditor(10)" :style="elementStyles[10]">{{ editableElements[10].text }}</text>
             </view>
 
             <!-- Couple Info -->
@@ -349,19 +349,20 @@ function handleShare() {
   display: flex;
   flex: 1;
   min-height: 0;
-  padding: 20rpx;
-  gap: 20rpx;
+  padding: 16rpx;
+  gap: 16rpx;
 }
 
-/* Preview Area */
+/* Preview Area - 左侧更大 */
 .preview-area {
-  flex: 1;
+  flex: 2.5;
   display: flex;
   flex-direction: column;
   background: #fff;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 
 .preview-scroll {
@@ -373,8 +374,8 @@ function handleShare() {
 .preview-card {
   display: flex;
   flex-direction: column;
-  padding: 20rpx;
-  gap: 20rpx;
+  padding: 16rpx;
+  gap: 16rpx;
 }
 
 .section {
@@ -384,9 +385,23 @@ function handleShare() {
 
 /* Cover Section */
 .cover-section {
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   overflow: hidden;
   aspect-ratio: 3 / 4;
+}
+
+/* 高亮样式：整个图片区块 */
+.active-section {
+  outline: 4rpx solid #e84a6e;
+  outline-offset: 4rpx;
+}
+
+/* 高亮样式：单个文字元素 */
+.active-item {
+  outline: 3rpx solid #e84a6e;
+  outline-offset: 3rpx;
+  background: rgba(232, 74, 110, 0.08);
+  border-radius: 4rpx;
 }
 
 .cover-image {
@@ -584,13 +599,14 @@ function handleShare() {
   font-weight: 500;
 }
 
-/* Sidebar Area */
+/* Sidebar Area - 右侧更窄 */
 .sidebar-area {
-  width: 360rpx;
+  flex: 1;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 
 /* Editor Footer */
