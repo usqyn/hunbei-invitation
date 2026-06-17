@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="bgBaby" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f4fd;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d1e8f7;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3498db;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2980b9;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1200" fill="url(#bgBaby)"/>
+  <circle cx="400" cy="180" r="100" fill="#ffffff" opacity="0.8"/>
+  <circle cx="400" cy="180" r="80" fill="#ffd93d" opacity="0.3"/>
+  <text x="400" y="200" font-size="72" fill="#3498db" text-anchor="middle">👶</text>
+  <text x="400" y="340" font-size="24" fill="#2980b9" text-anchor="middle" letter-spacing="12">BABY SHOWER</text>
+  <text x="400" y="440" font-size="64" fill="#1a5276" text-anchor="middle" font-family="STKaiti, KaiTi" font-weight="bold">百日宴</text>
+  <text x="400" y="500" font-size="24" fill="#2980b9" text-anchor="middle">100 DAYS CELEBRATION</text>
+  <line x1="200" y1="560" x2="600" y2="560" stroke="url(#blue)" stroke-width="1" stroke-dasharray="8 4"/>
+  <text x="400" y="560" font-size="28" fill="#e8f4fd" text-anchor="middle">♥</text>
+  <line x1="200" y1="560" x2="600" y2="560" stroke="url(#blue)" stroke-width="1" stroke-dasharray="8 4"/>
+  <rect x="200" y="620" width="400" height="280" rx="20" fill="#ffffff" stroke="url(#blue)" stroke-width="2"/>
+  <text x="400" y="690" font-size="28" fill="#2980b9" text-anchor="middle">宝宝的名字</text>
+  <text x="400" y="760" font-size="44" fill="#3498db" text-anchor="middle" font-weight="bold">小宝贝</text>
+  <text x="400" y="840" font-size="24" fill="#666" text-anchor="middle">出生于 2050 年 5 月 20 日</text>
+  <text x="400" y="880" font-size="22" fill="#999" text-anchor="middle">体重 3.5kg · 身高 50cm</text>
+  <text x="400" y="980" font-size="24" fill="#1a5276" text-anchor="middle" font-family="STKaiti">诚邀您参加宝宝的百日宴</text>
+  <text x="400" y="1030" font-size="20" fill="#2980b9" text-anchor="middle">2050年8月20日 · 中午12:00</text>
+  <text x="400" y="1070" font-size="20" fill="#666" text-anchor="middle">幸福大酒店 · 欢乐厅</text>
+  <text x="400" y="1150" font-size="18" fill="#3498db" text-anchor="middle" letter-spacing="6">— 期待您的光临 —</text>
+</svg>

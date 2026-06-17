@@ -1,18 +1,20 @@
 <template>
   <view class="page">
+    <!-- 搜索栏 -->
     <view class="search-bar">
-      <input 
-        class="search-input" 
-        placeholder="婚礼海报" 
+      <input
+        class="search-input"
+        placeholder="搜索模板名称/分类"
         v-model="searchText"
         @confirm="handleSearch"
       />
     </view>
-    
+
+    <!-- 分类网格 - 点击跳转到对应分类的模板列表 -->
     <view class="category-grid">
-      <view 
-        v-for="item in categories" 
-        :key="item.id" 
+      <view
+        v-for="item in categories"
+        :key="item.id"
         class="category-item"
         @click="handleCategoryClick(item)"
       >
@@ -22,45 +24,42 @@
         <text class="category-name">{{ item.name }}</text>
       </view>
     </view>
-    
+
+    <!-- 特色功能区 - 快速进入制作 -->
     <view class="feature-section">
-      <view class="feature-card invitation-card" @click="goToEditor('invitation')">
+      <view class="feature-card invitation-card" @click="goToEditor('wedding')">
         <view class="feature-content">
-          <view class="feature-badge">请帖制作</view>
-          <text class="feature-title">电子请帖 免费制作</text>
+          <view class="feature-badge">电子请帖</view>
+          <text class="feature-title">婚礼请柬 免费制作</text>
           <text class="feature-desc">精美模板一键生成</text>
         </view>
         <view class="feature-icon">💒</view>
       </view>
-      <view class="feature-card moments-card" @click="goToEditor('moments')">
+      <view class="feature-card moments-card" @click="goToEditor('birthday')">
         <view class="feature-content">
-          <view class="feature-badge">朋友圈邀请</view>
-          <text class="feature-title">朋友圈邀请函</text>
-          <text class="feature-desc">故事+视频+H5分享</text>
+          <view class="feature-badge">生日邀请</view>
+          <text class="feature-title">派对邀请函制作</text>
+          <text class="feature-desc">分享美好时光</text>
         </view>
-        <view class="feature-icon">📱</view>
+        <view class="feature-icon">🎂</view>
       </view>
     </view>
-    
+
+    <!-- 模板精选区 -->
     <view class="section">
       <view class="section-header">
-        <text class="section-title">婚贝精选</text>
-        <view class="section-tabs">
-          <text 
-            v-for="tab in tabs" 
-            :key="tab" 
-            class="tab-item"
-            :class="{ active: activeTab === tab }"
-            @click="activeTab = tab"
-          >{{ tab }}</text>
+        <text class="section-title">精选模板</text>
+        <view class="section-more" @click="goToTemplatePage">
+          <text class="more-text">查看全部 ›</text>
         </view>
       </view>
-      
+
+      <!-- 横向滚动的精选卡片 -->
       <scroll-view class="card-scroll" scroll-x>
         <view class="card-list">
-          <view 
-            v-for="card in featuredCards" 
-            :key="card.id" 
+          <view
+            v-for="card in featuredCards"
+            :key="card.id"
             class="scroll-card"
             @click="handleCardClick(card)"
           >
@@ -73,12 +72,43 @@
         </view>
       </scroll-view>
     </view>
+
+    <!-- 全部分类区 - 展示所有分类的模板数 -->
+    <view class="section">
+      <view class="section-header">
+        <text class="section-title">全部分类</text>
+        <view class="section-tabs">
+          <text
+            v-for="tab in tabs"
+            :key="tab"
+            class="tab-item"
+            :class="{ active: activeTab === tab }"
+            @click="activeTab = tab"
+          >{{ tab }}</text>
+        </view>
+      </view>
+
+      <!-- 分类网格 - 展示所有分类模板数 -->
+      <view class="category-count-grid">
+        <view
+          v-for="cat in allCategories"
+          :key="cat.id"
+          class="count-card"
+          @click="goToTemplatePage(cat.id)"
+        >
+          <text class="count-icon">{{ cat.icon }}</text>
+          <text class="count-name">{{ cat.name }}</text>
+          <text class="count-num">{{ cat.templates.length }} 个模板</text>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
+import { CATEGORY_LIST } from '@/constants/templates'
 
 const searchText = ref('')
 const activeTab = ref('网红爆款')
@@ -87,28 +117,55 @@ const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
 const featuredCards = HOME_FEATURED_CARDS
 
+// 全部分类 - 整合模板系统中的分类数据(用于展示每个分类下的模板数量)
+const allCategories = computed(() => {
+  return CATEGORY_LIST.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    icon: cat.icon,
+    templates: cat.templates,
+  }))
+})
+
+// 搜索功能
 const handleSearch = () => {
   if (searchText.value) {
-    uni.showToast({ title: '搜索: ' + searchText.value, icon: 'none' })
+    uni.navigateTo({
+      url: `/pages/template/index?search=${encodeURIComponent(searchText.value)}`,
+    })
   }
 }
 
+// 点击分类卡片 - 跳转到模板选择页并自动选中该分类
 const handleCategoryClick = (item: any) => {
-  uni.showToast({ title: '选择: ' + item.name, icon: 'none' })
+  uni.navigateTo({
+    url: `/pages/template/index?category=${item.categoryId}`,
+  })
 }
 
+// 点击精选卡片 - 直接跳转到编辑器并加载对应的模板
 const handleCardClick = (card: any) => {
-  if (card.type === 'moments') {
-    uni.navigateTo({ url: '/pages/template/index?type=moments' })
-  } else {
-    uni.navigateTo({ url: '/pages/template/index?type=invitation' })
-  }
+  uni.navigateTo({
+    url: `/pages/editor/index?templateId=${card.type}`,
+  })
 }
 
-const goToEditor = (type: string) => {
-  uni.navigateTo({ url: `/pages/template/index?type=${type}` })
+// 点击特色功能卡片 - 跳转到模板选择页
+const goToEditor = (categoryId: string) => {
+  uni.navigateTo({
+    url: `/pages/template/index?category=${categoryId}`,
+  })
 }
 
+// 跳转到模板选择页
+const goToTemplatePage = (categoryId?: string) => {
+  const url = categoryId
+    ? `/pages/template/index?category=${categoryId}`
+    : '/pages/template/index'
+  uni.navigateTo({ url })
+}
+
+// 图片加载失败的兜底处理
 const onImageError = () => {
   console.warn('Home page image load failed')
 }
@@ -121,6 +178,7 @@ const onImageError = () => {
   padding-bottom: 120rpx;
 }
 
+/* 搜索栏 */
 .search-bar {
   padding: 24rpx;
   background: #ffffff;
@@ -136,9 +194,10 @@ const onImageError = () => {
   box-sizing: border-box;
 }
 
+/* 分类网格 */
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 24rpx;
   padding: 24rpx;
   background: #ffffff;
@@ -149,31 +208,36 @@ const onImageError = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 0;
+  cursor: pointer;
 }
 
 .category-icon {
   width: 100rpx;
   height: 100rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12rpx;
 }
 
 .icon-text {
-  font-size: 40rpx;
+  font-size: 48rpx;
 }
 
 .category-name {
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: #333333;
+  font-weight: 500;
 }
 
+/* 特色功能区 */
 .feature-section {
   padding: 24rpx;
   display: flex;
   gap: 24rpx;
+  margin-top: 16rpx;
 }
 
 .feature-card {
@@ -183,29 +247,30 @@ const onImageError = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  cursor: pointer;
+  min-height: 180rpx;
 }
 
 .invitation-card {
   background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-  cursor: pointer;
 }
 
 .moments-card {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  cursor: pointer;
 }
 
 .feature-content {
   display: flex;
   flex-direction: column;
   gap: 8rpx;
+  flex: 1;
 }
 
 .feature-badge {
   background: rgba(255, 255, 255, 0.3);
   padding: 6rpx 16rpx;
   border-radius: 20rpx;
-  font-size: 20rpx;
+  font-size: 18rpx;
   color: #ffffff;
   align-self: flex-start;
 }
@@ -222,10 +287,12 @@ const onImageError = () => {
 }
 
 .feature-icon {
-  font-size: 48rpx;
+  font-size: 56rpx;
   color: #ffffff;
+  margin-left: 16rpx;
 }
 
+/* 通用Section */
 .section {
   margin-top: 16rpx;
   background: #ffffff;
@@ -245,6 +312,15 @@ const onImageError = () => {
   color: #333333;
 }
 
+.section-more {
+  cursor: pointer;
+}
+
+.more-text {
+  font-size: 24rpx;
+  color: #999999;
+}
+
 .section-tabs {
   display: flex;
   gap: 32rpx;
@@ -253,12 +329,12 @@ const onImageError = () => {
 .tab-item {
   font-size: 26rpx;
   color: #999999;
-  
+
   &.active {
     color: #e84a6e;
     font-weight: 500;
     position: relative;
-    
+
     &::after {
       content: '';
       position: absolute;
@@ -272,6 +348,7 @@ const onImageError = () => {
   }
 }
 
+/* 横向滚动卡片 */
 .card-scroll {
   white-space: nowrap;
 }
@@ -287,6 +364,7 @@ const onImageError = () => {
   overflow: hidden;
   background: #ffffff;
   box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+  display: inline-block;
 }
 
 .card-image {
@@ -307,6 +385,39 @@ const onImageError = () => {
 }
 
 .card-date {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+/* 分类模板数量网格 */
+.category-count-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20rpx;
+}
+
+.count-card {
+  background: #f8f9fa;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  cursor: pointer;
+}
+
+.count-icon {
+  font-size: 56rpx;
+}
+
+.count-name {
+  font-size: 28rpx;
+  color: #333333;
+  font-weight: 600;
+}
+
+.count-num {
   font-size: 22rpx;
   color: #999999;
 }

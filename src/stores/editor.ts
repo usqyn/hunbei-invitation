@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { useTemplateStore } from './template'
-import { DEFAULT_EDITABLE_ELEMENTS, MATERIAL_LIST, DEFAULT_ELEMENT_STYLE } from '@/constants/editor'
-import type { EditableElement, Material, ElementStyle } from '@/types'
+import { DEFAULT_ELEMENT_STYLE } from '@/constants/templates'
+import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
+import type { EditableElement, Material, ElementStyle, TemplateData } from '@/types'
 
-const STORAGE_KEY = 'hunbei_editor_styles'
+const STORAGE_KEY_STYLES = 'hunbei_editor_styles'
+const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
 
 export const useEditorStore = defineStore('editor', () => {
   const showTextEditor = ref(false)
@@ -12,6 +14,7 @@ export const useEditorStore = defineStore('editor', () => {
   const activePanelTab = ref('edit')
   const selectedElement = ref<number | null>(null)
   const editingText = ref('')
+  const currentTemplateId = ref<string>(DEFAULT_TEMPLATE_ID)
 
   const currentFont = ref(DEFAULT_ELEMENT_STYLE.font)
   const currentColor = ref(DEFAULT_ELEMENT_STYLE.color)
@@ -19,10 +22,58 @@ export const useEditorStore = defineStore('editor', () => {
   const currentSpacing = ref(DEFAULT_ELEMENT_STYLE.spacing)
   const currentLineHeight = ref(DEFAULT_ELEMENT_STYLE.lineHeight)
 
-  const editableElements = reactive<EditableElement[]>(
-    DEFAULT_EDITABLE_ELEMENTS.map(e => ({ ...e, style: e.style ? { ...e.style } : undefined }))
-  )
-  const materialList: Material[] = MATERIAL_LIST
+  // 可编辑元素列表 - 根据模板动态生成
+  const editableElements = reactive<EditableElement[]>([])
+
+  // 素材库 - 支持图片选择时的本地素材
+  const materialList: Material[] = [
+    { url: '/static/images/templates/wedding-1.svg', name: '婚礼主题1' },
+    { url: '/static/images/templates/wedding-2.svg', name: '婚礼主题2' },
+    { url: '/static/images/templates/wedding-3.svg', name: '婚礼主题3' },
+    { url: '/static/images/templates/wedding-4.svg', name: '婚礼主题4' },
+    { url: '/static/images/templates/invitation-1.svg', name: '生日主题' },
+    { url: '/static/images/templates/invitation-2.svg', name: '节日主题' },
+    { url: '/static/images/templates/template-1.svg', name: '宝宝主题' },
+    { url: '/static/images/templates/template-2.svg', name: '模板主题' },
+  ]
+
+  // ========== 加载模板 ==========
+  function loadTemplateById(templateId: string) {
+    const template = getTemplateById(templateId)
+    if (!template) {
+      console.warn('Template not found:', templateId)
+      return false
+    }
+
+    currentTemplateId.value = templateId
+
+    // 清空旧的元素列表
+    editableElements.splice(0, editableElements.length)
+
+    // 复制新模板的元素到列表
+    template.elements.forEach(el => {
+      editableElements.push({
+        type: el.type,
+        text: el.text,
+        dataKey: el.dataKey,
+        label: el.label,
+        style: el.style ? { ...el.style } : undefined,
+      })
+    })
+
+    // 同步更新 TemplateStore 的数据
+    const templateStore = useTemplateStore()
+    const data: TemplateData = template.data
+    Object.keys(data).forEach(key => {
+      const k = key as keyof TemplateData
+      if (k in templateStore.templateData) {
+        templateStore.templateData[k] = data[k]
+      }
+    })
+
+    persistTemplate()
+    return true
+  }
 
   function syncCurrentFromElement(idx: number) {
     const el = editableElements[idx]
@@ -56,13 +107,13 @@ export const useEditorStore = defineStore('editor', () => {
   function persistStyles() {
     try {
       const styles = editableElements.map(e => e.style ? { ...e.style } : null)
-      uni.setStorageSync(STORAGE_KEY, styles)
+      uni.setStorageSync(STORAGE_KEY_STYLES, styles)
     } catch (e) { console.error('persistStyles failed', e) }
   }
 
   function restoreStyles() {
     try {
-      const saved = uni.getStorageSync(STORAGE_KEY)
+      const saved = uni.getStorageSync(STORAGE_KEY_STYLES)
       if (saved && Array.isArray(saved)) {
         saved.forEach((style: ElementStyle | null, idx: number) => {
           if (style && editableElements[idx]) {
@@ -71,6 +122,26 @@ export const useEditorStore = defineStore('editor', () => {
         })
       }
     } catch (e) { console.error('restoreStyles failed', e) }
+  }
+
+  function persistTemplate() {
+    try {
+      uni.setStorageSync(STORAGE_KEY_TEMPLATE, currentTemplateId.value)
+    } catch (e) { console.error('persistTemplate failed', e) }
+  }
+
+  function restoreTemplate() {
+    try {
+      const saved = uni.getStorageSync(STORAGE_KEY_TEMPLATE)
+      if (saved && typeof saved === 'string') {
+        loadTemplateById(saved)
+      } else {
+        loadTemplateById(DEFAULT_TEMPLATE_ID)
+      }
+    } catch (e) {
+      console.error('restoreTemplate failed', e)
+      loadTemplateById(DEFAULT_TEMPLATE_ID)
+    }
   }
 
   function openEditor(idx: number) {
@@ -134,6 +205,19 @@ export const useEditorStore = defineStore('editor', () => {
     uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
+  function applyImageToElement(idx: number, url: string) {
+    const el = editableElements[idx]
+    if (el.type !== 'image') return
+    el.text = url
+    if (el.dataKey) {
+      const templateStore = useTemplateStore()
+      templateStore.updateField(el.dataKey, url)
+    }
+    selectedElement.value = null
+    persistStyles()
+    uni.showToast({ title: '图片已替换', icon: 'success' })
+  }
+
   function decreaseFontSize() {
     if (currentFontSize.value > 8) currentFontSize.value--
     syncCurrentToElement()
@@ -182,15 +266,17 @@ export const useEditorStore = defineStore('editor', () => {
     persistStyles()
   }
 
+  // 启动时恢复模板
+  restoreTemplate()
   restoreStyles()
 
   return {
     showTextEditor, showBasicInfoEditor, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
     currentFontSize, currentSpacing, currentLineHeight,
-    editableElements, materialList,
-    openEditor, closeTextEditor, confirmTextEdit,
-    closeBasicInfoEditor, resetStyle, selectMaterial,
+    editableElements, materialList, currentTemplateId,
+    loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
+    closeBasicInfoEditor, resetStyle, selectMaterial, applyImageToElement,
     decreaseFontSize, increaseFontSize, decreaseSpacing,
     increaseSpacing, decreaseLineHeight, increaseLineHeight,
     onFontChange, onColorChange,

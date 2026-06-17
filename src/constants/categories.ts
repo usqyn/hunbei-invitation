@@ -1,21 +1,30 @@
-import type { Category } from '@/types'
+// 首页分类 - 与模板系统中的分类ID保持一致
+// categoryId 对应 templates.ts 中的 category 字段
+export interface HomeCategory {
+  id: number           // 首页分类ID
+  name: string         // 显示名称
+  icon: string         // emoji图标
+  bgColor: string      // 背景色
+  categoryId: string   // 对应模板系统的分类ID(wedding/birthday/baby/graduation/festival/business)
+}
 
-export const HOME_CATEGORIES: Category[] = [
-  { id: 1, name: '婚贴精选', icon: '💒', bgColor: '#ffe4e8' },
-  { id: 2, name: '中式请帖', icon: '🏮', bgColor: '#ffebee' },
-  { id: 3, name: '西式请帖', icon: '🤵', bgColor: '#e8f5e9' },
-  { id: 4, name: '旅拍请帖', icon: '✈️', bgColor: '#e3f2fd' },
-  { id: 5, name: '朋友圈邀请', icon: '📱', bgColor: '#fff3e6' },
-  { id: 6, name: '全部分类', icon: '📋', bgColor: '#e0f2f1' },
+export const HOME_CATEGORIES: HomeCategory[] = [
+  { id: 1, name: '婚礼请柬', icon: '💒', bgColor: '#ffe4e8', categoryId: 'wedding' },
+  { id: 2, name: '生日派对', icon: '🎂', bgColor: '#fff3e6', categoryId: 'birthday' },
+  { id: 3, name: '宝宝满月', icon: '👶', bgColor: '#e3f2fd', categoryId: 'baby' },
+  { id: 4, name: '毕业典礼', icon: '🎓', bgColor: '#f3e5f5', categoryId: 'graduation' },
+  { id: 5, name: '节日祝福', icon: '🎊', bgColor: '#fce4ec', categoryId: 'festival' },
+  { id: 6, name: '商务会议', icon: '🏢', bgColor: '#e8f5e9', categoryId: 'business' },
 ]
 
-export const HOME_TABS = ['网红爆款', '婚礼请帖', '朋友圈邀请', '限时免费']
+export const HOME_TABS = ['网红爆款', '婚礼请帖', '生日邀请', '限时免费']
 
+// 精选卡片 - 对应模板系统中的实际模板
 export const HOME_FEATURED_CARDS = [
-  { id: 1, title: '一生一世', type: 'invitation', date: '2050.05.20', image: '/static/images/templates/wedding-1.svg' },
-  { id: 2, title: '中式囍宴', type: 'invitation', date: '2050.05.18', image: '/static/images/templates/wedding-2.svg' },
-  { id: 3, title: '浪漫粉色', type: 'invitation', date: '2050.05.15', image: '/static/images/templates/wedding-3.svg' },
-  { id: 4, title: '暗夜倾心', type: 'invitation', date: '2050.05.10', image: '/static/images/templates/wedding-4.svg' },
-  { id: 5, title: '我们的故事', type: 'moments', date: '2050.06.01', image: '/static/images/templates/wedding-1.svg' },
-  { id: 6, title: '请回答2050', type: 'moments', date: '2050.06.05', image: '/static/images/templates/wedding-2.svg' },
+  { id: 1, title: '好久不见', type: 'wedding-1', date: '2050.05.20', image: '/static/images/templates/wedding-1.svg' },
+  { id: 2, title: '适我愿兮', type: 'wedding-2', date: '2050.05.18', image: '/static/images/templates/wedding-2.svg' },
+  { id: 3, title: '佳偶天成', type: 'wedding-3', date: '2050.05.15', image: '/static/images/templates/wedding-3.svg' },
+  { id: 4, title: '生日快乐', type: 'birthday-1', date: '2050.06.15', image: '/static/images/templates/invitation-1.svg' },
+  { id: 5, title: '甜蜜派对', type: 'birthday-2', date: '2050.06.10', image: '/static/images/templates/invitation-2.svg' },
+  { id: 6, title: '百日宴', type: 'baby-2', date: '2050.08.20', image: '/static/images/templates/template-5.svg' },
 ]

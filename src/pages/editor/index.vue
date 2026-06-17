@@ -11,66 +11,56 @@
 
     <!-- Body: 左侧预览 + 右侧编辑面板 -->
     <view class="editor-body">
-      <!-- 左侧：竖版请柬预览 -->
+      <!-- 左侧：竖版请柬预览（根据模板动态渲染） -->
       <view class="preview-area">
         <scroll-view class="preview-scroll" scroll-y>
           <view class="preview-card">
-            <!-- Cover Section -->
-            <view class="section cover-section" :class="{ 'active-section': editorStore.selectedElement === 0 }" @click="onOpenEditor(0)">
-              <image class="cover-image" :src="editableElements[0].text" mode="aspectFill" @error="onImageError"></image>
-              <view class="cover-top">
-                <text class="cover-top-left">OUR WEDDING</text>
-                <text class="cover-top-right">INVITATION</text>
-              </view>
-              <view class="cover-overlay">
-                <text class="cover-date" :class="{ 'active-item': editorStore.selectedElement === 1 }" @click.stop="onOpenEditor(1)" :style="elementStyles[1]">{{ editableElements[1].text }}</text>
-                <text class="cover-main-title" :class="{ 'active-item': editorStore.selectedElement === 2 }" @click.stop="onOpenEditor(2)" :style="elementStyles[2]">{{ editableElements[2].text }}</text>
-                <text class="cover-subtitle" :class="{ 'active-item': editorStore.selectedElement === 3 }" @click.stop="onOpenEditor(3)" :style="elementStyles[3]">{{ editableElements[3].text }}</text>
-                <view class="cover-shuangxi-wrapper">
-                  <text class="shuangxi-text" :class="{ 'active-item': editorStore.selectedElement === 4 }" @click.stop="onOpenEditor(4)">{{ editableElements[4].text }}</text>
-                  <text class="arabic-left" :class="{ 'active-item': editorStore.selectedElement === 5 }" @click.stop="onOpenEditor(5)" :style="elementStyles[5]">{{ editableElements[5].text }}</text>
-                  <text class="arabic-right" :class="{ 'active-item': editorStore.selectedElement === 6 }" @click.stop="onOpenEditor(6)" :style="elementStyles[6]">{{ editableElements[6].text }}</text>
+
+            <!-- 动态渲染模板的所有元素 -->
+            <block v-for="(el, idx) in editorStore.editableElements" :key="idx">
+              <!-- 图片元素 -->
+              <view
+                v-if="el.type === 'image'"
+                class="section image-section"
+                :class="{ 'active-section': editorStore.selectedElement === idx }"
+                @click="onOpenEditor(idx)"
+              >
+                <image
+                  class="section-image"
+                  :src="el.text"
+                  mode="aspectFill"
+                  @error="onImageError"
+                ></image>
+                <view v-if="idx === 0" class="image-overlay">
+                  <text class="overlay-label">{{ templateName }}</text>
                 </view>
               </view>
-            </view>
 
-            <!-- Vinyl Record Section -->
-            <view class="section vinyl-section" :class="{ 'active-section': editorStore.selectedElement === 7 }" @click="onOpenEditor(7)">
-              <image class="vinyl-image" :src="editableElements[7].text" mode="aspectFill" @error="onImageError"></image>
-            </view>
-
-            <!-- Invitation Title -->
-            <view class="section invite-title-section">
-              <text class="invite-title" :class="{ 'active-item': editorStore.selectedElement === 8 }" @click="onOpenEditor(8)" :style="elementStyles[8]">{{ editableElements[8].text }}</text>
-              <text class="invite-title-en" :class="{ 'active-item': editorStore.selectedElement === 9 }" @click="onOpenEditor(9)" :style="elementStyles[9]">{{ editableElements[9].text }}</text>
-            </view>
-
-            <!-- Body Paragraphs -->
-            <view class="section body-text-section">
-              <text class="body-text" :class="{ 'active-item': editorStore.selectedElement === 10 }" @click="onOpenEditor(10)" :style="elementStyles[10]">{{ editableElements[10].text }}</text>
-            </view>
-
-            <!-- Couple Info -->
-            <view class="section couple-info-section">
-              <view class="couple-names">
-                <text class="name">{{ t.basicInfo.groomName || '满小满' }}</text>
-                <text class="groom-bride">GROOM</text>
+              <!-- 文字元素 -->
+              <view
+                v-else-if="el.type === 'text'"
+                class="section text-section"
+                :class="{ 'active-section': editorStore.selectedElement === idx }"
+                @click="onOpenEditor(idx)"
+              >
+                <text
+                  class="section-text"
+                  :style="getTextStyle(idx)"
+                >{{ el.text }}</text>
               </view>
-              <text class="shuangxi-icon">囍</text>
-              <view class="couple-names">
-                <text class="name">{{ t.basicInfo.brideName || '美小美' }}</text>
-                <text class="groom-bride">BRIDE</text>
+            </block>
+
+            <!-- 新人信息卡片 - 固定的基本信息区 -->
+            <view class="section info-section">
+              <view class="info-card">
+                <text class="info-groom">{{ basicInfo.groomName || '新郎姓名' }}</text>
+                <text class="info-and">囍</text>
+                <text class="info-bride">{{ basicInfo.brideName || '新娘姓名' }}</text>
               </view>
-              <text class="wedding-date">{{ t.basicInfo.weddingDate || '2050.05.20' }}</text>
-              <text class="wedding-address">{{ t.basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
+              <text class="info-date">{{ basicInfo.weddingDate || '2050.05.20' }}</text>
+              <text class="info-address">{{ basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
             </view>
 
-            <!-- Footer Border -->
-            <view class="section footer-border">
-              <text class="footer-text-left">WEDDING</text>
-              <text class="footer-text-center">INVITATION</text>
-              <text class="footer-text-right">2050</text>
-            </view>
           </view>
         </scroll-view>
       </view>
@@ -87,20 +77,11 @@
           :current-font-size="editorStore.currentFontSize"
           :current-spacing="editorStore.currentSpacing"
           :current-line-height="editorStore.currentLineHeight"
-          :settings="t.settings"
+          :settings="templateStore.settings"
           @update:active-panel-tab="editorStore.activePanelTab = $event"
           @open-editor="onOpenEditor"
           @select-material="onSelectMaterial"
-          @show-font-picker="showFontPickerModal = true"
-          @show-color-picker="showColorPickerModal = true"
-          @decrease-font-size="editorStore.decreaseFontSize"
-          @increase-font-size="editorStore.increaseFontSize"
-          @decrease-spacing="editorStore.decreaseSpacing"
-          @increase-spacing="editorStore.increaseSpacing"
-          @decrease-line-height="editorStore.decreaseLineHeight"
-          @increase-line-height="editorStore.increaseLineHeight"
-          @reset-style="editorStore.resetStyle"
-          @toggle-setting="t.toggleSetting"
+          @toggle-setting="toggleSetting"
         />
       </view>
     </view>
@@ -136,8 +117,6 @@
       @update:text="editorStore.editingText = $event"
       @close="editorStore.closeTextEditor"
       @confirm="editorStore.confirmTextEdit"
-      @show-font-picker="showFontPickerModal = true"
-      @show-color-picker="showColorPickerModal = true"
       @decrease-font-size="editorStore.decreaseFontSize"
       @increase-font-size="editorStore.increaseFontSize"
       @decrease-spacing="editorStore.decreaseSpacing"
@@ -150,131 +129,143 @@
     <!-- Basic Info Popup -->
     <BasicInfoForm
       v-if="editorStore.showBasicInfoEditor"
-      :groom-name="t.basicInfo.groomName"
-      :bride-name="t.basicInfo.brideName"
-      :wedding-date="t.basicInfo.weddingDate"
-      :location="t.basicInfo.location"
-      :detail-address="t.basicInfo.detailAddress"
+      :groom-name="basicInfo.groomName"
+      :bride-name="basicInfo.brideName"
+      :wedding-date="basicInfo.weddingDate"
+      :location="basicInfo.location"
+      :detail-address="basicInfo.detailAddress"
       @close="editorStore.closeBasicInfoEditor"
-      @update:groom-name="(v: string) => t.basicInfo.groomName = v"
-      @update:bride-name="(v: string) => t.basicInfo.brideName = v"
-      @update:wedding-date="(v: string) => t.basicInfo.weddingDate = v"
-      @update:location="(v: string) => t.basicInfo.location = v"
-      @update:detail-address="(v: string) => t.basicInfo.detailAddress = v"
+      @update:groom-name="(v: string) => basicInfo.groomName = v"
+      @update:bride-name="(v: string) => basicInfo.brideName = v"
+      @update:wedding-date="(v: string) => basicInfo.weddingDate = v"
+      @update:location="(v: string) => basicInfo.location = v"
+      @update:detail-address="(v: string) => basicInfo.detailAddress = v"
     />
+
+    <!-- 编辑基本信息按钮 - 放在预览里 -->
+    <view class="edit-info-btn" @click="openBasicInfoEditor">
+      <text class="edit-info-text">修改基本信息</text>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
+import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
-import type { Material } from '@/types'
+import type { Material, ElementStyle } from '@/types'
 
-const t = useTemplateStore()
+const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 
-const showFontPickerModal = ref(false)
-const showColorPickerModal = ref(false)
-const selectedPreviewIdx = computed(() => editorStore.selectedElement)
-const currentPageIndex = ref(0)
-
-const editableElements = computed(() => editorStore.editableElements)
-
-const elementStyles = computed(() => {
-  return editorStore.editableElements.map(el => {
-    if (!el.style) return {}
-    return {
-      fontFamily: el.style.font,
-      color: el.style.color,
-      fontSize: el.style.fontSize + 'rpx',
-      letterSpacing: el.style.spacing + 'rpx',
-      lineHeight: String(el.style.lineHeight),
-    }
-  })
+// 当前模板名
+const templateName = computed(() => {
+  return templateStore.templateData.coverTitle || '请柬'
 })
 
-const pageList = [
-  { type: 'cover', image: editorStore.editableElements[0].text },
-  { type: 'info', image: '' },
-  { type: 'footer', image: '' },
-]
+const basicInfo = computed(() => templateStore.basicInfo)
+
+// 根据元素索引获取样式
+function getTextStyle(idx: number) {
+  const el = editorStore.editableElements[idx]
+  if (!el || !el.style) {
+    return {
+      fontSize: '30rpx',
+      color: '#333333',
+      lineHeight: 1.6,
+      letterSpacing: '2rpx',
+    }
+  }
+
+  const style: ElementStyle = el.style
+
+  return {
+    fontSize: style.fontSize + 'rpx',
+    color: style.color,
+    lineHeight: String(style.lineHeight),
+    letterSpacing: style.spacing + 'rpx',
+    fontFamily: style.font,
+  }
+}
+
+// 打开编辑器
+function onOpenEditor(idx: number) {
+  const el = editorStore.editableElements[idx]
+  editorStore.selectedElement = idx
+
+  if (el.type === 'image') {
+    // 图片 - 直接让用户选择本地图片
+    chooseLocalImage(idx)
+  } else if (el.type === 'text') {
+    // 文字 - 打开文字编辑器
+    editorStore.editingText = el.text
+    editorStore.showTextEditor = true
+  }
+}
+
+// 选择本地图片
+function chooseLocalImage(idx: number) {
+  // 微信小程序端
+  // #ifdef MP-WEIXIN
+  uni.chooseMedia({
+    count: 1,
+    mediaType: ['image'],
+    sourceType: ['album', 'camera'],
+    success: (res: any) => {
+      if (res.tempFiles && res.tempFiles.length > 0) {
+        editorStore.applyImageToElement(idx, res.tempFiles[0].tempFilePath)
+      }
+    },
+    fail: () => {
+      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    },
+  })
+  // #endif
+
+  // H5 / App 端
+  // #ifndef MP-WEIXIN
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res: any) => {
+      if (res.tempFilePaths && res.tempFilePaths.length > 0) {
+        editorStore.applyImageToElement(idx, res.tempFilePaths[0])
+      }
+    },
+    fail: () => {
+      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    },
+  })
+  // #endif
+}
+
+// 选择素材
+function onSelectMaterial(material: Material) {
+  if (editorStore.selectedElement === null) return
+  const idx = editorStore.selectedElement
+  editorStore.applyImageToElement(idx, material.url)
+}
+
+// 打开基本信息编辑器
+function openBasicInfoEditor() {
+  editorStore.showBasicInfoEditor = true
+}
+
+// 切换设置
+function toggleSetting(key: string) {
+  templateStore.toggleSetting(key)
+}
 
 function goBack() {
   uni.navigateBack({ delta: 1 })
 }
 
 function onImageError() {}
-
-function onOpenEditor(idx: number) {
-  const el = editorStore.editableElements[idx]
-  editorStore.selectedElement = idx
-  if (el.type === 'image') {
-    // 本地选择图片
-    chooseLocalImage(idx)
-  } else if (el.type === 'text') {
-    editorStore.syncCurrentFromElement(idx)
-    editorStore.editingText = el.text
-    editorStore.showTextEditor = true
-  } else if (el.type === 'basic') {
-    editorStore.showBasicInfoEditor = true
-  }
-}
-
-function chooseLocalImage(idx: number) {
-  // #ifdef MP-WEIXIN
-  uni.chooseMedia({
-    count: 1,
-    mediaType: ['image'],
-    sourceType: ['album', 'camera'],
-    success: (res) => {
-      if (res.tempFiles && res.tempFiles.length > 0) {
-        const tempFilePath = res.tempFiles[0].tempFilePath
-        applyImageToElement(idx, tempFilePath)
-      }
-    },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
-    }
-  })
-  // #endif
-  // #ifndef MP-WEIXIN
-  uni.chooseImage({
-    count: 1,
-    sizeType: ['compressed'],
-    sourceType: ['album', 'camera'],
-    success: (res) => {
-      if (res.tempFilePaths && res.tempFilePaths.length > 0) {
-        const tempFilePath = res.tempFilePaths[0]
-        applyImageToElement(idx, tempFilePath)
-      }
-    },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
-    }
-  })
-  // #endif
-}
-
-function applyImageToElement(idx: number, url: string) {
-  const el = editorStore.editableElements[idx]
-  el.text = url
-  if (el.dataKey) {
-    t.updateField(el.dataKey, url)
-  }
-  editorStore.selectedElement = null
-  uni.showToast({ title: '图片已替换', icon: 'success' })
-}
-
-function onSelectMaterial(material: Material) {
-  if (editorStore.selectedElement === null) return
-  const el = editorStore.editableElements[editorStore.selectedElement]
-  if (el.type !== 'image') return
-  applyImageToElement(editorStore.selectedElement, material.url)
-}
 
 function handleMusic() {
   uni.navigateTo({ url: '/pages/music/index' })
@@ -283,11 +274,11 @@ function handleMusic() {
 function handleSettings() {
   uni.showActionSheet({
     itemList: ['礼物功能', '礼金功能', '点赞功能', '相册功能'],
-    success: (res) => {
+    success: (res: any) => {
       const keys = ['giftAlbum', 'moneyGift', 'like', 'album']
       const key = keys[res.tapIndex]
-      if (key) t.toggleSetting(key)
-    }
+      if (key) toggleSetting(key)
+    },
   })
 }
 
@@ -298,6 +289,21 @@ function handleSave() {
 function handleShare() {
   uni.showToast({ title: '即将生成预览', icon: 'none' })
 }
+
+// 页面加载时根据参数切换模板
+onMounted(() => {
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  const options = curPage?.options || {}
+
+  if (options.templateId) {
+    // 如果 URL 中有 templateId 参数，切换到该模板
+    editorStore.loadTemplateById(options.templateId)
+  } else {
+    // 否则默认加载第一个模板
+    editorStore.loadTemplateById(DEFAULT_TEMPLATE_ID)
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -375,7 +381,7 @@ function handleShare() {
   display: flex;
   flex-direction: column;
   padding: 16rpx;
-  gap: 16rpx;
+  gap: 20rpx;
 }
 
 .section {
@@ -383,223 +389,101 @@ function handleShare() {
   width: 100%;
 }
 
-/* Cover Section */
-.cover-section {
+/* 图片区块 */
+.image-section {
   border-radius: 12rpx;
   overflow: hidden;
-  aspect-ratio: 3 / 4;
 }
 
-/* 高亮样式：整个图片区块 */
+.section-image {
+  width: 100%;
+  min-height: 400rpx;
+  aspect-ratio: 3 / 4;
+  background: #f5f5f5;
+}
+
+.image-overlay {
+  position: absolute;
+  bottom: 20rpx;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+.overlay-label {
+  font-size: 28rpx;
+  color: #fff;
+  font-weight: 600;
+  text-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.5);
+}
+
+/* 文字区块 */
+.text-section {
+  padding: 20rpx;
+  background: #fff;
+  border-radius: 12rpx;
+  text-align: center;
+  min-height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.section-text {
+  font-size: 30rpx;
+  color: #333;
+  line-height: 1.6;
+}
+
+/* 新人信息区块 */
+.info-section {
+  padding: 40rpx 20rpx;
+  background: #fff8fa;
+  border-radius: 12rpx;
+  text-align: center;
+}
+
+.info-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.info-groom, .info-bride {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.info-and {
+  font-size: 40rpx;
+  color: #e84a6e;
+  font-weight: 700;
+}
+
+.info-date {
+  font-size: 30rpx;
+  color: #666;
+  display: block;
+  margin-bottom: 10rpx;
+  letter-spacing: 6rpx;
+}
+
+.info-address {
+  font-size: 24rpx;
+  color: #999;
+  display: block;
+}
+
+/* 高亮样式 */
 .active-section {
   outline: 4rpx solid #e84a6e;
   outline-offset: 4rpx;
 }
 
-/* 高亮样式：单个文字元素 */
-.active-item {
-  outline: 3rpx solid #e84a6e;
-  outline-offset: 3rpx;
-  background: rgba(232, 74, 110, 0.08);
-  border-radius: 4rpx;
-}
-
-.cover-image {
-  width: 100%;
-  height: 100%;
-}
-
-.cover-top {
-  position: absolute;
-  top: 24rpx;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  padding: 0 30rpx;
-}
-
-.cover-top-left, .cover-top-right {
-  font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.85);
-  letter-spacing: 4rpx;
-  font-weight: 300;
-}
-
-.cover-overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: 30%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  padding: 30rpx;
-}
-
-.cover-date {
-  font-size: 36rpx;
-  color: #fff;
-  letter-spacing: 4rpx;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
-  font-weight: 400;
-}
-
-.cover-main-title {
-  font-size: 56rpx;
-  color: #fff;
-  font-weight: 600;
-  text-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.4);
-  letter-spacing: 4rpx;
-}
-
-.cover-subtitle {
-  font-size: 28rpx;
-  color: rgba(255, 255, 255, 0.9);
-  font-style: italic;
-  letter-spacing: 2rpx;
-}
-
-.cover-shuangxi-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20rpx;
-  margin-top: 20rpx;
-}
-
-.shuangxi-text {
-  font-size: 48rpx;
-  color: #ff3366;
-  font-weight: 700;
-}
-
-.arabic-left, .arabic-right {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.9);
-  font-family: 'Arial', sans-serif;
-}
-
-/* Vinyl Section */
-.vinyl-section {
-  display: flex;
-  justify-content: center;
-  padding: 30rpx 0;
-}
-
-.vinyl-image {
-  width: 360rpx;
-  height: 360rpx;
-  border-radius: 50%;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.15);
-}
-
-/* Invite Title Section */
-.invite-title-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12rpx;
-  padding: 30rpx 0;
-}
-
-.invite-title {
-  font-size: 40rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.invite-title-en {
-  font-size: 24rpx;
-  color: #999;
-  font-style: italic;
-  letter-spacing: 2rpx;
-}
-
-/* Body Text Section */
-.body-text-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20rpx 30rpx;
-}
-
-.body-text {
-  font-size: 26rpx;
-  color: #666;
-  line-height: 2;
-  text-align: center;
-}
-
-/* Couple Info */
-.couple-info-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40rpx 30rpx;
-  gap: 16rpx;
-}
-
-.couple-names {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6rpx;
-}
-
-.name {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.groom-bride {
-  font-size: 18rpx;
-  color: #999;
-  letter-spacing: 2rpx;
-}
-
-.shuangxi-icon {
-  font-size: 40rpx;
-  color: #e84a6e;
-  font-weight: 700;
-  margin: 8rpx 0;
-}
-
-.wedding-date {
-  font-size: 28rpx;
-  color: #e84a6e;
-  font-weight: 500;
-}
-
-.wedding-address {
-  font-size: 24rpx;
-  color: #666;
-  margin-top: 8rpx;
-}
-
-/* Footer Border */
-.footer-border {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24rpx 30rpx;
-  border-top: 2rpx solid #e84a6e;
-  border-bottom: 2rpx solid #e84a6e;
-  margin-top: 20rpx;
-}
-
-.footer-text-left, .footer-text-right, .footer-text-center {
-  font-size: 22rpx;
-  color: #e84a6e;
-  letter-spacing: 3rpx;
-  font-weight: 500;
-}
-
-/* Sidebar Area - 右侧更窄 */
+/* Sidebar Area - 右侧编辑面板 */
 .sidebar-area {
   flex: 1;
   flex-shrink: 0;
@@ -609,7 +493,7 @@ function handleShare() {
   min-width: 0;
 }
 
-/* Editor Footer */
+/* Footer Toolbar */
 .editor-footer {
   display: flex;
   align-items: center;
@@ -617,41 +501,53 @@ function handleShare() {
   background: #fff;
   border-top: 1rpx solid #f0e0e5;
   flex-shrink: 0;
-  gap: 20rpx;
 }
 
 .footer-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  padding: 0 24rpx;
   gap: 6rpx;
-  padding: 8rpx 16rpx;
 }
 
 .footer-icon {
-  font-size: 36rpx;
+  font-size: 40rpx;
 }
 
 .footer-label {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #666;
 }
 
 .footer-share-btn {
   flex: 1;
   margin-left: 20rpx;
-  padding: 20rpx 40rpx;
+  padding: 24rpx 0;
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  border-radius: 40rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4rpx 16rpx rgba(232, 74, 110, 0.3);
+  border-radius: 50rpx;
+  text-align: center;
 }
 
 .share-btn-text {
   font-size: 28rpx;
   color: #fff;
   font-weight: 600;
+}
+
+/* Edit Info Button */
+.edit-info-btn {
+  position: absolute;
+  right: 30rpx;
+  top: 180rpx;
+  padding: 16rpx 24rpx;
+  background: rgba(232, 74, 110, 0.9);
+  border-radius: 40rpx;
+}
+
+.edit-info-text {
+  font-size: 22rpx;
+  color: #fff;
 }
 </style>

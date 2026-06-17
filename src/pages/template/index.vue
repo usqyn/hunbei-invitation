@@ -1,108 +1,168 @@
 <template>
   <view class="page">
+    <!-- 顶部标题栏 -->
     <view class="header">
-      <view class="back-btn" @click="goBack">
+      <view class="back-btn" @click="onBack">
         <text class="back-icon">‹</text>
       </view>
-      <view class="header-title">适我愿兮❤️婚...</view>
-      <view class="header-right">
-        <view class="share-icon" @click="handleShare">🔗</view>
-      </view>
+      <view class="header-title">选择模板</view>
+      <view class="header-right"></view>
     </view>
 
-    <scroll-view class="preview-scroll" scroll-y>
-      <view class="preview-container">
-        <image class="preview-image" :src="previewImage" mode="aspectFill" @error="onImageError"></image>
-
-        <view class="template-info-overlay">
-          <text class="groom-name">{{ templateStore.basicInfo.groomName || '满小满' }}</text>
-          <text class="divider">囍</text>
-          <text class="bride-name">{{ templateStore.basicInfo.brideName || '美小美' }}</text>
-          <text class="wedding-date">{{ templateStore.basicInfo.weddingDate || '2050.05.20' }}</text>
-          <text class="wedding-location">{{ templateStore.basicInfo.detailAddress || '婚贝大酒店A栋9F幸福宴会厅' }}</text>
+    <!-- 分类标签栏（横向滚动）-->
+    <scroll-view class="category-scroll" scroll-x enable-flex>
+      <view class="category-list">
+        <view
+          v-for="cat in categoryList"
+          :key="cat.id"
+          class="category-item"
+          :class="{ active: activeCategory === cat.id }"
+          @click="onSelectCategory(cat.id)"
+        >
+          <text class="category-icon">{{ cat.icon }}</text>
+          <text class="category-name">{{ cat.name }}</text>
+          <text class="category-count">{{ cat.templates.length }}</text>
         </view>
       </view>
     </scroll-view>
 
-    <view class="tab-bar">
-      <view class="tab-item active" @click="switchTab('preview')">
-        <text class="tab-text">模板预览</text>
+    <!-- 模板列表网格 -->
+    <scroll-view class="template-scroll" scroll-y>
+      <view v-if="filteredTemplates.length === 0" class="empty-state">
+        <text class="empty-icon">📄</text>
+        <text class="empty-text">该分类暂无模板</text>
       </view>
-      <view class="tab-item" @click="switchTab('similar')">
-        <text class="tab-text">相似推荐</text>
-      </view>
-    </view>
 
-    <view class="bottom-bar">
-      <view class="bottom-left">
-        <text class="template-stats">15图 | 63.94w人喜欢</text>
-      </view>
-      <view class="bottom-actions">
-        <view class="action-btn" @click="handleShare">
-          <text class="action-icon">🔗</text>
-          <text class="action-text">分享</text>
+      <view class="template-grid">
+        <view
+          v-for="template in filteredTemplates"
+          :key="template.id"
+          class="template-card"
+          @click="onSelectTemplate(template)"
+        >
+          <!-- 模板封面图 -->
+          <image class="template-cover" :src="template.cover" mode="aspectFill" @error="onImageError"></image>
+
+          <!-- 模板信息 -->
+          <view class="template-info">
+            <view class="template-header">
+              <text class="template-name">{{ template.name }}</text>
+              <view class="template-tag" :style="{ background: template.primaryColor }">
+                <text class="tag-text">{{ getCategoryName(template.category) }}</text>
+              </view>
+            </view>
+            <text class="template-subtitle">{{ template.subtitle }}</text>
+            <view class="template-footer">
+              <text class="template-stats">{{ template.pageCount }}页</text>
+              <text class="template-divider">·</text>
+              <text class="template-stats">{{ formatLikes(template.likes) }}人喜欢</text>
+            </view>
+          </view>
+
+          <!-- 立即制作按钮 -->
+          <view class="template-select-btn">
+            <text class="select-btn-text">立即制作</text>
+          </view>
         </view>
-        <view class="action-btn" @click="handleFavorite">
-          <text class="action-icon">{{ isFav ? '⭐' : '☆' }}</text>
-          <text class="action-text">{{ isFav ? '已收藏' : '收藏' }}</text>
-        </view>
-        <button class="create-btn" @click="handleCreate">立即制作</button>
       </view>
-    </view>
+
+      <!-- 底部提示 -->
+      <view class="page-bottom">
+        <text class="bottom-hint">— 更多模板持续更新中 —</text>
+      </view>
+    </scroll-view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useTemplateStore } from '@/stores/template'
-import { useWorksStore } from '@/stores/works'
+import { ref, computed, onMounted } from 'vue'
+import { CATEGORY_LIST, TEMPLATE_LIST } from '@/constants/templates'
+import type { TemplateItem } from '@/types'
 
-const templateStore = useTemplateStore()
-const worksStore = useWorksStore()
+// 从模板系统获取分类数据
+const categoryList = ref(CATEGORY_LIST)
 
-const activeTab = ref('preview')
-const previewImage = '/static/images/templates/wedding-1.svg'
-const isFav = ref(false)
-const templateType = ref('invitation')
-const templateId = ref(1)
+// 当前选中的分类 - 默认第一个
+const activeCategory = ref<string>(CATEGORY_LIST[0]?.id || 'wedding')
 
-onMounted(() => {
-  const pages = getCurrentPages()
-  const curPage = pages[pages.length - 1] as any
-  if (curPage?.$page?.options?.type) templateType.value = curPage.$page.options.type
-  if (curPage?.$page?.options?.id) templateId.value = Number(curPage.$page.options.id)
+// 根据分类筛选模板 - 同时支持搜索
+const searchKeyword = ref<string>('')
+
+const filteredTemplates = computed<TemplateItem[]>(() => {
+  let list = TEMPLATE_LIST
+
+  // 按分类筛选
+  if (activeCategory.value && activeCategory.value !== 'all') {
+    list = list.filter(t => t.category === activeCategory.value)
+  }
+
+  // 按关键词搜索（名称和副标题）
+  if (searchKeyword.value) {
+    const kw = searchKeyword.value.toLowerCase()
+    list = list.filter(t =>
+      t.name.toLowerCase().includes(kw) ||
+      t.subtitle.toLowerCase().includes(kw)
+    )
+  }
+
+  return list
 })
 
-const goBack = () => {
-  uni.navigateBack()
+// 根据分类ID获取分类名称
+function getCategoryName(categoryId: string): string {
+  const cat = categoryList.value.find(c => c.id === categoryId)
+  return cat ? cat.name : ''
 }
 
-const switchTab = (tab: string) => {
-  activeTab.value = tab
+// 选择分类（切换到该分类下的模板列表）
+function onSelectCategory(catId: string) {
+  activeCategory.value = catId
 }
 
-const handleShare = () => {
-  uni.setClipboardData({
-    data: 'https://www.hunbei.com/invitation/template/1',
-    success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
+// 格式化点赞数：将大数字转为带单位的形式（如 1.2w）
+function formatLikes(num: number): string {
+  if (num >= 10000) {
+    return (num / 10000).toFixed(2) + 'w'
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'k'
+  }
+  return String(num)
+}
+
+// 选择模板 - 跳转到编辑器并传递模板ID
+function onSelectTemplate(template: TemplateItem) {
+  uni.navigateTo({
+    url: `/pages/editor/index?templateId=${template.id}`,
   })
 }
 
-const handleFavorite = () => {
-  isFav.value = !isFav.value
-  if (isFav.value) {
-    worksStore.toggleFavorite(templateId.value)
+// 图片加载失败处理
+function onImageError() {
+  console.warn('Template cover image load failed')
+}
+
+// 返回上一页
+function onBack() {
+  uni.navigateBack()
+}
+
+// 页面加载时从URL参数初始化：
+// - category: 跳转到对应分类（如从首页分类卡片点击进入）
+// - search: 搜索关键词（如从首页搜索框进入）
+onMounted(() => {
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  const options = curPage?.options || {}
+
+  if (options.category) {
+    activeCategory.value = options.category
   }
-  uni.showToast({ title: isFav.value ? '已收藏' : '取消收藏', icon: 'success' })
-}
 
-const handleCreate = () => {
-  uni.navigateTo({ url: '/pages/editor/index' })
-}
-
-const onImageError = () => {
-  console.warn('Template preview image load failed')
-}
+  if (options.search) {
+    searchKeyword.value = decodeURIComponent(options.search)
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -113,13 +173,14 @@ const onImageError = () => {
   flex-direction: column;
 }
 
+/* 顶部标题栏 */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 30rpx;
   background: #ffffff;
-  z-index: 100;
+  border-bottom: 2rpx solid #f0f0f0;
 }
 
 .back-btn {
@@ -146,145 +207,198 @@ const onImageError = () => {
 
 .header-right {
   width: 80rpx;
-  display: flex;
-  justify-content: flex-end;
 }
 
-.share-icon {
-  font-size: 40rpx;
+/* 分类标签栏（横向滚动） */
+.category-scroll {
+  width: 100%;
+  background: #ffffff;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid #f0f0f0;
+  white-space: nowrap;
 }
 
-.preview-scroll {
+.category-list {
+  display: inline-flex;
+  padding: 0 20rpx;
+  gap: 12rpx;
+}
+
+.category-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 16rpx 24rpx;
+  background: #f5f5f5;
+  border-radius: 50rpx;
+  flex-shrink: 0;
+
+  &.active {
+    background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+
+    .category-name, .category-count, .category-icon {
+      color: #fff;
+    }
+  }
+}
+
+.category-icon {
+  font-size: 32rpx;
+  color: #333;
+}
+
+.category-name {
+  font-size: 26rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.category-count {
+  font-size: 22rpx;
+  color: #999;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2rpx 10rpx;
+  border-radius: 20rpx;
+
+  .active & {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* 模板列表网格（纵向滚动） */
+.template-scroll {
   flex: 1;
   height: 0;
 }
 
-.preview-container {
-  position: relative;
+.template-grid {
+  padding: 30rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30rpx;
 }
 
-.preview-image {
-  width: 100%;
-  min-height: 1200rpx;
-}
-
-.template-info-overlay {
-  position: absolute;
-  bottom: 200rpx;
-  left: 0;
-  right: 0;
+/* 模板卡片 */
+.template-card {
+  width: calc(50% - 15rpx);
+  background: #ffffff;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 20rpx;
-}
+  transition: transform 0.2s ease;
 
-.groom-name, .bride-name {
-  font-size: 48rpx;
-  color: #fff;
-  font-weight: 600;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-}
-
-.divider {
-  font-size: 60rpx;
-  color: #e84a6e;
-  font-weight: bold;
-}
-
-.wedding-date {
-  font-size: 32rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-  letter-spacing: 8rpx;
-}
-
-.wedding-location {
-  font-size: 28rpx;
-  color: #fff;
-  text-shadow: 2rpx 2rpx 8rpx rgba(0,0,0,0.5);
-  margin-top: 10rpx;
-}
-
-.tab-bar {
-  display: flex;
-  background: #fff;
-  padding: 10rpx 30rpx;
-  gap: 20rpx;
-  border-top: 1px solid #eee;
-}
-
-.tab-item {
-  flex: 1;
-  padding: 20rpx;
-  border-radius: 30rpx;
-  text-align: center;
-  font-size: 30rpx;
-  color: #666;
-
-  &.active {
-    background: #e84a6e;
-    color: #fff;
-    font-weight: 600;
+  &:active {
+    transform: scale(0.98);
   }
 }
 
-.tab-text {
-  font-size: 30rpx;
+.template-cover {
+  width: 100%;
+  height: 400rpx;
+  background: #f5f5f5;
 }
 
-.bottom-bar {
+.template-info {
+  padding: 20rpx;
+  flex: 1;
+}
+
+.template-header {
   display: flex;
   align-items: center;
-  padding: 20rpx 30rpx;
-  background: #fff;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  border-top: 1px solid #eee;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
 }
 
-.bottom-left {
-  flex: 1;
+.template-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.2;
+}
+
+.template-tag {
+  padding: 6rpx 14rpx;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+}
+
+.tag-text {
+  font-size: 20rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+.template-subtitle {
+  font-size: 22rpx;
+  color: #999;
+  line-height: 1.4;
+  margin-bottom: 16rpx;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.template-footer {
+  display: flex;
+  align-items: center;
 }
 
 .template-stats {
-  font-size: 26rpx;
+  font-size: 22rpx;
   color: #999;
 }
 
-.bottom-actions {
-  display: flex;
-  gap: 20rpx;
-  align-items: center;
+.template-divider {
+  margin: 0 10rpx;
+  color: #ddd;
+  font-size: 22rpx;
 }
 
-.action-btn {
+.template-select-btn {
+  margin: 0 20rpx 20rpx;
+  padding: 18rpx 0;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 40rpx;
+  text-align: center;
+}
+
+.select-btn-text {
+  font-size: 26rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+/* 空状态 */
+.empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5rpx;
-  padding: 10rpx 20rpx;
+  justify-content: center;
+  padding: 100rpx 30rpx;
 }
 
-.action-icon {
-  font-size: 40rpx;
+.empty-icon {
+  font-size: 80rpx;
+  margin-bottom: 20rpx;
 }
 
-.action-text {
+.empty-text {
+  font-size: 28rpx;
+  color: #999;
+}
+
+/* 底部 */
+.page-bottom {
+  padding: 60rpx 0 40rpx;
+  text-align: center;
+}
+
+.bottom-hint {
   font-size: 24rpx;
-  color: #666;
-}
-
-.create-btn {
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  color: #fff;
-  border: none;
-  border-radius: 40rpx;
-  padding: 24rpx 60rpx;
-  font-size: 32rpx;
-  font-weight: 600;
-
-  &::after {
-    border: none;
-  }
+  color: #ccc;
 }
 </style>
