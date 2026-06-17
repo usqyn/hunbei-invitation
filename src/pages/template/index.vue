@@ -21,13 +21,24 @@
         >
           <text class="category-icon">{{ cat.icon }}</text>
           <text class="category-name">{{ cat.name }}</text>
-          <text class="category-count">{{ cat.templates.length }}</text>
+          <text class="category-count">{{ cat.count }}</text>
         </view>
       </view>
     </scroll-view>
 
+    <!-- 加载状态 -->
+    <view v-if="loading" class="loading-state">
+      <text class="loading-text">加载中...</text>
+    </view>
+
+    <!-- 错误状态 -->
+    <view v-else-if="loadError" class="error-state">
+      <text class="error-icon">⚠️</text>
+      <text class="error-text">加载失败，点击重试</text>
+    </view>
+
     <!-- 模板列表网格 -->
-    <scroll-view class="template-scroll" scroll-y>
+    <scroll-view v-else class="template-scroll" scroll-y>
       <view v-if="filteredTemplates.length === 0" class="empty-state">
         <text class="empty-icon">📄</text>
         <text class="empty-text">该分类暂无模板</text>
@@ -41,13 +52,18 @@
           @click="onSelectTemplate(template)"
         >
           <!-- 模板封面图 -->
-          <image class="template-cover" :src="template.cover" mode="aspectFill" @error="onImageError"></image>
+          <image
+            class="template-cover"
+            :src="getImageUrl(template)"
+            mode="aspectFill"
+            @error="onImageError($event, template)"
+          ></image>
 
           <!-- 模板信息 -->
           <view class="template-info">
             <view class="template-header">
               <text class="template-name">{{ template.name }}</text>
-              <view class="template-tag" :style="{ background: template.primaryColor }">
+              <view class="template-tag" :style="{ background: template.primaryColor || '#e84a6e' }">
                 <text class="tag-text">{{ getCategoryName(template.category) }}</text>
               </view>
             </view>
@@ -76,80 +92,51 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { CATEGORY_LIST, TEMPLATE_LIST } from '@/constants/templates'
-import type { TemplateItem } from '@/types'
+import type { TemplateItem, TemplateCategory } from '@/types'
 
-// 从模板系统获取分类数据
-const categoryList = ref(CATEGORY_LIST)
+// ============ API 配置（与 editor.ts 保持一致） ============
+const API_BASE = 'http://localhost:3001'
 
-// 当前选中的分类 - 默认第一个
-const activeCategory = ref<string>(CATEGORY_LIST[0]?.id || 'wedding')
+// 分类列表（静态配置，可根据 API 动态拉取）
+const STATIC_CATEGORIES = [
+  { id: 'wedding', name: '婚礼请柬', icon: '💒' },
+  { id: 'birthday', name: '生日派对', icon: '🎂' },
+  { id: 'baby', name: '宝宝满月', icon: '👶' },
+  { id: 'graduation', name: '毕业典礼', icon: '🎓' },
+  { id: 'festival', name: '节日祝福', icon: '🎊' },
+  { id: 'business', name: '商务会议', icon: '🏢' },
+]
 
-// 根据分类筛选模板 - 同时支持搜索
+// ============ 状态 ============
+const categoryList = ref<TemplateCategory[]>([])
+const allTemplates = ref<TemplateItem[]>([])
+const activeCategory = ref<string>('wedding')
 const searchKeyword = ref<string>('')
+const loading = ref(false)
+const loadError = ref(false)
 
+// ============ 计算属性 ============
 const filteredTemplates = computed<TemplateItem[]>(() => {
-  let list = TEMPLATE_LIST
+  let list = allTemplates.value
 
   // 按分类筛选
   if (activeCategory.value && activeCategory.value !== 'all') {
     list = list.filter(t => t.category === activeCategory.value)
   }
 
-  // 按关键词搜索（名称和副标题）
+  // 按关键词搜索
   if (searchKeyword.value) {
     const kw = searchKeyword.value.toLowerCase()
     list = list.filter(t =>
-      t.name.toLowerCase().includes(kw) ||
-      t.subtitle.toLowerCase().includes(kw)
+      (t.name && t.name.toLowerCase().includes(kw)) ||
+      (t.subtitle && t.subtitle.toLowerCase().includes(kw))
     )
   }
 
   return list
 })
 
-// 根据分类ID获取分类名称
-function getCategoryName(categoryId: string): string {
-  const cat = categoryList.value.find(c => c.id === categoryId)
-  return cat ? cat.name : ''
-}
-
-// 选择分类（切换到该分类下的模板列表）
-function onSelectCategory(catId: string) {
-  activeCategory.value = catId
-}
-
-// 格式化点赞数：将大数字转为带单位的形式（如 1.2w）
-function formatLikes(num: number): string {
-  if (num >= 10000) {
-    return (num / 10000).toFixed(2) + 'w'
-  }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'k'
-  }
-  return String(num)
-}
-
-// 选择模板 - 跳转到编辑器并传递模板ID
-function onSelectTemplate(template: TemplateItem) {
-  uni.navigateTo({
-    url: `/pages/editor/index?templateId=${template.id}`,
-  })
-}
-
-// 图片加载失败处理
-function onImageError() {
-  console.warn('Template cover image load failed')
-}
-
-// 返回上一页
-function onBack() {
-  uni.navigateBack()
-}
-
-// 页面加载时从URL参数初始化：
-// - category: 跳转到对应分类（如从首页分类卡片点击进入）
-// - search: 搜索关键词（如从首页搜索框进入）
+// ============ 生命周期 ============
 onMounted(() => {
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
@@ -158,11 +145,126 @@ onMounted(() => {
   if (options.category) {
     activeCategory.value = options.category
   }
-
   if (options.search) {
     searchKeyword.value = decodeURIComponent(options.search)
   }
+
+  loadCategories()
+  loadTemplates()
 })
+
+// ============ API 请求 ============
+function request<T>(url: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    uni.request({
+      url: `${API_BASE}${url}`,
+      timeout: 8000,
+      success: (res: any) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res.data)
+        } else {
+          reject(new Error(res.data?.error || `请求失败: ${res.statusCode}`))
+        }
+      },
+      fail: (err: any) => reject(new Error(err.errMsg || '网络请求失败')),
+    })
+  })
+}
+
+async function loadCategories() {
+  try {
+    const res: any = await request('/api/categories')
+    if (res.success) {
+      // 合并 API 返回的分类（含模板数量）与静态配置
+      categoryList.value = res.data.map((cat: any) => {
+        const staticCat = STATIC_CATEGORIES.find(s => s.id === cat.id)
+        return {
+          id: cat.id,
+          name: staticCat?.name || cat.name,
+          icon: staticCat?.icon || '📄',
+          templates: allTemplates.value.filter(t => t.category === cat.id),
+        }
+      })
+    }
+  } catch (e) {
+    // API 失败则用静态分类
+    categoryList.value = STATIC_CATEGORIES.map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      icon: cat.icon,
+      templates: [],
+    }))
+  }
+}
+
+async function loadTemplates() {
+  loading.value = true
+  loadError.value = false
+
+  try {
+    const res: any = await request('/api/templates')
+    if (res.success) {
+      allTemplates.value = res.data || []
+      // 更新分类的模板列表
+      categoryList.value = categoryList.value.map(cat => ({
+        ...cat,
+        templates: allTemplates.value.filter(t => t.category === cat.id),
+      }))
+    }
+  } catch (e) {
+    console.error('加载模板列表失败:', e)
+    loadError.value = true
+  } finally {
+    loading.value = false
+  }
+}
+
+// ============ 方法 ============
+function onSelectCategory(catId: string) {
+  activeCategory.value = catId
+}
+
+function getCategoryName(categoryId: string): string {
+  const cat = STATIC_CATEGORIES.find(c => c.id === categoryId)
+  return cat?.name || categoryId
+}
+
+function formatLikes(num: number): string {
+  if (!num) return '0'
+  if (num >= 10000) return (num / 10000).toFixed(2) + 'w'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'k'
+  return String(num)
+}
+
+function onSelectTemplate(template: TemplateItem) {
+  uni.navigateTo({
+    url: `/pages/editor/index?templateId=${template.id}`,
+  })
+}
+
+function getImageUrl(template: TemplateItem): string {
+  if (!template.cover) {
+    // 如果没有封面，用 data 里的 coverImage
+    return (template as any).data?.coverImage || '/static/images/templates/wedding-1.svg'
+  }
+  // 如果是 http 链接（来自 API 的真实图片），直接使用
+  if (template.cover.startsWith('http')) {
+    return template.cover
+  }
+  return template.cover
+}
+
+function onImageError(e: any, template: TemplateItem) {
+  // 图片加载失败时用默认图
+  const target = e.target as any
+  if (target) {
+    target.src = '/static/images/templates/wedding-1.svg'
+  }
+}
+
+function onBack() {
+  uni.navigateBack()
+}
 </script>
 
 <style lang="scss" scoped>
@@ -205,11 +307,9 @@ onMounted(() => {
   text-align: center;
 }
 
-.header-right {
-  width: 80rpx;
-}
+.header-right { width: 80rpx; }
 
-/* 分类标签栏（横向滚动） */
+/* 分类标签栏 */
 .category-scroll {
   width: 100%;
   background: #ffffff;
@@ -235,23 +335,12 @@ onMounted(() => {
 
   &.active {
     background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-
-    .category-name, .category-count, .category-icon {
-      color: #fff;
-    }
+    .category-name, .category-count, .category-icon { color: #fff; }
   }
 }
 
-.category-icon {
-  font-size: 32rpx;
-  color: #333;
-}
-
-.category-name {
-  font-size: 26rpx;
-  color: #333;
-  font-weight: 500;
-}
+.category-icon { font-size: 32rpx; color: #333; }
+.category-name { font-size: 26rpx; color: #333; font-weight: 500; }
 
 .category-count {
   font-size: 22rpx;
@@ -259,13 +348,24 @@ onMounted(() => {
   background: rgba(0, 0, 0, 0.05);
   padding: 2rpx 10rpx;
   border-radius: 20rpx;
-
-  .active & {
-    background: rgba(255, 255, 255, 0.3);
-  }
+  .active & { background: rgba(255, 255, 255, 0.3); }
 }
 
-/* 模板列表网格（纵向滚动） */
+/* 状态视图 */
+.loading-state, .error-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+}
+
+.loading-text { font-size: 28rpx; color: #999; }
+.error-icon { font-size: 64rpx; }
+.error-text { font-size: 28rpx; color: #999; }
+
+/* 模板网格 */
 .template-scroll {
   flex: 1;
   height: 0;
@@ -278,7 +378,6 @@ onMounted(() => {
   gap: 30rpx;
 }
 
-/* 模板卡片 */
 .template-card {
   width: calc(50% - 15rpx);
   background: #ffffff;
@@ -287,11 +386,7 @@ onMounted(() => {
   box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease;
-
-  &:active {
-    transform: scale(0.98);
-  }
+  &:active { opacity: 0.9; }
 }
 
 .template-cover {
@@ -300,10 +395,7 @@ onMounted(() => {
   background: #f5f5f5;
 }
 
-.template-info {
-  padding: 20rpx;
-  flex: 1;
-}
+.template-info { padding: 20rpx; flex: 1; }
 
 .template-header {
   display: flex;
@@ -325,11 +417,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.tag-text {
-  font-size: 20rpx;
-  color: #fff;
-  font-weight: 500;
-}
+.tag-text { font-size: 20rpx; color: #fff; font-weight: 500; }
 
 .template-subtitle {
   font-size: 22rpx;
@@ -342,21 +430,9 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.template-footer {
-  display: flex;
-  align-items: center;
-}
-
-.template-stats {
-  font-size: 22rpx;
-  color: #999;
-}
-
-.template-divider {
-  margin: 0 10rpx;
-  color: #ddd;
-  font-size: 22rpx;
-}
+.template-footer { display: flex; align-items: center; }
+.template-stats { font-size: 22rpx; color: #999; }
+.template-divider { margin: 0 10rpx; color: #ddd; }
 
 .template-select-btn {
   margin: 0 20rpx 20rpx;
@@ -366,11 +442,7 @@ onMounted(() => {
   text-align: center;
 }
 
-.select-btn-text {
-  font-size: 26rpx;
-  color: #fff;
-  font-weight: 500;
-}
+.select-btn-text { font-size: 26rpx; color: #fff; font-weight: 500; }
 
 /* 空状态 */
 .empty-state {
@@ -381,24 +453,10 @@ onMounted(() => {
   padding: 100rpx 30rpx;
 }
 
-.empty-icon {
-  font-size: 80rpx;
-  margin-bottom: 20rpx;
-}
-
-.empty-text {
-  font-size: 28rpx;
-  color: #999;
-}
+.empty-icon { font-size: 80rpx; margin-bottom: 20rpx; }
+.empty-text { font-size: 28rpx; color: #999; }
 
 /* 底部 */
-.page-bottom {
-  padding: 60rpx 0 40rpx;
-  text-align: center;
-}
-
-.bottom-hint {
-  font-size: 24rpx;
-  color: #ccc;
-}
+.page-bottom { padding: 60rpx 0 40rpx; text-align: center; }
+.bottom-hint { font-size: 24rpx; color: #ccc; }
 </style>
