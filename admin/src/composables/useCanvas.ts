@@ -31,10 +31,14 @@ export interface UseCanvasOptions {
   canvasRef: { value: HTMLCanvasElement | null }
   initialSize?: CanvasSize
   onSelectionChange?: (el: AnyCanvasElement | null) => void
+  onBackgroundChange?: (bg: CanvasBackground) => void
 }
 
 // 最大历史快照数
 const MAX_HISTORY = 50
+
+// 复制缓冲区
+let clipboard: AnyCanvasElement | null = null
 
 export function useCanvas(opts: UseCanvasOptions) {
   // 对外暴露的响应式状态
@@ -385,6 +389,196 @@ export function useCanvas(opts: UseCanvasOptions) {
     }
   }
 
+  // ---- 图层顺序操作 ----
+  function bringToFront(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      canvas.bringToFront(obj)
+      updateZIndexFromFabric()
+      pushHistory('bring to front')
+    }
+  }
+
+  function sendToBack(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      canvas.sendToBack(obj)
+      updateZIndexFromFabric()
+      pushHistory('send to back')
+    }
+  }
+
+  function bringForward(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      canvas.bringForward(obj)
+      updateZIndexFromFabric()
+      pushHistory('bring forward')
+    }
+  }
+
+  function sendBackwards(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      canvas.sendBackwards(obj)
+      updateZIndexFromFabric()
+      pushHistory('send backwards')
+    }
+  }
+
+  function updateZIndexFromFabric() {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    canvas.getObjects().forEach((obj, index) => {
+      const el = elements.value.find(e => e.id === (obj as any).id)
+      if (el) {
+        el.zIndex = index
+      }
+    })
+  }
+
+  // ---- 复制/粘贴 ----
+  function copySelected() {
+    if (!selectedId.value) return
+    const el = elements.value.find(e => e.id === selectedId.value)
+    if (!el) return
+    clipboard = JSON.parse(JSON.stringify(el))
+  }
+
+  function pasteFromClipboard() {
+    if (!clipboard) return
+
+    const newEl: AnyCanvasElement = JSON.parse(JSON.stringify(clipboard))
+    newEl.id = createId(newEl.type)
+    newEl.x += 20
+    newEl.y += 20
+
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+
+    if (newEl.type === 'text') {
+      const t = new fabric.IText(newEl.content, {
+        left: newEl.x, top: newEl.y,
+        originX: 'center', originY: 'center',
+        fontFamily: newEl.fontFamily, fontSize: newEl.fontSize,
+        fontWeight: newEl.fontWeight as any, fontStyle: newEl.fontStyle as any,
+        fill: newEl.color, textAlign: newEl.textAlign,
+        lineHeight: newEl.lineHeight, charSpacing: newEl.letterSpacing * 10,
+        stroke: newEl.strokeColor, strokeWidth: newEl.strokeWidth,
+        opacity: newEl.opacity, angle: newEl.rotation,
+        lockRotation: newEl.locked, selectable: !newEl.locked,
+      })
+      ;(t as any).id = newEl.id
+      ;(t as any).elementType = 'text'
+      canvas.add(t)
+      canvas.setActiveObject(t)
+      elements.value.push(newEl)
+      selectedId.value = newEl.id
+    } else if (newEl.type === 'image') {
+      const ie = newEl as ImageElement
+      fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
+        const sx = ie.width / (img.width || 1)
+        const sy = ie.height / (img.height || 1)
+        img.set({
+          left: ie.x, top: ie.y,
+          originX: 'center', originY: 'center',
+          scaleX: sx, scaleY: sy,
+          opacity: ie.opacity, angle: ie.rotation,
+          lockRotation: ie.locked, selectable: !ie.locked,
+        })
+        ;(img as any).id = ie.id
+        ;(img as any).elementType = 'image'
+        ;(img as any).srcUrl = ie.src
+        canvas.add(img)
+        canvas.setActiveObject(img)
+        elements.value.push(newEl)
+        selectedId.value = newEl.id
+        canvas.renderAll()
+      })
+    }
+
+    pushHistory('paste')
+  }
+
+  // ---- 对齐功能 ----
+  function alignLeft(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      const boundingRect = obj.getBoundingRect()
+      obj.set('left', boundingRect.width / 2)
+      canvas.renderAll()
+      pushHistory('align left')
+    }
+  }
+
+  function alignCenter(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      obj.set('left', canvasSize.value.width / 2)
+      canvas.renderAll()
+      pushHistory('align center')
+    }
+  }
+
+  function alignRight(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      const boundingRect = obj.getBoundingRect()
+      obj.set('left', canvasSize.value.width - boundingRect.width / 2)
+      canvas.renderAll()
+      pushHistory('align right')
+    }
+  }
+
+  function alignTop(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      const boundingRect = obj.getBoundingRect()
+      obj.set('top', boundingRect.height / 2)
+      canvas.renderAll()
+      pushHistory('align top')
+    }
+  }
+
+  function alignMiddle(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      obj.set('top', canvasSize.value.height / 2)
+      canvas.renderAll()
+      pushHistory('align middle')
+    }
+  }
+
+  function alignBottom(id: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      const boundingRect = obj.getBoundingRect()
+      obj.set('top', canvasSize.value.height - boundingRect.height / 2)
+      canvas.renderAll()
+      pushHistory('align bottom')
+    }
+  }
+
   function selectElement(id: string | null) {
     const canvas = fabricCanvas.value
     if (!canvas) return
@@ -496,11 +690,13 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     // 清空
     canvas.getObjects().forEach(o => canvas.remove(o))
+    canvas.discardActiveObject()
 
     canvasSize.value = { ...draft.canvasSize }
     canvas.setDimensions({ width: draft.canvasSize.width, height: draft.canvasSize.height })
     background.value = { ...draft.background }
     applyBackground(draft.background)
+    opts.onBackgroundChange?.(draft.background)
 
     elements.value = []
     selectedId.value = null
@@ -515,7 +711,7 @@ export function useCanvas(opts: UseCanvasOptions) {
           left: el.x, top: el.y,
           originX: 'center', originY: 'center',
           fontFamily: el.fontFamily, fontSize: el.fontSize,
-          fontWeight: el.fontStyle as any, fontStyle: el.fontStyle as any,
+          fontWeight: el.fontWeight as any, fontStyle: el.fontStyle as any,
           fill: el.color, textAlign: el.textAlign,
           lineHeight: el.lineHeight, charSpacing: el.letterSpacing * 10,
           stroke: el.strokeColor, strokeWidth: el.strokeWidth,
@@ -618,6 +814,16 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (pushTimer) clearTimeout(pushTimer)
   }
 
+  // ---- 清空画布（供外部调用）----
+  function clearCanvas() {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    canvas.getObjects().forEach(o => canvas.remove(o))
+    canvas.discardActiveObject()
+    elements.value = []
+    selectedId.value = null
+  }
+
   // 组件挂载/卸载钩子
   onMounted(() => init())
   onBeforeUnmount(() => dispose())
@@ -646,6 +852,18 @@ export function useCanvas(opts: UseCanvasOptions) {
     toggleLock,
     selectElement,
     updateSelected,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackwards,
+    copySelected,
+    pasteFromClipboard,
+    alignLeft,
+    alignCenter,
+    alignRight,
+    alignTop,
+    alignMiddle,
+    alignBottom,
 
     // 历史
     pushHistory,
@@ -656,6 +874,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     setZoom,
     getDraft,
     loadDraft,
+    clearCanvas,
     dispose,
   }
 }

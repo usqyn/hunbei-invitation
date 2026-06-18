@@ -111,6 +111,10 @@
             <span class="layer-name" @click="selectElement(el.id)">{{ el.name }}</span>
             <button class="layer-btn" :class="{ off: !el.visible }" @click="toggleVisibility(el.id)" :title="el.visible ? '隐藏' : '显示'">👁</button>
             <button class="layer-btn" :class="{ off: !el.locked }" @click="toggleLock(el.id)" :title="el.locked ? '解锁' : '锁定'">🔒</button>
+            <button class="layer-btn" @click="bringForward(el.id)" title="上移一层">⬆</button>
+            <button class="layer-btn" @click="sendBackwards(el.id)" title="下移一层">⬇</button>
+            <button class="layer-btn" @click="bringToFront(el.id)" title="置于顶层">🔝</button>
+            <button class="layer-btn" @click="sendToBack(el.id)" title="置于底层">🔻</button>
             <button class="layer-btn danger" @click="deleteElement(el.id)" title="删除">🗑</button>
           </div>
         </div>
@@ -496,6 +500,17 @@
                 @click="updateSelected({ mask: 'heart' } as any)"
               >心</button>
             </div>
+            <div class="section-title">对齐</div>
+            <div class="btn-group">
+              <button class="btn-seg" @click="alignLeft(selectedElement.id)" title="左对齐">←</button>
+              <button class="btn-seg" @click="alignCenter(selectedElement.id)" title="水平居中">⇄</button>
+              <button class="btn-seg" @click="alignRight(selectedElement.id)" title="右对齐">→</button>
+            </div>
+            <div class="btn-group">
+              <button class="btn-seg" @click="alignTop(selectedElement.id)" title="顶部对齐">↑</button>
+              <button class="btn-seg" @click="alignMiddle(selectedElement.id)" title="垂直居中">⇅</button>
+              <button class="btn-seg" @click="alignBottom(selectedElement.id)" title="底部对齐">↓</button>
+            </div>
           </template>
 
           <!-- 未知元素 -->
@@ -604,17 +619,37 @@ const {
   toggleLock,
   selectElement,
   updateSelected,
+  bringToFront,
+  sendToBack,
+  bringForward,
+  sendBackwards,
+  copySelected,
+  pasteFromClipboard,
+  alignLeft,
+  alignCenter,
+  alignRight,
+  alignTop,
+  alignMiddle,
+  alignBottom,
   undo,
   redo,
   pushHistory,
   getDraft,
   loadDraft,
+  clearCanvas,
 } = useCanvas({
   canvasRef,
   initialSize: { ...DEFAULT_CANVAS_SIZE },
   onSelectionChange: (el) => {
     // 选中元素时，同步 UI 状态到画布
     console.log('selected:', el?.id)
+  },
+  onBackgroundChange: (bg) => {
+    // 同步 App.vue 本地背景状态
+    bgType.value = bg.type
+    bgColor1.value = bg.color1
+    bgColor2.value = bg.color2 ?? bg.color1
+    bgAngle.value = bg.angle ?? 180
   },
 })
 
@@ -806,15 +841,7 @@ function formatTime(ts: number): string {
 
 function createNewFromCanvas() {
   currentTemplateId.value = null
-  // 清空画布
-  elements.value.forEach(el => {
-    const canvas = (window as any).__fabricCanvas
-    if (canvas) {
-      const obj = canvas.getObjects().find((o: any) => o.id === el.id)
-      if (obj) canvas.remove(obj)
-    }
-  })
-  elements.value.splice(0)
+  clearCanvas()
   historyVersions.value = []
   pushHistory('new')
 }
@@ -1032,6 +1059,16 @@ function onKeyDown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
     e.preventDefault()
     redo()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+    e.preventDefault()
+    copySelected()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+    e.preventDefault()
+    pasteFromClipboard()
     return
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
