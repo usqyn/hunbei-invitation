@@ -131,6 +131,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function setBackground(bg: Partial<CanvasBackground>) {
     background.value = { ...background.value, ...bg }
     applyBackground(background.value)
+    opts.onBackgroundChange?.(background.value)
     pushHistory('set background')
   }
 
@@ -389,13 +390,14 @@ export function useCanvas(opts: UseCanvasOptions) {
     }
   }
 
-  // ---- 图层顺序操作 ----
+  // ---- 图层顺序操作（Fabric v6 无原生方法，通过 insertAt 实现）----
   function bringToFront(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
     const obj = canvas.getObjects().find(o => (o as any).id === id)
     if (obj) {
-      canvas.bringToFront(obj)
+      canvas.remove(obj)
+      canvas.add(obj)
       updateZIndexFromFabric()
       pushHistory('bring to front')
     }
@@ -406,7 +408,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
     const obj = canvas.getObjects().find(o => (o as any).id === id)
     if (obj) {
-      canvas.sendToBack(obj)
+      canvas.remove(obj)
+      canvas.insertAt(0, obj)
       updateZIndexFromFabric()
       pushHistory('send to back')
     }
@@ -417,9 +420,14 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
     const obj = canvas.getObjects().find(o => (o as any).id === id)
     if (obj) {
-      canvas.bringForward(obj)
-      updateZIndexFromFabric()
-      pushHistory('bring forward')
+      const objects = canvas.getObjects()
+      const idx = objects.indexOf(obj)
+      if (idx < objects.length - 1) {
+        canvas.remove(obj)
+        canvas.insertAt(idx + 1, obj)
+        updateZIndexFromFabric()
+        pushHistory('bring forward')
+      }
     }
   }
 
@@ -428,9 +436,14 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
     const obj = canvas.getObjects().find(o => (o as any).id === id)
     if (obj) {
-      canvas.sendBackwards(obj)
-      updateZIndexFromFabric()
-      pushHistory('send backwards')
+      const objects = canvas.getObjects()
+      const idx = objects.indexOf(obj)
+      if (idx > 0) {
+        canvas.remove(obj)
+        canvas.insertAt(idx - 1, obj)
+        updateZIndexFromFabric()
+        pushHistory('send backwards')
+      }
     }
   }
 

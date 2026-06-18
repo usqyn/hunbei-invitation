@@ -11,7 +11,6 @@ const API_TIMEOUT = 8000
 
 const STORAGE_KEY_STYLES = 'hunbei_editor_styles'
 const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
-const STORAGE_KEY_VERSION = 'hunbei_template_version'
 
 export const useEditorStore = defineStore('editor', () => {
   const showTextEditor = ref(false)
@@ -22,11 +21,12 @@ export const useEditorStore = defineStore('editor', () => {
   const currentTemplateId = ref<string>(DEFAULT_TEMPLATE_ID)
   const templateLoading = ref(false)
 
-  const currentFont = ref(DEFAULT_ELEMENT_STYLE.font)
-  const currentColor = ref(DEFAULT_ELEMENT_STYLE.color)
-  const currentFontSize = ref(DEFAULT_ELEMENT_STYLE.fontSize)
-  const currentSpacing = ref(DEFAULT_ELEMENT_STYLE.spacing)
-  const currentLineHeight = ref(DEFAULT_ELEMENT_STYLE.lineHeight)
+  const currentFont = ref<string>('思源宋体')
+  const currentColor = ref<string>('#666666')
+  const currentFontSize = ref<number>(12)
+  const currentSpacing = ref<number>(2)
+  const currentLineHeight = ref<number>(2)
+  const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
 
   // 可编辑元素列表 - 根据模板动态生成
   const editableElements = reactive<EditableElement[]>([])
@@ -108,8 +108,20 @@ export const useEditorStore = defineStore('editor', () => {
         dataKey: el.dataKey,
         label: el.label,
         style: el.style ? { ...el.style } : undefined,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        zIndex: el.zIndex,
+        rotation: el.rotation,
+        opacity: el.opacity,
       })
     })
+
+    // 同步画布尺寸
+    if (template.canvasSize) {
+      canvasSize.value = { ...template.canvasSize }
+    }
 
     // 同步到 TemplateStore
     const templateStore = useTemplateStore()
@@ -138,17 +150,6 @@ export const useEditorStore = defineStore('editor', () => {
       currentSpacing.value = DEFAULT_ELEMENT_STYLE.spacing
       currentLineHeight.value = DEFAULT_ELEMENT_STYLE.lineHeight
     }
-  }
-
-  function syncCurrentToElement() {
-    if (selectedElement.value === null) return
-    const el = editableElements[selectedElement.value]
-    if (!el.style) el.style = { ...DEFAULT_ELEMENT_STYLE }
-    el.style.font = currentFont.value
-    el.style.color = currentColor.value
-    el.style.fontSize = currentFontSize.value
-    el.style.spacing = currentSpacing.value
-    el.style.lineHeight = currentLineHeight.value
   }
 
   function persistStyles() {
@@ -214,28 +215,16 @@ export const useEditorStore = defineStore('editor', () => {
     if (selectedElement.value !== null) {
       const el = editableElements[selectedElement.value]
       el.text = editingText.value
-      syncCurrentToElement()
       if (el.dataKey) {
         const templateStore = useTemplateStore()
         templateStore.updateField(el.dataKey, editingText.value)
       }
     }
     showTextEditor.value = false
-    persistStyles()
   }
 
   function closeBasicInfoEditor() {
     showBasicInfoEditor.value = false
-  }
-
-  function resetStyle() {
-    currentFont.value = DEFAULT_ELEMENT_STYLE.font
-    currentColor.value = DEFAULT_ELEMENT_STYLE.color
-    currentFontSize.value = DEFAULT_ELEMENT_STYLE.fontSize
-    currentSpacing.value = DEFAULT_ELEMENT_STYLE.spacing
-    currentLineHeight.value = DEFAULT_ELEMENT_STYLE.lineHeight
-    syncCurrentToElement()
-    persistStyles()
   }
 
   function selectMaterial(material: { url: string; name: string }) {
@@ -265,57 +254,15 @@ export const useEditorStore = defineStore('editor', () => {
     uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
-  function decreaseFontSize() {
-    if (currentFontSize.value > 8) currentFontSize.value--
-    syncCurrentToElement(); persistStyles()
-  }
-
-  function increaseFontSize() {
-    if (currentFontSize.value < 72) currentFontSize.value++
-    syncCurrentToElement(); persistStyles()
-  }
-
-  function decreaseSpacing() {
-    if (currentSpacing.value > 0) currentSpacing.value--
-    syncCurrentToElement(); persistStyles()
-  }
-
-  function increaseSpacing() {
-    if (currentSpacing.value < 20) currentSpacing.value++
-    syncCurrentToElement(); persistStyles()
-  }
-
-  function decreaseLineHeight() {
-    if (currentLineHeight.value > 1) currentLineHeight.value--
-    syncCurrentToElement(); persistStyles()
-  }
-
-  function increaseLineHeight() {
-    if (currentLineHeight.value < 10) currentLineHeight.value++
-    syncCurrentToElement(); persistStyles()
-  }
-
-  function onFontChange(font: string) {
-    currentFont.value = font; syncCurrentToElement(); persistStyles()
-  }
-
-  function onColorChange(color: string) {
-    currentColor.value = color; syncCurrentToElement(); persistStyles()
-  }
-
   // 启动时恢复
   restoreTemplate()
-  restoreStyles()
 
   return {
     showTextEditor, showBasicInfoEditor, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
     currentFontSize, currentSpacing, currentLineHeight,
-    editableElements, materialList, currentTemplateId, templateLoading,
+    editableElements, materialList, currentTemplateId, templateLoading, canvasSize,
     loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
-    closeBasicInfoEditor, resetStyle, selectMaterial, applyImageToElement,
-    decreaseFontSize, increaseFontSize, decreaseSpacing,
-    increaseSpacing, decreaseLineHeight, increaseLineHeight,
-    onFontChange, onColorChange,
+    closeBasicInfoEditor, selectMaterial, applyImageToElement,
   }
 })

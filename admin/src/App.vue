@@ -164,7 +164,7 @@
               :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
             ></div>
             <canvas
-              ref="canvasElRef"
+              ref="canvasRef"
               class="fabric-canvas"
               :style="{
                 width: (canvasSize.width * zoom) + 'px',
@@ -587,7 +587,7 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 // ============ 本地状态 ============
-const leftTab = ref<'material' | 'layers'>('material')
+const leftTab = ref<'material' | 'layers' | 'templates'>('material')
 const sizeLabel = ref('375 × 667')
 
 // 背景 UI 状态
@@ -741,10 +741,9 @@ const currentTemplateId = ref<string | null>(null)
 const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
-const canvasElRef = ref<HTMLCanvasElement | null>(null)
 
 function getCanvasEl(): HTMLCanvasElement | null {
-  return canvasElRef.value || null
+  return canvasRef.value || null
 }
 
 async function loadTemplateList() {
@@ -887,15 +886,6 @@ function restoreDraftFromLocal() {
   } catch (_) {}
   return false
 }
-
-onMounted(() => {
-  // 恢复草稿
-  if (!restoreDraftFromLocal()) {
-    pushHistory('init')
-  }
-  // 定时自动保存
-  autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
-})
 
 onBeforeUnmount(() => {
   if (autoSaveTimer.value) clearInterval(autoSaveTimer.value)

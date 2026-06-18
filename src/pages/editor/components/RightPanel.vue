@@ -43,11 +43,6 @@ defineProps<{
   editableElements: EditableElement[]
   selectedElement: number | null
   materialList: Material[]
-  currentFont: string
-  currentColor: string
-  currentFontSize: number
-  currentSpacing: number
-  currentLineHeight: number
   settings: TemplateSettings
 }>()
 
@@ -55,15 +50,6 @@ defineEmits<{
   'update:activePanelTab': [key: string]
   openEditor: [idx: number]
   selectMaterial: [material: Material]
-  showFontPicker: []
-  showColorPicker: []
-  decreaseFontSize: []
-  increaseFontSize: []
-  decreaseSpacing: []
-  increaseSpacing: []
-  decreaseLineHeight: []
-  increaseLineHeight: []
-  resetStyle: []
   toggleSetting: [key: string]
   imageError: []
 }>()

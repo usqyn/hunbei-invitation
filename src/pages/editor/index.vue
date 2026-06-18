@@ -14,43 +14,30 @@
       <!-- 左侧：竖版请柬预览（根据模板动态渲染） -->
       <view class="preview-area">
         <scroll-view class="preview-scroll" scroll-y>
-          <view class="preview-card">
-
-            <!-- 动态渲染模板的所有元素 -->
-            <block v-for="(el, idx) in editorStore.editableElements" :key="idx">
-              <!-- 图片元素 -->
+          <!-- 画布模式：admin 发布的绝对定位模板 -->
+          <template v-if="isCanvasMode">
+            <view class="preview-card preview-card--canvas" :style="canvasCardStyle">
               <view
-                v-if="el.type === 'image'"
-                class="section image-section"
-                :class="{ 'active-section': editorStore.selectedElement === idx }"
+                v-for="(el, idx) in editorStore.editableElements" :key="idx"
+                class="canvas-element"
+                :class="{ 'active-element': editorStore.selectedElement === idx }"
+                :style="getCanvasElementStyle(el)"
                 @click="onOpenEditor(idx)"
               >
                 <image
-                  class="section-image"
+                  v-if="el.type === 'image'"
+                  class="canvas-image"
                   :src="el.text"
                   mode="aspectFill"
                   @error="onImageError"
-                ></image>
-                <view v-if="idx === 0" class="image-overlay">
-                  <text class="overlay-label">{{ templateName }}</text>
-                </view>
-              </view>
-
-              <!-- 文字元素 -->
-              <view
-                v-else-if="el.type === 'text'"
-                class="section text-section"
-                :class="{ 'active-section': editorStore.selectedElement === idx }"
-                @click="onOpenEditor(idx)"
-              >
+                />
                 <text
-                  class="section-text"
+                  v-else-if="el.type === 'text'"
+                  class="canvas-text"
                   :style="getTextStyle(idx)"
                 >{{ el.text }}</text>
               </view>
-            </block>
-
-            <!-- 新人信息卡片 - 固定的基本信息区 -->
+            </view>
             <view class="section info-section">
               <view class="info-card">
                 <text class="info-groom">{{ basicInfo.groomName || '新郎姓名' }}</text>
@@ -60,8 +47,50 @@
               <text class="info-date">{{ basicInfo.weddingDate || '2050.05.20' }}</text>
               <text class="info-address">{{ basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
             </view>
-
-          </view>
+          </template>
+          <!-- Flex 模式：静态模板的垂直排列 -->
+          <template v-else>
+            <view class="preview-card preview-card--flex">
+              <block v-for="(el, idx) in editorStore.editableElements" :key="idx">
+                <view
+                  v-if="el.type === 'image'"
+                  class="section image-section"
+                  :class="{ 'active-section': editorStore.selectedElement === idx }"
+                  @click="onOpenEditor(idx)"
+                >
+                  <image
+                    class="section-image"
+                    :src="el.text"
+                    mode="aspectFill"
+                    @error="onImageError"
+                  ></image>
+                  <view v-if="idx === 0" class="image-overlay">
+                    <text class="overlay-label">{{ templateName }}</text>
+                  </view>
+                </view>
+                <view
+                  v-else-if="el.type === 'text'"
+                  class="section text-section"
+                  :class="{ 'active-section': editorStore.selectedElement === idx }"
+                  @click="onOpenEditor(idx)"
+                >
+                  <text
+                    class="section-text"
+                    :style="getTextStyle(idx)"
+                  >{{ el.text }}</text>
+                </view>
+              </block>
+              <view class="section info-section">
+                <view class="info-card">
+                  <text class="info-groom">{{ basicInfo.groomName || '新郎姓名' }}</text>
+                  <text class="info-and">囍</text>
+                  <text class="info-bride">{{ basicInfo.brideName || '新娘姓名' }}</text>
+                </view>
+                <text class="info-date">{{ basicInfo.weddingDate || '2050.05.20' }}</text>
+                <text class="info-address">{{ basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
+              </view>
+            </view>
+          </template>
         </scroll-view>
       </view>
 
@@ -72,11 +101,6 @@
           :editable-elements="editorStore.editableElements"
           :selected-element="editorStore.selectedElement"
           :material-list="editorStore.materialList"
-          :current-font="editorStore.currentFont"
-          :current-color="editorStore.currentColor"
-          :current-font-size="editorStore.currentFontSize"
-          :current-spacing="editorStore.currentSpacing"
-          :current-line-height="editorStore.currentLineHeight"
           :settings="templateStore.settings"
           @update:active-panel-tab="editorStore.activePanelTab = $event"
           @open-editor="onOpenEditor"
@@ -108,22 +132,11 @@
     <!-- Text Editor Popup -->
     <TextEditorPopup
       v-if="editorStore.showTextEditor"
-      :text="editorStore.editingText"
-      :current-font="editorStore.currentFont"
-      :current-color="editorStore.currentColor"
-      :current-font-size="editorStore.currentFontSize"
-      :current-spacing="editorStore.currentSpacing"
-      :current-line-height="editorStore.currentLineHeight"
-      @update:text="editorStore.editingText = $event"
+      :visible="editorStore.showTextEditor"
+      :editing-text="editorStore.editingText"
+      @input="(v: string) => editorStore.editingText = v"
       @close="editorStore.closeTextEditor"
       @confirm="editorStore.confirmTextEdit"
-      @decrease-font-size="editorStore.decreaseFontSize"
-      @increase-font-size="editorStore.increaseFontSize"
-      @decrease-spacing="editorStore.decreaseSpacing"
-      @increase-spacing="editorStore.increaseSpacing"
-      @decrease-line-height="editorStore.decreaseLineHeight"
-      @increase-line-height="editorStore.increaseLineHeight"
-      @reset-style="editorStore.resetStyle"
     />
 
     <!-- Basic Info Popup -->
@@ -157,7 +170,7 @@ import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
-import type { Material, ElementStyle } from '@/types'
+import type { Material, ElementStyle, EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
@@ -168,6 +181,35 @@ const templateName = computed(() => {
 })
 
 const basicInfo = computed(() => templateStore.basicInfo)
+
+// 画布模式判断 & 尺寸
+const isCanvasMode = computed(() => {
+  const first = editorStore.editableElements[0]
+  return first && first.x != null
+})
+
+const canvasWidth = computed(() => editorStore.canvasSize?.width || 375)
+const canvasHeight = computed(() => editorStore.canvasSize?.height || 667)
+
+const canvasCardStyle = computed(() => ({
+  aspectRatio: `${canvasWidth.value} / ${canvasHeight.value}`,
+  width: '100%',
+}))
+
+// 画布模式下获取元素的绝对定位样式
+function getCanvasElementStyle(el: EditableElement) {
+  if (el.x == null) return {}
+  return {
+    position: 'absolute',
+    left: `${(el.x / canvasWidth.value) * 100}%`,
+    top: `${(el.y! / canvasHeight.value) * 100}%`,
+    width: `${(el.width! / canvasWidth.value) * 100}%`,
+    height: `${(el.height! / canvasHeight.value) * 100}%`,
+    zIndex: el.zIndex ?? 0,
+    opacity: el.opacity ?? 1,
+    transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+  }
+}
 
 // 根据元素索引获取样式
 function getTextStyle(idx: number) {
@@ -481,6 +523,37 @@ onMounted(() => {
 .active-section {
   outline: 4rpx solid #e84a6e;
   outline-offset: 4rpx;
+}
+
+/* ===== 画布模式 ===== */
+.preview-card--canvas {
+  display: block;
+  padding: 0;
+  gap: 0;
+  position: relative;
+  background: #fff;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.canvas-element {
+  overflow: hidden;
+}
+
+.canvas-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.canvas-text {
+  display: block;
+  word-break: break-all;
+}
+
+.active-element {
+  outline: 4rpx solid #e84a6e;
+  outline-offset: -4rpx;
 }
 
 /* Sidebar Area - 右侧编辑面板 */

@@ -57,6 +57,14 @@ export interface EditableElement {
   dataKey?: keyof TemplateData
   label?: string
   style?: ElementStyle
+  // 画布定位（admin 模板）
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  zIndex?: number
+  rotation?: number
+  opacity?: number
 }
 
 // 素材
@@ -88,6 +96,8 @@ export interface TemplateItem {
   data: TemplateData
   // 可编辑元素配置（按顺序对应预览中的元素）
   elements: EditableElement[]
+  // 画布尺寸（admin 模板）
+  canvasSize?: { width: number; height: number }
   // 主题色
   primaryColor: string
 }

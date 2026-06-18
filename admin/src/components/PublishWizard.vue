@@ -211,7 +211,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { CATEGORIES } from '../types/template'
-import { createTemplate, updateTemplate, fetchVersion, API_BASE } from '../composables/useApi'
+import { createTemplate, fetchVersion, API_BASE } from '../composables/useApi'
 
 const props = defineProps<{
   visible: boolean
@@ -397,6 +397,7 @@ async function doPublish() {
       name: form.name,
       subtitle: form.subtitle,
       category: form.category,
+      cover: coverPreview.value || '',
       primaryColor: '#e84a6e',
       likes: form.likes,
       pageCount: form.pageCount,
@@ -413,12 +414,20 @@ async function doPublish() {
         footerText: '',
         footerSubText: '',
       },
+      canvasSize: draft?.canvasSize || { width: 375, height: 667 },
       elements: (draft?.elements || []).map((el: any) => ({
         type: el.type,
         text: el.content || el.src || '',
         dataKey: el.dataKey,
         label: el.name,
-        style: el.style ? {
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        zIndex: el.zIndex,
+        rotation: el.rotation,
+        opacity: el.opacity,
+        style: el.type === 'text' ? {
           font: el.fontFamily,
           color: el.color,
           fontSize: el.fontSize,
