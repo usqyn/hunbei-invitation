@@ -1,967 +1,1689 @@
 <template>
-  <div class="app">
-    <!-- ========== 顶部导航栏 ========== -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <span class="logo">🎨 婚贝模板制作工具</span>
-        <div class="template-tabs">
-          <button
-            v-for="t in templateList"
-            :key="t.id"
-            class="tab-btn"
-            :class="{ active: currentId === t.id }"
-            @click="loadTemplate(t.id)"
-          >
-            {{ t.name }}
-          </button>
-        </div>
+  <div class="app" @keydown="onKeyDown" tabindex="0" ref="appRootRef">
+    <!-- ============ 顶部工具栏 ============ -->
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <span class="logo">🎨 婚贝模板制作</span>
+        <span class="toolbar-divider"></span>
+
+        <button class="tb-btn" :disabled="!canUndo" @click="undo" title="撤销 (Ctrl+Z)">
+          ↶ 撤销
+        </button>
+        <button class="tb-btn" :disabled="!canRedo" @click="redo" title="重做 (Ctrl+Y)">
+          ↷ 重做
+        </button>
+
+        <span class="toolbar-divider"></span>
+
+        <button class="tb-btn primary" @click="addText">✎ 添加文字</button>
+        <button class="tb-btn" @click="triggerImageUpload">🖼 添加图片</button>
+        <input ref="fileInput" type="file" accept="image/*" style="display:none" @change="onImageFile" />
+
+        <span class="toolbar-divider"></span>
+
+        <!-- 画布尺寸 -->
+        <select class="tb-select" v-model="sizeLabel" @change="onPresetChange">
+          <option v-for="p in CANVAS_PRESETS" :key="p.label" :value="p.label">{{ p.label }}</option>
+        </select>
       </div>
-      <div class="topbar-right">
-        <button class="btn-secondary" @click="createNewTemplate">+ 新建模板</button>
+
+      <div class="toolbar-right">
+        <span class="zoom-label">缩放 {{ Math.round(zoom * 100) }}%</span>
+        <button class="tb-btn sm" @click="zoom = Math.max(0.3, zoom - 0.1)">−</button>
+        <button class="tb-btn sm" @click="zoom = 1">100%</button>
+        <button class="tb-btn sm" @click="zoom = Math.min(3, zoom + 0.1)">+</button>
+        <span class="toolbar-divider"></span>
+        <button class="tb-btn danger" @click="deleteSelected" title="删除选中 (Del)">🗑 删除</button>
+        <span class="toolbar-divider"></span>
+        <button class="tb-btn publish-btn" @click="showPublishWizard = true" title="发布模板">🚀 发布</button>
+        <button class="tb-btn" @click="onExportPNG" title="导出 PNG">📥 导出</button>
       </div>
     </header>
 
-    <!-- ========== 主工作区 ========== -->
-    <div class="workspace">
-      <!-- 左侧：网格画布 -->
-      <div class="canvas-panel">
-        <div class="canvas-header">
-          <span>模板画布</span>
-          <span class="canvas-hint">点击格子可编辑内容</span>
+    <!-- ============ 主工作区 ============ -->
+    <main class="workspace">
+      <!-- 左侧面板 -->
+      <aside class="panel panel-left">
+        <div class="panel-tabs">
+          <button
+            class="tab-btn"
+            :class="{ active: leftTab === 'material' }"
+            @click="leftTab = 'material'"
+          >素材</button>
+          <button
+            class="tab-btn"
+            :class="{ active: leftTab === 'layers' }"
+            @click="leftTab = 'layers'"
+          >图层</button>
+          <button
+            class="tab-btn"
+            :class="{ active: leftTab === 'templates' }"
+            @click="loadTemplateList(); leftTab = 'templates'"
+          >模板</button>
         </div>
 
-        <div class="canvas-scroll">
-          <div class="canvas-phone">
-            <!-- 封面区块 -->
-            <div class="cell-group">
-              <div class="cell image-cell" :class="{ selected: selectedId === 'coverImage' }" @click="selectElement('coverImage')">
-                <img v-if="template.data.coverImage" :src="template.data.coverImage" class="cell-img" />
-                <div v-else class="cell-placeholder">
-                  <span>📷</span>
-                  <text>上传封面图</text>
-                </div>
-                <div class="cell-label">封面图片</div>
-              </div>
-
-              <div class="cell text-cell" :class="{ selected: selectedId === 'coverTitle' }" @click="selectElement('coverTitle')">
-                <span class="cell-text" :style="getCellStyle('coverTitle')">{{ template.data.coverTitle }}</span>
-                <div class="cell-label">主标题</div>
-              </div>
-
-              <div class="cell text-cell" :class="{ selected: selectedId === 'coverSubtitle' }" @click="selectElement('coverSubtitle')">
-                <span class="cell-text small" :style="getCellStyle('coverSubtitle')">{{ template.data.coverSubtitle }}</span>
-                <div class="cell-label">副标题</div>
-              </div>
-
-              <div class="cell text-cell" :class="{ selected: selectedId === 'weddingDate' }" @click="selectElement('weddingDate')">
-                <span class="cell-text" :style="getCellStyle('weddingDate')">2050.05.20</span>
-                <div class="cell-label">婚礼日期</div>
-              </div>
+        <!-- 素材 Tab -->
+        <div v-if="leftTab === 'material'" class="panel-body">
+          <div class="section-title">文字</div>
+          <div class="material-grid">
+            <button class="material-item text-item" @click="addText({ content: '标题文字', fontSize: 32, fontWeight: 'bold' as any })">
+              <span class="mi-label">大标题</span>
+            </button>
+            <button class="material-item text-item" @click="addText({ content: '副标题文字', fontSize: 20 } as any)">
+              <span class="mi-label small">副标题</span>
+            </button>
+            <button class="material-item text-item" @click="addText({ content: '一段正文文字，可换行编辑。', fontSize: 16, textAlign: 'left' as any } as any)">
+              <span class="mi-label small">正文</span>
+            </button>
+          </div>
+          <div class="section-divider"></div>
+          <div class="section-title">背景颜色</div>
+          <div class="color-grid">
+            <button v-for="c in bgColors" :key="c" class="color-chip" :style="{ background: c }" @click="setBackground({ type: 'solid', color1: c } as any)"></button>
+          </div>
+          <div class="section-title">背景渐变</div>
+          <div class="color-grid">
+            <button v-for="(g, idx) in gradients" :key="'g' + idx" class="color-chip wide" :style="{ background: g.css }" @click="setBackground({ type: 'linear-gradient', color1: g.c1, color2: g.c2, angle: g.angle } as any)"></button>
+          </div>
+          <div class="section-title">上传背景图</div>
+          <label class="upload-btn">点击上传背景图<input type="file" accept="image/*" style="display:none" @change="onBgImageFile" /></label>
+          <div class="section-divider"></div>
+          <div class="section-title">素材库</div>
+          <div class="mat-category-scroll">
+            <div class="mat-cats">
+              <button v-for="cat in materialCategories" :key="cat" class="mat-cat-btn" :class="{ active: activeMaterialCat === cat }" @click="activeMaterialCat = cat">{{ cat }}</button>
             </div>
-
-            <!-- 分隔装饰 -->
-            <div class="cell divider-cell">
-              <div class="divider-line"></div>
-              <span class="divider-icon">囍</span>
-              <div class="divider-line"></div>
-            </div>
-
-            <!-- 内容区块 -->
-            <div class="cell-group">
-              <div class="cell image-cell" :class="{ selected: selectedId === 'photo1' }" @click="selectElement('photo1')">
-                <img v-if="template.data.photo1" :src="template.data.photo1" class="cell-img" />
-                <div v-else class="cell-placeholder"><span>📷</span><text>相册图1</text></div>
-                <div class="cell-label">相册图片1</div>
-              </div>
-
-              <div class="cell text-cell" :class="{ selected: selectedId === 'photoTitle' }" @click="selectElement('photoTitle')">
-                <span class="cell-text" :style="getCellStyle('photoTitle')">{{ template.data.photoTitle }}</span>
-                <div class="cell-label">内容标题</div>
-              </div>
-
-              <div class="cell text-cell" :class="{ selected: selectedId === 'photoSubtitle' }" @click="selectElement('photoSubtitle')">
-                <span class="cell-text small" :style="getCellStyle('photoSubtitle')">{{ template.data.photoSubtitle }}</span>
-                <div class="cell-label">内容副标题</div>
-              </div>
-
-              <div class="cell image-cell" :class="{ selected: selectedId === 'photo2' }" @click="selectElement('photo2')">
-                <img v-if="template.data.photo2" :src="template.data.photo2" class="cell-img" />
-                <div v-else class="cell-placeholder"><span>📷</span><text>相册图2</text></div>
-                <div class="cell-label">相册图片2</div>
-              </div>
-
-              <div class="cell image-cell" :class="{ selected: selectedId === 'photo3' }" @click="selectElement('photo3')">
-                <img v-if="template.data.photo3" :src="template.data.photo3" class="cell-img" />
-                <div v-else class="cell-placeholder"><span>📷</span><text>相册图3</text></div>
-                <div class="cell-label">相册图片3</div>
-              </div>
-
-              <div class="cell image-cell" :class="{ selected: selectedId === 'photo4' }" @click="selectElement('photo4')">
-                <img v-if="template.data.photo4" :src="template.data.photo4" class="cell-img" />
-                <div v-else class="cell-placeholder"><span>📷</span><text>相册图4</text></div>
-                <div class="cell-label">相册图片4</div>
-              </div>
-            </div>
-
-            <!-- 文字区块 -->
-            <div class="cell-group">
-              <div class="cell text-cell tall" :class="{ selected: selectedId === 'footerText' }" @click="selectElement('footerText')">
-                <span class="cell-text" :style="getCellStyle('footerText')">{{ template.data.footerText }}</span>
-                <div class="cell-label">正文内容</div>
-              </div>
-
-              <div class="cell text-cell" :class="{ selected: selectedId === 'footerSubText' }" @click="selectElement('footerSubText')">
-                <span class="cell-text small" :style="getCellStyle('footerSubText')">{{ template.data.footerSubText }}</span>
-                <div class="cell-label">底部标签</div>
-              </div>
-            </div>
-
-            <!-- 新人信息区（固定） -->
-            <div class="cell-group info-area">
-              <div class="info-names">
-                <span>新郎姓名</span>
-                <span class="info-and">囍</span>
-                <span>新娘姓名</span>
-              </div>
-              <div class="info-detail">婚贝大酒店 · 幸福宴会厅</div>
-              <div class="info-hint">基本信息在编辑器中填写</div>
+          </div>
+          <div class="mat-grid">
+            <div v-for="mat in filteredMaterials" :key="mat.id" class="mat-item" draggable="true" @dragstart="onMaterialDragStart($event, mat)" @click="onMaterialClick(mat)" :title="mat.name">
+              <div v-if="mat.type === 'shape'" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
+              <div v-else class="mat-emoji">{{ mat.emoji }}</div>
+              <div class="mat-name">{{ mat.name }}</div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 右侧：属性编辑面板 -->
-      <div class="property-panel">
-        <div class="panel-header">
-          <span>属性配置</span>
-          <span v-if="selectedId" class="panel-hint">已选中: {{ getElementLabel(selectedId) }}</span>
+        <!-- 图层 Tab -->
+        <div v-if="leftTab === 'layers'" class="panel-body">
+          <div v-if="layers.length === 0" class="empty-hint">画布暂无元素<br/>点击「添加文字/图片」开始</div>
+          <div v-for="el in layers" :key="el.id" class="layer-row" :class="{ active: selectedId === el.id }">
+            <span class="layer-icon" @click="selectElement(el.id)">{{ el.type === 'text' ? 'T' : el.type === 'image' ? '🖼' : '✦' }}</span>
+            <span class="layer-name" @click="selectElement(el.id)">{{ el.name }}</span>
+            <button class="layer-btn" :class="{ off: !el.visible }" @click="toggleVisibility(el.id)" :title="el.visible ? '隐藏' : '显示'">👁</button>
+            <button class="layer-btn" :class="{ off: !el.locked }" @click="toggleLock(el.id)" :title="el.locked ? '解锁' : '锁定'">🔒</button>
+            <button class="layer-btn danger" @click="deleteElement(el.id)" title="删除">🗑</button>
+          </div>
         </div>
 
-        <div class="panel-body" v-if="selectedId">
-          <!-- 文本内容编辑 -->
-          <div class="field-group" v-if="isTextElement(selectedId)">
-            <label class="field-label">文字内容</label>
+        <!-- 模板 Tab -->
+        <div v-if="leftTab === 'templates'" class="panel-body templates-body">
+          <button class="btn-new-template" @click="createNewFromCanvas">+ 新建空白模板</button>
+          <div v-if="loadingTemplates" class="empty-hint">加载中...</div>
+          <div v-else-if="!templateList.length" class="empty-hint">暂无模板<br/>先在画布制作，再发布</div>
+          <div v-for="tpl in templateList" :key="tpl.id" class="template-item" :class="{ active: currentTemplateId === tpl.id }">
+            <div class="tpl-thumb" @click="onLoadTemplate(tpl.id)">
+              <img v-if="tpl.cover" :src="tpl.cover.startsWith('http') ? tpl.cover : API_BASE + tpl.cover" class="tpl-thumb-img" />
+              <div v-else class="tpl-thumb-placeholder">📄</div>
+            </div>
+            <div class="tpl-info" @click="onLoadTemplate(tpl.id)">
+              <div class="tpl-name">{{ tpl.name }}</div>
+              <div class="tpl-cat">{{ getCategoryName(tpl.category) }}</div>
+            </div>
+            <div class="tpl-actions">
+              <button class="tpl-btn" @click="onCloneTemplate(tpl)" title="克隆">📋</button>
+              <button class="tpl-btn danger" @click="onDeleteTemplate(tpl)" title="删除">🗑</button>
+            </div>
+          </div>
+          <div class="section-divider"></div>
+          <div class="section-title">历史版本</div>
+          <div v-if="historyVersions.length === 0" class="empty-hint small">无历史记录</div>
+          <div v-for="(ver, idx) in historyVersions" :key="ver.ts" class="history-item" @click="onRestoreVersion(idx)">
+            <span class="history-label">v{{ historyVersions.length - idx }}</span>
+            <span class="history-desc">{{ ver.description }}</span>
+            <span class="history-time">{{ formatTime(ver.ts) }}</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 中间画布 -->
+      <section class="canvas-area">
+        <div class="canvas-scroll" @wheel.prevent="onWheel">
+          <div
+            class="phone-frame"
+            :style="{
+              width: (canvasSize.width * zoom) + 'px',
+              height: (canvasSize.height * zoom) + 'px',
+            }"
+          >
+            <div
+              class="phone-notch"
+              :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
+            ></div>
+            <canvas
+              ref="canvasElRef"
+              class="fabric-canvas"
+              :style="{
+                width: (canvasSize.width * zoom) + 'px',
+                height: (canvasSize.height * zoom) + 'px',
+              }"
+              @dragover="onCanvasDragOver"
+              @drop="onCanvasDrop"
+            ></canvas>
+            <div
+              class="phone-home"
+              :style="{ width: (80 * zoom) + 'px', height: (6 * zoom) + 'px' }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- 画布底部状态栏 -->
+        <div class="canvas-footer">
+          <span>画布：{{ canvasSize.width }} × {{ canvasSize.height }}</span>
+          <span v-if="selectedId">已选中：{{ selectedElement?.type === 'text' ? '文字' : '图片' }}（{{ canvasSize.width }} × {{ canvasSize.height }}）</span>
+          <span v-else>未选中元素 · 提示：点击画布元素以编辑</span>
+        </div>
+      </section>
+
+      <!-- 右侧属性面板 -->
+      <aside class="panel panel-right">
+        <div class="panel-tabs">
+          <button class="tab-btn active">属性</button>
+        </div>
+
+        <div class="panel-body">
+          <!-- 未选中：显示画布属性 -->
+          <template v-if="!selectedElement">
+            <div class="section-title">画布背景</div>
+            <div class="form-row">
+              <label>类型</label>
+              <select class="form-input" v-model="bgType">
+                <option value="solid">纯色</option>
+                <option value="linear-gradient">线性渐变</option>
+                <option value="radial-gradient">径向渐变</option>
+                <option value="image">图片</option>
+              </select>
+            </div>
+
+            <div class="form-row" v-if="bgType === 'solid' || bgType === 'linear-gradient' || bgType === 'radial-gradient'">
+              <label>主色</label>
+              <input type="color" class="form-input color" v-model="bgColor1" @change="onBgColorChange" />
+            </div>
+            <div class="form-row" v-if="bgType === 'linear-gradient' || bgType === 'radial-gradient'">
+              <label>副色</label>
+              <input type="color" class="form-input color" v-model="bgColor2" @change="onBgColorChange" />
+            </div>
+            <div class="form-row" v-if="bgType === 'linear-gradient'">
+              <label>角度 {{ bgAngle }}°</label>
+              <input type="range" class="form-input" min="0" max="180" v-model.number="bgAngle" @change="onBgColorChange" />
+            </div>
+
+            <div class="form-row" v-if="bgType === 'image'">
+              <label>上传图片</label>
+              <label class="upload-btn small">
+                点击上传背景
+                <input type="file" accept="image/*" style="display:none" @change="onBgImageFile" />
+              </label>
+            </div>
+
+            <div class="form-row" v-if="bgType === 'image'">
+              <label>填充模式</label>
+              <select class="form-input" v-model="bgScale" @change="onBgImageChange">
+                <option value="cover">Cover</option>
+                <option value="contain">Contain</option>
+                <option value="fill">Fill</option>
+              </select>
+            </div>
+
+            <div class="form-row" v-if="bgType === 'image'">
+              <label>透明度 {{ bgOpacity }}%</label>
+              <input type="range" class="form-input" min="0" max="100" v-model.number="bgOpacity" @change="onBgImageChange" />
+            </div>
+
+            <div class="section-divider"></div>
+            <div class="section-title">画布尺寸</div>
+            <div class="form-row">
+              <label>预设</label>
+              <select class="form-input" v-model="sizeLabel" @change="onPresetChange">
+                <option v-for="p in CANVAS_PRESETS" :key="p.label" :value="p.label">{{ p.label }}</option>
+              </select>
+            </div>
+            <div class="form-row two-col">
+              <div>
+                <label>宽</label>
+                <input type="number" class="form-input" :value="canvasSize.width" @change="e => onManualSize(e, 'width')" />
+              </div>
+              <div>
+                <label>高</label>
+                <input type="number" class="form-input" :value="canvasSize.height" @change="e => onManualSize(e, 'height')" />
+              </div>
+            </div>
+          </template>
+
+          <!-- 文字元素属性 -->
+          <template v-else-if="selectedElement.type === 'text'">
+            <div class="section-title">文字内容</div>
             <textarea
-              class="field-textarea"
-              :value="getTextContent(selectedId)"
-              @input="updateTextContent(selectedId, ($event.target as HTMLTextAreaElement).value)"
-              :placeholder="getPlaceholder(selectedId)"
+              class="form-textarea"
+              :value="(selectedElement as any).content"
+              @change="e => updateSelected({ content: (e.target as HTMLTextAreaElement).value })"
             ></textarea>
-          </div>
 
-          <!-- 图片上传 -->
-          <div class="field-group" v-if="isImageElement(selectedId)">
-            <label class="field-label">图片</label>
-            <div class="image-upload-area" @click="triggerImageUpload(selectedId)">
-              <img v-if="getImageUrl(selectedId)" :src="getImageUrl(selectedId)" class="upload-preview" />
-              <div v-else class="upload-placeholder">
-                <span>📷</span>
-                <text>点击上传图片</text>
+            <div class="section-title">字体与大小</div>
+            <div class="form-row">
+              <label>字体</label>
+              <select
+                class="form-input"
+                :value="(selectedElement as any).fontFamily"
+                @change="e => updateSelected({ fontFamily: (e.target as HTMLSelectElement).value })"
+              >
+                <option v-for="f in fontList" :key="f" :value="f">{{ f }}</option>
+              </select>
+            </div>
+            <div class="form-row two-col">
+              <div>
+                <label>字号</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  :value="(selectedElement as any).fontSize"
+                  min="8" max="120"
+                  @change="e => updateSelected({ fontSize: Number((e.target as HTMLInputElement).value) })"
+                />
+              </div>
+              <div>
+                <label>样式</label>
+                <select
+                  class="form-input"
+                  :value="fontStyleLabel(selectedElement as any)"
+                  @change="e => onFontStyleChange((e.target as HTMLSelectElement).value)"
+                >
+                  <option value="normal">正常</option>
+                  <option value="bold">加粗</option>
+                  <option value="italic">斜体</option>
+                  <option value="bold-italic">加粗+斜体</option>
+                </select>
               </div>
             </div>
-            <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="onFileChange" />
-            <button v-if="getImageUrl(selectedId)" class="btn-clear" @click="clearImage(selectedId)">移除图片</button>
-          </div>
 
-          <!-- 字体样式（文字元素） -->
-          <div class="field-group" v-if="isTextElement(selectedId)">
-            <label class="field-label">字体</label>
-            <select class="field-select" :value="getStyleProp(selectedId, 'font')" @change="updateStyleProp(selectedId, 'font', ($event.target as HTMLSelectElement).value)">
-              <option v-for="f in FONT_LIST" :key="f" :value="f">{{ f }}</option>
-            </select>
-          </div>
-
-          <div class="field-group" v-if="isTextElement(selectedId)">
-            <label class="field-label">字号: {{ getStyleProp(selectedId, 'fontSize') }}px</label>
-            <input
-              type="range" min="12" max="72" step="2"
-              :value="getStyleProp(selectedId, 'fontSize')"
-              @input="updateStyleProp(selectedId, 'fontSize', Number(($event.target as HTMLInputElement).value))"
-              class="field-range"
-            />
-          </div>
-
-          <div class="field-group" v-if="isTextElement(selectedId)">
-            <label class="field-label">颜色</label>
-            <div class="color-grid">
-              <div
-                v-for="c in COLOR_LIST"
-                :key="c"
-                class="color-swatch"
-                :class="{ active: getStyleProp(selectedId, 'color') === c }"
-                :style="{ background: c }"
-                @click="updateStyleProp(selectedId, 'color', c)"
-              ></div>
+            <div class="section-title">对齐与行高</div>
+            <div class="form-row">
+              <label>对齐</label>
+              <div class="btn-group">
+                <button
+                  class="btn-seg"
+                  :class="{ active: (selectedElement as any).textAlign === 'left' }"
+                  @click="updateSelected({ textAlign: 'left' })"
+                >左</button>
+                <button
+                  class="btn-seg"
+                  :class="{ active: (selectedElement as any).textAlign === 'center' }"
+                  @click="updateSelected({ textAlign: 'center' })"
+                >中</button>
+                <button
+                  class="btn-seg"
+                  :class="{ active: (selectedElement as any).textAlign === 'right' }"
+                  @click="updateSelected({ textAlign: 'right' })"
+                >右</button>
+              </div>
             </div>
-            <input type="color" class="field-color" :value="getStyleProp(selectedId, 'color')" @input="updateStyleProp(selectedId, 'color', ($event.target as HTMLInputElement).value)" />
-          </div>
-
-          <div class="field-group" v-if="isTextElement(selectedId)">
-            <label class="field-label">行高: {{ getStyleProp(selectedId, 'lineHeight') }}</label>
-            <input type="range" min="1" max="4" step="0.2" :value="getStyleProp(selectedId, 'lineHeight')" @input="updateStyleProp(selectedId, 'lineHeight', Number(($event.target as HTMLInputElement).value))" class="field-range" />
-          </div>
-
-          <div class="field-group" v-if="isTextElement(selectedId)">
-            <label class="field-label">间距: {{ getStyleProp(selectedId, 'spacing') }}px</label>
-            <input type="range" min="0" max="20" step="1" :value="getStyleProp(selectedId, 'spacing')" @input="updateStyleProp(selectedId, 'spacing', Number(($event.target as HTMLInputElement).value))" class="field-range" />
-          </div>
-        </div>
-
-        <!-- 模板基本信息（无选中时显示） -->
-        <div class="panel-body" v-else>
-          <div class="field-group">
-            <label class="field-label">模板名称 *</label>
-            <input class="field-input" v-model="template.name" placeholder="如：好久不见" />
-          </div>
-          <div class="field-group">
-            <label class="field-label">副标题</label>
-            <input class="field-input" v-model="template.subtitle" placeholder="如：双向奔赴的爱情" />
-          </div>
-          <div class="field-group">
-            <label class="field-label">分类 *</label>
-            <select class="field-select" v-model="template.category">
-              <option v-for="cat in CATEGORIES" :key="cat.id" :value="cat.id">{{ cat.icon }} {{ cat.name }}</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label class="field-label">主题色</label>
-            <div class="color-grid">
-              <div
-                v-for="c in ['#e84a6e','#f39c12','#3498db','#9b59b6','#e74c3c','#2ecc71','#00cec9','#ff6b8a','#ffa502']"
-                :key="c"
-                class="color-swatch"
-                :class="{ active: template.primaryColor === c }"
-                :style="{ background: c }"
-                @click="template.primaryColor = c"
-              ></div>
+            <div class="form-row">
+              <label>行高 {{ (selectedElement as any).lineHeight.toFixed(2) }}</label>
+              <input
+                type="range"
+                class="form-input"
+                min="1" max="3" step="0.1"
+                :value="(selectedElement as any).lineHeight"
+                @change="e => updateSelected({ lineHeight: Number((e.target as HTMLInputElement).value) })"
+              />
             </div>
-            <input type="color" class="field-color" v-model="template.primaryColor" />
-          </div>
-          <div class="field-group">
-            <label class="field-label">页数</label>
-            <input class="field-input" type="number" v-model.number="template.pageCount" min="1" />
-          </div>
-          <div class="field-group">
-            <label class="field-label">点赞数（初始）</label>
-            <input class="field-input" type="number" v-model.number="template.likes" min="0" />
-          </div>
-        </div>
+            <div class="form-row">
+              <label>字间距 {{ (selectedElement as any).letterSpacing }}px</label>
+              <input
+                type="range"
+                class="form-input"
+                min="-5" max="30" step="1"
+                :value="(selectedElement as any).letterSpacing"
+                @change="e => updateSelected({ letterSpacing: Number((e.target as HTMLInputElement).value) })"
+              />
+            </div>
 
-        <!-- 底部操作栏 -->
-        <div class="panel-footer">
-          <button class="btn-secondary" @click="resetTemplate">重置</button>
-          <button class="btn-primary" :disabled="isSaving" @click="publishTemplate">
-            {{ isSaving ? '上传中...' : '发布模板' }}
-          </button>
-        </div>
-      </div>
-    </div>
+            <div class="section-title">颜色与描边</div>
+            <div class="form-row two-col">
+              <div>
+                <label>文字色</label>
+                <input
+                  type="color"
+                  class="form-input color"
+                  :value="(selectedElement as any).color"
+                  @change="e => updateSelected({ color: (e.target as HTMLInputElement).value })"
+                />
+              </div>
+              <div>
+                <label>透明度 {{ Math.round(((selectedElement as any).opacity) * 100) }}%</label>
+                <input
+                  type="range"
+                  class="form-input"
+                  min="0" max="100"
+                  :value="Math.round(((selectedElement as any).opacity) * 100)"
+                  @change="e => updateSelected({ opacity: Number((e.target as HTMLInputElement).value) / 100 })"
+                />
+              </div>
+            </div>
+            <div class="form-row two-col">
+              <div>
+                <label>描边色</label>
+                <input
+                  type="color"
+                  class="form-input color"
+                  :value="(selectedElement as any).strokeColor || '#000000'"
+                  @change="e => updateSelected({ strokeColor: (e.target as HTMLInputElement).value })"
+                />
+              </div>
+              <div>
+                <label>描边宽度 {{ (selectedElement as any).strokeWidth }}px</label>
+                <input
+                  type="range"
+                  class="form-input"
+                  min="0" max="10" step="1"
+                  :value="(selectedElement as any).strokeWidth"
+                  @change="e => updateSelected({ strokeWidth: Number((e.target as HTMLInputElement).value) })"
+                />
+              </div>
+            </div>
 
-    <!-- ========== Toast 提示 ========== -->
-    <div v-if="toast.show" class="toast" :class="toast.type">
-      {{ toast.message }}
-    </div>
+            <div class="section-title">阴影</div>
+            <div class="form-row two-col">
+              <div>
+                <label>阴影色</label>
+                <input
+                  type="color"
+                  class="form-input color"
+                  :value="(selectedElement as any).shadowColor || '#000000'"
+                  @change="e => updateSelected({ shadowColor: (e.target as HTMLInputElement).value })"
+                />
+              </div>
+              <div>
+                <label>模糊 {{ (selectedElement as any).shadowBlur }}px</label>
+                <input
+                  type="range"
+                  class="form-input"
+                  min="0" max="30" step="1"
+                  :value="(selectedElement as any).shadowBlur"
+                  @change="e => updateSelected({ shadowBlur: Number((e.target as HTMLInputElement).value) })"
+                />
+              </div>
+            </div>
+
+            <div class="section-title">旋转</div>
+            <div class="form-row">
+              <label>角度 {{ Math.round((selectedElement as any).rotation) }}°</label>
+              <input
+                type="range"
+                class="form-input"
+                min="-180" max="180"
+                :value="Math.round((selectedElement as any).rotation)"
+                @change="e => updateSelected({ rotation: Number((e.target as HTMLInputElement).value) })"
+              />
+            </div>
+          </template>
+
+          <!-- 图片元素属性 -->
+          <template v-else-if="selectedElement.type === 'image'">
+            <div class="section-title">图片</div>
+            <div class="form-row">
+              <label>替换图片</label>
+              <label class="upload-btn small">
+                点击上传
+                <input type="file" accept="image/*" style="display:none" @change="onImageReplaceFile" />
+              </label>
+            </div>
+            <div class="form-row two-col">
+              <div>
+                <label>透明度 {{ Math.round(((selectedElement as any).opacity) * 100) }}%</label>
+                <input
+                  type="range"
+                  class="form-input"
+                  min="0" max="100"
+                  :value="Math.round(((selectedElement as any).opacity) * 100)"
+                  @change="e => updateSelected({ opacity: Number((e.target as HTMLInputElement).value) / 100 })"
+                />
+              </div>
+              <div>
+                <label>旋转 {{ Math.round((selectedElement as any).rotation) }}°</label>
+                <input
+                  type="range"
+                  class="form-input"
+                  min="-180" max="180"
+                  :value="Math.round((selectedElement as any).rotation)"
+                  @change="e => updateSelected({ rotation: Number((e.target as HTMLInputElement).value) })"
+                />
+              </div>
+            </div>
+            <div class="section-title">填充模式</div>
+            <div class="form-row">
+              <label>填充</label>
+              <select
+                class="form-input"
+                :value="(selectedElement as any).scale"
+                @change="e => updateSelected({ scale: (e.target as HTMLSelectElement).value } as any)"
+              >
+                <option value="cover">cover</option>
+                <option value="contain">contain</option>
+                <option value="fill">fill</option>
+                <option value="none">none</option>
+              </select>
+            </div>
+            <div class="section-title">剪裁形状（标记用）</div>
+            <div class="btn-group">
+              <button
+                class="btn-seg"
+                :class="{ active: (selectedElement as any).mask === 'rect' }"
+                @click="updateSelected({ mask: 'rect' } as any)"
+              >矩形</button>
+              <button
+                class="btn-seg"
+                :class="{ active: (selectedElement as any).mask === 'rounded' }"
+                @click="updateSelected({ mask: 'rounded' } as any)"
+              >圆角</button>
+              <button
+                class="btn-seg"
+                :class="{ active: (selectedElement as any).mask === 'circle' }"
+                @click="updateSelected({ mask: 'circle' } as any)"
+              >圆形</button>
+              <button
+                class="btn-seg"
+                :class="{ active: (selectedElement as any).mask === 'heart' }"
+                @click="updateSelected({ mask: 'heart' } as any)"
+              >心</button>
+            </div>
+          </template>
+
+          <!-- 未知元素 -->
+          <template v-else>
+            <div class="empty-hint">不支持的元素类型</div>
+          </template>
+        </div>
+      </aside>
+    </main>
+
+    <!-- 发布向导 -->
+    <PublishWizard
+      :visible="showPublishWizard"
+      :canvasSize="canvasSize"
+      :elementCount="elements.length"
+      :getDraft="getDraft"
+      :getCanvasEl="getCanvasEl"
+      @close="showPublishWizard = false"
+      @published="onTemplatePublished"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import type { TemplateItem, EditableElement, ElementStyle } from './types/template'
-import { DEFAULT_TEMPLATE_DATA, DEFAULT_ELEMENT_STYLE, FONT_LIST, COLOR_LIST, CATEGORIES } from './types/template'
-import { fetchTemplates, fetchTemplate, createTemplate, updateTemplate, deleteTemplate, uploadImage } from './composables/useApi'
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 8)
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useCanvas } from './composables/useCanvas'
+import {
+  uploadImage,
+  API_BASE,
+  fetchTemplates,
+  fetchTemplate,
+  deleteTemplate,
+  fetchVersion,
+} from './composables/useApi'
+import PublishWizard from './components/PublishWizard.vue'
+import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot } from './types/canvas'
+import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
+import { CATEGORIES } from './types/template'
+import { ALL_MATERIALS, getMaterialCategories, getMaterialsByCategory } from './constants/materials'
+
+// 字体列表
+const fontList = [
+  '思源宋体, serif',
+  '思源黑体, sans-serif',
+  '华文楷体, KaiTi, serif',
+  '华文行楷, serif',
+  '华文隶书, serif',
+  'Arial, sans-serif',
+  'Georgia, serif',
+]
+
+// 颜色与渐变预设
+const bgColors = [
+  '#ffffff', '#f5f5f5', '#fff3e0', '#ffe0b2', '#f8bbd0',
+  '#f8d7da', '#e1bee7', '#d1c4e9', '#c5cae9', '#b3e5fc',
+  '#b2ebf2', '#b2dfdb', '#c8e6c9', '#dcedc8', '#fff9c4',
+  '#f0f4c3', '#ffebee', '#e3f2fd', '#e8eaf6', '#fce4ec',
+]
+
+const gradients = [
+  { css: 'linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%)', c1: '#fce4ec', c2: '#f8bbd0', angle: 135 },
+  { css: 'linear-gradient(180deg, #e3f2fd 0%, #90caf9 100%)', c1: '#e3f2fd', c2: '#90caf9', angle: 180 },
+  { css: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', c1: '#e8f5e9', c2: '#c8e6c9', angle: 135 },
+  { css: 'linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%)', c1: '#fff3e0', c2: '#ffcc80', angle: 135 },
+  { css: 'linear-gradient(135deg, #f3e5f5 0%, #ce93d8 100%)', c1: '#f3e5f5', c2: '#ce93d8', angle: 135 },
+  { css: 'linear-gradient(135deg, #e0e0e0 0%, #9e9e9e 100%)', c1: '#e0e0e0', c2: '#9e9e9e', angle: 135 },
+  { css: 'linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%)', c1: '#ffffff', c2: '#f5f5f5', angle: 180 },
+  { css: 'linear-gradient(135deg, #ffecb3 0%, #ffe082 100%)', c1: '#ffecb3', c2: '#ffe082', angle: 135 },
+]
+
+// ============ DOM refs ============
+const appRootRef = ref<HTMLDivElement | null>(null)
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+// ============ 本地状态 ============
+const leftTab = ref<'material' | 'layers'>('material')
+const sizeLabel = ref('375 × 667')
+
+// 背景 UI 状态
+const bgType = ref<'solid' | 'linear-gradient' | 'radial-gradient' | 'image'>('solid')
+const bgColor1 = ref('#ffffff')
+const bgColor2 = ref('#f5f5f5')
+const bgAngle = ref(180)
+const bgScale = ref<'contain' | 'cover' | 'fill' | 'none'>('cover')
+const bgOpacity = ref(100)
+
+// ============ 画布 composable ============
+const {
+  canvasSize,
+  background,
+  selectedId,
+  selectedElement,
+  elements,
+  zoom,
+  canUndo,
+  canRedo,
+  init,
+  setSize,
+  setBackground,
+  addText: canvasAddText,
+  addImage: canvasAddImage,
+  deleteSelected,
+  deleteElement,
+  toggleVisibility,
+  toggleLock,
+  selectElement,
+  updateSelected,
+  undo,
+  redo,
+  pushHistory,
+  getDraft,
+  loadDraft,
+} = useCanvas({
+  canvasRef,
+  initialSize: { ...DEFAULT_CANVAS_SIZE },
+  onSelectionChange: (el) => {
+    // 选中元素时，同步 UI 状态到画布
+    console.log('selected:', el?.id)
+  },
+})
+
+// 图层：按 zIndex 降序显示（最上层排第一）
+const layers = computed(() => [...elements.value].sort((a, b) => b.zIndex - a.zIndex))
+
+// ============ Phase 2: 素材库 ============
+const materialCategories = getMaterialCategories()
+const activeMaterialCat = ref('全部')
+const filteredMaterials = computed(() => getMaterialsByCategory(activeMaterialCat.value))
+
+function onMaterialDragStart(e: DragEvent, mat: any) {
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('application/json', JSON.stringify(mat))
+    e.dataTransfer.effectAllowed = 'copy'
+  }
 }
 
-// ============ 状态 ============
-const templateList = ref<TemplateItem[]>([])
-const currentId = ref<string | null>(null)
-const selectedId = ref<string | null>(null)
-const isSaving = ref(false)
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const uploadingElementId = ref<string | null>(null)
-
-const toast = reactive({ show: false, message: '', type: 'success' })
-
-// 当前编辑的模板
-const template = reactive<TemplateItem>({
-  id: '',
-  name: '未命名模板',
-  subtitle: '',
-  category: 'wedding',
-  cover: '',
-  primaryColor: '#e84a6e',
-  likes: 0,
-  pageCount: 10,
-  data: { ...DEFAULT_TEMPLATE_DATA },
-  elements: [],
-})
-
-// ============ 初始化 ============
-onMounted(async () => {
-  await loadTemplateList()
-  if (templateList.value.length > 0) {
-    await loadTemplate(templateList.value[0].id)
+function onMaterialClick(mat: any) {
+  const cx = canvasSize.value.width / 2
+  const cy = canvasSize.value.height / 2
+  if (mat.type === 'shape' && mat.svg) {
+    const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
+    const reader = new FileReader()
+    reader.onload = () => {
+      canvasAddImage(reader.result as string, {
+        x: cx, y: cy, width: 100, height: 100, name: mat.name,
+      } as any)
+    }
+    reader.readAsDataURL(blob)
+  } else if (mat.type === 'sticker' && mat.emoji) {
+    canvasAddText({ content: mat.emoji, x: cx, y: cy, fontSize: 48, fontFamily: 'Arial, sans-serif', textAlign: 'center', name: mat.name })
   }
-})
+}
+
+function onRestoreVersion(idx: number) {
+  const ver = historyVersions.value[idx]
+  if (!ver) return
+  if (!confirm(`恢复到 v${historyVersions.value.length - idx}？当前未保存的更改将丢失。`)) return
+  loadDraft(ver.draft)
+}
+
+async function onCanvasDrop(e: DragEvent) {
+  e.preventDefault()
+  const json = e.dataTransfer?.getData('application/json')
+  if (!json) return
+  try {
+    const mat = JSON.parse(json)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = (e.clientX - rect.left) / zoom.value
+    const y = (e.clientY - rect.top) / zoom.value
+
+    if (mat.type === 'shape' && mat.svg) {
+      // 将 SVG 转为 data URL，再通过图片元素方式加入
+      const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
+      const reader = new FileReader()
+      reader.onload = () => {
+        canvasAddImage(reader.result as string, {
+          x, y,
+          width: 100,
+          height: 100,
+          name: mat.name,
+        } as any)
+      }
+      reader.readAsDataURL(blob)
+    } else if (mat.type === 'sticker' && mat.emoji) {
+      // emoji 贴纸：作为文字加入
+      canvasAddText({
+        content: mat.emoji,
+        x, y,
+        fontSize: 48,
+        fontFamily: 'Arial, sans-serif',
+        textAlign: 'center',
+        name: mat.name,
+      })
+    }
+  } catch (_) {}
+}
+
+function onCanvasDragOver(e: DragEvent) {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+
+// ============ Phase 3: 模板列表 ============
+const templateList = ref<any[]>([])
+const loadingTemplates = ref(false)
+const currentTemplateId = ref<string | null>(null)
+const showPublishWizard = ref(false)
+const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
+const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
+const canvasElRef = ref<HTMLCanvasElement | null>(null)
+
+function getCanvasEl(): HTMLCanvasElement | null {
+  return canvasElRef.value || null
+}
 
 async function loadTemplateList() {
+  loadingTemplates.value = true
   try {
     templateList.value = await fetchTemplates()
   } catch (e) {
-    showToast('加载模板列表失败: ' + (e as Error).message, 'error')
+    console.error('loadTemplateList error:', e)
+    templateList.value = []
+  } finally {
+    loadingTemplates.value = false
   }
 }
 
-async function loadTemplate(id: string) {
+async function onLoadTemplate(id: string) {
   try {
-    const t = await fetchTemplate(id)
-    Object.assign(template, t)
-    currentId.value = id
-    selectedId.value = null
-  } catch (e) {
-    showToast('加载模板失败', 'error')
-  }
-}
-
-function createNewTemplate() {
-  template.id = ''
-  template.name = '新模板'
-  template.subtitle = ''
-  template.category = 'wedding'
-  template.cover = ''
-  template.primaryColor = '#e84a6e'
-  template.likes = 0
-  template.pageCount = 10
-  template.data = { ...DEFAULT_TEMPLATE_DATA }
-  template.elements = []
-  currentId.value = null
-  selectedId.value = null
-  showToast('已创建空白模板，开始编辑吧！')
-}
-
-// ============ 元素选择与编辑 ============
-function selectElement(id: string) {
-  selectedId.value = selectedId.value === id ? null : id
-}
-
-function getElementLabel(id: string): string {
-  const labels: Record<string, string> = {
-    coverImage: '封面图片', coverTitle: '主标题', coverSubtitle: '副标题',
-    weddingDate: '婚礼日期', photo1: '相册1', photo2: '相册2',
-    photo3: '相册3', photo4: '相册4', photoTitle: '内容标题',
-    photoSubtitle: '内容副标题', footerText: '正文内容', footerSubText: '底部标签',
-  }
-  return labels[id] || id
-}
-
-function isTextElement(id: string): boolean {
-  const imageIds = ['coverImage', 'photo1', 'photo2', 'photo3', 'photo4']
-  return !imageIds.includes(id)
-}
-
-function isImageElement(id: string): boolean {
-  return ['coverImage', 'photo1', 'photo2', 'photo3', 'photo4'].includes(id)
-}
-
-function getTextContent(id: string): string {
-  const map: Record<string, string> = {
-    coverTitle: template.data.coverTitle,
-    coverSubtitle: template.data.coverSubtitle,
-    weddingDate: '2050.05.20',
-    photoTitle: template.data.photoTitle,
-    photoSubtitle: template.data.photoSubtitle,
-    footerText: template.data.footerText,
-    footerSubText: template.data.footerSubText,
-  }
-  return map[id] || ''
-}
-
-function updateTextContent(id: string, value: string) {
-  const map: Record<string, keyof typeof template.data> = {
-    coverTitle: 'coverTitle',
-    coverSubtitle: 'coverSubtitle',
-    photoTitle: 'photoTitle',
-    photoSubtitle: 'photoSubtitle',
-    footerText: 'footerText',
-    footerSubText: 'footerSubText',
-  }
-  const key = map[id]
-  if (key) template.data[key] = value
-}
-
-function getPlaceholder(id: string): string {
-  const map: Record<string, string> = {
-    coverTitle: '输入主标题，如：我们的婚礼',
-    coverSubtitle: '输入英文副标题，如：Our Wedding',
-    photoTitle: '输入内容标题',
-    photoSubtitle: '输入英文副标题',
-    footerText: '输入正文内容（支持换行）',
-    footerSubText: '输入底部标签文字',
-  }
-  return map[id] || ''
-}
-
-// ============ 样式 ============
-function getCellStyle(id: string): Record<string, string> {
-  const el = template.elements.find(e => e.id === id)
-  if (!el?.style) {
-    return {
-      fontSize: '26px',
-      color: '#333333',
-      fontFamily: '思源宋体',
-      lineHeight: '2',
-      letterSpacing: '2px',
+    const tpl = await fetchTemplate(id)
+    // 将 API 模板转成 CanvasDraft 格式
+    const draft = {
+      canvasSize: { width: 375, height: 667 },
+      background: { type: 'solid', color1: '#ffffff' },
+      elements: (tpl.elements || []).map((el: any, idx: number) => ({
+        id: el.id || `el_${idx}`,
+        type: el.type,
+        name: el.label || (el.type === 'text' ? '文字' : '图片'),
+        x: 187,
+        y: 200 + idx * 80,
+        width: 240,
+        height: 60,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        visible: true,
+        zIndex: idx,
+        content: el.text || '',
+        fontFamily: el.style?.font || '思源宋体, serif',
+        fontSize: el.style?.fontSize || 24,
+        fontWeight: 'normal',
+        fontStyle: 'normal',
+        color: el.style?.color || '#333333',
+        textAlign: 'center',
+        lineHeight: el.style?.lineHeight || 1.5,
+        letterSpacing: el.style?.spacing || 2,
+        strokeColor: 'transparent',
+        strokeWidth: 0,
+        shadowColor: 'transparent',
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
+        shadowBlur: 0,
+        src: el.type === 'image' ? (tpl.data as any)?.[el.dataKey] || '' : '',
+        scale: 'cover',
+        mask: 'rect',
+        borderRadius: 0,
+        borderColor: 'transparent',
+        borderWidth: 0,
+        brightness: 100,
+        contrast: 0,
+        blur: 0,
+        grayscale: 0,
+        saturate: 100,
+      })),
     }
-  }
-  return {
-    fontSize: `${el.style!.fontSize}px`,
-    color: el.style!.color,
-    fontFamily: el.style!.font,
-    lineHeight: String(el.style!.lineHeight),
-    letterSpacing: `${el.style!.spacing}px`,
+    loadDraft(draft)
+    currentTemplateId.value = id
+  } catch (e) {
+    alert('加载模板失败：' + (e as Error).message)
   }
 }
 
-function getStyleProp(id: string, prop: keyof ElementStyle): any {
-  let el = template.elements.find(e => e.id === id)
-  if (!el) {
-    el = createElement(id)
-    template.elements.push(el)
-  }
-  return el.style ? el.style[prop] : DEFAULT_ELEMENT_STYLE[prop]
+function onCloneTemplate(tpl: any) {
+  currentTemplateId.value = null
+  onLoadTemplate(tpl.id)
 }
 
-function createElement(id: string): EditableElement {
-  const imageIds = ['coverImage', 'photo1', 'photo2', 'photo3', 'photo4']
-  return {
-    id,
-    type: imageIds.includes(id) ? 'image' : 'text',
-    text: getTextContent(id) || '',
-    dataKey: id as any,
-    label: getElementLabel(id),
-    style: { ...DEFAULT_ELEMENT_STYLE },
-    placeholder: getPlaceholder(id),
+async function onDeleteTemplate(tpl: any) {
+  if (!confirm(`确定删除模板「${tpl.name}」？`)) return
+  try {
+    await deleteTemplate(tpl.id)
+    await fetchVersion()
+    templateList.value = templateList.value.filter(t => t.id !== tpl.id)
+  } catch (e) {
+    alert('删除失败：' + (e as Error).message)
   }
 }
 
-function updateStyleProp(id: string, prop: keyof ElementStyle, value: any) {
-  let el = template.elements.find(e => e.id === id)
-  if (!el) {
-    el = createElement(id)
-    template.elements.push(el)
+function getCategoryName(catId: string): string {
+  return CATEGORIES.find(c => c.id === catId)?.name || catId
+}
+
+function formatTime(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function createNewFromCanvas() {
+  currentTemplateId.value = null
+  // 清空画布
+  elements.value.forEach(el => {
+    const canvas = (window as any).__fabricCanvas
+    if (canvas) {
+      const obj = canvas.getObjects().find((o: any) => o.id === el.id)
+      if (obj) canvas.remove(obj)
+    }
+  })
+  elements.value.splice(0)
+  historyVersions.value = []
+  pushHistory('new')
+}
+
+// ============ Phase 4: 发布与导出 ============
+function onExportPNG() {
+  const canvas = getCanvasEl()
+  if (!canvas) return
+  const dataUrl = canvas.toDataURL('image/png')
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = `hunbei-template-${Date.now()}.png`
+  a.click()
+}
+
+function onTemplatePublished(id: string) {
+  showPublishWizard.value = false
+  loadTemplateList()
+  currentTemplateId.value = id
+}
+
+// ============ 本地草稿自动保存 ============
+const DRAFT_KEY = 'hunbei-draft-v1'
+const AUTO_SAVE_INTERVAL = 30_000 // 30 秒
+
+function saveDraftToLocal() {
+  try {
+    const draft = getDraft()
+    draft._savedAt = Date.now()
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch (_) {}
+}
+
+function restoreDraftFromLocal() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return false
+    const draft = JSON.parse(raw)
+    if (draft && Array.isArray(draft.elements)) {
+      loadDraft(draft)
+      return true
+    }
+  } catch (_) {}
+  return false
+}
+
+onMounted(() => {
+  // 恢复草稿
+  if (!restoreDraftFromLocal()) {
+    pushHistory('init')
   }
-  if (!el.style) el.style = { ...DEFAULT_ELEMENT_STYLE }
-  el.style[prop] = value
-  // 同步到 data（文字元素的 style 也存一份到 data.text 供预览）
+  // 定时自动保存
+  autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
+})
+
+onBeforeUnmount(() => {
+  if (autoSaveTimer.value) clearInterval(autoSaveTimer.value)
+  saveDraftToLocal()
+})
+
+// ============ 事件处理 ============
+
+// 文字添加：支持传入一些初始属性
+function addText(partial?: Partial<TextElement>) {
+  canvasAddText(partial)
+  // 自动切换到图层 Tab 便于看到新元素
+  // leftTab.value = 'layers'
 }
 
-// ============ 图片上传 ============
-function triggerImageUpload(id: string) {
-  uploadingElementId.value = id
-  fileInputRef.value?.click()
+// 文件上传
+function triggerImageUpload() {
+  fileInput.value?.click()
 }
 
-async function onFileChange(e: Event) {
+async function onImageFile(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !uploadingElementId.value) return
-
+  if (!file) return
   try {
-    showToast('图片上传中...')
-    const url = await uploadImage(file)
-    const id = uploadingElementId.value
-    const imageMap: Record<string, keyof typeof template.data> = {
-      coverImage: 'coverImage', photo1: 'photo1', photo2: 'photo2',
-      photo3: 'photo3', photo4: 'photo4',
-    }
-    const key = imageMap[id]
-    if (key) template.data[key] = url
-    showToast('图片上传成功')
-  } catch (e) {
-    showToast('上传失败: ' + (e as Error).message, 'error')
+    // 读成 DataURL：离线可用 + 预览快速
+    const dataUrl = await fileToDataURL(file)
+    await canvasAddImage(dataUrl)
+  } catch (err) {
+    alert('图片上传失败：' + (err as Error).message)
+  } finally {
+    input.value = ''
   }
-
-  input.value = ''
-  uploadingElementId.value = null
 }
 
-function getImageUrl(id: string): string {
-  const map: Record<string, keyof typeof template.data> = {
-    coverImage: 'coverImage', photo1: 'photo1', photo2: 'photo2',
-    photo3: 'photo3', photo4: 'photo4',
+async function onImageReplaceFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !selectedId.value) return
+  try {
+    const dataUrl = await fileToDataURL(file)
+    // 先通过 API：把真实图片上传到服务器（可选）
+    // 在阶段 1 中我们只把图片加到画布上，用于替换所选图片
+    // 简单做法：删除当前元素 → 添加新图片
+    const id = selectedId.value
+    deleteElement(id)
+    await canvasAddImage(dataUrl)
+  } catch (err) {
+    alert('图片上传失败：' + (err as Error).message)
+  } finally {
+    input.value = ''
   }
-  const key = map[id]
-  return key ? template.data[key] : ''
 }
 
-function clearImage(id: string) {
-  const map: Record<string, keyof typeof template.data> = {
-    coverImage: 'coverImage', photo1: 'photo1', photo2: 'photo2',
-    photo3: 'photo3', photo4: 'photo4',
+async function onBgImageFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const dataUrl = await fileToDataURL(file)
+    bgType.value = 'image'
+    setBackground({ type: 'image', imageUrl: dataUrl, imageScale: bgScale.value, imageOpacity: bgOpacity.value / 100, color1: bgColor1.value })
+  } catch (err) {
+    alert('图片上传失败：' + (err as Error).message)
+  } finally {
+    input.value = ''
   }
-  const key = map[id]
-  if (key) template.data[key] = ''
 }
 
-// ============ 发布 ============
-async function publishTemplate() {
-  if (!template.name || !template.category) {
-    showToast('请填写模板名称和分类', 'error')
+function fileToDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+// 背景设置：类型改变 / 颜色改变
+function onBgColorChange() {
+  setBackground({
+    type: bgType.value,
+    color1: bgColor1.value,
+    color2: bgColor2.value,
+    angle: bgAngle.value,
+  })
+}
+
+function onBgImageChange() {
+  if (bgType.value === 'image' && background.value.imageUrl) {
+    setBackground({
+      type: 'image',
+      imageUrl: background.value.imageUrl,
+      imageScale: bgScale.value,
+      imageOpacity: bgOpacity.value / 100,
+      color1: bgColor1.value,
+    })
+  }
+}
+
+// 画布尺寸
+function onPresetChange() {
+  const preset = CANVAS_PRESETS.find(p => p.label === sizeLabel.value)
+  if (preset) {
+    setSize({ width: preset.width, height: preset.height })
+  }
+}
+
+function onManualSize(e: Event, side: 'width' | 'height') {
+  const value = Number((e.target as HTMLInputElement).value)
+  if (!value || value < 50) return
+  const newSize: CanvasSize = {
+    width: side === 'width' ? value : canvasSize.value.width,
+    height: side === 'height' ? value : canvasSize.value.height,
+  }
+  setSize(newSize)
+}
+
+// 文字「加粗/斜体」映射
+function fontStyleLabel(el: TextElement): string {
+  const b = el.fontWeight === 'bold'
+  const i = el.fontStyle === 'italic'
+  if (b && i) return 'bold-italic'
+  if (b) return 'bold'
+  if (i) return 'italic'
+  return 'normal'
+}
+
+function onFontStyleChange(val: string) {
+  const patch: Partial<TextElement> = {}
+  if (val === 'bold') { patch.fontWeight = 'bold'; patch.fontStyle = 'normal' }
+  else if (val === 'italic') { patch.fontWeight = 'normal'; patch.fontStyle = 'italic' }
+  else if (val === 'bold-italic') { patch.fontWeight = 'bold'; patch.fontStyle = 'italic' }
+  else { patch.fontWeight = 'normal'; patch.fontStyle = 'normal' }
+  updateSelected(patch as any)
+}
+
+// ============ 键盘 ============
+function onKeyDown(e: KeyboardEvent) {
+  // 仅当焦点不在输入框里时响应快捷键
+  const target = e.target as HTMLElement
+  if (
+    target &&
+    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' ||
+      target.isContentEditable)
+  ) {
+    // 允许 Ctrl+A 之类，这里我们不拦截
     return
   }
 
-  isSaving.value = true
-  try {
-    // 构建最终要提交的模板数据
-    const payload = {
-      name: template.name,
-      subtitle: template.subtitle,
-      category: template.category,
-      cover: template.data.coverImage || template.cover,
-      primaryColor: template.primaryColor,
-      likes: template.likes,
-      pageCount: template.pageCount,
-      data: template.data,
-      elements: template.elements.map(e => ({
-        type: e.type,
-        text: e.text,
-        dataKey: e.dataKey,
-        label: e.label,
-        style: e.style,
-      })),
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault()
+    undo()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+    e.preventDefault()
+    redo()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault()
+    redo()
+    return
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedId.value) {
+      e.preventDefault()
+      deleteSelected()
     }
-
-    let result: TemplateItem
-    if (currentId.value) {
-      result = await updateTemplate(currentId.value, payload)
-      showToast('模板更新成功！')
-    } else {
-      result = await createTemplate(payload)
-      currentId.value = result.id
-      showToast('模板发布成功！')
-    }
-
-    await loadTemplateList()
-  } catch (e) {
-    showToast('发布失败: ' + (e as Error).message, 'error')
-  } finally {
-    isSaving.value = false
+    return
   }
 }
 
-function resetTemplate() {
-  if (currentId.value) {
-    loadTemplate(currentId.value)
-  } else {
-    createNewTemplate()
+// 滚轮缩放
+function onWheel(e: WheelEvent) {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.08 : 0.08
+    zoom.value = Math.max(0.3, Math.min(3, zoom.value + delta))
   }
 }
 
-// ============ Toast ============
-function showToast(message: string, type: 'success' | 'error' = 'success') {
-  toast.message = message
-  toast.type = type
-  toast.show = true
-  setTimeout(() => { toast.show = false }, 2500)
-}
+// ============ 聚焦根元素以接收键盘事件 ============
+onMounted(() => {
+  // 1. 聚焦以便接收键盘事件
+  setTimeout(() => appRootRef.value?.focus(), 50)
+  // 2. 恢复草稿
+  if (!restoreDraftFromLocal()) {
+    pushHistory('init')
+  }
+  // 3. 启动定时自动保存
+  autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
+  // 4. 加载模板列表
+  loadTemplateList()
+})
 </script>
 
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
+<style scoped>
+* { box-sizing: border-box; }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f0f2f5;
-  color: #333;
-  min-height: 100vh;
-}
-
+/* ====== 根布局 ====== */
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 100vw;
   overflow: hidden;
+  background: #eef1f6;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  color: #333;
+  outline: none;
 }
 
-/* ========== 顶部栏 ========== */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  height: 60px;
-  background: #1a1a2e;
+/* ====== 顶部工具栏 ====== */
+.toolbar {
+  height: 52px;
+  background: #2b2f38;
   color: #fff;
-  flex-shrink: 0;
-  gap: 24px;
-}
-
-.topbar-left {
   display: flex;
   align-items: center;
-  gap: 24px;
-  flex: 1;
-  overflow: hidden;
+  padding: 0 16px;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  flex-shrink: 0;
+}
+
+.toolbar-left, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-right {
+  margin-left: auto;
 }
 
 .logo {
-  font-size: 18px;
-  font-weight: 700;
-  white-space: nowrap;
-  color: #e84a6e;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffd54f;
+  margin-right: 8px;
 }
 
-.template-tabs {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  flex: 1;
+.toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 4px;
 }
 
-.template-tabs::-webkit-scrollbar { display: none; }
-
-.tab-btn {
+.tb-btn {
   padding: 6px 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.2);
-  background: transparent;
-  color: rgba(255,255,255,0.7);
+  background: #3b4049;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
+  transition: background 0.15s;
 }
 
-.tab-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-.tab-btn.active { background: #e84a6e; border-color: #e84a6e; color: #fff; }
+.tb-btn:hover:not(:disabled) { background: #4a5160; }
+.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tb-btn.primary { background: #1976d2; border-color: #1565c0; }
+.tb-btn.primary:hover:not(:disabled) { background: #1565c0; }
+.tb-btn.danger { background: #c62828; border-color: #b71c1c; }
+.tb-btn.danger:hover:not(:disabled) { background: #b71c1c; }
+.tb-btn.sm { padding: 6px 10px; font-size: 12px; min-width: 60px; }
 
-.topbar-right { flex-shrink: 0; }
-
-/* ========== 按钮 ========== */
-.btn-primary {
-  padding: 8px 20px;
-  background: linear-gradient(135deg, #e84a6e, #ff6b8a);
+.tb-select {
+  padding: 6px 10px;
+  background: #3b4049;
   color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-primary:hover:not(:disabled) { opacity: 0.9; }
-
-.btn-secondary {
-  padding: 8px 16px;
-  background: #fff;
-  color: #333;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.btn-secondary:hover { background: #f5f5f5; }
-
-.btn-clear {
-  padding: 4px 12px;
-  background: #ff4757;
-  color: #fff;
-  border: none;
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
-  margin-top: 8px;
 }
 
-/* ========== 工作区 ========== */
+.zoom-label { font-size: 12px; color: #bbb; }
+
+/* ====== 主工作区 ====== */
 .workspace {
-  display: flex;
   flex: 1;
+  display: flex;
   min-height: 0;
   overflow: hidden;
 }
 
-/* ========== 画布面板 ========== */
-.canvas-panel {
-  flex: 1;
+.panel {
+  background: #fff;
   display: flex;
   flex-direction: column;
-  background: #e8eef5;
-  overflow: hidden;
-}
-
-.canvas-header {
-  padding: 12px 20px;
-  background: #fff;
-  border-bottom: 1px solid #eee;
-  font-size: 14px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 16px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.05);
   flex-shrink: 0;
 }
 
-.canvas-hint { font-weight: 400; color: #999; font-size: 12px; }
+.panel-left { width: 260px; border-right: 1px solid #e5e7eb; }
+.panel-right { width: 320px; border-left: 1px solid #e5e7eb; }
 
-.canvas-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
+.panel-tabs {
   display: flex;
-  justify-content: center;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
 }
 
-.canvas-phone {
-  width: 320px;
-  background: #fff;
-  border-radius: 32px;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-}
-
-/* ========== 格子 ========== */
-.cell-group { padding: 0; }
-
-.cell {
-  position: relative;
-  border: 2px dashed transparent;
+.tab-btn {
+  flex: 1;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  color: #666;
   cursor: pointer;
-  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
 }
 
-.cell:hover { border-color: #e84a6e; }
-
-.cell.selected {
-  border-color: #e84a6e !important;
-  box-shadow: inset 0 0 0 2px rgba(232,74,110,0.2);
-}
-
-.cell-label {
-  position: absolute;
-  bottom: 4px;
-  right: 8px;
-  font-size: 10px;
-  color: rgba(255,255,255,0.8);
-  background: rgba(0,0,0,0.4);
-  padding: 2px 6px;
-  border-radius: 4px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.cell:hover .cell-label,
-.cell.selected .cell-label { opacity: 1; }
-
-/* 图片格子 */
-.image-cell { min-height: 200px; overflow: hidden; }
-
-.cell-img {
-  width: 100%;
-  height: 100%;
-  min-height: 200px;
-  object-fit: cover;
-  display: block;
-}
-
-.cell-placeholder {
-  min-height: 200px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: #f5f5f5;
-  color: #aaa;
-}
-
-.cell-placeholder span { font-size: 40px; }
-.cell-placeholder text { font-size: 12px; }
-
-/* 文字格子 */
-.text-cell {
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  background: #fff;
-  min-height: 60px;
-}
-
-.text-cell.tall { min-height: 120px; }
-
-.cell-text {
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
-.cell-text.small { font-size: 14px; opacity: 0.8; }
-
-/* 分隔装饰 */
-.divider-cell {
-  display: flex;
-  align-items: center;
-  padding: 16px 20px;
-  background: #fff;
-  gap: 12px;
-}
-
-.divider-line { flex: 1; height: 1px; background: #e84a6e; opacity: 0.4; }
-.divider-icon { font-size: 24px; color: #e84a6e; }
-
-/* 基本信息区 */
-.info-area {
-  background: #fff8fa;
-  padding: 24px 20px;
-  text-align: center;
-  border-top: 1px solid #f0e0e5;
-}
-
-.info-names { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-.info-and { font-size: 24px; color: #e84a6e; }
-.info-detail { font-size: 13px; color: #999; margin-bottom: 4px; }
-.info-hint { font-size: 11px; color: #ccc; }
-
-/* ========== 属性面板 ========== */
-.property-panel {
-  width: 340px;
-  flex-shrink: 0;
-  background: #fff;
-  border-left: 1px solid #eee;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid #eee;
-  font-weight: 600;
-  font-size: 15px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.panel-hint { font-size: 12px; color: #e84a6e; font-weight: 400; }
+.tab-btn:hover { background: #f9fafb; color: #333; }
+.tab-btn.active { color: #1976d2; border-bottom-color: #1976d2; font-weight: 600; }
 
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px;
+  padding: 16px;
 }
 
-.field-group { margin-bottom: 16px; }
-
-.field-label {
-  display: block;
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 6px;
-  font-weight: 500;
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  margin-top: 12px;
 }
 
-.field-input, .field-select {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
+.section-title:first-child { margin-top: 0; }
+
+.section-divider {
+  height: 1px;
+  background: #eee;
+  margin: 16px -16px;
+}
+
+/* 素材 */
+.material-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.material-item {
+  padding: 14px 8px;
+  background: #f5f7fa;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 14px;
-  background: #fafafa;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
 }
 
-.field-input:focus, .field-select:focus {
-  outline: none;
-  border-color: #e84a6e;
+.material-item:hover {
+  background: #e3f2fd;
+  border-color: #90caf9;
 }
 
-.field-textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
-  resize: vertical;
-  min-height: 80px;
-  background: #fafafa;
-  font-family: inherit;
-}
+.text-item { display: flex; align-items: center; justify-content: center; }
+.mi-label { font-size: 14px; font-weight: 600; color: #333; }
+.mi-label.small { font-size: 12px; color: #666; }
 
-.field-textarea:focus { outline: none; border-color: #e84a6e; }
-
-.field-range { width: 100%; cursor: pointer; accent-color: #e84a6e; }
-.field-color { width: 100%; height: 36px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; margin-top: 4px; }
-
-/* 颜色格子 */
 .color-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   margin-bottom: 8px;
 }
 
-.color-swatch {
-  width: 28px;
-  height: 28px;
+.color-chip {
+  aspect-ratio: 1;
+  border: 1px solid #e0e0e0;
   border-radius: 6px;
   cursor: pointer;
-  border: 2px solid transparent;
-  transition: transform 0.15s;
+  transition: transform 0.1s;
 }
 
-.color-swatch:hover { transform: scale(1.15); }
-.color-swatch.active { border-color: #333; transform: scale(1.15); }
+.color-chip:hover { transform: scale(1.1); border-color: #90caf9; }
+.color-chip.wide { grid-column: span 3; aspect-ratio: 2.5 / 1; }
 
-/* 图片上传区 */
-.image-upload-area {
-  border: 2px dashed #ddd;
-  border-radius: 12px;
-  overflow: hidden;
+.upload-btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: #f5f7fa;
+  border: 2px dashed #c0c4cc;
+  border-radius: 8px;
+  color: #666;
+  font-size: 12px;
   cursor: pointer;
-  min-height: 120px;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.upload-btn:hover { background: #e3f2fd; border-color: #90caf9; color: #1976d2; }
+.upload-btn.small { padding: 8px; font-size: 12px; }
+
+.empty-hint {
+  padding: 40px 16px;
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+/* 图层 */
+.layer-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border: 1px solid transparent;
+}
+
+.layer-row:hover { background: #f5f7fa; }
+.layer-row.active { background: #e3f2fd; border-color: #90caf9; }
+
+.layer-icon {
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.2s;
+  background: #eee;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
 }
 
-.image-upload-area:hover { border-color: #e84a6e; }
+.layer-name {
+  flex: 1;
+  font-size: 13px;
+  color: #333;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
-.upload-preview { width: 100%; height: 120px; object-fit: cover; display: block; }
-.upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #aaa; font-size: 12px; }
-.upload-placeholder span { font-size: 32px; }
+.layer-btn {
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.1s;
+}
 
-/* 底部操作栏 */
-.panel-footer {
-  padding: 16px 20px;
-  border-top: 1px solid #eee;
+.layer-btn:hover { opacity: 1; }
+.layer-btn.off { opacity: 0.25; }
+.layer-btn.danger:hover { color: #c62828; }
+
+/* ====== 画布 ====== */
+.canvas-area {
+  flex: 1;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  background: #eef1f6;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.canvas-scroll {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  /* 棋盘格背景，便于看到透明元素 */
+  background-image:
+    linear-gradient(45deg, #e0e4ea 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e4ea 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e4ea 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e4ea 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, 10px 0;
+  background-color: #eef1f6;
+}
+
+.phone-frame {
+  position: relative;
+  background: #000;
+  border-radius: 40px;
+  padding: 24px 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  transition: width 0.2s, height 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.phone-notch {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000;
+  border-radius: 0 0 8px 8px;
+  z-index: 10;
+}
+
+.phone-home {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  border-radius: 3px;
+  z-index: 10;
+}
+
+.fabric-canvas {
+  background: #fff;
+  display: block;
+  /* 由外层容器设置实际尺寸 */
+}
+
+.canvas-footer {
+  padding: 10px 16px;
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
   flex-shrink: 0;
 }
 
-.panel-footer .btn-primary { flex: 1; padding: 10px; text-align: center; }
-.panel-footer .btn-secondary { flex: 1; }
-
-/* ========== Toast ========== */
-.toast {
-  position: fixed;
-  top: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 24px;
-  border-radius: 24px;
-  font-size: 14px;
-  color: #fff;
-  z-index: 9999;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+/* ====== 表单 ====== */
+.form-row {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.toast.success { background: #2ecc71; }
-.toast.error { background: #e74c3c; }
+.form-row.two-col {
+  flex-direction: row;
+  gap: 8px;
+}
+
+.form-row.two-col > div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+label {
+  font-size: 11px;
+  color: #666;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e0e4ea;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  transition: border-color 0.15s;
+}
+
+.form-input:focus { outline: none; border-color: #1976d2; }
+
+.form-input.color {
+  height: 36px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.form-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 8px 10px;
+  border: 1px solid #e0e4ea;
+  border-radius: 6px;
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-textarea:focus { outline: none; border-color: #1976d2; }
+
+.btn-group {
+  display: flex;
+  gap: 4px;
+  background: #f5f7fa;
+  padding: 3px;
+  border-radius: 6px;
+}
+
+.btn-seg {
+  flex: 1;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-seg:hover { color: #1976d2; }
+.btn-seg.active { background: #fff; color: #1976d2; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600; }
+
+/* 滚动条样式（webkit） */
+.panel-body::-webkit-scrollbar,
+.canvas-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+
+.panel-body::-webkit-scrollbar-track,
+.canvas-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.panel-body::-webkit-scrollbar-thumb,
+.canvas-scroll::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 3px; }
+
+.panel-body::-webkit-scrollbar-thumb:hover,
+.canvas-scroll::-webkit-scrollbar-thumb:hover { background: #9098a8; }
+
+/* ====== Phase 2: 素材库 ====== */
+.mat-category-scroll {
+  margin-bottom: 12px;
+  overflow-x: auto;
+  max-height: 44px;
+}
+
+.mat-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.mat-cat-btn {
+  padding: 4px 10px;
+  background: #f0f2f5;
+  border: 1px solid #e0e4ea;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #666;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.mat-cat-btn:hover { background: #e3f2fd; border-color: #90caf9; color: #1976d2; }
+.mat-cat-btn.active { background: #e3f2fd; border-color: #1976d2; color: #1976d2; font-weight: 600; }
+
+.mat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.mat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: #f8f9fb;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.mat-item:hover { background: #e3f2fd; border-color: #90caf9; transform: scale(1.05); }
+
+.mat-shape {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mat-shape :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+
+.mat-emoji { font-size: 28px; line-height: 1; }
+.mat-name { font-size: 9px; color: #888; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 100%; }
+
+/* ====== Phase 3: 模板 Tab ====== */
+.templates-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 12px 0;
+}
+
+.btn-new-template {
+  margin: 0 12px 12px;
+  padding: 10px;
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  border: 1.5px dashed #90caf9;
+  border-radius: 8px;
+  color: #1565c0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-new-template:hover { background: #e3f2fd; border-color: #1976d2; }
+
+.template-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.template-item:hover { background: #f5f7fa; }
+.template-item.active { background: #e3f2fd; }
+
+.tpl-thumb {
+  width: 44px;
+  height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.tpl-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+.tpl-thumb-placeholder { font-size: 24px; }
+
+.tpl-info { flex: 1; min-width: 0; cursor: pointer; }
+.tpl-name { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tpl-cat { font-size: 11px; color: #999; margin-top: 2px; }
+
+.tpl-actions { display: flex; gap: 2px; }
+
+.tpl-btn {
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.tpl-btn:hover { background: #e8e8e8; }
+.tpl-btn.danger:hover { background: #ffebee; }
+
+/* 历史版本 */
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.1s;
+}
+
+.history-item:hover { background: #fff8e1; }
+
+.history-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1976d2;
+  background: #e3f2fd;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.history-desc { flex: 1; font-size: 12px; color: #555; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.history-time { font-size: 10px; color: #aaa; flex-shrink: 0; }
+
+/* ====== Phase 4: 工具栏发布按钮 ====== */
+.tb-btn.publish-btn {
+  background: linear-gradient(135deg, #e84a6e, #ff6b8a);
+  border-color: #e84a6e;
+  font-weight: 700;
+  padding: 6px 16px;
+}
+
+.tb-btn.publish-btn:hover { background: linear-gradient(135deg, #c0392b, #e84a6e); }
+
+/* 空提示小号 */
+.empty-hint.small {
+  padding: 16px;
+  font-size: 11px;
+  color: #bbb;
+}
 </style>
