@@ -26,26 +26,26 @@ export const CATEGORY_LIST: TemplateCategory[] = [
   },
   {
     id: 'baby',
-    name: '宝宝满月',
+    name: '周岁宴',
     icon: '👶',
     templates: TEMPLATE_LIST.filter(t => t.category === 'baby'),
   },
   {
     id: 'graduation',
-    name: '毕业典礼',
-    icon: '🎓',
+    name: '升学宴',
+    icon: '🎉',
     templates: TEMPLATE_LIST.filter(t => t.category === 'graduation'),
   },
   {
     id: 'festival',
-    name: '节日祝福',
-    icon: '🎊',
+    name: '割礼',
+    icon: '🎁',
     templates: TEMPLATE_LIST.filter(t => t.category === 'festival'),
   },
   {
     id: 'business',
-    name: '商务会议',
-    icon: '🏢',
+    name: '耳环礼',
+    icon: '💎',
     templates: TEMPLATE_LIST.filter(t => t.category === 'business'),
   },
 ]

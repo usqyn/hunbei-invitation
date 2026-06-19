@@ -3,10 +3,9 @@ import { ref, reactive } from 'vue'
 import { useTemplateStore } from './template'
 import { DEFAULT_ELEMENT_STYLE, getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import type { EditableElement, ElementStyle, TemplateData, TemplateItem } from '@/types'
+import { API_BASE } from '@/config'
 
 // ============ API 配置 ============
-// 模板 API 地址（开发环境用 localhost，生产环境改为实际域名）
-const API_BASE = 'http://localhost:3001'
 const API_TIMEOUT = 8000
 
 const STORAGE_KEY_STYLES = 'hunbei_editor_styles'
@@ -115,6 +114,7 @@ export const useEditorStore = defineStore('editor', () => {
         zIndex: el.zIndex,
         rotation: el.rotation,
         opacity: el.opacity,
+        editable: el.editable,
       })
     })
 

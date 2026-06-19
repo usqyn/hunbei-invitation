@@ -37,6 +37,7 @@ export interface BaseElement {
   locked: boolean
   visible: boolean
   zIndex: number
+  editable: boolean
 }
 
 // 文字元素

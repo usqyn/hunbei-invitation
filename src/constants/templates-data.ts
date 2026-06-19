@@ -200,10 +200,10 @@ const BABY_2_ELEMENTS: EditableElement[] = [
   { type: 'text', text: BABY_2_DATA.footerText, dataKey: 'footerText', label: '正文内容', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 26, color: '#666666' } },
 ]
 
-// ============ 【模板 8】毕业 - 毕业典礼 ============
+// ============ 【模板 8】毕业 - 升学宴 ============
 const GRADUATION_1_DATA: TemplateData = {
   coverImage: '/static/images/templates/moments-1.svg',
-  coverTitle: '毕业典礼',
+  coverTitle: '升学宴',
   coverSubtitle: 'GRADUATION',
   photo1: '/static/images/templates/moments-2.svg',
   photo2: '/static/images/templates/template-1.svg',
@@ -218,7 +218,7 @@ const GRADUATION_1_DATA: TemplateData = {
 const GRADUATION_1_ELEMENTS: EditableElement[] = [
   { type: 'image', text: '/static/images/templates/moments-1.svg', dataKey: 'coverImage', label: '封面图片' },
   { type: 'text', text: '2050.07.01', label: '毕业日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
-  { type: 'text', text: '毕业典礼', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
+  { type: 'text', text: '升学宴', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
   { type: 'text', text: 'GRADUATION', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
   { type: 'text', text: '🎓', label: '学士帽图标', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56 } },
   { type: 'image', text: '/static/images/templates/moments-2.svg', dataKey: 'photo1', label: '毕业图片' },
@@ -375,6 +375,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: WEDDING_1_DATA,
     elements: WEDDING_1_ELEMENTS,
     primaryColor: '#e84a6e',
+    tags: ['网红爆款', '婚礼请帖'],
   },
   {
     id: 'wedding-2',
@@ -387,6 +388,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: WEDDING_2_DATA,
     elements: WEDDING_2_ELEMENTS,
     primaryColor: '#ff6b8a',
+    tags: ['网红爆款', '婚礼请帖'],
   },
   {
     id: 'wedding-3',
@@ -399,6 +401,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: WEDDING_3_DATA,
     elements: WEDDING_3_ELEMENTS,
     primaryColor: '#c0392b',
+    tags: ['网红爆款', '婚礼请帖'],
   },
   {
     id: 'birthday-1',
@@ -411,6 +414,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: BIRTHDAY_1_DATA,
     elements: BIRTHDAY_1_ELEMENTS,
     primaryColor: '#f39c12',
+    tags: ['网红爆款', '生日邀请'],
   },
   {
     id: 'birthday-2',
@@ -423,6 +427,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: BIRTHDAY_2_DATA,
     elements: BIRTHDAY_2_ELEMENTS,
     primaryColor: '#ff9f43',
+    tags: ['网红爆款', '生日邀请'],
   },
   {
     id: 'baby-1',
@@ -435,6 +440,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: BABY_1_DATA,
     elements: BABY_1_ELEMENTS,
     primaryColor: '#3498db',
+    tags: ['网红爆款'],
   },
   {
     id: 'baby-2',
@@ -447,10 +453,11 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: BABY_2_DATA,
     elements: BABY_2_ELEMENTS,
     primaryColor: '#6c5ce7',
+    tags: ['网红爆款'],
   },
   {
     id: 'graduation-1',
-    name: '毕业典礼',
+    name: '升学宴',
     subtitle: '青春不散场',
     category: 'graduation',
     cover: '/static/images/templates/moments-1.svg',
@@ -459,6 +466,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: GRADUATION_1_DATA,
     elements: GRADUATION_1_ELEMENTS,
     primaryColor: '#9b59b6',
+    tags: ['限时免费'],
   },
   {
     id: 'graduation-2',
@@ -471,6 +479,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: GRADUATION_2_DATA,
     elements: GRADUATION_2_ELEMENTS,
     primaryColor: '#74b9ff',
+    tags: ['限时免费'],
   },
   {
     id: 'festival-1',
@@ -483,6 +492,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: FESTIVAL_1_DATA,
     elements: FESTIVAL_1_ELEMENTS,
     primaryColor: '#e74c3c',
+    tags: ['限时免费'],
   },
   {
     id: 'festival-2',
@@ -495,6 +505,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: FESTIVAL_2_DATA,
     elements: FESTIVAL_2_ELEMENTS,
     primaryColor: '#ffa502',
+    tags: ['限时免费'],
   },
   {
     id: 'business-1',
@@ -507,6 +518,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: BUSINESS_1_DATA,
     elements: BUSINESS_1_ELEMENTS,
     primaryColor: '#2ecc71',
+    tags: ['限时免费'],
   },
   {
     id: 'business-2',
@@ -519,6 +531,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: BUSINESS_2_DATA,
     elements: BUSINESS_2_ELEMENTS,
     primaryColor: '#00cec9',
+    tags: ['限时免费'],
   },
 ]
 

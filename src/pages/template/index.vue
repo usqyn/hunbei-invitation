@@ -93,18 +93,19 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { TemplateItem, TemplateCategory } from '@/types'
+import { TEMPLATE_LIST } from '@/constants/templates-data'
+import { API_BASE } from '@/config'
 
 // ============ API 配置（与 editor.ts 保持一致） ============
-const API_BASE = 'http://localhost:3001'
 
 // 分类列表（静态配置，可根据 API 动态拉取）
 const STATIC_CATEGORIES = [
   { id: 'wedding', name: '婚礼请柬', icon: '💒' },
   { id: 'birthday', name: '生日派对', icon: '🎂' },
-  { id: 'baby', name: '宝宝满月', icon: '👶' },
-  { id: 'graduation', name: '毕业典礼', icon: '🎓' },
-  { id: 'festival', name: '节日祝福', icon: '🎊' },
-  { id: 'business', name: '商务会议', icon: '🏢' },
+  { id: 'baby', name: '周岁宴', icon: '🎉' },
+  { id: 'graduation', name: '升学宴', icon: '🎉' },
+  { id: 'festival', name: '割礼', icon: '🎁' },
+  { id: 'business', name: '耳环礼', icon: '💎' },
 ]
 
 // ============ 状态 ============
@@ -137,7 +138,7 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
 })
 
 // ============ 生命周期 ============
-onMounted(() => {
+onMounted(async () => {
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
@@ -149,8 +150,8 @@ onMounted(() => {
     searchKeyword.value = decodeURIComponent(options.search)
   }
 
-  loadCategories()
-  loadTemplates()
+  await loadCategories()
+  await loadTemplates()
 })
 
 // ============ API 请求 ============
@@ -182,6 +183,7 @@ async function loadCategories() {
           id: cat.id,
           name: staticCat?.name || cat.name,
           icon: staticCat?.icon || '📄',
+          count: cat.count ?? 0,
           templates: allTemplates.value.filter(t => t.category === cat.id),
         }
       })
@@ -192,6 +194,7 @@ async function loadCategories() {
       id: cat.id,
       name: cat.name,
       icon: cat.icon,
+      count: 0,
       templates: [],
     }))
   }
@@ -205,18 +208,24 @@ async function loadTemplates() {
     const res: any = await request('/api/templates')
     if (res.success) {
       allTemplates.value = res.data || []
-      // 更新分类的模板列表
-      categoryList.value = categoryList.value.map(cat => ({
-        ...cat,
-        templates: allTemplates.value.filter(t => t.category === cat.id),
-      }))
     }
   } catch (e) {
     console.error('加载模板列表失败:', e)
     loadError.value = true
-  } finally {
-    loading.value = false
   }
+
+  // 对没有模板的分类，用本地模板数据填充
+  categoryList.value = categoryList.value.map(cat => {
+    let templates = allTemplates.value.filter(t => t.category === cat.id)
+    if (templates.length === 0) {
+      const localTemplates = TEMPLATE_LIST.filter(t => t.category === cat.id)
+      templates = localTemplates
+      allTemplates.value.push(...localTemplates)
+    }
+    return { ...cat, templates }
+  })
+
+  loading.value = false
 }
 
 // ============ 方法 ============

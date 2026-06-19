@@ -117,14 +117,17 @@ const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
 const featuredCards = HOME_FEATURED_CARDS
 
-// 全部分类 - 整合模板系统中的分类数据(用于展示每个分类下的模板数量)
+// 全部分类 - 根据选中的 tab 标签筛选
 const allCategories = computed(() => {
-  return CATEGORY_LIST.map(cat => ({
-    id: cat.id,
-    name: cat.name,
-    icon: cat.icon,
-    templates: cat.templates,
-  }))
+  const tag = activeTab.value
+  return CATEGORY_LIST
+    .filter(cat => cat.templates.some(t => t.tags?.includes(tag)))
+    .map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      icon: cat.icon,
+      templates: cat.templates.filter(t => t.tags?.includes(tag)),
+    }))
 })
 
 // 搜索功能

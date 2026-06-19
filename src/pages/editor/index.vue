@@ -199,6 +199,10 @@ const canvasCardStyle = computed(() => ({
 // 画布模式下获取元素的绝对定位样式
 function getCanvasElementStyle(el: EditableElement) {
   if (el.x == null) return {}
+  const imgStyle: Record<string, string> = {}
+  if (el.type === 'image' && el.style?.borderRadius) {
+    imgStyle.borderRadius = el.style.borderRadius + 'rpx'
+  }
   return {
     position: 'absolute',
     left: `${(el.x / canvasWidth.value) * 100}%`,
@@ -208,6 +212,7 @@ function getCanvasElementStyle(el: EditableElement) {
     zIndex: el.zIndex ?? 0,
     opacity: el.opacity ?? 1,
     transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+    ...imgStyle,
   }
 }
 
@@ -231,12 +236,18 @@ function getTextStyle(idx: number) {
     lineHeight: String(style.lineHeight),
     letterSpacing: style.spacing + 'rpx',
     fontFamily: style.font,
+    fontWeight: style.fontWeight || 'normal',
+    textAlign: style.textAlign || 'center',
   }
 }
 
 // 打开编辑器
 function onOpenEditor(idx: number) {
   const el = editorStore.editableElements[idx]
+  if (el.editable === false) {
+    uni.showToast({ title: '该元素不可编辑', icon: 'none' })
+    return
+  }
   editorStore.selectedElement = idx
 
   if (el.type === 'image') {

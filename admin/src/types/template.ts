@@ -20,6 +20,11 @@ export interface ElementStyle {
   fontSize: number
   spacing: number
   lineHeight: number
+  fontWeight?: 'normal' | 'bold'
+  textAlign?: 'left' | 'center' | 'right'
+  borderRadius?: number
+  borderColor?: string
+  borderWidth?: number
 }
 
 // 可编辑元素
@@ -31,6 +36,14 @@ export interface EditableElement {
   label: string
   style?: ElementStyle
   placeholder?: string
+  x: number
+  y: number
+  width: number
+  height: number
+  zIndex: number
+  rotation: number
+  opacity: number
+  editable: boolean
 }
 
 // 完整模板
@@ -45,6 +58,15 @@ export interface TemplateItem {
   pageCount: number
   data: TemplateData
   elements: EditableElement[]
+  canvasSize?: { width: number; height: number }
+  background?: {
+    type: string
+    color1: string
+    color2?: string
+    angle?: number
+    imageUrl?: string
+  }
+  tags?: string[]
   createdAt?: string
   updatedAt?: string
 }
@@ -107,8 +129,8 @@ export const COLOR_LIST = [
 export const CATEGORIES = [
   { id: 'wedding', name: '婚礼请柬', icon: '💒' },
   { id: 'birthday', name: '生日派对', icon: '🎂' },
-  { id: 'baby', name: '宝宝满月', icon: '👶' },
-  { id: 'graduation', name: '毕业典礼', icon: '🎓' },
-  { id: 'festival', name: '节日祝福', icon: '🎊' },
-  { id: 'business', name: '商务会议', icon: '🏢' },
+  { id: 'baby', name: '周岁宴', icon: '🎉' },
+  { id: 'graduation', name: '升学宴', icon: '🎉' },
+  { id: 'festival', name: '割礼', icon: '🎁' },
+  { id: 'business', name: '耳环礼', icon: '💎' },
 ]

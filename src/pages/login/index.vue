@@ -30,15 +30,25 @@
       </view>
 
       <button
+        v-if="isMpWeixin"
         class="login-btn"
         :class="{ disabled: !agreed, loading: logging }"
         :disabled="!agreed || logging"
         open-type="getPhoneNumber"
         @getphonenumber="onGetPhoneNumber"
-        @click="handleH5Login"
       >
         <text v-if="logging">登录中...</text>
         <text v-else>微信一键登录</text>
+      </button>
+      <button
+        v-else
+        class="login-btn"
+        :class="{ disabled: !agreed, loading: logging }"
+        :disabled="!agreed || logging"
+        @click="handleH5Login"
+      >
+        <text v-if="logging">登录中...</text>
+        <text v-else>一键登录</text>
       </button>
 
       <view class="divider">
@@ -90,6 +100,12 @@ const phone = ref('')
 const smsCode = ref('')
 const countdown = ref(0)
 let timer: number | null = null
+const isMpWeixin = ref(false)
+
+try {
+  const info = uni.getSystemInfoSync()
+  isMpWeixin.value = info.uniPlatform === 'mp-weixin'
+} catch (_) {}
 
 const toggleAgreement = () => {
   agreed.value = !agreed.value
@@ -139,16 +155,14 @@ const onGetPhoneNumber = (e: any) => {
   })
 }
 
-const handleH5Login = (e: any) => {
+const handleH5Login = () => {
   if (!agreed.value || logging.value) return
-  if (e?.detail?.errMsg === undefined) {
-    logging.value = true
-    uni.showLoading({ title: '登录中...' })
-    setTimeout(async () => {
-      await userStore.doLogin({ phone: 'h5_user' })
-      loginSuccess()
-    }, 800)
-  }
+  logging.value = true
+  uni.showLoading({ title: '登录中...' })
+  setTimeout(async () => {
+    await userStore.doLogin({ phone: 'h5_user' })
+    loginSuccess()
+  }, 800)
 }
 
 const sendCode = () => {

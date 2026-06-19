@@ -234,6 +234,7 @@ const STEPS = [
 ]
 
 const TAG_LIST = [
+  '网红爆款', '婚礼请帖', '生日邀请', '限时免费',
   '中国风', '简约', '复古', '浪漫', '活泼', '典雅', '大气', '温馨', '西式', '韩式',
 ]
 
@@ -393,10 +394,12 @@ async function doPublish() {
     uploadProgressText.value = '上传模板数据...'
 
     // 构建 payload
+    const cSize = draft?.canvasSize || { width: 375, height: 667 }
     const payload: any = {
       name: form.name,
       subtitle: form.subtitle,
       category: form.category,
+      tags: form.tags,
       cover: coverPreview.value || '',
       primaryColor: '#e84a6e',
       likes: form.likes,
@@ -414,27 +417,58 @@ async function doPublish() {
         footerText: '',
         footerSubText: '',
       },
-      canvasSize: draft?.canvasSize || { width: 375, height: 667 },
-      elements: (draft?.elements || []).map((el: any) => ({
-        type: el.type,
-        text: el.content || el.src || '',
-        dataKey: el.dataKey,
-        label: el.name,
-        x: el.x,
-        y: el.y,
-        width: el.width,
-        height: el.height,
-        zIndex: el.zIndex,
-        rotation: el.rotation,
-        opacity: el.opacity,
-        style: el.type === 'text' ? {
-          font: el.fontFamily,
-          color: el.color,
-          fontSize: el.fontSize,
-          spacing: el.letterSpacing,
-          lineHeight: el.lineHeight,
-        } : undefined,
-      })),
+      canvasSize: cSize,
+      background: draft?.background || { type: 'solid', color1: '#ffffff' },
+      elements: (draft?.elements || []).map((el: any) => {
+        // Fabric.js originX/Y = 'center', so el.x/el.y are center coordinates
+        // Convert to top-left for mini-program rendering
+        const topLeftX = el.x - (el.width || 0) / 2
+        const topLeftY = el.y - (el.height || 0) / 2
+
+        // Convert px → rpx: rpx = px * (750 / canvasWidth)
+        const pxToRpx = 750 / cSize.width
+        const fontSize = el.fontSize != null ? Math.round(el.fontSize * pxToRpx) : undefined
+
+        const base: any = {
+          type: el.type === 'sticker' ? 'image' : el.type,
+          text: el.content || el.src || '',
+          dataKey: el.dataKey,
+          label: el.name,
+          x: Math.round(topLeftX * 100) / 100,
+          y: Math.round(topLeftY * 100) / 100,
+          width: Math.round((el.width || 0) * 100) / 100,
+          height: Math.round((el.height || 0) * 100) / 100,
+          zIndex: el.zIndex ?? 0,
+          rotation: el.rotation ?? 0,
+          opacity: el.opacity ?? 1,
+          editable: el.editable !== false,
+        }
+
+        if (el.type === 'text') {
+          base.style = {
+            font: el.fontFamily,
+            color: el.color,
+            fontSize: fontSize ?? 28,
+            spacing: el.letterSpacing ?? 2,
+            lineHeight: el.lineHeight ?? 1.5,
+            fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
+            textAlign: el.textAlign || 'center',
+          }
+        } else if (el.type === 'image') {
+          base.style = {
+            font: '',
+            color: '',
+            fontSize: 0,
+            spacing: 0,
+            lineHeight: 0,
+            borderRadius: el.borderRadius ?? 0,
+            borderColor: el.borderColor || 'transparent',
+            borderWidth: el.borderWidth ?? 0,
+          }
+        }
+
+        return base
+      }),
     }
 
     uploadProgress.value = 50

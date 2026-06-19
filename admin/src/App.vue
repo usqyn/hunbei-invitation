@@ -429,6 +429,20 @@
                 @change="e => updateSelected({ rotation: Number((e.target as HTMLInputElement).value) })"
               />
             </div>
+            <div class="section-title">小程序编辑权限</div>
+            <div class="form-row">
+              <label class="toggle-label">
+                <span>允许用户编辑</span>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    :checked="(selectedElement as any).editable !== false"
+                    @change="e => updateSelected({ editable: (e.target as HTMLInputElement).checked })"
+                  />
+                  <span class="slider"></span>
+                </label>
+              </label>
+            </div>
           </template>
 
           <!-- 图片元素属性 -->
@@ -510,6 +524,20 @@
               <button class="btn-seg" @click="alignTop(selectedElement.id)" title="顶部对齐">↑</button>
               <button class="btn-seg" @click="alignMiddle(selectedElement.id)" title="垂直居中">⇅</button>
               <button class="btn-seg" @click="alignBottom(selectedElement.id)" title="底部对齐">↓</button>
+            </div>
+            <div class="section-title">小程序编辑权限</div>
+            <div class="form-row">
+              <label class="toggle-label">
+                <span>允许用户编辑</span>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    :checked="(selectedElement as any).editable !== false"
+                    @change="e => updateSelected({ editable: (e.target as HTMLInputElement).checked })"
+                  />
+                  <span class="slider"></span>
+                </label>
+              </label>
             </div>
           </template>
 
@@ -650,6 +678,8 @@ const {
     bgColor1.value = bg.color1
     bgColor2.value = bg.color2 ?? bg.color1
     bgAngle.value = bg.angle ?? 180
+    if (bg.imageScale) bgScale.value = bg.imageScale
+    if (bg.imageOpacity !== undefined) bgOpacity.value = bg.imageOpacity * 100
   },
 })
 
@@ -1517,6 +1547,53 @@ label {
 
 .btn-seg:hover { color: #1976d2; }
 .btn-seg.active { background: #fff; color: #1976d2; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600; }
+
+/* 开关 toggle */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #ccc;
+  transition: 0.3s;
+  border-radius: 22px;
+}
+
+.slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.switch input:checked + .slider { background: #1976d2; }
+.switch input:checked + .slider::before { transform: translateX(18px); }
 
 /* 滚动条样式（webkit） */
 .panel-body::-webkit-scrollbar,

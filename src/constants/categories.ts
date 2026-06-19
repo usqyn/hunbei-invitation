@@ -11,10 +11,10 @@ export interface HomeCategory {
 export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 1, name: '婚礼请柬', icon: '💒', bgColor: '#ffe4e8', categoryId: 'wedding' },
   { id: 2, name: '生日派对', icon: '🎂', bgColor: '#fff3e6', categoryId: 'birthday' },
-  { id: 3, name: '宝宝满月', icon: '👶', bgColor: '#e3f2fd', categoryId: 'baby' },
-  { id: 4, name: '毕业典礼', icon: '🎓', bgColor: '#f3e5f5', categoryId: 'graduation' },
-  { id: 5, name: '节日祝福', icon: '🎊', bgColor: '#fce4ec', categoryId: 'festival' },
-  { id: 6, name: '商务会议', icon: '🏢', bgColor: '#e8f5e9', categoryId: 'business' },
+  { id: 3, name: '周岁宴', icon: '🎉', bgColor: '#ffeaa7', categoryId: 'baby' },
+  { id: 4, name: '升学宴', icon: '🎉', bgColor: '#fff3e0', categoryId: 'graduation' },
+  { id: 5, name: '割礼', icon: '🎁', bgColor: '#e8f5e9', categoryId: 'festival' },
+  { id: 6, name: '耳环礼', icon: '💎', bgColor: '#fce4ec', categoryId: 'business' },
 ]
 
 export const HOME_TABS = ['网红爆款', '婚礼请帖', '生日邀请', '限时免费']

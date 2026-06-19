@@ -177,13 +177,17 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     // 图片背景
     if (bg.type === 'image' && bg.imageUrl) {
-      fabric.FabricImage.fromURL(bg.imageUrl).then(img => {
+      const imgEl = new Image()
+      imgEl.crossOrigin = 'anonymous'
+      imgEl.src = bg.imageUrl
+      imgEl.onload = () => {
+        const img = new fabric.FabricImage(imgEl)
         const w = canvasSize.value.width
         const h = canvasSize.value.height
         const scale = bg.imageScale === 'cover'
-          ? Math.max(w / img.width!, h / img.height!)
+          ? Math.max(w / imgEl.naturalWidth, h / imgEl.naturalHeight)
           : bg.imageScale === 'contain'
-            ? Math.min(w / img.width!, h / img.height!)
+            ? Math.min(w / imgEl.naturalWidth, h / imgEl.naturalHeight)
             : 1
         img.set({
           left: w / 2,
@@ -196,9 +200,13 @@ export function useCanvas(opts: UseCanvasOptions) {
           selectable: false,
           evented: false,
         })
-        canvas.setBackgroundColor('#ffffff', () => {})
-        canvas.setBackgroundImage(img, () => canvas.renderAll())
-      })
+        canvas.backgroundColor = '#ffffff'
+        canvas.backgroundImage = img
+        canvas.renderAll()
+      }
+      imgEl.onerror = () => {
+        console.error('Background image failed to load:', bg.imageUrl?.slice(0, 80))
+      }
     }
   }
 
@@ -220,6 +228,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       locked: false,
       visible: true,
       zIndex: elements.value.length,
+      editable: true,
       content: '点击编辑文字',
       fontFamily: '思源宋体, serif',
       fontSize: 24,
@@ -295,6 +304,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         locked: false,
         visible: true,
         zIndex: elements.value.length,
+        editable: true,
         src,
         scale: 'cover',
         mask: 'rect',

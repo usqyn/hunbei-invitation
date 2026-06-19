@@ -48,6 +48,8 @@ export interface ElementStyle {
   fontSize: number
   spacing: number
   lineHeight: number
+  fontWeight?: 'normal' | 'bold'
+  textAlign?: 'left' | 'center' | 'right'
 }
 
 // 单个可编辑元素（图片/文字/基本信息）
@@ -65,6 +67,8 @@ export interface EditableElement {
   zIndex?: number
   rotation?: number
   opacity?: number
+  // admin 端控制是否允许用户编辑
+  editable?: boolean
 }
 
 // 素材
@@ -100,6 +104,8 @@ export interface TemplateItem {
   canvasSize?: { width: number; height: number }
   // 主题色
   primaryColor: string
+  // 首页标签（网红爆款/婚礼请帖等）
+  tags?: string[]
 }
 
 // 当前选中的模板状态

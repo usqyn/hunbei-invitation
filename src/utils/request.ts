@@ -1,3 +1,5 @@
+import { API_BASE } from '@/config'
+
 function getToken(): string {
   try { return uni.getStorageSync('token') || '' } catch { return '' }
 }
@@ -11,7 +13,7 @@ export function request<T = any>(options: {
   if (!options.hideLoading) uni.showLoading({ title: '加载中...', mask: true })
   return new Promise((resolve, reject) => {
     uni.request({
-      url: 'https://api.hunbei.com' + options.url,
+      url: API_BASE + options.url,
       method: options.method || 'GET',
       data: options.data,
       header,

@@ -121,6 +121,33 @@ app.post('/api/upload', upload.array('images', 10), (req, res) => {
   }
 })
 
+// 用户登录（mock）
+// POST /api/user/login
+app.post('/api/user/login', (req, res) => {
+  const { phone } = req.body
+  res.json({
+    success: true,
+    data: {
+      token: 'dev-token-' + Date.now(),
+      nickname: phone ? phone.substring(0, 3) + '****' + phone.substring(7) : '用户',
+      phone: phone || '',
+    },
+  })
+})
+
+// 用户信息（mock）
+// GET /api/user/info
+app.get('/api/user/info', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      nickname: '用户',
+      phone: '',
+      avatar: '',
+    },
+  })
+})
+
 // 创建模板
 // POST /api/templates
 app.post('/api/templates', (req, res) => {
@@ -216,10 +243,10 @@ app.get('/api/categories', (req, res) => {
   const CATEGORIES = [
     { id: 'wedding', name: '婚礼请柬', icon: '💒' },
     { id: 'birthday', name: '生日派对', icon: '🎂' },
-    { id: 'baby', name: '宝宝满月', icon: '👶' },
-    { id: 'graduation', name: '毕业典礼', icon: '🎓' },
-    { id: 'festival', name: '节日祝福', icon: '🎊' },
-    { id: 'business', name: '商务会议', icon: '🏢' },
+    { id: 'baby', name: '周岁宴', icon: '🎉' },
+    { id: 'graduation', name: '升学宴', icon: '🎉' },
+    { id: 'festival', name: '割礼', icon: '🎁' },
+    { id: 'business', name: '耳环礼', icon: '💎' },
   ]
 
   const data = readData()
