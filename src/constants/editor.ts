@@ -39,7 +39,7 @@ export const PANEL_TABS = [
 ]
 
 export const DEFAULT_ELEMENT_STYLE: ElementStyle = {
-  font: '思源宋体极细',
+  font: '思源宋体',
   color: '#666666',
   fontSize: 12,
   spacing: 2,

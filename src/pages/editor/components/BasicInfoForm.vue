@@ -116,7 +116,7 @@
 <script setup lang="ts">
 import type { BasicInfo } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
   basicInfo: BasicInfo
 }>()
@@ -126,11 +126,12 @@ const emit = defineEmits<{
   confirm: []
   location: []
   datePicker: []
-  update: [field: string, value: string]
 }>()
 
 const onDateChange = (e: any) => {
-  emit('update', 'weddingDate', e.detail.value)
+  if (props.basicInfo) {
+    props.basicInfo.weddingDate = e.detail.value
+  }
 }
 </script>
 

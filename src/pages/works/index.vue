@@ -1,9 +1,9 @@
 <template>
   <view class="page">
     <view v-if="!isLoggedIn" class="not-login">
-      <view class="empty-icon">📋</view>
-      <text class="empty-text">登录后才可以看到作品记录哦</text>
-      <button class="login-btn" @click="handleLogin">立即登录</button>
+      <image class="empty-icon-image" :src="worksConfig.notLoggedIn.icon" mode="aspectFit" />
+      <text class="empty-text">{{ worksConfig.notLoggedIn.text }}</text>
+      <button class="login-btn" @click="handleLogin">{{ worksConfig.notLoggedIn.btnText }}</button>
     </view>
 
     <view v-else class="works-content">
@@ -39,17 +39,17 @@
           </view>
         </view>
 
-        <view v-if="worksStore.works.length === 0" class="empty-state">
-          <view class="empty-icon">📭</view>
-          <text class="empty-text">暂无作品</text>
-          <button class="create-btn" @click="handleCreate">去制作</button>
+        <view v-if="!loading && worksStore.works.length === 0" class="empty-state">
+          <image class="empty-icon-image" :src="worksConfig.emptyStates.all.icon" mode="aspectFit" />
+          <text class="empty-text">{{ worksConfig.emptyStates.all.text }}</text>
+          <button class="create-btn" @click="handleCreate">{{ worksConfig.emptyStates.all.btnText }}</button>
         </view>
       </view>
 
       <view class="works-list" v-if="activeTab === 'draft'">
-        <view v-if="worksStore.drafts.length === 0" class="empty-state">
-          <view class="empty-icon">📝</view>
-          <text class="empty-text">暂无草稿</text>
+        <view v-if="!loading && worksStore.drafts.length === 0" class="empty-state">
+          <image class="empty-icon-image" :src="worksConfig.emptyStates.draft.icon" mode="aspectFit" />
+          <text class="empty-text">{{ worksConfig.emptyStates.draft.text }}</text>
         </view>
         <view
           v-for="draft in worksStore.drafts"
@@ -74,9 +74,9 @@
       </view>
 
       <view class="works-list" v-if="activeTab === 'favorite'">
-        <view v-if="worksStore.favorites.length === 0" class="empty-state">
-          <view class="empty-icon">❤️</view>
-          <text class="empty-text">暂无收藏</text>
+        <view v-if="!loading && worksStore.favorites.length === 0" class="empty-state">
+          <image class="empty-icon-image" :src="worksConfig.emptyStates.favorite.icon" mode="aspectFit" />
+          <text class="empty-text">{{ worksConfig.emptyStates.favorite.text }}</text>
         </view>
         <view
           v-for="fav in worksStore.favorites"
@@ -104,21 +104,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
+import { WORKS_CONFIG } from '@/config'
 
 const userStore = useUserStore()
 const worksStore = useWorksStore()
 const { isLoggedIn } = storeToRefs(userStore)
 const activeTab = ref('all')
+const worksConfig = WORKS_CONFIG
+const { loading } = storeToRefs(worksStore)
 
 const tabList = ref([
   { key: 'all', name: '全部' },
   { key: 'draft', name: '草稿' },
-  { key: 'favorite', name: '收藏' }
+  { key: 'favorite', name: '收藏' },
 ])
+
+onMounted(async () => {
+  if (isLoggedIn.value) {
+    await worksStore.loadAll()
+  }
+})
 
 const handleLogin = () => {
   uni.navigateTo({ url: '/pages/login/index' })
@@ -156,7 +165,7 @@ const handleDelete = (draft: any) => {
         worksStore.deleteWork(draft.id)
         uni.showToast({ title: '已删除', icon: 'success' })
       }
-    }
+    },
   })
 }
 
@@ -184,8 +193,9 @@ const onImageError = () => {
   padding: 0 48rpx;
 }
 
-.empty-icon {
-  font-size: 120rpx;
+.empty-icon-image {
+  width: 120rpx;
+  height: 120rpx;
   margin-bottom: 32rpx;
   opacity: 0.5;
 }

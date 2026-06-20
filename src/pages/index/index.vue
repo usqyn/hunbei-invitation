@@ -4,7 +4,7 @@
     <view class="search-bar">
       <input
         class="search-input"
-        placeholder="搜索模板名称/分类"
+        :placeholder="homeConfig.searchPlaceholder"
         v-model="searchText"
         @confirm="handleSearch"
       />
@@ -19,7 +19,7 @@
         @click="handleCategoryClick(item)"
       >
         <view class="category-icon" :style="{ background: item.bgColor }">
-          <text class="icon-text">{{ item.icon }}</text>
+          <image class="icon-image" :src="item.image" mode="aspectFit" />
         </view>
         <text class="category-name">{{ item.name }}</text>
       </view>
@@ -27,30 +27,28 @@
 
     <!-- 特色功能区 - 快速进入制作 -->
     <view class="feature-section">
-      <view class="feature-card invitation-card" @click="goToEditor('wedding')">
+      <view
+        v-for="card in homeConfig.featureCards"
+        :key="card.categoryId"
+        class="feature-card"
+        :class="card.categoryId === 'wedding' ? 'invitation-card' : 'moments-card'"
+        @click="goToEditor(card.categoryId)"
+      >
         <view class="feature-content">
-          <view class="feature-badge">电子请帖</view>
-          <text class="feature-title">婚礼请柬 免费制作</text>
-          <text class="feature-desc">精美模板一键生成</text>
+          <view class="feature-badge">{{ card.badge }}</view>
+          <text class="feature-title">{{ card.title }}</text>
+          <text class="feature-desc">{{ card.desc }}</text>
         </view>
-        <view class="feature-icon">💒</view>
-      </view>
-      <view class="feature-card moments-card" @click="goToEditor('birthday')">
-        <view class="feature-content">
-          <view class="feature-badge">生日邀请</view>
-          <text class="feature-title">派对邀请函制作</text>
-          <text class="feature-desc">分享美好时光</text>
-        </view>
-        <view class="feature-icon">🎂</view>
+        <image class="feature-icon-image" :src="card.image" mode="aspectFit" />
       </view>
     </view>
 
     <!-- 模板精选区 -->
     <view class="section">
       <view class="section-header">
-        <text class="section-title">精选模板</text>
+        <text class="section-title">{{ homeConfig.sections.featured.title }}</text>
         <view class="section-more" @click="goToTemplatePage">
-          <text class="more-text">查看全部 ›</text>
+          <text class="more-text">{{ homeConfig.moreText }}</text>
         </view>
       </view>
 
@@ -76,7 +74,7 @@
     <!-- 全部分类区 - 展示所有分类的模板数 -->
     <view class="section">
       <view class="section-header">
-        <text class="section-title">全部分类</text>
+        <text class="section-title">{{ homeConfig.sections.allCategories.title }}</text>
         <view class="section-tabs">
           <text
             v-for="tab in tabs"
@@ -96,7 +94,7 @@
           class="count-card"
           @click="goToTemplatePage(cat.id)"
         >
-          <text class="count-icon">{{ cat.icon }}</text>
+          <image class="count-icon-image" :src="cat.icon" mode="aspectFit" />
           <text class="count-name">{{ cat.name }}</text>
           <text class="count-num">{{ cat.templates.length }} 个模板</text>
         </view>
@@ -109,13 +107,15 @@
 import { ref, computed } from 'vue'
 import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
+import { HOME_CONFIG } from '@/config'
 
 const searchText = ref('')
-const activeTab = ref('网红爆款')
+const activeTab = ref(HOME_CONFIG.defaultTab)
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
 const featuredCards = HOME_FEATURED_CARDS
+const homeConfig = HOME_CONFIG
 
 // 全部分类 - 根据选中的 tab 标签筛选
 const allCategories = computed(() => {
@@ -225,8 +225,9 @@ const onImageError = () => {
   justify-content: center;
 }
 
-.icon-text {
-  font-size: 48rpx;
+.icon-image {
+  width: 48rpx;
+  height: 48rpx;
 }
 
 .category-name {
@@ -289,9 +290,9 @@ const onImageError = () => {
   color: rgba(255, 255, 255, 0.7);
 }
 
-.feature-icon {
-  font-size: 56rpx;
-  color: #ffffff;
+.feature-icon-image {
+  width: 56rpx;
+  height: 56rpx;
   margin-left: 16rpx;
 }
 
@@ -410,8 +411,9 @@ const onImageError = () => {
   cursor: pointer;
 }
 
-.count-icon {
-  font-size: 56rpx;
+.count-icon-image {
+  width: 56rpx;
+  height: 56rpx;
 }
 
 .count-name {

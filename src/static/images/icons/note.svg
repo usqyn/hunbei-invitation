@@ -1,0 +1,9 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <path d="M25 10 L65 10 L80 25 L80 90 L25 90 Z" fill="#ecf0f1" stroke="#bdc3c7" stroke-width="2"/>
+  <polygon points="65,10 65,25 80,25" fill="#bdc3c7"/>
+  <rect x="35" y="40" width="30" height="4" rx="2" fill="#95a5a6"/>
+  <rect x="35" y="52" width="30" height="4" rx="2" fill="#95a5a6"/>
+  <rect x="35" y="64" width="20" height="4" rx="2" fill="#95a5a6"/>
+  <line x1="35" y1="76" x2="25" y2="76" stroke="#e74c3c" stroke-width="3" stroke-linecap="round"/>
+  <line x1="35" y1="76" x2="25" y2="76" stroke="#e74c3c" stroke-width="3" stroke-linecap="round"/>
+</svg>

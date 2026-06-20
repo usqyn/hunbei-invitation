@@ -142,17 +142,10 @@
     <!-- Basic Info Popup -->
     <BasicInfoForm
       v-if="editorStore.showBasicInfoEditor"
-      :groom-name="basicInfo.groomName"
-      :bride-name="basicInfo.brideName"
-      :wedding-date="basicInfo.weddingDate"
-      :location="basicInfo.location"
-      :detail-address="basicInfo.detailAddress"
+      :visible="editorStore.showBasicInfoEditor"
+      :basic-info="basicInfo"
       @close="editorStore.closeBasicInfoEditor"
-      @update:groom-name="(v: string) => basicInfo.groomName = v"
-      @update:bride-name="(v: string) => basicInfo.brideName = v"
-      @update:wedding-date="(v: string) => basicInfo.weddingDate = v"
-      @update:location="(v: string) => basicInfo.location = v"
-      @update:detail-address="(v: string) => basicInfo.detailAddress = v"
+      @confirm="editorStore.closeBasicInfoEditor"
     />
 
     <!-- 编辑基本信息按钮 - 放在预览里 -->
@@ -166,14 +159,16 @@
 import { computed, onMounted } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
+import { useWorksStore } from '@/stores/works'
 import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
-import type { Material, ElementStyle, EditableElement } from '@/types'
+import type { Material, ElementStyle, EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
+const worksStore = useWorksStore()
 
 // 当前模板名
 const templateName = computed(() => {
@@ -336,11 +331,25 @@ function handleSettings() {
 }
 
 function handleSave() {
+  const id = editorStore.currentWorkId || Date.now()
+  if (!editorStore.currentWorkId) {
+    editorStore.setCurrentWorkId(id)
+  }
+  const work: Work = {
+    id,
+    title: templateStore.templateData.coverTitle || '未命名作品',
+    date: new Date().toLocaleDateString('zh-CN'),
+    image: templateStore.templateData.coverImage,
+    templateType: editorStore.currentTemplateId,
+    status: 'draft',
+  }
+  worksStore.saveAsWork(work)
   uni.showToast({ title: '已保存', icon: 'success' })
 }
 
 function handleShare() {
-  uni.showToast({ title: '即将生成预览', icon: 'none' })
+  handleSave()
+  uni.navigateTo({ url: '/pages/preview/index' })
 }
 
 // 页面加载时根据参数切换模板

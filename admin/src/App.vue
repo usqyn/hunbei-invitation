@@ -97,7 +97,7 @@
           <div class="mat-grid">
             <div v-for="mat in filteredMaterials" :key="mat.id" class="mat-item" draggable="true" @dragstart="onMaterialDragStart($event, mat)" @click="onMaterialClick(mat)" :title="mat.name">
               <div v-if="mat.type === 'shape'" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
-              <div v-else class="mat-emoji">{{ mat.emoji }}</div>
+              <div v-else-if="mat.svg" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
               <div class="mat-name">{{ mat.name }}</div>
             </div>
           </div>
@@ -710,8 +710,15 @@ function onMaterialClick(mat: any) {
       } as any)
     }
     reader.readAsDataURL(blob)
-  } else if (mat.type === 'sticker' && mat.emoji) {
-    canvasAddText({ content: mat.emoji, x: cx, y: cy, fontSize: 48, fontFamily: 'Arial, sans-serif', textAlign: 'center', name: mat.name })
+  } else if (mat.type === 'sticker' && mat.svg) {
+    const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
+    const reader = new FileReader()
+    reader.onload = () => {
+      canvasAddImage(reader.result as string, {
+        x: cx, y: cy, width: 100, height: 100, name: mat.name,
+      } as any)
+    }
+    reader.readAsDataURL(blob)
   }
 }
 
@@ -745,16 +752,18 @@ async function onCanvasDrop(e: DragEvent) {
         } as any)
       }
       reader.readAsDataURL(blob)
-    } else if (mat.type === 'sticker' && mat.emoji) {
-      // emoji 贴纸：作为文字加入
-      canvasAddText({
-        content: mat.emoji,
-        x, y,
-        fontSize: 48,
-        fontFamily: 'Arial, sans-serif',
-        textAlign: 'center',
-        name: mat.name,
-      })
+    } else if (mat.type === 'sticker' && mat.svg) {
+      const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
+      const reader = new FileReader()
+      reader.onload = () => {
+        canvasAddImage(reader.result as string, {
+          x, y,
+          width: 100,
+          height: 100,
+          name: mat.name,
+        } as any)
+      }
+      reader.readAsDataURL(blob)
     }
   } catch (_) {}
 }
@@ -791,30 +800,29 @@ async function loadTemplateList() {
 async function onLoadTemplate(id: string) {
   try {
     const tpl = await fetchTemplate(id)
-    // 将 API 模板转成 CanvasDraft 格式
     const draft = {
-      canvasSize: { width: 375, height: 667 },
-      background: { type: 'solid', color1: '#ffffff' },
+      canvasSize: tpl.canvasSize || { width: 375, height: 667 },
+      background: tpl.background || { type: 'solid', color1: '#ffffff' },
       elements: (tpl.elements || []).map((el: any, idx: number) => ({
         id: el.id || `el_${idx}`,
         type: el.type,
         name: el.label || (el.type === 'text' ? '文字' : '图片'),
-        x: 187,
-        y: 200 + idx * 80,
-        width: 240,
-        height: 60,
-        rotation: 0,
-        opacity: 1,
+        x: el.x ?? 187,
+        y: el.y ?? 200 + idx * 80,
+        width: el.width ?? 240,
+        height: el.height ?? 60,
+        rotation: el.rotation ?? 0,
+        opacity: el.opacity ?? 1,
         locked: false,
         visible: true,
-        zIndex: idx,
+        zIndex: el.zIndex ?? idx,
         content: el.text || '',
         fontFamily: el.style?.font || '思源宋体, serif',
         fontSize: el.style?.fontSize || 24,
-        fontWeight: 'normal',
+        fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
         fontStyle: 'normal',
         color: el.style?.color || '#333333',
-        textAlign: 'center',
+        textAlign: el.style?.textAlign || 'center',
         lineHeight: el.style?.lineHeight || 1.5,
         letterSpacing: el.style?.spacing || 2,
         strokeColor: 'transparent',
@@ -823,7 +831,7 @@ async function onLoadTemplate(id: string) {
         shadowOffsetX: 0,
         shadowOffsetY: 0,
         shadowBlur: 0,
-        src: el.type === 'image' ? (tpl.data as any)?.[el.dataKey] || '' : '',
+        src: el.type === 'image' ? (el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '') : '',
         scale: 'cover',
         mask: 'rect',
         borderRadius: 0,
@@ -1674,7 +1682,6 @@ label {
   height: 100%;
 }
 
-.mat-emoji { font-size: 28px; line-height: 1; }
 .mat-name { font-size: 9px; color: #888; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 100%; }
 
 /* ====== Phase 3: 模板 Tab ====== */

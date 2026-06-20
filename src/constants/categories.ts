@@ -3,18 +3,18 @@
 export interface HomeCategory {
   id: number           // 首页分类ID
   name: string         // 显示名称
-  icon: string         // emoji图标
+  image: string        // 分类图标图片路径
   bgColor: string      // 背景色
   categoryId: string   // 对应模板系统的分类ID(wedding/birthday/baby/graduation/festival/business)
 }
 
 export const HOME_CATEGORIES: HomeCategory[] = [
-  { id: 1, name: '婚礼请柬', icon: '💒', bgColor: '#ffe4e8', categoryId: 'wedding' },
-  { id: 2, name: '生日派对', icon: '🎂', bgColor: '#fff3e6', categoryId: 'birthday' },
-  { id: 3, name: '周岁宴', icon: '🎉', bgColor: '#ffeaa7', categoryId: 'baby' },
-  { id: 4, name: '升学宴', icon: '🎉', bgColor: '#fff3e0', categoryId: 'graduation' },
-  { id: 5, name: '割礼', icon: '🎁', bgColor: '#e8f5e9', categoryId: 'festival' },
-  { id: 6, name: '耳环礼', icon: '💎', bgColor: '#fce4ec', categoryId: 'business' },
+  { id: 1, name: '婚礼请柬', image: '/static/images/categories/wedding.svg', bgColor: '#ffe4e8', categoryId: 'wedding' },
+  { id: 2, name: '生日派对', image: '/static/images/categories/birthday.svg', bgColor: '#fff3e6', categoryId: 'birthday' },
+  { id: 3, name: '周岁宴', image: '/static/images/categories/baby.svg', bgColor: '#ffeaa7', categoryId: 'baby' },
+  { id: 4, name: '升学宴', image: '/static/images/categories/graduation.svg', bgColor: '#fff3e0', categoryId: 'graduation' },
+  { id: 5, name: '割礼', image: '/static/images/categories/ceremony.svg', bgColor: '#e8f5e9', categoryId: 'festival' },
+  { id: 6, name: '耳环礼', image: '/static/images/categories/earring.svg', bgColor: '#fce4ec', categoryId: 'business' },
 ]
 
 export const HOME_TABS = ['网红爆款', '婚礼请帖', '生日邀请', '限时免费']

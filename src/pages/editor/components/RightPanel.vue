@@ -1,11 +1,6 @@
 <template>
   <view class="right-panel">
     <scroll-view class="panel-scroll" scroll-y>
-      <view class="free-edit-btn" @click="onFreeEditToggle">
-        <text class="free-edit-icon">🖼️</text>
-        <text class="free-edit-text">自由编辑</text>
-      </view>
-
       <view class="content-header" @click="onToggleContent">
         <text class="content-title">修改对应内容</text>
         <text class="content-arrow" :class="{ open: contentOpen }">▼</text>
@@ -20,7 +15,7 @@
           @click="$emit('openEditor', idx)"
         >
           <view v-if="element.type === 'image'" class="image-item">
-            <image class="item-image" :src="element.text" mode="aspectFill" @error="$emit('imageError')"></image>
+            <image class="item-image" :src="element.text" mode="aspectFill"></image>
             <view class="replace-icon-wrapper">
               <text class="replace-icon">🖼️</text>
             </view>
@@ -51,14 +46,9 @@ defineEmits<{
   openEditor: [idx: number]
   selectMaterial: [material: Material]
   toggleSetting: [key: string]
-  imageError: []
 }>()
 
 const contentOpen = ref(true)
-
-function onFreeEditToggle() {
-  uni.showToast({ title: '切换编辑模式', icon: 'none' })
-}
 
 function onToggleContent() {
   contentOpen.value = !contentOpen.value
@@ -81,29 +71,6 @@ function onToggleContent() {
   height: 100%;
   min-height: 0;
   padding: 12rpx;
-}
-
-/* 自由编辑按钮 */
-.free-edit-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  padding: 14rpx 16rpx;
-  background: #fff;
-  border: 2rpx solid #e8e8e8;
-  border-radius: 10rpx;
-  margin-bottom: 14rpx;
-}
-
-.free-edit-icon {
-  font-size: 24rpx;
-}
-
-.free-edit-text {
-  font-size: 22rpx;
-  color: #333;
-  font-weight: 500;
 }
 
 /* 内容标题 */

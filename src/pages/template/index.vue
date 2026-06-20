@@ -5,7 +5,7 @@
       <view class="back-btn" @click="onBack">
         <text class="back-icon">‹</text>
       </view>
-      <view class="header-title">选择模板</view>
+      <view class="header-title">{{ pageConfig.headerTitle }}</view>
       <view class="header-right"></view>
     </view>
 
@@ -19,7 +19,7 @@
           :class="{ active: activeCategory === cat.id }"
           @click="onSelectCategory(cat.id)"
         >
-          <text class="category-icon">{{ cat.icon }}</text>
+          <image class="category-icon-image" :src="cat.icon" mode="aspectFit" />
           <text class="category-name">{{ cat.name }}</text>
           <text class="category-count">{{ cat.count }}</text>
         </view>
@@ -28,20 +28,20 @@
 
     <!-- 加载状态 -->
     <view v-if="loading" class="loading-state">
-      <text class="loading-text">加载中...</text>
+      <text class="loading-text">{{ pageConfig.loadingText }}</text>
     </view>
 
     <!-- 错误状态 -->
     <view v-else-if="loadError" class="error-state">
-      <text class="error-icon">⚠️</text>
-      <text class="error-text">加载失败，点击重试</text>
+      <image class="error-icon-image" :src="pageConfig.errorIcon" mode="aspectFit" />
+      <text class="error-text">{{ pageConfig.errorText }}</text>
     </view>
 
     <!-- 模板列表网格 -->
     <scroll-view v-else class="template-scroll" scroll-y>
       <view v-if="filteredTemplates.length === 0" class="empty-state">
-        <text class="empty-icon">📄</text>
-        <text class="empty-text">该分类暂无模板</text>
+        <image class="empty-icon-image" :src="pageConfig.emptyIcon" mode="aspectFit" />
+        <text class="empty-text">{{ pageConfig.emptyText }}</text>
       </view>
 
       <view class="template-grid">
@@ -77,14 +77,14 @@
 
           <!-- 立即制作按钮 -->
           <view class="template-select-btn">
-            <text class="select-btn-text">立即制作</text>
+            <text class="select-btn-text">{{ pageConfig.selectBtnText }}</text>
           </view>
         </view>
       </view>
 
       <!-- 底部提示 -->
       <view class="page-bottom">
-        <text class="bottom-hint">— 更多模板持续更新中 —</text>
+        <text class="bottom-hint">{{ pageConfig.bottomHint }}</text>
       </view>
     </scroll-view>
   </view>
@@ -94,18 +94,20 @@
 import { ref, computed, onMounted } from 'vue'
 import type { TemplateItem, TemplateCategory } from '@/types'
 import { TEMPLATE_LIST } from '@/constants/templates-data'
-import { API_BASE } from '@/config'
+import { API_BASE, TEMPLATE_PAGE_CONFIG } from '@/config'
+
+const pageConfig = TEMPLATE_PAGE_CONFIG
 
 // ============ API 配置（与 editor.ts 保持一致） ============
 
 // 分类列表（静态配置，可根据 API 动态拉取）
 const STATIC_CATEGORIES = [
-  { id: 'wedding', name: '婚礼请柬', icon: '💒' },
-  { id: 'birthday', name: '生日派对', icon: '🎂' },
-  { id: 'baby', name: '周岁宴', icon: '🎉' },
-  { id: 'graduation', name: '升学宴', icon: '🎉' },
-  { id: 'festival', name: '割礼', icon: '🎁' },
-  { id: 'business', name: '耳环礼', icon: '💎' },
+  { id: 'wedding', name: '婚礼请柬', icon: '/static/images/categories/wedding.svg' },
+  { id: 'birthday', name: '生日派对', icon: '/static/images/categories/birthday.svg' },
+  { id: 'baby', name: '周岁宴', icon: '/static/images/categories/baby.svg' },
+  { id: 'graduation', name: '升学宴', icon: '/static/images/icons/party.svg' },
+  { id: 'festival', name: '割礼', icon: '/static/images/categories/ceremony.svg' },
+  { id: 'business', name: '耳环礼', icon: '/static/images/categories/earring.svg' },
 ]
 
 // ============ 状态 ============
@@ -182,7 +184,7 @@ async function loadCategories() {
         return {
           id: cat.id,
           name: staticCat?.name || cat.name,
-          icon: staticCat?.icon || '📄',
+            icon: staticCat?.icon || '/static/images/icons/document.svg',
           count: cat.count ?? 0,
           templates: allTemplates.value.filter(t => t.category === cat.id),
         }
@@ -348,7 +350,7 @@ function onBack() {
   }
 }
 
-.category-icon { font-size: 32rpx; color: #333; }
+.category-icon-image { width: 32rpx; height: 32rpx; }
 .category-name { font-size: 26rpx; color: #333; font-weight: 500; }
 
 .category-count {
@@ -371,7 +373,7 @@ function onBack() {
 }
 
 .loading-text { font-size: 28rpx; color: #999; }
-.error-icon { font-size: 64rpx; }
+.error-icon-image { width: 64rpx; height: 64rpx; }
 .error-text { font-size: 28rpx; color: #999; }
 
 /* 模板网格 */
@@ -381,14 +383,14 @@ function onBack() {
 }
 
 .template-grid {
-  padding: 30rpx;
+  padding: 30rpx 30rpx 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 30rpx;
 }
 
 .template-card {
   width: calc(50% - 15rpx);
+  margin-bottom: 30rpx;
   background: #ffffff;
   border-radius: 20rpx;
   overflow: hidden;
@@ -396,6 +398,7 @@ function onBack() {
   display: flex;
   flex-direction: column;
   &:active { opacity: 0.9; }
+  &:nth-child(odd) { margin-right: 30rpx; }
 }
 
 .template-cover {
@@ -462,7 +465,7 @@ function onBack() {
   padding: 100rpx 30rpx;
 }
 
-.empty-icon { font-size: 80rpx; margin-bottom: 20rpx; }
+.empty-icon-image { width: 80rpx; height: 80rpx; margin-bottom: 20rpx; }
 .empty-text { font-size: 28rpx; color: #999; }
 
 /* 底部 */

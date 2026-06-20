@@ -15,37 +15,37 @@ export const CATEGORY_LIST: TemplateCategory[] = [
   {
     id: 'wedding',
     name: '婚礼请柬',
-    icon: '💒',
+    icon: '/static/images/categories/wedding.svg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'wedding'),
   },
   {
     id: 'birthday',
     name: '生日派对',
-    icon: '🎂',
+    icon: '/static/images/categories/birthday.svg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'birthday'),
   },
   {
     id: 'baby',
     name: '周岁宴',
-    icon: '👶',
+    icon: '/static/images/categories/baby.svg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'baby'),
   },
   {
     id: 'graduation',
     name: '升学宴',
-    icon: '🎉',
+    icon: '/static/images/icons/party.svg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'graduation'),
   },
   {
     id: 'festival',
     name: '割礼',
-    icon: '🎁',
+    icon: '/static/images/categories/ceremony.svg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'festival'),
   },
   {
     id: 'business',
     name: '耳环礼',
-    icon: '💎',
+    icon: '/static/images/categories/earring.svg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'business'),
   },
 ]

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { useTemplateStore } from './template'
 import { DEFAULT_ELEMENT_STYLE, getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
+import { MATERIAL_LIST } from '@/constants/editor'
 import type { EditableElement, ElementStyle, TemplateData, TemplateItem } from '@/types'
 import { API_BASE } from '@/config'
 
@@ -18,6 +19,7 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedElement = ref<number | null>(null)
   const editingText = ref('')
   const currentTemplateId = ref<string>(DEFAULT_TEMPLATE_ID)
+  const currentWorkId = ref<number | null>(null)
   const templateLoading = ref(false)
 
   const currentFont = ref<string>('思源宋体')
@@ -31,16 +33,7 @@ export const useEditorStore = defineStore('editor', () => {
   const editableElements = reactive<EditableElement[]>([])
 
   // 素材库
-  const materialList = [
-    { url: '/static/images/templates/wedding-1.svg', name: '婚礼主题1' },
-    { url: '/static/images/templates/wedding-2.svg', name: '婚礼主题2' },
-    { url: '/static/images/templates/wedding-3.svg', name: '婚礼主题3' },
-    { url: '/static/images/templates/wedding-4.svg', name: '婚礼主题4' },
-    { url: '/static/images/templates/invitation-1.svg', name: '生日主题' },
-    { url: '/static/images/templates/invitation-2.svg', name: '节日主题' },
-    { url: '/static/images/templates/template-1.svg', name: '宝宝主题' },
-    { url: '/static/images/templates/template-2.svg', name: '模板主题' },
-  ]
+  const materialList = MATERIAL_LIST
 
   // ============ API 请求（适配微信小程序 request） ============
   function apiRequest<T>(url: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET'): Promise<T> {
@@ -254,6 +247,10 @@ export const useEditorStore = defineStore('editor', () => {
     uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
+  function setCurrentWorkId(id: number | null) {
+    currentWorkId.value = id
+  }
+
   // 启动时恢复
   restoreTemplate()
 
@@ -261,8 +258,8 @@ export const useEditorStore = defineStore('editor', () => {
     showTextEditor, showBasicInfoEditor, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
     currentFontSize, currentSpacing, currentLineHeight,
-    editableElements, materialList, currentTemplateId, templateLoading, canvasSize,
+    editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize,
     loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
-    closeBasicInfoEditor, selectMaterial, applyImageToElement,
+    closeBasicInfoEditor, selectMaterial, applyImageToElement, setCurrentWorkId,
   }
 })

@@ -1,0 +1,10 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" r="35" fill="#f39c12"/>
+  <circle cx="50" cy="50" r="28" fill="#e67e22"/>
+  <circle cx="50" cy="50" r="20" fill="#f1c40f"/>
+  <text x="50" y="57" text-anchor="middle" font-size="18" fill="#e67e22" font-weight="bold">花</text>
+  <circle cx="30" cy="30" r="3" fill="#fff" opacity="0.3"/>
+  <circle cx="70" cy="30" r="3" fill="#fff" opacity="0.3"/>
+  <circle cx="30" cy="70" r="3" fill="#fff" opacity="0.3"/>
+  <circle cx="70" cy="70" r="3" fill="#fff" opacity="0.3"/>
+</svg>
