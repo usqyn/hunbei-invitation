@@ -1,0 +1,25 @@
+{
+  "envId": "your-env-id",
+  "region": "ap-guangzhou",
+  "framework": {
+    "plugins": {
+      "server": {
+        "use": "@cloudbase/framework-plugin-run",
+        "inputs": {
+          "name": "server",
+          "entry": "./server",
+          "path": "/",
+          "port": 3001,
+          "dockerfilePath": "./Dockerfile"
+        }
+      },
+      "admin": {
+        "use": "@cloudbase/framework-plugin-website",
+        "inputs": {
+          "name": "admin",
+          "entry": "./admin/dist"
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
-// API 基地址
-export const API_BASE = 'http://localhost:3001'
+// API 基地址（生产环境通过 .env.production 覆盖）
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 // ============ 首页配置 ============
 export const HOME_CONFIG = {

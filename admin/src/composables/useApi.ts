@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { TemplateItem, Category } from '../types/template'
 
-const API_BASE = 'http://localhost:3001'
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 const api = axios.create({
   baseURL: API_BASE,
