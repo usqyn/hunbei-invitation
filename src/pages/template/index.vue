@@ -94,6 +94,7 @@
 import { ref, computed, onMounted } from 'vue'
 import type { TemplateItem, TemplateCategory } from '@/types'
 import { TEMPLATE_LIST } from '@/constants/templates-data'
+import { HOME_CATEGORIES } from '@/constants/categories'
 import { API_BASE, TEMPLATE_PAGE_CONFIG } from '@/config'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
@@ -127,13 +128,23 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
     list = list.filter(t => t.category === activeCategory.value)
   }
 
-  // 按关键词搜索
+  // 按关键词搜索（名称/副标题/分类名称/标签/元素内容）
   if (searchKeyword.value) {
     const kw = searchKeyword.value.toLowerCase()
-    list = list.filter(t =>
-      (t.name && t.name.toLowerCase().includes(kw)) ||
-      (t.subtitle && t.subtitle.toLowerCase().includes(kw))
-    )
+    list = list.filter(t => {
+      // 名称
+      if (t.name && t.name.toLowerCase().includes(kw)) return true
+      // 副标题
+      if (t.subtitle && t.subtitle.toLowerCase().includes(kw)) return true
+      // 分类名称
+      const cat = HOME_CATEGORIES.find(c => c.categoryId === t.category)
+      if (cat && cat.name.toLowerCase().includes(kw)) return true
+      // 标签
+      if (t.tags && t.tags.some(tag => tag.toLowerCase().includes(kw))) return true
+      // 元素内容（文字元素文本）
+      if (t.elements && t.elements.some(el => el.text && el.text.toLowerCase().includes(kw))) return true
+      return false
+    })
   }
 
   return list
