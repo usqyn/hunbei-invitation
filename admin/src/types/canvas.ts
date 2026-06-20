@@ -105,12 +105,16 @@ export interface HistorySnapshot {
   ts: number
 }
 
+export type PageMode = 'single' | 'long'
+
 // 预设尺寸（常见微信小程序尺寸）
 export const CANVAS_PRESETS: Array<{ label: string; width: number; height: number }> = [
   { label: '320 × 480', width: 320, height: 480 },
   { label: '375 × 667', width: 375, height: 667 },
   { label: '390 × 844', width: 390, height: 844 },
   { label: '750 × 1334', width: 750, height: 1334 },
+  { label: '长页面 375 × 2000', width: 375, height: 2000 },
+  { label: '长页面 375 × 3000', width: 375, height: 3000 },
 ]
 
 // 默认画布配置

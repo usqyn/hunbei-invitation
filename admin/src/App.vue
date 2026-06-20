@@ -25,6 +25,12 @@
         <select class="tb-select" v-model="sizeLabel" @change="onPresetChange">
           <option v-for="p in CANVAS_PRESETS" :key="p.label" :value="p.label">{{ p.label }}</option>
         </select>
+
+        <span class="toolbar-divider"></span>
+
+        <!-- 页面模式 -->
+        <button class="tb-btn" :class="{ active: pageMode === 'single' }" @click="onPageModeChange('single')" title="单页模式">📄 单页</button>
+        <button class="tb-btn" :class="{ active: pageMode === 'long' }" @click="onPageModeChange('long')" title="长页面模式">📃 长页面</button>
       </div>
 
       <div class="toolbar-right">
@@ -151,34 +157,61 @@
 
       <!-- 中间画布 -->
       <section class="canvas-area">
-        <div class="canvas-scroll" @wheel.prevent="onWheel">
-          <div
-            class="phone-frame"
-            :style="{
-              width: (canvasSize.width * zoom) + 'px',
-              height: (canvasSize.height * zoom) + 'px',
-            }"
-          >
+        <!-- 单页模式：手机框 -->
+        <template v-if="pageMode === 'single'">
+          <div class="canvas-scroll" @wheel.prevent="onWheel">
             <div
-              class="phone-notch"
-              :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
-            ></div>
-            <canvas
-              ref="canvasRef"
-              class="fabric-canvas"
+              class="phone-frame"
               :style="{
                 width: (canvasSize.width * zoom) + 'px',
                 height: (canvasSize.height * zoom) + 'px',
               }"
-              @dragover="onCanvasDragOver"
-              @drop="onCanvasDrop"
-            ></canvas>
-            <div
-              class="phone-home"
-              :style="{ width: (80 * zoom) + 'px', height: (6 * zoom) + 'px' }"
-            ></div>
+            >
+              <div
+                class="phone-notch"
+                :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
+              ></div>
+              <canvas
+                ref="canvasRef"
+                class="fabric-canvas"
+                :style="{
+                  width: (canvasSize.width * zoom) + 'px',
+                  height: (canvasSize.height * zoom) + 'px',
+                }"
+                @dragover="onCanvasDragOver"
+                @drop="onCanvasDrop"
+              ></canvas>
+              <div
+                class="phone-home"
+                :style="{ width: (80 * zoom) + 'px', height: (6 * zoom) + 'px' }"
+              ></div>
+            </div>
           </div>
-        </div>
+        </template>
+        <!-- 长页面模式：滚动视口 -->
+        <template v-else>
+          <div class="viewport-wrap" @wheel.prevent="onWheel">
+            <div class="viewport-header">长页面 · 可上下拖动元素</div>
+            <div
+              class="viewport-scroll"
+              :style="{ height: (667 * zoom) + 'px' }"
+            >
+              <canvas
+                ref="canvasRef"
+                class="fabric-canvas"
+                :style="{
+                  width: (canvasSize.width * zoom) + 'px',
+                  height: (canvasSize.height * zoom) + 'px',
+                }"
+                @dragover="onCanvasDragOver"
+                @drop="onCanvasDrop"
+              ></canvas>
+            </div>
+            <div class="viewport-footer">
+              高 {{ canvasSize.height }}px · 区域内滚动查看全页
+            </div>
+          </div>
+        </template>
 
         <!-- 画布底部状态栏 -->
         <div class="canvas-footer">
@@ -574,7 +607,7 @@ import {
   fetchVersion,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
-import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot } from './types/canvas'
+import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot, PageMode } from './types/canvas'
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
 import { CATEGORIES } from './types/template'
 import { ALL_MATERIALS, getMaterialCategories, getMaterialsByCategory } from './constants/materials'
@@ -617,6 +650,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 // ============ 本地状态 ============
 const leftTab = ref<'material' | 'layers' | 'templates'>('material')
 const sizeLabel = ref('375 × 667')
+const pageMode = ref<'single' | 'long'>('single')
 
 // 背景 UI 状态
 const bgType = ref<'solid' | 'linear-gradient' | 'radial-gradient' | 'image'>('solid')
@@ -1029,6 +1063,22 @@ function onPresetChange() {
   const preset = CANVAS_PRESETS.find(p => p.label === sizeLabel.value)
   if (preset) {
     setSize({ width: preset.width, height: preset.height })
+    pageMode.value = sizeLabel.value.startsWith('长页面') ? 'long' : 'single'
+  }
+}
+
+// 手动切换页面模式
+function onPageModeChange(mode: PageMode) {
+  pageMode.value = mode
+  // 切换到单页时，如果当前高度 > 1000，自动切回默认单页尺寸
+  if (mode === 'single' && canvasSize.value.height > 1000) {
+    sizeLabel.value = '375 × 667'
+    setSize({ width: 375, height: 667 })
+  }
+  // 切换到长页面时，如果当前高度 <= 1000，自动切到长页面尺寸
+  if (mode === 'long' && canvasSize.value.height <= 1000) {
+    sizeLabel.value = '长页面 375 × 2000'
+    setSize({ width: 375, height: 2000 })
   }
 }
 
@@ -1461,6 +1511,50 @@ onMounted(() => {
   background: #333;
   border-radius: 3px;
   z-index: 10;
+}
+
+/* 长页面视口模式 */
+.viewport-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  background-image:
+    linear-gradient(45deg, #e0e4ea 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e4ea 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e4ea 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e4ea 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, 10px 0;
+  background-color: #eef1f6;
+}
+
+.viewport-header {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.viewport-scroll {
+  overflow-y: auto;
+  border: 2px solid #c0c4cc;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  background: #fff;
+}
+
+.viewport-scroll::-webkit-scrollbar { width: 6px; }
+.viewport-scroll::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 3px; }
+.viewport-scroll::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 3px; }
+
+.viewport-footer {
+  font-size: 11px;
+  color: #999;
+  margin-top: 8px;
 }
 
 .fabric-canvas {
