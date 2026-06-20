@@ -38,15 +38,6 @@
                 >{{ el.text }}</text>
               </view>
             </view>
-            <view class="section info-section">
-              <view class="info-card">
-                <text class="info-groom">{{ basicInfo.groomName || '新郎姓名' }}</text>
-                <text class="info-and">囍</text>
-                <text class="info-bride">{{ basicInfo.brideName || '新娘姓名' }}</text>
-              </view>
-              <text class="info-date">{{ basicInfo.weddingDate || '2050.05.20' }}</text>
-              <text class="info-address">{{ basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
-            </view>
           </template>
           <!-- Flex 模式：静态模板的垂直排列 -->
           <template v-else>
@@ -80,15 +71,6 @@
                   >{{ el.text }}</text>
                 </view>
               </block>
-              <view class="section info-section">
-                <view class="info-card">
-                  <text class="info-groom">{{ basicInfo.groomName || '新郎姓名' }}</text>
-                  <text class="info-and">囍</text>
-                  <text class="info-bride">{{ basicInfo.brideName || '新娘姓名' }}</text>
-                </view>
-                <text class="info-date">{{ basicInfo.weddingDate || '2050.05.20' }}</text>
-                <text class="info-address">{{ basicInfo.detailAddress || '婚贝大酒店9F幸福宴会厅' }}</text>
-              </view>
             </view>
           </template>
         </scroll-view>
@@ -120,6 +102,10 @@
         <text class="footer-icon">⚙️</text>
         <text class="footer-label">设置</text>
       </view>
+      <view class="footer-item" @click="openBasicInfoEditor">
+        <text class="footer-icon">📋</text>
+        <text class="footer-label">基本信息</text>
+      </view>
       <view class="footer-item" @click="handleSave">
         <text class="footer-icon">💾</text>
         <text class="footer-label">保存</text>
@@ -148,10 +134,6 @@
       @confirm="editorStore.closeBasicInfoEditor"
     />
 
-    <!-- 编辑基本信息按钮 - 放在预览里 -->
-    <view class="edit-info-btn" @click="openBasicInfoEditor">
-      <text class="edit-info-text">修改基本信息</text>
-    </view>
   </view>
 </template>
 
@@ -497,48 +479,6 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-/* 新人信息区块 */
-.info-section {
-  padding: 40rpx 20rpx;
-  background: #fff8fa;
-  border-radius: 12rpx;
-  text-align: center;
-}
-
-.info-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20rpx;
-  margin-bottom: 20rpx;
-}
-
-.info-groom, .info-bride {
-  font-size: 36rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.info-and {
-  font-size: 40rpx;
-  color: #e84a6e;
-  font-weight: 700;
-}
-
-.info-date {
-  font-size: 30rpx;
-  color: #666;
-  display: block;
-  margin-bottom: 10rpx;
-  letter-spacing: 6rpx;
-}
-
-.info-address {
-  font-size: 24rpx;
-  color: #999;
-  display: block;
-}
-
 /* 高亮样式 */
 .active-section {
   outline: 4rpx solid #e84a6e;
@@ -629,18 +569,4 @@ onMounted(() => {
   font-weight: 600;
 }
 
-/* Edit Info Button */
-.edit-info-btn {
-  position: absolute;
-  right: 30rpx;
-  top: 180rpx;
-  padding: 16rpx 24rpx;
-  background: rgba(232, 74, 110, 0.9);
-  border-radius: 40rpx;
-}
-
-.edit-info-text {
-  font-size: 22rpx;
-  color: #fff;
-}
 </style>

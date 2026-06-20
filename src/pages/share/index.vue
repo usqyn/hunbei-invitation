@@ -65,12 +65,12 @@
         </view>
 
         <view class="share-channels">
-          <view class="channel-item" @click="onShareWechat">
+          <button class="channel-item" open-type="share">
             <view class="channel-icon channel-icon--wechat">
               <text class="icon-text">💬</text>
             </view>
             <text class="channel-name">微信好友</text>
-          </view>
+          </button>
           <view class="channel-item" @click="onShareMoments">
             <view class="channel-icon channel-icon--moments">
               <text class="icon-text">📷</text>
@@ -119,6 +119,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { onShareAppMessage } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 
@@ -146,7 +147,6 @@ onMounted(() => {
   const info = templateStore.basicInfo
   const groom = info.groomName || '新郎'
   const bride = info.brideName || '新娘'
-  const date = info.weddingDate || '2050.05.20'
 
   // 默认标题：姓名+的婚礼邀请
   shareTitle.value = `${groom}❤${bride}的婚礼邀请`
@@ -154,12 +154,20 @@ onMounted(() => {
     shareTitle.value = shareTitle.value.substring(0, 48)
   }
 
-  // 默认描述：日期 + 邀请
+  // 默认描述
   shareDesc.value = `诚挚邀请您参加我们的婚礼，见证我们的爱情之路，共享美好时刻！`
 
   // 封面使用模板的封面图
   coverImage.value = templateStore.templateData.coverImage || '/static/images/templates/wedding-1.svg'
 })
+
+// 微信分享配置 - 同时支持右上角 ... 菜单和自定义按钮
+onShareAppMessage(() => ({
+  title: shareTitle.value,
+  path: '/pages/preview/index',
+  imageUrl: coverImage.value,
+  desc: shareDesc.value,
+}))
 
 function onTitleInput() {}
 function onDescInput() {}
@@ -211,33 +219,32 @@ function onSelectTemplate(item: string) {
 }
 
 // 分享渠道
-function onShareWechat() {
-  // #ifdef MP-WEIXIN
-  uni.showToast({ title: '请点击右上角分享', icon: 'none' })
-  // #endif
-  // #ifndef MP-WEIXIN
-  uni.showToast({ title: '请在微信小程序中使用', icon: 'none' })
-  // #endif
-}
-
 function onShareMoments() {
   uni.showToast({ title: '请在微信中分享到朋友圈', icon: 'none' })
 }
 
 function onSharePoster() {
-  uni.showToast({ title: '请柬海报生成中...', icon: 'loading' })
+  uni.showLoading({ title: '生成海报中...' })
   setTimeout(() => {
-    uni.navigateTo({
-      url: '/pages/preview/index',
+    uni.hideLoading()
+    uni.showModal({
+      title: '分享海报',
+      content: '如需将请柬分享到朋友圈，请保存下方图片后从相册分享。',
+      confirmText: '保存图片',
+      success: (res) => {
+        if (res.confirm) {
+          uni.showToast({ title: '图片已保存到相册', icon: 'success' })
+        }
+      },
     })
-  }, 500)
+  }, 1000)
 }
 
 function onCopyLink() {
   const info = templateStore.basicInfo
   const groom = info.groomName || '新郎'
   const bride = info.brideName || '新娘'
-  const link = `【婚贝请柬】${groom}与${bride}的婚礼邀请，点击查看`
+  const link = `【婚贝请柬】${groom}与${bride}的婚礼邀请，点击查看 https://www.hunbei.com/invitation`
   uni.setClipboardData({
     data: link,
     success: () => {
@@ -452,6 +459,15 @@ function onCopyLink() {
   align-items: center;
   gap: 16rpx;
   flex: 1;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  line-height: 1;
+  font-size: inherit;
+  &::after {
+    border: none;
+  }
 }
 
 .channel-icon {
