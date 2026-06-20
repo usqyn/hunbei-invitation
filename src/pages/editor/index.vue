@@ -349,7 +349,7 @@ function handleSave() {
 
 function handleShare() {
   handleSave()
-  uni.navigateTo({ url: '/pages/preview/index' })
+  uni.navigateTo({ url: '/pages/share/index' })
 }
 
 // 页面加载时根据参数切换模板

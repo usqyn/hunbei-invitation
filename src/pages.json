@@ -47,6 +47,12 @@
       "style": {
         "navigationBarTitleText": "请帖预览"
       }
+    },
+    {
+      "path": "pages/share/index",
+      "style": {
+        "navigationBarTitleText": "婚贝请柬"
+      }
     }
   ],
   "globalStyle": {
