@@ -105,7 +105,7 @@ const pageConfig = TEMPLATE_PAGE_CONFIG
 const STATIC_CATEGORIES = [
   { id: 'wedding', name: '婚礼请柬', icon: '/static/images/categories/wedding.svg' },
   { id: 'birthday', name: '生日派对', icon: '/static/images/categories/birthday.svg' },
-  { id: 'baby', name: '周岁宴', icon: '/static/images/categories/baby.svg' },
+  { id: 'baby', name: '周岁宴', icon: '/static/images/categories/baby.jpg' },
   { id: 'graduation', name: '升学宴', icon: '/static/images/icons/party.svg' },
   { id: 'festival', name: '割礼', icon: '/static/images/categories/ceremony.svg' },
   { id: 'business', name: '耳环礼', icon: '/static/images/categories/earring.svg' },

@@ -166,7 +166,7 @@ const BABY_1_ELEMENTS: EditableElement[] = [
   { type: 'text', text: '2050.08.20', label: '满月日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
   { type: 'text', text: '满月宴', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
   { type: 'text', text: 'BABY SHOWER', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
-  { type: 'image', text: '/static/images/categories/baby.svg', label: '宝宝图标' },
+  { type: 'image', text: '/static/images/categories/baby.jpg', label: '宝宝图标' },
   { type: 'image', text: '/static/images/templates/template-2.svg', dataKey: 'photo1', label: '宝宝图片' },
   { type: 'text', text: '宝宝的到来', dataKey: 'photoTitle', label: '标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 40, color: '#333333' } },
   { type: 'text', text: 'Welcome Baby', dataKey: 'photoSubtitle', label: '英文标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 22, color: '#999999' } },

@@ -27,7 +27,7 @@ export const CATEGORY_LIST: TemplateCategory[] = [
   {
     id: 'baby',
     name: '周岁宴',
-    icon: '/static/images/categories/baby.svg',
+    icon: '/static/images/categories/baby.jpg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'baby'),
   },
   {

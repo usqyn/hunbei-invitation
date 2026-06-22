@@ -11,7 +11,7 @@ export interface HomeCategory {
 export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 1, name: '婚礼请柬', image: '/static/images/categories/wedding.svg', bgColor: '#ffe4e8', categoryId: 'wedding' },
   { id: 2, name: '生日派对', image: '/static/images/categories/birthday.svg', bgColor: '#fff3e6', categoryId: 'birthday' },
-  { id: 3, name: '周岁宴', image: '/static/images/categories/baby.svg', bgColor: '#ffeaa7', categoryId: 'baby' },
+  { id: 3, name: '周岁宴', image: '/static/images/categories/baby.jpg', bgColor: '#ffeaa7', categoryId: 'baby' },
   { id: 4, name: '升学宴', image: '/static/images/categories/graduation.svg', bgColor: '#fff3e0', categoryId: 'graduation' },
   { id: 5, name: '割礼', image: '/static/images/categories/ceremony.svg', bgColor: '#e8f5e9', categoryId: 'festival' },
   { id: 6, name: '耳环礼', image: '/static/images/categories/earring.svg', bgColor: '#fce4ec', categoryId: 'business' },

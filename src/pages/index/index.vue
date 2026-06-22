@@ -19,7 +19,7 @@
         @click="handleCategoryClick(item)"
       >
         <view class="category-icon" :style="{ background: item.bgColor }">
-          <image class="icon-image" :src="item.image" mode="aspectFit" />
+          <image class="icon-image" :class="{ 'icon-image-full': item.categoryId === 'baby' }" :src="item.image" mode="aspectFit" />
         </view>
         <text class="category-name">{{ item.name }}</text>
       </view>
@@ -228,6 +228,12 @@ const onImageError = () => {
 .icon-image {
   width: 48rpx;
   height: 48rpx;
+}
+
+.icon-image-full {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 24rpx;
 }
 
 .category-name {
