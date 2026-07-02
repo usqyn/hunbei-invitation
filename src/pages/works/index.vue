@@ -105,6 +105,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
@@ -127,6 +128,13 @@ onMounted(async () => {
   if (isLoggedIn.value) {
     await worksStore.loadAll()
   }
+})
+
+onPullDownRefresh(async () => {
+  if (isLoggedIn.value) {
+    await worksStore.loadAll()
+  }
+  uni.stopPullDownRefresh()
 })
 
 const handleLogin = () => {

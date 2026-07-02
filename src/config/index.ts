@@ -1,4 +1,5 @@
 // API 基地址（生产环境通过 .env.production 覆盖）
+// 注意：生产环境必须使用 HTTPS 保证传输安全
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 // ============ 首页配置 ============
@@ -10,20 +11,42 @@ export const HOME_CONFIG = {
     allCategories: { title: '全部分类' },
   },
   moreText: '查看全部 ›',
+  banners: [
+    {
+      image: '/static/images/banners/banner-1.jpg',
+      linkType: 'category',
+      linkValue: 'wedding',
+    },
+    {
+      image: '/static/images/banners/banner-2.jpg',
+      linkType: 'category',
+      linkValue: 'festival-invitation',
+    },
+    {
+      image: '/static/images/banners/banner-3.jpg',
+      linkType: 'category',
+      linkValue: 'ceremony',
+    },
+    {
+      image: '/static/images/banners/banner-4.jpg',
+      linkType: 'category',
+      linkValue: 'baby',
+    },
+  ],
   featureCards: [
     {
       badge: '电子请帖',
       title: '婚礼请柬 免费制作',
       desc: '精美模板一键生成',
       categoryId: 'wedding',
-      image: '/static/images/categories/wedding.svg',
+      image: '/static/images/categories/wedding.jpg',
     },
     {
-      badge: '生日邀请',
-      title: '派对邀请函制作',
+      badge: '节日邀请',
+      title: '节日请柬制作',
       desc: '分享美好时光',
-      categoryId: 'birthday',
-      image: '/static/images/categories/birthday.svg',
+      categoryId: 'festival-invitation',
+      image: '/static/images/categories/festival-invitation.jpg',
     },
   ],
 }

@@ -3,7 +3,7 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "婚贝请柬"
+        "navigationBarTitleText": "toy tamaxia"
       }
     },
     {
@@ -21,13 +21,13 @@
     {
       "path": "pages/login/index",
       "style": {
-        "navigationBarTitleText": "婚贝请柬"
+        "navigationBarTitleText": "toy tamaxia"
       }
     },
     {
       "path": "pages/template/index",
       "style": {
-        "navigationBarTitleText": "婚贝请柬"
+        "navigationBarTitleText": "toy tamaxia"
       }
     },
     {
@@ -51,13 +51,43 @@
     {
       "path": "pages/share/index",
       "style": {
-        "navigationBarTitleText": "婚贝请柬"
+        "navigationBarTitleText": "toy tamaxia"
+      }
+    },
+    {
+      "path": "pages/mall/index",
+      "style": {
+        "navigationBarTitleText": "婚礼商城"
+      }
+    },
+    {
+      "path": "pages/mall/cart",
+      "style": {
+        "navigationBarTitleText": "购物车"
+      }
+    },
+    {
+      "path": "pages/mall/order-confirm",
+      "style": {
+        "navigationBarTitleText": "确认订单"
+      }
+    },
+    {
+      "path": "pages/mall/orders",
+      "style": {
+        "navigationBarTitleText": "我的订单"
+      }
+    },
+    {
+      "path": "pages/mall/pay-result",
+      "style": {
+        "navigationBarTitleText": "支付结果"
       }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "婚贝请柬",
+    "navigationBarTitleText": "toy tamaxia",
     "navigationBarBackgroundColor": "#ffffff",
     "backgroundColor": "#f5f5f5"
   },
@@ -72,6 +102,12 @@
         "text": "首页",
         "iconPath": "static/tabs/home.png",
         "selectedIconPath": "static/tabs/home-active.png"
+      },
+      {
+        "pagePath": "pages/mall/index",
+        "text": "商场",
+        "iconPath": "static/tabs/mall.png",
+        "selectedIconPath": "static/tabs/mall-active.png"
       },
       {
         "pagePath": "pages/works/index",

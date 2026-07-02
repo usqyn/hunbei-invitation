@@ -92,34 +92,34 @@ const WEDDING_3_ELEMENTS: EditableElement[] = [
   { type: 'text', text: WEDDING_3_DATA.footerText, dataKey: 'footerText', label: '正文内容', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 26, color: '#666666' } },
 ]
 
-// ============ 【模板 4】生日 - 生日快乐 ============
+// ============ 【模板 4】节日 - 节日快乐 ============
 const BIRTHDAY_1_DATA: TemplateData = {
   coverImage: '/static/images/templates/invitation-1.svg',
-  coverTitle: '生日快乐',
-  coverSubtitle: 'HAPPY BIRTHDAY',
+  coverTitle: '节日快乐',
+  coverSubtitle: 'HAPPY HOLIDAY',
   photo1: '/static/images/templates/invitation-2.svg',
   photo2: '/static/images/templates/invitation-3.svg',
   photo3: '/static/images/templates/invitation-4.svg',
   photo4: '/static/images/templates/invitation-1.svg',
-  photoTitle: '生日派对',
-  photoSubtitle: 'Birthday Party',
-  footerText: '诚挚邀请您参加\n我的生日派对\n一起度过难忘的时光\n愿所有美好如约而至',
+  photoTitle: '节日派对',
+  photoSubtitle: 'Festival Party',
+  footerText: '诚挚邀请您参加\n节日庆典\n一起度过难忘的时光\n愿所有美好如约而至',
   footerSubText: 'PARTY',
 }
 
 const BIRTHDAY_1_ELEMENTS: EditableElement[] = [
   { type: 'image', text: '/static/images/templates/invitation-1.svg', dataKey: 'coverImage', label: '封面图片' },
-  { type: 'text', text: '2050.06.15', label: '生日日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
-  { type: 'text', text: '生日快乐', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
-  { type: 'text', text: 'HAPPY BIRTHDAY', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
-  { type: 'image', text: '/static/images/categories/birthday.svg', label: '蛋糕图标' },
+  { type: 'text', text: '2050.06.15', label: '节日日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
+  { type: 'text', text: '节日快乐', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
+  { type: 'text', text: 'HAPPY HOLIDAY', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
+  { type: 'image', text: '/static/images/categories/festival-invitation.svg', label: '节日图标' },
   { type: 'image', text: '/static/images/templates/invitation-2.svg', dataKey: 'photo1', label: '派对图片' },
-  { type: 'text', text: '生日派对', dataKey: 'photoTitle', label: '派对标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 40, color: '#333333' } },
-  { type: 'text', text: 'Birthday Party', dataKey: 'photoSubtitle', label: '英文标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 22, color: '#999999' } },
+  { type: 'text', text: '节日派对', dataKey: 'photoTitle', label: '节日标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 40, color: '#333333' } },
+  { type: 'text', text: 'Festival Party', dataKey: 'photoSubtitle', label: '英文标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 22, color: '#999999' } },
   { type: 'text', text: BIRTHDAY_1_DATA.footerText, dataKey: 'footerText', label: '正文内容', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 26, color: '#666666' } },
 ]
 
-// ============ 【模板 5】生日 - 甜蜜派对 ============
+// ============ 【模板 5】节日 - 甜蜜派对 ============
 const BIRTHDAY_2_DATA: TemplateData = {
   coverImage: '/static/images/templates/invitation-2.svg',
   coverTitle: '甜蜜派对',
@@ -136,7 +136,7 @@ const BIRTHDAY_2_DATA: TemplateData = {
 
 const BIRTHDAY_2_ELEMENTS: EditableElement[] = [
   { type: 'image', text: '/static/images/templates/invitation-2.svg', dataKey: 'coverImage', label: '封面图片' },
-  { type: 'text', text: '2050.06.15', label: '生日日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
+  { type: 'text', text: '2050.06.15', label: '节日日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
   { type: 'text', text: '甜蜜派对', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
   { type: 'text', text: 'SWEET PARTY', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
   { type: 'image', text: '/static/images/icons/party.svg', label: '派对图标' },
@@ -362,6 +362,87 @@ const BUSINESS_2_ELEMENTS: EditableElement[] = [
   { type: 'text', text: BUSINESS_2_DATA.footerText, dataKey: 'footerText', label: '正文内容', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 26, color: '#666666' } },
 ]
 
+// ============ 【模板 14】求婚 - 最美的遇见 ============
+const PROPOSAL_1_DATA: TemplateData = {
+  coverImage: '/static/images/templates/template-1.svg',
+  coverTitle: '嫁给我吧',
+  coverSubtitle: 'MARRY ME',
+  photo1: '/static/images/templates/wedding-2.svg',
+  photo2: '/static/images/templates/wedding-3.svg',
+  photo3: '/static/images/templates/wedding-4.svg',
+  photo4: '/static/images/templates/wedding-5.svg',
+  photoTitle: '一生一世',
+  photoSubtitle: 'FOREVER & ALWAYS',
+  footerText: '从遇见你的那一天起\n我的世界便充满了色彩\n想和你一起走过每个春夏秋冬\n让余生因你而完整',
+  footerSubText: 'LOVE',
+}
+
+const PROPOSAL_1_ELEMENTS: EditableElement[] = [
+  { type: 'image', text: '/static/images/templates/template-1.svg', dataKey: 'coverImage', label: '封面图片' },
+  { type: 'text', text: '2050.06.15', label: '求婚日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
+  { type: 'text', text: '嫁给我吧', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
+  { type: 'text', text: 'MARRY ME', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
+  { type: 'image', text: '/static/images/categories/proposal.jpg', label: '求婚图标' },
+  { type: 'image', text: '/static/images/templates/wedding-2.svg', dataKey: 'photo1', label: '相册图片' },
+  { type: 'text', text: '一生一世', dataKey: 'photoTitle', label: '标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 40, color: '#333333' } },
+  { type: 'text', text: 'FOREVER & ALWAYS', dataKey: 'photoSubtitle', label: '英文标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 22, color: '#999999' } },
+  { type: 'text', text: PROPOSAL_1_DATA.footerText, dataKey: 'footerText', label: '正文内容', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 26, color: '#666666' } },
+]
+
+// ============ 【模板 15】商量茶 - 喜结良缘 ============
+const CONSULTATION_TEA_1_DATA: TemplateData = {
+  coverImage: '/static/images/templates/template-2.svg',
+  coverTitle: '喜结良缘',
+  coverSubtitle: 'A PERFECT MATCH',
+  photo1: '/static/images/templates/wedding-4.svg',
+  photo2: '/static/images/templates/wedding-5.svg',
+  photo3: '/static/images/templates/wedding-6.svg',
+  photo4: '/static/images/templates/wedding-1.svg',
+  photoTitle: '以茶为媒',
+  photoSubtitle: 'TEA CEREMONY',
+  footerText: '诚邀您参加我们的商量茶仪式\n一杯清茶 两姓联姻\n共商良辰美景\n一同见证我们的幸福时刻',
+  footerSubText: 'TEA',
+}
+
+const CONSULTATION_TEA_1_ELEMENTS: EditableElement[] = [
+  { type: 'image', text: '/static/images/templates/template-2.svg', dataKey: 'coverImage', label: '封面图片' },
+  { type: 'text', text: '2050.07.01', label: '商量茶日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
+  { type: 'text', text: '喜结良缘', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
+  { type: 'text', text: 'A PERFECT MATCH', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
+  { type: 'image', text: '/static/images/categories/consultation-tea.jpg', label: '商量茶图标' },
+  { type: 'image', text: '/static/images/templates/wedding-4.svg', dataKey: 'photo1', label: '相册图片' },
+  { type: 'text', text: '以茶为媒', dataKey: 'photoTitle', label: '标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 40, color: '#333333' } },
+  { type: 'text', text: 'TEA CEREMONY', dataKey: 'photoSubtitle', label: '英文标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 22, color: '#999999' } },
+  { type: 'text', text: CONSULTATION_TEA_1_DATA.footerText, dataKey: 'footerText', label: '正文内容', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 26, color: '#666666' } },
+]
+
+// ============ 【模板 16】乔迁 - 乔迁之喜 ============
+const HOUSEWARMING_1_DATA: TemplateData = {
+  coverImage: '/static/images/templates/template-3.svg',
+  coverTitle: '乔迁之喜',
+  coverSubtitle: 'HOUSEWARMING',
+  photo1: '/static/images/templates/template-4.svg',
+  photo2: '/static/images/templates/template-5.svg',
+  photo3: '/static/images/templates/wedding-1.svg',
+  photo4: '/static/images/templates/wedding-2.svg',
+  photoTitle: '新居落成',
+  photoSubtitle: 'NEW HOME',
+  footerText: '新居落成 吉日迁居\n诚挚邀请您光临寒舍\n共庆乔迁之喜\n薄酒一杯 恭候大驾',
+  footerSubText: 'HOME',
+}
+
+const HOUSEWARMING_1_ELEMENTS: EditableElement[] = [
+  { type: 'image', text: '/static/images/templates/template-3.svg', dataKey: 'coverImage', label: '封面图片' },
+  { type: 'text', text: '2050.09.10', label: '乔迁日期', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 36, color: '#ffffff' } },
+  { type: 'text', text: '乔迁之喜', dataKey: 'coverTitle', label: '主标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 56, color: '#ffffff' } },
+  { type: 'text', text: 'HOUSEWARMING', dataKey: 'coverSubtitle', label: '英文副标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 24, color: 'rgba(255,255,255,0.9)' } },
+  { type: 'image', text: '/static/images/categories/housewarming.jpg', label: '乔迁图标' },
+  { type: 'image', text: '/static/images/templates/template-4.svg', dataKey: 'photo1', label: '新居图片' },
+  { type: 'text', text: '新居落成', dataKey: 'photoTitle', label: '标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 40, color: '#333333' } },
+  { type: 'text', text: 'NEW HOME', dataKey: 'photoSubtitle', label: '英文标题', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 22, color: '#999999' } },
+  { type: 'text', text: HOUSEWARMING_1_DATA.footerText, dataKey: 'footerText', label: '正文内容', style: { ...DEFAULT_ELEMENT_STYLE, fontSize: 26, color: '#666666' } },
+]
+
 // ============ 模板总列表 ============
 export const TEMPLATE_LIST: TemplateItem[] = [
   {
@@ -375,7 +456,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: WEDDING_1_DATA,
     elements: WEDDING_1_ELEMENTS,
     primaryColor: '#e84a6e',
-    tags: ['网红爆款', '婚礼请帖'],
+    tags: ['网红爆款', '新婚'],
   },
   {
     id: 'wedding-2',
@@ -388,7 +469,7 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: WEDDING_2_DATA,
     elements: WEDDING_2_ELEMENTS,
     primaryColor: '#ff6b8a',
-    tags: ['网红爆款', '婚礼请帖'],
+    tags: ['网红爆款', '新婚'],
   },
   {
     id: 'wedding-3',
@@ -401,33 +482,33 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     data: WEDDING_3_DATA,
     elements: WEDDING_3_ELEMENTS,
     primaryColor: '#c0392b',
-    tags: ['网红爆款', '婚礼请帖'],
+    tags: ['网红爆款', '新婚'],
   },
   {
-    id: 'birthday-1',
-    name: '生日快乐',
-    subtitle: '难忘的派对时光',
-    category: 'birthday',
+    id: 'festival-invitation-1',
+    name: '节日快乐',
+    subtitle: '难忘的节日时光',
+    category: 'festival-invitation',
     cover: '/static/images/templates/invitation-1.svg',
     likes: 285600,
     pageCount: 10,
     data: BIRTHDAY_1_DATA,
     elements: BIRTHDAY_1_ELEMENTS,
     primaryColor: '#f39c12',
-    tags: ['网红爆款', '生日邀请'],
+    tags: ['网红爆款', '节日邀请'],
   },
   {
-    id: 'birthday-2',
+    id: 'festival-invitation-2',
     name: '甜蜜派对',
     subtitle: '分享美好时光',
-    category: 'birthday',
+    category: 'festival-invitation',
     cover: '/static/images/templates/invitation-2.svg',
     likes: 198700,
     pageCount: 10,
     data: BIRTHDAY_2_DATA,
     elements: BIRTHDAY_2_ELEMENTS,
     primaryColor: '#ff9f43',
-    tags: ['网红爆款', '生日邀请'],
+    tags: ['网红爆款', '节日邀请'],
   },
   {
     id: 'baby-1',
@@ -532,6 +613,45 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     elements: BUSINESS_2_ELEMENTS,
     primaryColor: '#00cec9',
     tags: ['限时免费'],
+  },
+  {
+    id: 'proposal-1',
+    name: '最美的遇见',
+    subtitle: '一见钟情 此生不渝',
+    category: 'proposal',
+    cover: '/static/images/templates/template-1.svg',
+    likes: 215600,
+    pageCount: 10,
+    data: PROPOSAL_1_DATA,
+    elements: PROPOSAL_1_ELEMENTS,
+    primaryColor: '#9b59b6',
+    tags: ['网红爆款'],
+  },
+  {
+    id: 'consultation-tea-1',
+    name: '喜结良缘',
+    subtitle: '以茶为媒 共话未来',
+    category: 'consultation-tea',
+    cover: '/static/images/templates/template-2.svg',
+    likes: 156300,
+    pageCount: 10,
+    data: CONSULTATION_TEA_1_DATA,
+    elements: CONSULTATION_TEA_1_ELEMENTS,
+    primaryColor: '#e67e22',
+    tags: ['网红爆款'],
+  },
+  {
+    id: 'housewarming-1',
+    name: '乔迁之喜',
+    subtitle: '新居落成 鸿运当头',
+    category: 'housewarming',
+    cover: '/static/images/templates/template-3.svg',
+    likes: 187400,
+    pageCount: 10,
+    data: HOUSEWARMING_1_DATA,
+    elements: HOUSEWARMING_1_ELEMENTS,
+    primaryColor: '#e74c3c',
+    tags: ['网红爆款'],
   },
 ]
 

@@ -14,15 +14,33 @@ export {
 export const CATEGORY_LIST: TemplateCategory[] = [
   {
     id: 'wedding',
-    name: '婚礼请柬',
-    icon: '/static/images/categories/wedding.svg',
+    name: '新婚',
+    icon: '/static/images/categories/wedding.jpg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'wedding'),
   },
   {
-    id: 'birthday',
-    name: '生日派对',
-    icon: '/static/images/categories/birthday.svg',
-    templates: TEMPLATE_LIST.filter(t => t.category === 'birthday'),
+    id: 'proposal',
+    name: '求婚',
+    icon: '/static/images/categories/proposal.jpg',
+    templates: TEMPLATE_LIST.filter(t => t.category === 'proposal'),
+  },
+  {
+    id: 'consultation-tea',
+    name: '商量茶',
+    icon: '/static/images/categories/consultation-tea.jpg',
+    templates: TEMPLATE_LIST.filter(t => t.category === 'consultation-tea'),
+  },
+  {
+    id: 'festival',
+    name: '割礼',
+    icon: '/static/images/categories/ceremony.jpg',
+    templates: TEMPLATE_LIST.filter(t => t.category === 'festival'),
+  },
+  {
+    id: 'business',
+    name: '耳环礼',
+    icon: '/static/images/categories/earring.jpg',
+    templates: TEMPLATE_LIST.filter(t => t.category === 'business'),
   },
   {
     id: 'baby',
@@ -33,20 +51,20 @@ export const CATEGORY_LIST: TemplateCategory[] = [
   {
     id: 'graduation',
     name: '升学宴',
-    icon: '/static/images/icons/party.svg',
+    icon: '/static/images/categories/graduation.jpg',
     templates: TEMPLATE_LIST.filter(t => t.category === 'graduation'),
   },
   {
-    id: 'festival',
-    name: '割礼',
-    icon: '/static/images/categories/ceremony.svg',
-    templates: TEMPLATE_LIST.filter(t => t.category === 'festival'),
+    id: 'festival-invitation',
+    name: '节日请柬',
+    icon: '/static/images/categories/festival-invitation.jpg',
+    templates: TEMPLATE_LIST.filter(t => t.category === 'festival-invitation'),
   },
   {
-    id: 'business',
-    name: '耳环礼',
-    icon: '/static/images/categories/earring.svg',
-    templates: TEMPLATE_LIST.filter(t => t.category === 'business'),
+    id: 'housewarming',
+    name: '乔迁',
+    icon: '/static/images/categories/housewarming.jpg',
+    templates: TEMPLATE_LIST.filter(t => t.category === 'housewarming'),
   },
 ]
 

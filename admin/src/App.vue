@@ -1,5 +1,14 @@
 <template>
   <div class="app" @keydown="onKeyDown" tabindex="0" ref="appRootRef">
+    <!-- 全局 Toast 通知 -->
+    <Teleport to="body">
+      <transition name="toast-fade">
+        <div v-if="toast.visible" class="global-toast" :class="toast.type">
+          <span class="toast-icon">{{ toast.type === 'success' ? '✅' : '❌' }}</span>
+          <span class="toast-text">{{ toast.message }}</span>
+        </div>
+      </transition>
+    </Teleport>
     <!-- ============ 顶部工具栏 ============ -->
     <header class="toolbar">
       <div class="toolbar-left">
@@ -31,6 +40,7 @@
         <!-- 页面模式 -->
         <button class="tb-btn" :class="{ active: pageMode === 'single' }" @click="onPageModeChange('single')" title="单页模式">📄 单页</button>
         <button class="tb-btn" :class="{ active: pageMode === 'long' }" @click="onPageModeChange('long')" title="长页面模式">📃 长页面</button>
+        <button class="tb-btn" :class="{ active: pageMode === 'landscape' }" @click="onPageModeChange('landscape')" title="横屏卡片模式">🃏 横屏</button>
       </div>
 
       <div class="toolbar-right">
@@ -41,6 +51,7 @@
         <span class="toolbar-divider"></span>
         <button class="tb-btn danger" @click="deleteSelected" title="删除选中 (Del)">🗑 删除</button>
         <span class="toolbar-divider"></span>
+        <button class="tb-btn" @click="saveToServer" title="保存到服务器 (Ctrl+S)">💾 保存</button>
         <button class="tb-btn publish-btn" @click="showPublishWizard = true" title="发布模板">🚀 发布</button>
         <button class="tb-btn" @click="onExportPNG" title="导出 PNG">📥 导出</button>
       </div>
@@ -83,6 +94,19 @@
             </button>
           </div>
           <div class="section-divider"></div>
+          <div class="section-title">快捷字段</div>
+          <div class="material-grid">
+            <button
+              v-for="sf in SMART_FIELDS" :key="sf.key"
+              class="material-item smart-field-item"
+              :title="sf.label"
+              @click="addSmartField(sf)"
+            >
+              <span class="sf-icon">{{ sf.icon }}</span>
+              <span class="mi-label">{{ sf.label }}</span>
+            </button>
+          </div>
+          <div class="section-divider"></div>
           <div class="section-title">背景颜色</div>
           <div class="color-grid">
             <button v-for="c in bgColors" :key="c" class="color-chip" :style="{ background: c }" @click="setBackground({ type: 'solid', color1: c } as any)"></button>
@@ -103,7 +127,7 @@
           <div class="mat-grid">
             <div v-for="mat in filteredMaterials" :key="mat.id" class="mat-item" draggable="true" @dragstart="onMaterialDragStart($event, mat)" @click="onMaterialClick(mat)" :title="mat.name">
               <div v-if="mat.type === 'shape'" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
-              <div v-else-if="mat.svg" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
+              <div v-else-if="mat.svg" class="mat-shape" v-html="sanitizeSvg(mat.svg)" :style="{ color: mat.color || '#333' }"></div>
               <div class="mat-name">{{ mat.name }}</div>
             </div>
           </div>
@@ -189,7 +213,7 @@
           </div>
         </template>
         <!-- 长页面模式：滚动视口 -->
-        <template v-else>
+        <template v-else-if="pageMode === 'long'">
           <div class="viewport-wrap" @wheel.prevent="onWheel">
             <div class="viewport-header">长页面 · 可上下拖动元素</div>
             <div
@@ -212,11 +236,38 @@
             </div>
           </div>
         </template>
+        <!-- 横屏卡片模式 -->
+        <template v-else>
+          <div class="card-wrap" @wheel.prevent="onWheel">
+            <div class="card-header">横屏卡片 · 宽 {{ canvasSize.width }} × 高 {{ canvasSize.height }}</div>
+            <div class="card-viewport">
+              <div
+                class="card-frame"
+                :style="{
+                  width: (canvasSize.width * zoom) + 'px',
+                  height: (canvasSize.height * zoom) + 'px',
+                }"
+              >
+                <canvas
+                  ref="canvasRef"
+                  class="fabric-canvas"
+                  :style="{
+                    width: (canvasSize.width * zoom) + 'px',
+                    height: (canvasSize.height * zoom) + 'px',
+                  }"
+                  @dragover="onCanvasDragOver"
+                  @drop="onCanvasDrop"
+                ></canvas>
+              </div>
+            </div>
+            <div class="card-footer">卡片居中展示 · 传统横版贺卡风格</div>
+          </div>
+        </template>
 
         <!-- 画布底部状态栏 -->
         <div class="canvas-footer">
           <span>画布：{{ canvasSize.width }} × {{ canvasSize.height }}</span>
-          <span v-if="selectedId">已选中：{{ selectedElement?.type === 'text' ? '文字' : '图片' }}（{{ canvasSize.width }} × {{ canvasSize.height }}）</span>
+          <span v-if="selectedId">已选中：{{ selectedElement?.type === 'text' ? '文字' : '图片' }}（{{ Math.round((selectedElement as any).width || 0) }} × {{ Math.round((selectedElement as any).height || 0) }}）</span>
           <span v-else>未选中元素 · 提示：点击画布元素以编辑</span>
         </div>
       </section>
@@ -364,7 +415,7 @@
               </div>
             </div>
             <div class="form-row">
-              <label>行高 {{ (selectedElement as any).lineHeight.toFixed(2) }}</label>
+              <label>行高 {{ ((selectedElement as any).lineHeight ?? 1.5).toFixed(2) }}</label>
               <input
                 type="range"
                 class="form-input"
@@ -476,6 +527,19 @@
                 </label>
               </label>
             </div>
+
+            <div class="section-title">模板数据绑定</div>
+            <div class="form-row">
+              <label>数据字段</label>
+              <select
+                class="form-input"
+                :value="(selectedElement as any).dataKey || ''"
+                @change="e => updateSelected({ dataKey: (e.target as HTMLSelectElement).value || undefined })"
+              >
+                <option value="">无绑定</option>
+                <option v-for="k in TEMPLATE_DATA_KEYS" :key="k" :value="k">{{ k }}</option>
+              </select>
+            </div>
           </template>
 
           <!-- 图片元素属性 -->
@@ -572,6 +636,19 @@
                 </label>
               </label>
             </div>
+
+            <div class="section-title">模板数据绑定</div>
+            <div class="form-row">
+              <label>数据字段</label>
+              <select
+                class="form-input"
+                :value="(selectedElement as any).dataKey || ''"
+                @change="e => updateSelected({ dataKey: (e.target as HTMLSelectElement).value || undefined })"
+              >
+                <option value="">无绑定</option>
+                <option v-for="k in TEMPLATE_DATA_KEYS" :key="k" :value="k">{{ k }}</option>
+              </select>
+            </div>
           </template>
 
           <!-- 未知元素 -->
@@ -589,6 +666,7 @@
       :elementCount="elements.length"
       :getDraft="getDraft"
       :getCanvasEl="getCanvasEl"
+      :pageMode="pageMode"
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
@@ -596,7 +674,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useCanvas } from './composables/useCanvas'
 import {
   uploadImage,
@@ -605,12 +683,45 @@ import {
   fetchTemplate,
   deleteTemplate,
   fetchVersion,
+  initApi,
+  createTemplate,
+  updateTemplate,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
 import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot, PageMode } from './types/canvas'
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
 import { CATEGORIES } from './types/template'
 import { ALL_MATERIALS, getMaterialCategories, getMaterialsByCategory } from './constants/materials'
+
+// 模板数据字段（用于 dataKey 绑定）
+const TEMPLATE_DATA_KEYS = [
+  'coverImage', 'coverTitle', 'coverSubtitle',
+  'photo1', 'photo2', 'photo3', 'photo4',
+  'photoTitle', 'photoSubtitle',
+  'footerText', 'footerSubText',
+  'inviter', 'invitee', 'date', 'time',
+  'location', 'address', 'phone',
+]
+
+// 快捷字段配置
+interface SmartFieldConfig {
+  key: string
+  label: string
+  icon: string
+  placeholder: string
+  fontSize: number
+  fontWeight: 'normal' | 'bold'
+  color: string
+}
+const SMART_FIELDS: SmartFieldConfig[] = [
+  { key: 'inviter', label: '邀请者', icon: '👤', placeholder: '请输入邀请者姓名', fontSize: 14, fontWeight: 'bold', color: '#d4a574' },
+  { key: 'invitee', label: '受邀者', icon: '👥', placeholder: '请输入受邀者姓名', fontSize: 14, fontWeight: 'bold', color: '#d4a574' },
+  { key: 'date', label: '日期', icon: '📅', placeholder: '2024年10月1日', fontSize: 18, fontWeight: 'normal', color: '#666666' },
+  { key: 'time', label: '时间', icon: '⏰', placeholder: '18:00', fontSize: 18, fontWeight: 'normal', color: '#666666' },
+  { key: 'location', label: '地点', icon: '📍', placeholder: '点击填写地点', fontSize: 18, fontWeight: 'normal', color: '#666666' },
+  { key: 'address', label: '详细地址', icon: '🏠', placeholder: 'xx酒店xx厅', fontSize: 16, fontWeight: 'normal', color: '#999999' },
+  { key: 'phone', label: '联系电话', icon: '📞', placeholder: '138xxxxxxxx', fontSize: 16, fontWeight: 'normal', color: '#999999' },
+]
 
 // 字体列表
 const fontList = [
@@ -642,6 +753,17 @@ const gradients = [
   { css: 'linear-gradient(135deg, #ffecb3 0%, #ffe082 100%)', c1: '#ffecb3', c2: '#ffe082', angle: 135 },
 ]
 
+// ============ 全局 Toast ============
+const toast = reactive({ visible: false, message: '', type: 'success' as 'success' | 'error' })
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+function showToast(message: string, type: 'success' | 'error' = 'success') {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.message = message
+  toast.type = type
+  toast.visible = true
+  toastTimer = setTimeout(() => { toast.visible = false }, 2500)
+}
+
 // ============ DOM refs ============
 const appRootRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -650,7 +772,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 // ============ 本地状态 ============
 const leftTab = ref<'material' | 'layers' | 'templates'>('material')
 const sizeLabel = ref('375 × 667')
-const pageMode = ref<'single' | 'long'>('single')
+const pageMode = ref<PageMode>('single')
 
 // 背景 UI 状态
 const bgType = ref<'solid' | 'linear-gradient' | 'radial-gradient' | 'image'>('solid')
@@ -699,6 +821,7 @@ const {
   getDraft,
   loadDraft,
   clearCanvas,
+  dispose,
 } = useCanvas({
   canvasRef,
   initialSize: { ...DEFAULT_CANVAS_SIZE },
@@ -732,27 +855,28 @@ function onMaterialDragStart(e: DragEvent, mat: any) {
   }
 }
 
+function svgWithColor(svg: string, color?: string): string {
+  if (!color) return svg
+  return svg.replace(/currentColor/g, color)
+}
+
+function loadSvgToCanvas(svg: string, color: string | undefined, x: number, y: number, name: string) {
+  const colored = svgWithColor(svg, color)
+  const blob = new Blob([colored], { type: 'image/svg+xml' })
+  const reader = new FileReader()
+  reader.onload = () => {
+    canvasAddImage(reader.result as string, {
+      x, y, width: 100, height: 100, name,
+    } as any)
+  }
+  reader.readAsDataURL(blob)
+}
+
 function onMaterialClick(mat: any) {
   const cx = canvasSize.value.width / 2
   const cy = canvasSize.value.height / 2
-  if (mat.type === 'shape' && mat.svg) {
-    const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
-    const reader = new FileReader()
-    reader.onload = () => {
-      canvasAddImage(reader.result as string, {
-        x: cx, y: cy, width: 100, height: 100, name: mat.name,
-      } as any)
-    }
-    reader.readAsDataURL(blob)
-  } else if (mat.type === 'sticker' && mat.svg) {
-    const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
-    const reader = new FileReader()
-    reader.onload = () => {
-      canvasAddImage(reader.result as string, {
-        x: cx, y: cy, width: 100, height: 100, name: mat.name,
-      } as any)
-    }
-    reader.readAsDataURL(blob)
+  if ((mat.type === 'shape' || mat.type === 'sticker') && mat.svg) {
+    loadSvgToCanvas(mat.svg, mat.color, cx, cy, mat.name)
   }
 }
 
@@ -773,31 +897,8 @@ async function onCanvasDrop(e: DragEvent) {
     const x = (e.clientX - rect.left) / zoom.value
     const y = (e.clientY - rect.top) / zoom.value
 
-    if (mat.type === 'shape' && mat.svg) {
-      // 将 SVG 转为 data URL，再通过图片元素方式加入
-      const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
-      const reader = new FileReader()
-      reader.onload = () => {
-        canvasAddImage(reader.result as string, {
-          x, y,
-          width: 100,
-          height: 100,
-          name: mat.name,
-        } as any)
-      }
-      reader.readAsDataURL(blob)
-    } else if (mat.type === 'sticker' && mat.svg) {
-      const blob = new Blob([mat.svg], { type: 'image/svg+xml' })
-      const reader = new FileReader()
-      reader.onload = () => {
-        canvasAddImage(reader.result as string, {
-          x, y,
-          width: 100,
-          height: 100,
-          name: mat.name,
-        } as any)
-      }
-      reader.readAsDataURL(blob)
+    if ((mat.type === 'shape' || mat.type === 'sticker') && mat.svg) {
+      loadSvgToCanvas(mat.svg, mat.color, x, y, mat.name)
     }
   } catch (_) {}
 }
@@ -811,6 +912,9 @@ function onCanvasDragOver(e: DragEvent) {
 const templateList = ref<any[]>([])
 const loadingTemplates = ref(false)
 const currentTemplateId = ref<string | null>(null)
+const currentTemplateName = ref('')
+const currentTemplateCategory = ref('wedding')
+const currentTemplateSubtitle = ref('')
 const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
@@ -850,7 +954,8 @@ async function onLoadTemplate(id: string) {
         locked: false,
         visible: true,
         zIndex: el.zIndex ?? idx,
-        content: el.text || '',
+        content: el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '',
+        dataKey: el.dataKey,
         fontFamily: el.style?.font || '思源宋体, serif',
         fontSize: el.style?.fontSize || 24,
         fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
@@ -880,6 +985,9 @@ async function onLoadTemplate(id: string) {
     }
     loadDraft(draft)
     currentTemplateId.value = id
+    currentTemplateName.value = tpl.name || ''
+    currentTemplateCategory.value = tpl.category || 'wedding'
+    currentTemplateSubtitle.value = tpl.subtitle || ''
   } catch (e) {
     alert('加载模板失败：' + (e as Error).message)
   }
@@ -887,6 +995,9 @@ async function onLoadTemplate(id: string) {
 
 function onCloneTemplate(tpl: any) {
   currentTemplateId.value = null
+  currentTemplateName.value = ''
+  currentTemplateCategory.value = 'wedding'
+  currentTemplateSubtitle.value = ''
   onLoadTemplate(tpl.id)
 }
 
@@ -894,8 +1005,8 @@ async function onDeleteTemplate(tpl: any) {
   if (!confirm(`确定删除模板「${tpl.name}」？`)) return
   try {
     await deleteTemplate(tpl.id)
-    await fetchVersion()
     templateList.value = templateList.value.filter(t => t.id !== tpl.id)
+    showToast('模板已删除')
   } catch (e) {
     alert('删除失败：' + (e as Error).message)
   }
@@ -912,9 +1023,90 @@ function formatTime(ts: number): string {
 
 function createNewFromCanvas() {
   currentTemplateId.value = null
+  currentTemplateName.value = ''
+  currentTemplateCategory.value = 'wedding'
+  currentTemplateSubtitle.value = ''
   clearCanvas()
   historyVersions.value = []
   pushHistory('new')
+}
+
+// ============ 保存到服务器 ============
+async function saveToServer() {
+  try {
+    const draft = getDraft()
+    const cSize = draft?.canvasSize || { width: 375, height: 667 }
+    const name = currentTemplateName.value || '未命名模板'
+    const payload: any = {
+      name,
+      subtitle: currentTemplateSubtitle.value || '',
+      category: currentTemplateCategory.value || 'wedding',
+      tags: [],
+      cover: '',
+      primaryColor: '#e84a6e',
+      likes: 0,
+      pageCount: 10,
+      orientation: cSize.width > cSize.height ? 'landscape' : 'portrait',
+      data: {
+        coverImage: '',
+        coverTitle: name,
+        coverSubtitle: currentTemplateSubtitle.value || '',
+        photo1: '', photo2: '', photo3: '', photo4: '',
+        photoTitle: '', photoSubtitle: '',
+        footerText: '', footerSubText: '',
+        inviter: '', invitee: '', date: '', time: '',
+        location: '', address: '', phone: '',
+      },
+      canvasSize: cSize,
+      background: draft?.background || { type: 'solid', color1: '#ffffff' },
+      elements: (draft?.elements || []).map((el: any) => ({
+        id: el.id,
+        type: el.type === 'sticker' ? 'image' : el.type,
+        text: el.content || el.src || '',
+        dataKey: el.dataKey,
+        label: el.name,
+        x: el.x - (el.width || 0) / 2,
+        y: el.y - (el.height || 0) / 2,
+        width: el.width || 0,
+        height: el.height || 0,
+        zIndex: el.zIndex ?? 0,
+        rotation: el.rotation ?? 0,
+        opacity: el.opacity ?? 1,
+        editable: el.editable !== false,
+        style: el.type === 'text' ? {
+          font: el.fontFamily,
+          color: el.color,
+          fontSize: el.fontSize != null ? Math.round(el.fontSize * 750 / cSize.width) : 28,
+          spacing: el.letterSpacing ?? 2,
+          lineHeight: el.lineHeight ?? 1.5,
+          fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
+          textAlign: el.textAlign || 'center',
+        } : el.type === 'image' ? {
+          font: '', color: '', spacing: 0,
+          borderRadius: el.borderRadius ?? 0,
+          borderColor: el.borderColor || 'transparent',
+          borderWidth: el.borderWidth ?? 0,
+        } as any : undefined,
+      })),
+    }
+
+    let resultId: string
+    if (currentTemplateId.value) {
+      payload.id = currentTemplateId.value
+      await updateTemplate(currentTemplateId.value, payload)
+      resultId = currentTemplateId.value
+    } else {
+      const result = await createTemplate(payload)
+      resultId = result.id
+      currentTemplateId.value = resultId
+      currentTemplateName.value = result.name || name
+    }
+
+    showToast('保存成功 ✅')
+    loadTemplateList()
+  } catch (e: any) {
+    showToast('保存失败：' + (e?.response?.data?.error || e?.message || '未知错误'), 'error')
+  }
 }
 
 // ============ Phase 4: 发布与导出 ============
@@ -928,10 +1120,13 @@ function onExportPNG() {
   a.click()
 }
 
-function onTemplatePublished(id: string) {
+function onTemplatePublished(data: { id: string; name: string; category: string; subtitle: string }) {
   showPublishWizard.value = false
   loadTemplateList()
-  currentTemplateId.value = id
+  currentTemplateId.value = data.id
+  currentTemplateName.value = data.name
+  currentTemplateCategory.value = data.category
+  currentTemplateSubtitle.value = data.subtitle
 }
 
 // ============ 本地草稿自动保存 ============
@@ -969,8 +1164,19 @@ onBeforeUnmount(() => {
 // 文字添加：支持传入一些初始属性
 function addText(partial?: Partial<TextElement>) {
   canvasAddText(partial)
-  // 自动切换到图层 Tab 便于看到新元素
-  // leftTab.value = 'layers'
+}
+
+// 快捷字段添加到画布
+function addSmartField(sf: SmartFieldConfig) {
+  canvasAddText({
+    content: sf.placeholder,
+    dataKey: sf.key,
+    editable: true,
+    name: sf.label,
+    fontSize: sf.fontSize,
+    fontWeight: sf.fontWeight,
+    color: sf.color,
+  })
 }
 
 // 文件上传
@@ -983,9 +1189,9 @@ async function onImageFile(e: Event) {
   const file = input.files?.[0]
   if (!file) return
   try {
-    // 读成 DataURL：离线可用 + 预览快速
     const dataUrl = await fileToDataURL(file)
     await canvasAddImage(dataUrl)
+    showToast('图片添加成功')
   } catch (err) {
     alert('图片上传失败：' + (err as Error).message)
   } finally {
@@ -999,12 +1205,12 @@ async function onImageReplaceFile(e: Event) {
   if (!file || !selectedId.value) return
   try {
     const dataUrl = await fileToDataURL(file)
-    // 先通过 API：把真实图片上传到服务器（可选）
-    // 在阶段 1 中我们只把图片加到画布上，用于替换所选图片
-    // 简单做法：删除当前元素 → 添加新图片
     const id = selectedId.value
-    deleteElement(id)
-    await canvasAddImage(dataUrl)
+    const el = elements.value.find(e => e.id === id)
+    if (el) {
+      updateSelected({ src: dataUrl } as any)
+    }
+    showToast('图片替换成功')
   } catch (err) {
     alert('图片上传失败：' + (err as Error).message)
   } finally {
@@ -1020,6 +1226,7 @@ async function onBgImageFile(e: Event) {
     const dataUrl = await fileToDataURL(file)
     bgType.value = 'image'
     setBackground({ type: 'image', imageUrl: dataUrl, imageScale: bgScale.value, imageOpacity: bgOpacity.value / 100, color1: bgColor1.value })
+    showToast('背景图设置成功')
   } catch (err) {
     alert('图片上传失败：' + (err as Error).message)
   } finally {
@@ -1034,6 +1241,10 @@ function fileToDataURL(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error)
     reader.readAsDataURL(file)
   })
+}
+
+function sanitizeSvg(svg: string): string {
+  return svg.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '').replace(/on\w+="[^"]*"/gi, '')
 }
 
 // 背景设置：类型改变 / 颜色改变
@@ -1063,15 +1274,21 @@ function onPresetChange() {
   const preset = CANVAS_PRESETS.find(p => p.label === sizeLabel.value)
   if (preset) {
     setSize({ width: preset.width, height: preset.height })
-    pageMode.value = sizeLabel.value.startsWith('长页面') ? 'long' : 'single'
+    if (sizeLabel.value.startsWith('横屏')) {
+      pageMode.value = 'landscape'
+    } else if (sizeLabel.value.startsWith('长页面')) {
+      pageMode.value = 'long'
+    } else {
+      pageMode.value = 'single'
+    }
   }
 }
 
 // 手动切换页面模式
 function onPageModeChange(mode: PageMode) {
   pageMode.value = mode
-  // 切换到单页时，如果当前高度 > 1000，自动切回默认单页尺寸
-  if (mode === 'single' && canvasSize.value.height > 1000) {
+  // 切换到单页时，如果当前是长页面或横屏，自动切回默认单页尺寸
+  if (mode === 'single' && (canvasSize.value.height > 1000 || canvasSize.value.width > canvasSize.value.height)) {
     sizeLabel.value = '375 × 667'
     setSize({ width: 375, height: 667 })
   }
@@ -1080,7 +1297,21 @@ function onPageModeChange(mode: PageMode) {
     sizeLabel.value = '长页面 375 × 2000'
     setSize({ width: 375, height: 2000 })
   }
+  // 切换到横屏时，自动切到横屏尺寸
+  if (mode === 'landscape' && canvasSize.value.width <= canvasSize.value.height) {
+    sizeLabel.value = '横屏 750 × 500'
+    setSize({ width: 750, height: 500 })
+  }
 }
+
+// 页面模式切换时，画布 DOM 会重建（v-if），需销毁旧 Fabric 实例并在新 canvas 上重建
+watch(pageMode, async () => {
+  await nextTick()
+  const draft = getDraft()
+  dispose()
+  init()
+  loadDraft(draft)
+})
 
 function onManualSize(e: Event, side: 'width' | 'height') {
   const value = Number((e.target as HTMLInputElement).value)
@@ -1149,6 +1380,11 @@ function onKeyDown(e: KeyboardEvent) {
     pasteFromClipboard()
     return
   }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+    e.preventDefault()
+    saveToServer()
+    return
+  }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (selectedId.value) {
       e.preventDefault()
@@ -1168,17 +1404,15 @@ function onWheel(e: WheelEvent) {
 }
 
 // ============ 聚焦根元素以接收键盘事件 ============
-onMounted(() => {
-  // 1. 聚焦以便接收键盘事件
+onMounted(async () => {
+  await initApi()
   setTimeout(() => appRootRef.value?.focus(), 50)
-  // 2. 恢复草稿
   if (!restoreDraftFromLocal()) {
     pushHistory('init')
   }
-  // 3. 启动定时自动保存
   autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
-  // 4. 加载模板列表
   loadTemplateList()
+  window.addEventListener('publish-success', () => showToast('模板发布成功！'))
 })
 </script>
 
@@ -1356,6 +1590,15 @@ onMounted(() => {
 .text-item { display: flex; align-items: center; justify-content: center; }
 .mi-label { font-size: 14px; font-weight: 600; color: #333; }
 .mi-label.small { font-size: 12px; color: #666; }
+
+.smart-field-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+}
+.sf-icon { font-size: 20px; line-height: 1; }
 
 .color-grid {
   display: grid;
@@ -1552,6 +1795,52 @@ onMounted(() => {
 .viewport-scroll::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 3px; }
 
 .viewport-footer {
+  font-size: 11px;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* 横屏卡片模式 */
+.card-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  background-image:
+    linear-gradient(45deg, #e0e4ea 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e4ea 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e4ea 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e4ea 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, 10px 0;
+  background-color: #eef1f6;
+}
+
+.card-header {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.card-viewport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-frame {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+  overflow: hidden;
+  transition: width 0.2s, height 0.2s;
+}
+
+.card-footer {
   font-size: 11px;
   color: #999;
   margin-top: 8px;
@@ -1891,4 +2180,28 @@ label {
   font-size: 11px;
   color: #bbb;
 }
+
+/* ====== 全局 Toast ====== */
+.global-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  pointer-events: none;
+}
+.global-toast.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+.global-toast.error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+.toast-icon { font-size: 18px; }
+.toast-text { font-weight: 500; }
+
+.toast-fade-enter-active, .toast-fade-leave-active { transition: all 0.3s ease; }
+.toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
 </style>

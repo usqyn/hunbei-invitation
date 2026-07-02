@@ -44,6 +44,7 @@ export interface BaseElement {
 export interface TextElement extends BaseElement {
   type: 'text'
   content: string
+  dataKey?: string
   fontFamily: string
   fontSize: number
   fontWeight: 'normal' | 'bold'
@@ -67,6 +68,7 @@ export interface TextElement extends BaseElement {
 export interface ImageElement extends BaseElement {
   type: 'image'
   src: string
+  dataKey?: string
   scale: 'contain' | 'cover' | 'fill' | 'none'
   mask: 'rect' | 'rounded' | 'circle' | 'heart' | 'star'
   borderRadius: number
@@ -96,6 +98,7 @@ export interface CanvasDraft {
   canvasSize: CanvasSize
   background: CanvasBackground
   elements: AnyCanvasElement[]
+  orientation?: 'portrait' | 'landscape'
 }
 
 // 历史快照（撤销栈中的一条）
@@ -105,7 +108,7 @@ export interface HistorySnapshot {
   ts: number
 }
 
-export type PageMode = 'single' | 'long'
+export type PageMode = 'single' | 'long' | 'landscape'
 
 // 预设尺寸（常见微信小程序尺寸）
 export const CANVAS_PRESETS: Array<{ label: string; width: number; height: number }> = [
@@ -115,6 +118,10 @@ export const CANVAS_PRESETS: Array<{ label: string; width: number; height: numbe
   { label: '750 × 1334', width: 750, height: 1334 },
   { label: '长页面 375 × 2000', width: 375, height: 2000 },
   { label: '长页面 375 × 3000', width: 375, height: 3000 },
+  // 横屏卡片
+  { label: '横屏 750 × 500', width: 750, height: 500 },
+  { label: '横屏 900 × 600', width: 900, height: 600 },
+  { label: '横屏 800 × 480', width: 800, height: 480 },
 ]
 
 // 默认画布配置

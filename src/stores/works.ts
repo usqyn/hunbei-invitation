@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Work } from '@/types'
-import { request } from '@/utils/request'
 
 const STORAGE_KEY = 'hunbei_works'
 
@@ -32,40 +31,9 @@ export const useWorksStore = defineStore('works', () => {
     } catch (e) { console.error('works restore failed', e) }
   }
 
-  async function fetchWorks() {
-    try {
-      const res: any = await request({ url: '/api/works', method: 'GET', hideLoading: true })
-      if (res?.data) works.value = res.data
-      persist()
-    } catch (e) {
-      console.warn('fetchWorks API failed, using local data', e)
-    }
-  }
-
-  async function fetchDrafts() {
-    try {
-      const res: any = await request({ url: '/api/works/drafts', method: 'GET', hideLoading: true })
-      if (res?.data) drafts.value = res.data
-      persist()
-    } catch (e) {
-      console.warn('fetchDrafts API failed, using local data', e)
-    }
-  }
-
-  async function fetchFavorites() {
-    try {
-      const res: any = await request({ url: '/api/works/favorites', method: 'GET', hideLoading: true })
-      if (res?.data) favorites.value = res.data
-      persist()
-    } catch (e) {
-      console.warn('fetchFavorites API failed, using local data', e)
-    }
-  }
-
   async function loadAll() {
     loading.value = true
     restore()
-    await Promise.all([fetchWorks(), fetchDrafts(), fetchFavorites()])
     loading.value = false
   }
 

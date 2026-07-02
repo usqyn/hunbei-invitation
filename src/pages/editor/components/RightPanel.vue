@@ -1,31 +1,33 @@
 <template>
-  <view class="right-panel">
-    <scroll-view class="panel-scroll" scroll-y>
-      <view class="content-header" @click="onToggleContent">
-        <text class="content-title">修改对应内容</text>
-        <text class="content-arrow" :class="{ open: contentOpen }">▼</text>
-      </view>
+  <view class="right-panel" :class="[mode === 'bottom' ? 'right-panel--bottom' : 'right-panel--sidebar']">
+    <view class="content-header" @click="onToggleContent">
+      <text class="content-title">修改对应内容</text>
+      <text class="content-arrow" :class="{ open: contentOpen }">▼</text>
+    </view>
 
-      <view v-if="contentOpen" class="content-list">
-        <view
-          v-for="(element, idx) in editableElements"
-          :key="idx"
-          class="content-item"
-          :class="{ selected: selectedElement === idx }"
-          @click="$emit('openEditor', idx)"
-        >
-          <view v-if="element.type === 'image'" class="image-item">
-            <image class="item-image" :src="element.text" mode="aspectFill"></image>
-            <view class="replace-icon-wrapper">
-              <text class="replace-icon">🖼️</text>
-            </view>
-          </view>
-          <view v-else class="text-item">
-            <text class="item-text">{{ element.text }}</text>
+    <view v-if="contentOpen" class="content-list" :class="{ 'content-list--horizontal': mode === 'bottom' }">
+      <view
+        v-for="(element, idx) in editableElements"
+        :key="idx"
+        class="content-item"
+        :class="{
+          selected: selectedElement === idx,
+          'content-item--thumb': mode === 'bottom',
+        }"
+        @click="$emit('openEditor', idx)"
+      >
+        <view v-if="element.type === 'image'" class="image-item" :class="{ 'image-item--thumb': mode === 'bottom' }">
+          <image class="item-image" :src="element.text" mode="aspectFill"></image>
+          <view class="replace-icon-wrapper">
+            <text class="replace-icon">🖼️</text>
           </view>
         </view>
+        <view v-else class="text-item" :class="{ 'text-item--thumb': mode === 'bottom' }">
+          <text class="item-text">{{ element.text }}</text>
+        </view>
+        <view v-if="mode === 'bottom'" class="item-label">{{ element.label || (element.type === 'image' ? '图片' : '文字') }}</view>
       </view>
-    </scroll-view>
+    </view>
   </view>
 </template>
 
@@ -39,6 +41,7 @@ defineProps<{
   selectedElement: number | null
   materialList: Material[]
   settings: TemplateSettings
+  mode?: 'sidebar' | 'bottom'
 }>()
 
 defineEmits<{
@@ -57,13 +60,93 @@ function onToggleContent() {
 
 <style lang="scss" scoped>
 .right-panel {
-  width: 100%;
-  height: 100%;
   background: #fff;
   display: flex;
   flex-direction: column;
-  border-radius: 12rpx;
   overflow: hidden;
+}
+
+.right-panel--sidebar {
+  width: 100%;
+  height: 100%;
+  border-radius: 12rpx;
+
+  .content-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10rpx;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .content-item {
+    flex-shrink: 0;
+  }
+
+  .image-item {
+    width: 100%;
+    height: 180rpx;
+    background: #f5f5f5;
+    border-radius: 10rpx;
+    overflow: hidden;
+  }
+}
+
+.right-panel--bottom {
+  width: 100%;
+  border-radius: 16rpx 16rpx 0 0;
+
+  .content-header {
+    padding: 16rpx 20rpx;
+    border-bottom: 1rpx solid #f0f0f0;
+  }
+
+  .content-list--horizontal {
+    display: flex;
+    gap: 16rpx;
+    overflow-x: auto;
+    padding: 16rpx 20rpx;
+    white-space: nowrap;
+  }
+
+  .content-item--thumb {
+    flex-shrink: 0;
+    width: 160rpx;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8rpx;
+  }
+
+  .image-item--thumb {
+    width: 160rpx;
+    height: 120rpx;
+    background: #f5f5f5;
+    border-radius: 10rpx;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .text-item--thumb {
+    width: 160rpx;
+    height: 120rpx;
+    background: #fafafa;
+    border-radius: 10rpx;
+    padding: 16rpx 12rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .item-label {
+    font-size: 18rpx;
+    color: #999;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
 }
 
 .panel-scroll {
@@ -73,7 +156,6 @@ function onToggleContent() {
   padding: 12rpx;
 }
 
-/* 内容标题 */
 .content-header {
   display: flex;
   align-items: center;
@@ -102,13 +184,6 @@ function onToggleContent() {
   }
 }
 
-/* 内容列表 */
-.content-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
 .content-item {
   border-radius: 10rpx;
   overflow: hidden;
@@ -118,16 +193,6 @@ function onToggleContent() {
   &.selected {
     border-color: #e84a6e;
   }
-}
-
-/* 图片项 */
-.image-item {
-  position: relative;
-  width: 100%;
-  height: 180rpx;
-  background: #f5f5f5;
-  border-radius: 10rpx;
-  overflow: hidden;
 }
 
 .item-image {
@@ -152,7 +217,6 @@ function onToggleContent() {
   font-size: 20rpx;
 }
 
-/* 文字项 */
 .text-item {
   background: #fafafa;
   border-radius: 10rpx;

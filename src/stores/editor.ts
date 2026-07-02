@@ -4,7 +4,7 @@ import { useTemplateStore } from './template'
 import { DEFAULT_ELEMENT_STYLE, getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { MATERIAL_LIST } from '@/constants/editor'
 import type { EditableElement, ElementStyle, TemplateData, TemplateItem } from '@/types'
-import { API_BASE } from '@/config'
+import { request } from '@/utils/request'
 
 // ============ API 配置 ============
 const API_TIMEOUT = 8000
@@ -15,6 +15,7 @@ const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
 export const useEditorStore = defineStore('editor', () => {
   const showTextEditor = ref(false)
   const showBasicInfoEditor = ref(false)
+  const showQuickEdit = ref(false)
   const activePanelTab = ref('edit')
   const selectedElement = ref<number | null>(null)
   const editingText = ref('')
@@ -35,51 +36,38 @@ export const useEditorStore = defineStore('editor', () => {
   // 素材库
   const materialList = MATERIAL_LIST
 
-  // ============ API 请求（适配微信小程序 request） ============
-  function apiRequest<T>(url: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET'): Promise<T> {
-    return new Promise((resolve, reject) => {
-      uni.request({
-        url: `${API_BASE}${url}`,
-        method,
-        timeout: API_TIMEOUT,
-        success: (res: any) => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(res.data)
-          } else {
-            reject(new Error(res.data?.error || `请求失败: ${res.statusCode}`))
-          }
-        },
-        fail: (err: any) => {
-          reject(new Error(err.errMsg || '网络请求失败'))
-        },
-      })
-    })
-  }
+  // 请求计数器，用于忽略过期请求（避免 restoreTemplate 与 onMounted 竞争）
+  let _loadReqId = 0
 
   // ============ 从 API 加载模板 ============
   async function loadTemplateById(templateId: string): Promise<boolean> {
-    // 优先从本地找（离线兜底）
+    const reqId = ++_loadReqId
     const local = getTemplateById(templateId)
-    if (!local) {
-      console.warn('Template not found locally:', templateId)
-    }
 
     templateLoading.value = true
     try {
-      const res: any = await apiRequest(`/api/templates/${templateId}`)
-      if (res.success && res.data) {
-        applyTemplateData(res.data as TemplateItem)
-        currentTemplateId.value = templateId
-        persistTemplate()
-        return true
+      const data = await request<TemplateItem>({ url: `/api/templates/${templateId}`, hideLoading: true })
+      if (reqId !== _loadReqId) return false // 忽略过期请求
+
+      if (local) {
+        // 模板在本地存在（内置模板），本地数据更完整，优先使用本地
+        applyTemplateData(local)
+      } else {
+        // 仅 API 有的模板（admin 创建），使用 API 数据
+        applyTemplateData(data as TemplateItem)
       }
-    } catch (e) {
-      console.warn('API load failed, using local data:', e)
-    } finally {
+      currentTemplateId.value = templateId
+      persistTemplate()
       templateLoading.value = false
+      return true
+    } catch (e) {
+      if (reqId !== _loadReqId) return false // 忽略过期请求
+      console.warn('API load failed, using local data:', e)
     }
 
-    // API 失败则用本地数据
+    templateLoading.value = false
+
+    // API 失败则用本地数据回退
     if (local) {
       applyTemplateData(local)
       currentTemplateId.value = templateId
@@ -111,9 +99,11 @@ export const useEditorStore = defineStore('editor', () => {
       })
     })
 
-    // 同步画布尺寸
+    // 同步画布尺寸，缺失则使用 admin 默认 375x667
     if (template.canvasSize) {
       canvasSize.value = { ...template.canvasSize }
+    } else {
+      canvasSize.value = { width: 375, height: 667 }
     }
 
     // 同步到 TemplateStore
@@ -125,6 +115,14 @@ export const useEditorStore = defineStore('editor', () => {
         templateStore.templateData[k] = data[k]
       }
     })
+
+    // 同步方向信息到 TemplateStore
+    if (template.canvasSize) {
+      templateStore.setCanvasSize(template.canvasSize)
+    }
+    if (template.orientation) {
+      templateStore.orientation = template.orientation
+    }
   }
 
   function syncCurrentFromElement(idx: number) {
@@ -220,6 +218,24 @@ export const useEditorStore = defineStore('editor', () => {
     showBasicInfoEditor.value = false
   }
 
+  function openQuickEdit() {
+    showQuickEdit.value = true
+  }
+
+  function closeQuickEdit() {
+    showQuickEdit.value = false
+  }
+
+  function syncSmartField(key: string, value: string) {
+    const templateStore = useTemplateStore()
+    templateStore.updateField(key as keyof TemplateData, value)
+    editableElements.forEach(el => {
+      if (el.dataKey === key) {
+        el.text = value
+      }
+    })
+  }
+
   function selectMaterial(material: { url: string; name: string }) {
     if (selectedElement.value === null) return
     const el = editableElements[selectedElement.value]
@@ -255,11 +271,12 @@ export const useEditorStore = defineStore('editor', () => {
   restoreTemplate()
 
   return {
-    showTextEditor, showBasicInfoEditor, activePanelTab,
+    showTextEditor, showBasicInfoEditor, showQuickEdit, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
     currentFontSize, currentSpacing, currentLineHeight,
     editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize,
     loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
-    closeBasicInfoEditor, selectMaterial, applyImageToElement, setCurrentWorkId,
+    closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField,
+    selectMaterial, applyImageToElement, setCurrentWorkId,
   }
 })

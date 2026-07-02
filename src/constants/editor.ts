@@ -12,6 +12,13 @@ export const DEFAULT_TEMPLATE_DATA: TemplateData = {
   photoSubtitle: 'He jin & Ju hua',
   footerText: '满小满',
   footerSubText: 'GROOM',
+  inviter: '',
+  invitee: '',
+  date: '',
+  time: '',
+  location: '',
+  address: '',
+  phone: '',
 }
 
 export const DEFAULT_BASIC_INFO: BasicInfo = {

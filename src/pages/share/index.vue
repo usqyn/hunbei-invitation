@@ -5,7 +5,7 @@
       <view class="header-back" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
-      <text class="header-title">婚贝请柬</text>
+      <text class="header-title">toy tamaxia</text>
       <view class="header-right"></view>
     </view>
 
@@ -162,18 +162,32 @@ onMounted(() => {
 })
 
 // 微信分享配置 - 同时支持右上角 ... 菜单和自定义按钮
-onShareAppMessage(() => ({
-  title: shareTitle.value,
-  path: '/pages/preview/index',
-  imageUrl: coverImage.value,
-  desc: shareDesc.value,
-}))
+onShareAppMessage(() => {
+  const templateId = templateStore.currentTemplateId || ''
+  const workId = editorStore.currentWorkId || ''
+  let path = '/pages/preview/index'
+  const params: string[] = []
+  if (templateId) params.push(`templateId=${templateId}`)
+  if (workId) params.push(`workId=${workId}`)
+  if (params.length) path += '?' + params.join('&')
+  return {
+    title: shareTitle.value,
+    path,
+    imageUrl: coverImage.value,
+    desc: shareDesc.value,
+  }
+})
 
 function onTitleInput() {}
 function onDescInput() {}
 
 function goBack() {
-  uni.navigateBack({ delta: 1 })
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack({ delta: 1 })
+  } else {
+    uni.switchTab({ url: '/pages/index/index' })
+  }
 }
 
 // 更换封面
@@ -244,7 +258,7 @@ function onCopyLink() {
   const info = templateStore.basicInfo
   const groom = info.groomName || '新郎'
   const bride = info.brideName || '新娘'
-  const link = `【婚贝请柬】${groom}与${bride}的婚礼邀请，点击查看 https://www.hunbei.com/invitation`
+  const link = `【toy tamaxia】${groom}与${bride}的婚礼邀请，点击查看 https://www.hunbei.com/invitation`
   uni.setClipboardData({
     data: link,
     success: () => {

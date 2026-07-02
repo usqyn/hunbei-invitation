@@ -6,3 +6,5 @@ unpackage/
 .env
 .vscode/
 .idea/
+*.err
+*.db

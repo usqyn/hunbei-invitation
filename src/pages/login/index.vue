@@ -11,9 +11,9 @@
     <view class="content">
       <view class="logo-section">
         <view class="logo">
-          <text class="logo-icon">💝</text>
+          <image class="logo-icon" src="/static/images/logo.png" mode="aspectFit"></image>
         </view>
-        <text class="app-name">婚贝请柬</text>
+        <text class="app-name">toy tamaxia</text>
         <text class="app-desc">微信一键登录，制作专属婚礼请柬</text>
       </view>
 
@@ -23,9 +23,9 @@
             <text v-if="agreed" class="check-icon">✓</text>
           </view>
           <text class="agreement-text">已阅读并同意</text>
-          <text class="agreement-link">《用户协议》</text>
+          <text class="agreement-link" @click.stop="openAgreement('user')">《用户协议》</text>
           <text class="agreement-text">和</text>
-          <text class="agreement-link">《隐私协议》</text>
+          <text class="agreement-link" @click.stop="openAgreement('privacy')">《隐私协议》</text>
         </view>
       </view>
 
@@ -88,8 +88,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { request } from '@/utils/request'
 
 const userStore = useUserStore()
 
@@ -107,12 +108,34 @@ try {
   isMpWeixin.value = info.uniPlatform === 'mp-weixin'
 } catch (_) {}
 
+onUnmounted(() => {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+})
+
+const openAgreement = (type: string) => {
+  uni.showModal({
+    title: type === 'user' ? '用户协议' : '隐私协议',
+    content: type === 'user'
+      ? '用户协议内容：使用本服务即表示您同意遵守相关法律法规。我们将为您提供婚礼请柬制作和分享服务。'
+      : '隐私协议内容：我们重视您的隐私。我们收集的信息仅用于提供和改善服务，不会与第三方分享您的个人信息。',
+    showCancel: false,
+  })
+}
+
 const toggleAgreement = () => {
   agreed.value = !agreed.value
 }
 
 const goBack = () => {
-  uni.navigateBack()
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    uni.switchTab({ url: '/pages/index/index' })
+  }
 }
 
 const loginSuccess = () => {
@@ -165,9 +188,15 @@ const handleH5Login = () => {
   }, 800)
 }
 
-const sendCode = () => {
+const sendCode = async () => {
   if (!phone.value || phone.value.length < 11) {
     uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
+    return
+  }
+  try {
+    await request({ url: '/api/sms/send', method: 'POST', data: { phone: phone.value }, hideLoading: true })
+  } catch (e: any) {
+    uni.showToast({ title: e.message || '网络错误，请重试', icon: 'none' })
     return
   }
   countdown.value = 60
@@ -176,7 +205,7 @@ const sendCode = () => {
     if (countdown.value <= 0) {
       if (timer) clearInterval(timer)
     }
-  }, 1000) as unknown as number
+  }, 1000)
   uni.showToast({ title: '验证码已发送', icon: 'success' })
 }
 
@@ -263,7 +292,8 @@ const handleSmsLogin = async () => {
 }
 
 .logo-icon {
-  font-size: 80rpx;
+  width: 120rpx;
+  height: 120rpx;
 }
 
 .app-name {

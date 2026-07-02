@@ -77,15 +77,18 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     fabricCanvas.value = canvas
 
-    // 暴露到 window，供 App.vue 外部调用（如 createNewFromCanvas 清空画布）
-    ;(window as any).__fabricCanvas = canvas
-
     // 选中事件 → 同步到 Vue
     canvas.on('selection:created', syncSelectionFromFabric)
     canvas.on('selection:updated', syncSelectionFromFabric)
     canvas.on('selection:cleared', () => {
       selectedId.value = null
       opts.onSelectionChange?.(null)
+    })
+
+    // 内联编辑文字退出时 → 同步文字内容到 model
+    canvas.on('editing:exited', () => {
+      syncTextFromFabric()
+      pushHistory('edit text')
     })
 
     // 对象变更 → push 到历史栈
@@ -229,6 +232,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       visible: true,
       zIndex: elements.value.length,
       editable: true,
+      dataKey: undefined,
       content: '点击编辑文字',
       fontFamily: '思源宋体, serif',
       fontSize: 24,
@@ -279,7 +283,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.setActiveObject(text)
     elements.value.push(el)
     selectedId.value = el.id
-    pushHistory('add text')
     return el
   }
 
@@ -287,7 +290,15 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return Promise.resolve<ImageElement | null>(null)
 
-    return fabric.FabricImage.fromURL(src, { crossOrigin: 'anonymous' }).then(img => {
+    const isDataUrl = src.startsWith('data:')
+    const loadOpts = isDataUrl ? {} : { crossOrigin: 'anonymous' }
+
+    return fabric.FabricImage.fromURL(src, loadOpts).then(img => {
+      if (!img) {
+        console.warn('addImage: FabricImage.fromURL returned null for', src.slice(0, 64))
+        return null
+      }
+
       const maxWidth = canvasSize.value.width * 0.8
       const scale = Math.min(1, maxWidth / (img.width || maxWidth))
 
@@ -305,6 +316,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         visible: true,
         zIndex: elements.value.length,
         editable: true,
+        dataKey: undefined,
         src,
         scale: 'cover',
         mask: 'rect',
@@ -337,8 +349,10 @@ export function useCanvas(opts: UseCanvasOptions) {
       canvas.setActiveObject(img)
       elements.value.push(el)
       selectedId.value = el.id
-      pushHistory('add image')
       return el
+    }).catch(err => {
+      console.error('addImage failed:', err, 'src:', src.slice(0, 80))
+      return null
     })
   }
 
@@ -352,7 +366,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.remove(active)
     elements.value = elements.value.filter(e => e.id !== id)
     selectedId.value = null
-    pushHistory('delete')
   }
 
   // 通过 id 删除
@@ -364,7 +377,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.remove(obj)
     elements.value = elements.value.filter(e => e.id !== id)
     if (selectedId.value === id) selectedId.value = null
-    pushHistory('delete')
   }
 
   // 切换隐藏/锁定
@@ -676,6 +688,17 @@ export function useCanvas(opts: UseCanvasOptions) {
   }
 
   // ---- 从 Fabric 反向同步（拖拽/缩放后）----
+  function syncTextFromFabric() {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    canvas.getObjects().forEach(obj => {
+      const id = (obj as any).id as string
+      const el = elements.value.find(e => e.id === id)
+      if (!el || el.type !== 'text') return
+      el.content = (obj as any).text ?? el.content
+    })
+  }
+
   function syncFromFabricToModel() {
     const canvas = fabricCanvas.value
     if (!canvas) return
@@ -690,6 +713,9 @@ export function useCanvas(opts: UseCanvasOptions) {
       el.y = (o.top ?? 0)
       el.rotation = (o.angle ?? 0)
       el.opacity = (o.opacity ?? 1)
+      if (el.type === 'text') {
+        el.content = o.text ?? el.content
+      }
       if (el.type === 'image') {
         el.width = (obj.width || el.width) * scaleX
         el.height = (obj.height || el.height) * scaleY
@@ -704,6 +730,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       canvasSize: { ...canvasSize.value },
       background: { ...background.value },
       elements: JSON.parse(JSON.stringify(elements.value)),
+      orientation: canvasSize.value.width > canvasSize.value.height ? 'landscape' : 'portrait',
     }
   }
 

@@ -9,10 +9,13 @@
       <view class="header-right"></view>
     </view>
 
-    <!-- Body: 左侧预览 + 右侧编辑面板 -->
-    <view class="editor-body">
-      <!-- 左侧：竖版请柬预览（根据模板动态渲染） -->
-      <view class="preview-area">
+    <!-- Body: 左侧预览 + 右侧编辑面板 / 横屏模式：上预览 + 下编辑 -->
+    <view v-if="editorStore.templateLoading" class="loading-overlay">
+      <text class="loading-overlay-text">加载模板中...</text>
+    </view>
+    <view v-else class="editor-body" :class="{ 'editor-body--landscape': isLandscape }">
+      <!-- 预览区 -->
+      <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
         <scroll-view class="preview-scroll" scroll-y>
           <!-- 画布模式：admin 发布的绝对定位模板 -->
           <template v-if="isCanvasMode">
@@ -20,7 +23,10 @@
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="idx"
                 class="canvas-element"
-                :class="{ 'active-element': editorStore.selectedElement === idx }"
+                :class="{
+                  'active-element': editorStore.selectedElement === idx,
+                  'text-element': el.type === 'text'
+                }"
                 :style="getCanvasElementStyle(el)"
                 @click="onOpenEditor(idx)"
               >
@@ -28,7 +34,7 @@
                   v-if="el.type === 'image'"
                   class="canvas-image"
                   :src="el.text"
-                  mode="aspectFill"
+                  mode="aspectFit"
                   @error="onImageError"
                 />
                 <text
@@ -76,14 +82,29 @@
         </scroll-view>
       </view>
 
-      <!-- 右侧：编辑面板 -->
-      <view class="sidebar-area">
+      <!-- 右侧/底部编辑面板 -->
+      <view v-if="!isLandscape" class="sidebar-area">
         <RightPanel
           :active-panel-tab="editorStore.activePanelTab"
           :editable-elements="editorStore.editableElements"
           :selected-element="editorStore.selectedElement"
           :material-list="editorStore.materialList"
           :settings="templateStore.settings"
+          mode="sidebar"
+          @update:active-panel-tab="editorStore.activePanelTab = $event"
+          @open-editor="onOpenEditor"
+          @select-material="onSelectMaterial"
+          @toggle-setting="toggleSetting"
+        />
+      </view>
+      <view v-else class="bottom-panel">
+        <RightPanel
+          :active-panel-tab="editorStore.activePanelTab"
+          :editable-elements="editorStore.editableElements"
+          :selected-element="editorStore.selectedElement"
+          :material-list="editorStore.materialList"
+          :settings="templateStore.settings"
+          mode="bottom"
           @update:active-panel-tab="editorStore.activePanelTab = $event"
           @open-editor="onOpenEditor"
           @select-material="onSelectMaterial"
@@ -105,6 +126,10 @@
       <view class="footer-item" @click="openBasicInfoEditor">
         <text class="footer-icon">📋</text>
         <text class="footer-label">基本信息</text>
+      </view>
+      <view class="footer-item" @click="openQuickEdit">
+        <text class="footer-icon">✏️</text>
+        <text class="footer-label">快捷填写</text>
       </view>
       <view class="footer-item" @click="handleSave">
         <text class="footer-icon">💾</text>
@@ -134,6 +159,15 @@
       @confirm="editorStore.closeBasicInfoEditor"
     />
 
+    <!-- Quick Edit Popup -->
+    <QuickEditForm
+      v-if="editorStore.showQuickEdit"
+      :visible="editorStore.showQuickEdit"
+      :elements="editorStore.editableElements"
+      @close="editorStore.closeQuickEdit"
+      @update="onSmartFieldUpdate"
+    />
+
   </view>
 </template>
 
@@ -146,6 +180,7 @@ import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
+import QuickEditForm from './components/QuickEditForm.vue'
 import type { Material, ElementStyle, EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -159,38 +194,72 @@ const templateName = computed(() => {
 
 const basicInfo = computed(() => templateStore.basicInfo)
 
-// 画布模式判断 & 尺寸
+// 画布模式判断：有元素且任一元素有完整定位数据（x/y/width/height）
 const isCanvasMode = computed(() => {
-  const first = editorStore.editableElements[0]
-  return first && first.x != null
+  return editorStore.editableElements.length > 0 &&
+    editorStore.editableElements.some(el => el.x != null && el.y != null && el.width != null && el.height != null)
+})
+
+// 横屏检测：画布宽 > 高时为横屏模式
+const isLandscape = computed(() => {
+  if (!isCanvasMode.value) return false
+  const w = editorStore.canvasSize?.width || 375
+  const h = editorStore.canvasSize?.height || 667
+  return w > h
 })
 
 const canvasWidth = computed(() => editorStore.canvasSize?.width || 375)
 const canvasHeight = computed(() => editorStore.canvasSize?.height || 667)
 
-const canvasCardStyle = computed(() => ({
-  aspectRatio: `${canvasWidth.value} / ${canvasHeight.value}`,
-  width: '100%',
-}))
+const canvasCardStyle = computed(() => {
+  const w = canvasWidth.value
+  const h = canvasHeight.value
+  const isLand = w > h
+  return {
+    aspectRatio: `${w} / ${h}`,
+    width: isLand ? '70%' : '100%',
+    margin: isLand ? '0 auto' : '0',
+  }
+})
+
+// 编辑器内画布卡片相对于全屏的固定比例，用于缩放 rpx 值
+const fontScale = computed(() => {
+  if (!isCanvasMode.value) return 1
+  // (750rpx - 32rpx padding - 16rpx gap) × 2.5/3.5 / 750
+  return 0.67
+})
 
 // 画布模式下获取元素的绝对定位样式
 function getCanvasElementStyle(el: EditableElement) {
   if (el.x == null) return {}
+  const fs = fontScale.value
   const imgStyle: Record<string, string> = {}
   if (el.type === 'image' && el.style?.borderRadius) {
-    imgStyle.borderRadius = el.style.borderRadius + 'rpx'
+    imgStyle.borderRadius = Math.round(el.style.borderRadius * fs) + 'rpx'
   }
-  return {
+  const isText = el.type === 'text'
+  const style: Record<string, string> = {
     position: 'absolute',
     left: `${(el.x / canvasWidth.value) * 100}%`,
     top: `${(el.y! / canvasHeight.value) * 100}%`,
     width: `${(el.width! / canvasWidth.value) * 100}%`,
-    height: `${(el.height! / canvasHeight.value) * 100}%`,
-    zIndex: el.zIndex ?? 0,
-    opacity: el.opacity ?? 1,
-    transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+    zIndex: String(el.zIndex ?? 0),
+    opacity: String(el.opacity ?? 1),
     ...imgStyle,
   }
+  if (isText) {
+    style.height = 'auto'
+    style.minHeight = Math.round(40 * fs) + 'rpx'
+  } else {
+    style.height = `${(el.height! / canvasHeight.value) * 100}%`
+  }
+  if (el.rotation) style.transform = `rotate(${el.rotation}deg)`
+  return style
+}
+
+function getFontFamily(font: string | undefined) {
+  if (!font) return 'sans-serif'
+  return `"${font}", 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif`
 }
 
 // 根据元素索引获取样式
@@ -198,21 +267,22 @@ function getTextStyle(idx: number) {
   const el = editorStore.editableElements[idx]
   if (!el || !el.style) {
     return {
-      fontSize: '30rpx',
+      fontSize: Math.round(30 * fontScale.value) + 'rpx',
       color: '#333333',
       lineHeight: 1.6,
-      letterSpacing: '2rpx',
+      letterSpacing: Math.round(2 * fontScale.value) + 'rpx',
     }
   }
 
   const style: ElementStyle = el.style
+  const fs = fontScale.value
 
   return {
-    fontSize: style.fontSize + 'rpx',
+    fontSize: Math.round((style.fontSize || 28) * fs) + 'rpx',
     color: style.color,
-    lineHeight: String(style.lineHeight),
-    letterSpacing: style.spacing + 'rpx',
-    fontFamily: style.font,
+    lineHeight: String(style.lineHeight || 1.6),
+    letterSpacing: Math.round((style.spacing ?? 2) * fs) + 'rpx',
+    fontFamily: getFontFamily(style.font),
     fontWeight: style.fontWeight || 'normal',
     textAlign: style.textAlign || 'center',
   }
@@ -286,16 +356,32 @@ function openBasicInfoEditor() {
   editorStore.showBasicInfoEditor = true
 }
 
+function openQuickEdit() {
+  editorStore.openQuickEdit()
+}
+
+function onSmartFieldUpdate(key: string, value: string) {
+  editorStore.syncSmartField(key, value)
+}
+
 // 切换设置
 function toggleSetting(key: string) {
   templateStore.toggleSetting(key)
 }
 
 function goBack() {
-  uni.navigateBack({ delta: 1 })
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack({ delta: 1 })
+  } else {
+    uni.switchTab({ url: '/pages/index/index' })
+  }
 }
 
-function onImageError() {}
+function onImageError(e: any) {
+  console.warn('Editor image load failed')
+  uni.showToast({ title: '图片加载失败', icon: 'none' })
+}
 
 function handleMusic() {
   uni.navigateTo({ url: '/pages/music/index' })
@@ -313,6 +399,18 @@ function handleSettings() {
 }
 
 function handleSave() {
+  if (editorStore.currentWorkId) {
+    const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+    if (existing) {
+      existing.title = templateStore.templateData.coverTitle || '未命名作品'
+      existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+      existing.image = templateStore.templateData.coverImage
+      existing.templateType = editorStore.currentTemplateId
+      worksStore.saveAsWork(existing)
+      uni.showToast({ title: '已保存', icon: 'success' })
+      return
+    }
+  }
   const id = editorStore.currentWorkId || Date.now()
   if (!editorStore.currentWorkId) {
     editorStore.setCurrentWorkId(id)
@@ -320,7 +418,7 @@ function handleSave() {
   const work: Work = {
     id,
     title: templateStore.templateData.coverTitle || '未命名作品',
-    date: new Date().toLocaleDateString('zh-CN'),
+    date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
     image: templateStore.templateData.coverImage,
     templateType: editorStore.currentTemplateId,
     status: 'draft',
@@ -331,7 +429,12 @@ function handleSave() {
 
 function handleShare() {
   handleSave()
-  uni.navigateTo({ url: '/pages/share/index' })
+  const templateId = editorStore.currentTemplateId
+  if (templateId) {
+    uni.navigateTo({ url: `/pages/share/index?templateId=${templateId}` })
+  } else {
+    uni.navigateTo({ url: '/pages/share/index' })
+  }
 }
 
 // 页面加载时根据参数切换模板
@@ -341,10 +444,8 @@ onMounted(() => {
   const options = curPage?.options || {}
 
   if (options.templateId) {
-    // 如果 URL 中有 templateId 参数，切换到该模板
     editorStore.loadTemplateById(options.templateId)
   } else {
-    // 否则默认加载第一个模板
     editorStore.loadTemplateById(DEFAULT_TEMPLATE_ID)
   }
 })
@@ -499,6 +600,12 @@ onMounted(() => {
 .canvas-element {
   overflow: hidden;
 }
+.canvas-element.text-element {
+  height: auto !important;
+  min-height: 40rpx;
+  max-height: 50%;
+  overflow-y: auto;
+}
 
 .canvas-image {
   width: 100%;
@@ -508,7 +615,7 @@ onMounted(() => {
 
 .canvas-text {
   display: block;
-  word-break: break-all;
+  word-break: break-word;
 }
 
 .active-element {
@@ -524,6 +631,36 @@ onMounted(() => {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+}
+
+/* Bottom Panel - 横屏模式下底部编辑面板 */
+.bottom-panel {
+  flex-shrink: 0;
+  background: #fff;
+  border-top: 1rpx solid #f0e0e5;
+  border-radius: 16rpx 16rpx 0 0;
+  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.06);
+  min-height: 200rpx;
+  max-height: 340rpx;
+  overflow: hidden;
+}
+
+/* 横屏模式布局 */
+.editor-body--landscape {
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+
+.preview-area--landscape {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
+  padding: 20rpx 16rpx;
+  min-height: 0;
 }
 
 /* Footer Toolbar */
@@ -567,6 +704,19 @@ onMounted(() => {
   font-size: 28rpx;
   color: #fff;
   font-weight: 600;
+}
+
+.loading-overlay {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fdf6f8;
+}
+
+.loading-overlay-text {
+  font-size: 28rpx;
+  color: #999;
 }
 
 </style>

@@ -144,13 +144,23 @@ const handleQuickAction = (item: any) => {
 const handleToolClick = (tool: any) => {
   if (tool.name === '一键成请柬') {
     uni.navigateTo({ url: '/pages/editor/index' })
+  } else if (tool.name === '婚礼文案') {
+    uni.navigateTo({ url: '/pages/template/index' })
+  } else if (tool.name === '婚礼MV') {
+    uni.navigateTo({ url: '/pages/music/index' })
+  } else if (tool.name === '收到的请柬') {
+    uni.switchTab({ url: '/pages/works/index' })
   } else {
     uni.showToast({ title: tool.name, icon: 'none' })
   }
 }
 
 const handleMenuItemClick = (item: any) => {
-  uni.showToast({ title: item.name, icon: 'none' })
+  if (item.id === 1) {
+    uni.navigateTo({ url: '/pages/mall/orders' })
+  } else {
+    uni.showToast({ title: item.name, icon: 'none' })
+  }
 }
 
 const handleLogout = () => {

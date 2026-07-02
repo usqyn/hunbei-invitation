@@ -10,38 +10,38 @@
       </view>
     </view>
 
-    <view class="music-tabs">
+    <view class="music-tags">
       <view
-        v-for="tab in tabList"
-        :key="tab.key"
-        class="tab-item"
-        :class="{ active: currentTab === tab.key }"
-        @click="currentTab = tab.key"
+        v-for="tag in MUSIC_TAGS"
+        :key="tag"
+        class="tag-item"
+        :class="{ active: currentTag === tag }"
+        @click="switchTag(tag)"
       >
-        <text class="tab-text">{{ tab.name }}</text>
-        <view v-if="currentTab === tab.key" class="tab-underline"></view>
+        <text class="tag-text">{{ tag }}</text>
       </view>
     </view>
 
-    <scroll-view class="music-list" scroll-y>
+    <scroll-view class="music-list" scroll-y @scrolltolower="loadMore">
       <view
         v-for="(song, idx) in filteredMusicList"
-        :key="idx"
+        :key="song.id"
         class="music-item"
-        :class="{ 'is-using': currentSongIndex === idx }"
-        @click="handleSelectSong(idx)"
+        :class="{ 'is-using': selectedMusicId === song.id }"
+        @click="handleSelectSong(song, idx)"
       >
         <view class="music-icon">
           <text class="icon-text">🎵</text>
         </view>
         <view class="music-info">
           <text class="music-name">{{ song.name }}</text>
-          <text v-if="song.isHot" class="music-hot">HOT</text>
+          <text v-if="song.hot" class="music-hot">HOT</text>
         </view>
-        <view v-if="currentSongIndex === idx" class="music-using">
+        <view v-if="selectedMusicId === song.id" class="music-using">
           <text class="using-text">使用中</text>
         </view>
       </view>
+      <view v-if="loading" class="loading-text">加载中...</view>
     </scroll-view>
 
     <view class="music-player">
@@ -63,43 +63,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTemplateStore } from '@/stores/template'
+import { MUSIC_TAGS, fetchMusicFromApi } from '@/constants/music'
+import type { Music } from '@/types'
 
 const templateStore = useTemplateStore()
 
-const currentTab = ref('all')
+const currentTag = ref('全部')
+const musicList = ref<Music[]>([])
+const loading = ref(false)
 const currentSongIndex = ref<number | null>(null)
 const isPlaying = ref(false)
 const progressPercent = ref(0)
 const currentTimeText = ref('00:00')
 const durationText = ref('00:00')
 
+const selectedMusicId = computed(() => templateStore.selectedMusicId)
+
 let audio: UniApp.InnerAudioContext | null = null
 
-const tabList = ref([
-  { key: 'all', name: '全部' },
-  { key: 'happy', name: '欢快' },
-  { key: 'quiet', name: '安静' },
-  { key: 'douyin', name: '抖音' },
-])
-
-const musicList = ref([
-  { id: 1, name: '告白气球', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=426342151.mp3' },
-  { id: 2, name: '我们结婚啦', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-  { id: 3, name: '执子之手', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=1940188978.mp3' },
-  { id: 4, name: "It's You", isHot: true, category: 'quiet', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-  { id: 5, name: '我是如此相信', isHot: true, category: 'quiet', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-  { id: 6, name: '就是爱你', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-  { id: 7, name: '因你而在', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-  { id: 8, name: 'Lucky Me', isHot: true, category: 'douyin', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-  { id: 9, name: '繁花', isHot: true, category: 'quiet', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-  { id: 10, name: '爱你', isHot: true, category: 'happy', src: 'https://music.163.com/song/media/outer/url?id=483671299.mp3' },
-])
-
 const filteredMusicList = computed(() => {
-  if (currentTab.value === 'all') return musicList.value
-  return musicList.value.filter(s => s.category === currentTab.value)
+  if (currentTag.value === '全部') return musicList.value
+  return musicList.value.filter(s => s.tag === currentTag.value)
 })
 
 const currentSong = computed(() => {
@@ -108,6 +94,27 @@ const currentSong = computed(() => {
   }
   return null
 })
+
+async function loadMusic() {
+  loading.value = true
+  musicList.value = await fetchMusicFromApi()
+  loading.value = false
+}
+
+async function switchTag(tag: string) {
+  currentTag.value = tag
+  loading.value = true
+  musicList.value = await fetchMusicFromApi(tag)
+  loading.value = false
+}
+
+async function loadMore() {
+  if (!loading.value) {
+    loading.value = true
+    musicList.value = await fetchMusicFromApi(currentTag.value === '全部' ? undefined : currentTag.value)
+    loading.value = false
+  }
+}
 
 function stopAudio() {
   if (audio) {
@@ -123,34 +130,68 @@ function stopAudio() {
 
 const goBack = () => {
   stopAudio()
-  uni.navigateBack()
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    uni.switchTab({ url: '/pages/index/index' })
+  }
 }
 
 const handleUpload = () => {
+  // #ifdef MP-WEIXIN
   uni.chooseMedia({
     count: 1,
     mediaType: ['audio'],
-    success: (res) => {
+    success: (res: any) => {
       const file = res.tempFiles[0]
-      musicList.value.push({ id: Date.now(), name: file.name || '本地音乐', isHot: false, category: 'all', src: file.tempFilePath })
+      musicList.value.push({
+        id: Date.now(),
+        name: file.name || '本地音乐',
+        hot: false,
+        tag: '本地上传',
+        src: file.tempFilePath,
+      })
       uni.showToast({ title: '上传成功', icon: 'success' })
     },
     fail: () => {
       uni.showToast({ title: '暂未选择文件', icon: 'none' })
-    }
+    },
   })
+  // #endif
+  // #ifndef MP-WEIXIN
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res: any) => {
+      if (res.tempFilePaths && res.tempFilePaths.length > 0) {
+        musicList.value.push({
+          id: Date.now(),
+          name: '本地音乐',
+          hot: false,
+          tag: '本地上传',
+          src: res.tempFilePaths[0],
+        })
+        uni.showToast({ title: '上传成功', icon: 'success' })
+      }
+    },
+    fail: () => {
+      uni.showToast({ title: '暂未选择文件', icon: 'none' })
+    },
+  })
+  // #endif
 }
 
-const handleSelectSong = (idx: number) => {
+const handleSelectSong = (song: Music, idx: number) => {
   stopAudio()
-  const song = filteredMusicList.value[idx]
-  if (!song) return
-  currentSongIndex.value = idx
-  templateStore.setSelectedMusic(song.id)
   if (!song.src) {
     uni.showToast({ title: '该歌曲暂无音频源', icon: 'none' })
     return
   }
+  currentSongIndex.value = idx
+  templateStore.setSelectedMusic(song.id)
+
   audio = uni.createInnerAudioContext()
   audio.src = song.src
   audio.autoplay = true
@@ -202,15 +243,21 @@ const togglePlay = () => {
   }
 }
 
+onMounted(() => {
+  loadMusic()
+})
+
 const seekProgress = (e: any) => {
   if (!audio) return
-  const rect = e.target.getBoundingClientRect?.() || { left: 0, width: 300 }
-  const x = e.detail?.x || e.changedTouches?.[0]?.clientX || 0
-  const pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100))
-  progressPercent.value = pct
-  if (audio.duration && isFinite(audio.duration)) {
-    audio.seek((pct / 100) * audio.duration)
-  }
+  uni.createSelectorQuery().select('.progress-bar').boundingClientRect((rect: any) => {
+    if (!rect) return
+    const x = e.detail?.x || e.changedTouches?.[0]?.clientX || 0
+    const pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100))
+    progressPercent.value = pct
+    if (audio && audio.duration && isFinite(audio.duration)) {
+      audio.seek((pct / 100) * audio.duration)
+    }
+  }).exec()
 }
 
 onUnmounted(() => {
@@ -266,44 +313,30 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-.music-tabs {
+.music-tags {
   display: flex;
+  flex-wrap: wrap;
   background: #fff;
-  padding: 0 32rpx 16rpx;
+  padding: 0 32rpx 20rpx;
   border-bottom: 1rpx solid #f0f0f0;
   flex-shrink: 0;
+  gap: 16rpx;
 }
 
-.tab-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20rpx 0;
-  position: relative;
+.tag-item {
+  padding: 12rpx 24rpx;
+  border-radius: 30rpx;
+  background: #f5f5f5;
 
   &.active {
-    .tab-text {
-      color: #e84a6e;
-      font-weight: 600;
-    }
+    background: #e84a6e;
+    .tag-text { color: #fff; }
   }
 }
 
-.tab-text {
-  font-size: 28rpx;
+.tag-text {
+  font-size: 26rpx;
   color: #666;
-}
-
-.tab-underline {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 40rpx;
-  height: 4rpx;
-  background: #e84a6e;
-  border-radius: 2rpx;
 }
 
 .music-list {
@@ -321,15 +354,10 @@ onUnmounted(() => {
 
   &.is-using {
     background: #fff5f5;
-
-    .music-name {
-      color: #e84a6e;
-    }
+    .music-name { color: #e84a6e; }
   }
 
-  &:active {
-    background: #fafafa;
-  }
+  &:active { background: #fafafa; }
 }
 
 .music-icon {
@@ -344,9 +372,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.icon-text {
-  font-size: 32rpx;
-}
+.icon-text { font-size: 32rpx; }
 
 .music-info {
   flex: 1;
@@ -385,6 +411,13 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+.loading-text {
+  text-align: center;
+  padding: 32rpx;
+  color: #999;
+  font-size: 26rpx;
+}
+
 .music-player {
   display: flex;
   align-items: center;
@@ -413,9 +446,7 @@ onUnmounted(() => {
   justify-content: center;
 }
 
-.vinyl-emoji {
-  font-size: 24rpx;
-}
+.vinyl-emoji { font-size: 24rpx; }
 
 .player-name {
   font-size: 26rpx;

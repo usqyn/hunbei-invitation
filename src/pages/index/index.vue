@@ -1,5 +1,21 @@
 <template>
   <view class="page">
+    <!-- 顶部轮播图 -->
+    <swiper
+      class="banner-swiper"
+      :indicator-dots="true"
+      :autoplay="true"
+      :interval="3000"
+      :duration="500"
+      :circular="true"
+      indicator-color="rgba(255,255,255,0.5)"
+      indicator-active-color="#ffffff"
+    >
+      <swiper-item v-for="(banner, index) in homeConfig.banners" :key="index" @click="handleBannerClick(banner)">
+        <image :src="banner.image" mode="aspectFill" class="banner-image" />
+      </swiper-item>
+    </swiper>
+
     <!-- 搜索栏 -->
     <view class="search-bar">
       <input
@@ -19,7 +35,7 @@
         @click="handleCategoryClick(item)"
       >
         <view class="category-icon" :style="{ background: item.bgColor }">
-          <image class="icon-image" :class="{ 'icon-image-full': item.categoryId === 'baby' }" :src="item.image" mode="aspectFit" />
+          <image class="icon-image-full" :src="item.image" mode="aspectFill" />
         </view>
         <text class="category-name">{{ item.name }}</text>
       </view>
@@ -130,6 +146,15 @@ const allCategories = computed(() => {
     }))
 })
 
+// 点击轮播图 - 跳转到对应分类
+const handleBannerClick = (banner: any) => {
+  if (banner.linkType === 'category') {
+    uni.navigateTo({
+      url: `/pages/template/index?category=${banner.linkValue}`,
+    })
+  }
+}
+
 // 搜索功能
 const handleSearch = () => {
   if (searchText.value) {
@@ -181,6 +206,17 @@ const onImageError = () => {
   padding-bottom: 120rpx;
 }
 
+/* 顶部轮播图 */
+.banner-swiper {
+  width: 100%;
+  height: 360rpx;
+}
+
+.banner-image {
+  width: 100%;
+  height: 100%;
+}
+
 /* 搜索栏 */
 .search-bar {
   padding: 24rpx;
@@ -223,6 +259,7 @@ const onImageError = () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .icon-image {

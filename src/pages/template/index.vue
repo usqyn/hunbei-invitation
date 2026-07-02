@@ -66,6 +66,9 @@
               <view class="template-tag" :style="{ background: template.primaryColor || '#e84a6e' }">
                 <text class="tag-text">{{ getCategoryName(template.category) }}</text>
               </view>
+              <view v-if="template.orientation === 'landscape' || (template.canvasSize && template.canvasSize.width > template.canvasSize.height)" class="template-tag landscape-tag">
+                <text class="tag-text">横版</text>
+              </view>
             </view>
             <text class="template-subtitle">{{ template.subtitle }}</text>
             <view class="template-footer">
@@ -95,20 +98,21 @@ import { ref, computed, onMounted } from 'vue'
 import type { TemplateItem, TemplateCategory } from '@/types'
 import { TEMPLATE_LIST } from '@/constants/templates-data'
 import { HOME_CATEGORIES } from '@/constants/categories'
-import { API_BASE, TEMPLATE_PAGE_CONFIG } from '@/config'
+import { TEMPLATE_PAGE_CONFIG, API_BASE } from '@/config'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
 
-// ============ API 配置（与 editor.ts 保持一致） ============
-
 // 分类列表（静态配置，可根据 API 动态拉取）
 const STATIC_CATEGORIES = [
-  { id: 'wedding', name: '婚礼请柬', icon: '/static/images/categories/wedding.svg' },
-  { id: 'birthday', name: '生日派对', icon: '/static/images/categories/birthday.svg' },
+  { id: 'wedding', name: '婚礼请柬', icon: '/static/images/categories/wedding.jpg' },
+  { id: 'proposal', name: '求婚', icon: '/static/images/categories/proposal.jpg' },
+  { id: 'consultation-tea', name: '商量茶', icon: '/static/images/categories/consultation-tea.jpg' },
+  { id: 'festival', name: '割礼', icon: '/static/images/categories/ceremony.jpg' },
+  { id: 'business', name: '耳环礼', icon: '/static/images/categories/earring.jpg' },
   { id: 'baby', name: '周岁宴', icon: '/static/images/categories/baby.jpg' },
-  { id: 'graduation', name: '升学宴', icon: '/static/images/icons/party.svg' },
-  { id: 'festival', name: '割礼', icon: '/static/images/categories/ceremony.svg' },
-  { id: 'business', name: '耳环礼', icon: '/static/images/categories/earring.svg' },
+  { id: 'graduation', name: '升学宴', icon: '/static/images/categories/graduation.jpg' },
+  { id: 'festival-invitation', name: '节日请柬', icon: '/static/images/categories/festival-invitation.jpg' },
+  { id: 'housewarming', name: '乔迁', icon: '/static/images/categories/housewarming.jpg' },
 ]
 
 // ============ 状态 ============
@@ -167,30 +171,13 @@ onMounted(async () => {
   await loadTemplates()
 })
 
-// ============ API 请求 ============
-function request<T>(url: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    uni.request({
-      url: `${API_BASE}${url}`,
-      timeout: 8000,
-      success: (res: any) => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(res.data)
-        } else {
-          reject(new Error(res.data?.error || `请求失败: ${res.statusCode}`))
-        }
-      },
-      fail: (err: any) => reject(new Error(err.errMsg || '网络请求失败')),
-    })
-  })
-}
-
 async function loadCategories() {
   try {
-    const res: any = await request('/api/categories')
-    if (res.success) {
+        const res = await uni.request({ url: API_BASE + '/api/categories' }) as any
+        const data = res.data?.success ? res.data.data as { id: string; name: string; icon: string; count: number }[] : null
+    if (data) {
       // 合并 API 返回的分类（含模板数量）与静态配置
-      categoryList.value = res.data.map((cat: any) => {
+      categoryList.value = data.map((cat: any) => {
         const staticCat = STATIC_CATEGORIES.find(s => s.id === cat.id)
         return {
           id: cat.id,
@@ -218,25 +205,26 @@ async function loadTemplates() {
   loadError.value = false
 
   try {
-    const res: any = await request('/api/templates')
-    if (res.success) {
-      allTemplates.value = res.data || []
-    }
+        const res = await uni.request({ url: API_BASE + '/api/templates' }) as any
+        const data = res.data?.success ? res.data.data as TemplateItem[] : null
+    if (data) allTemplates.value = data
   } catch (e) {
     console.error('加载模板列表失败:', e)
     loadError.value = true
   }
 
-  // 对没有模板的分类，用本地模板数据填充
-  categoryList.value = categoryList.value.map(cat => {
-    let templates = allTemplates.value.filter(t => t.category === cat.id)
-    if (templates.length === 0) {
-      const localTemplates = TEMPLATE_LIST.filter(t => t.category === cat.id)
-      templates = localTemplates
-      allTemplates.value.push(...localTemplates)
+  // 合并 API 模板 + 本地模板（不重复）
+  const existingIds = new Set(allTemplates.value.map(t => t.id))
+  TEMPLATE_LIST.forEach(t => {
+    if (!existingIds.has(t.id)) {
+      allTemplates.value.push(t)
+      existingIds.add(t.id)
     }
-    return { ...cat, templates }
   })
+  categoryList.value = categoryList.value.map(cat => ({
+    ...cat,
+    templates: allTemplates.value.filter(t => t.category === cat.id),
+  }))
 
   loading.value = false
 }
@@ -266,26 +254,22 @@ function onSelectTemplate(template: TemplateItem) {
 
 function getImageUrl(template: TemplateItem): string {
   if (!template.cover) {
-    // 如果没有封面，用 data 里的 coverImage
     return (template as any).data?.coverImage || '/static/images/templates/wedding-1.svg'
-  }
-  // 如果是 http 链接（来自 API 的真实图片），直接使用
-  if (template.cover.startsWith('http')) {
-    return template.cover
   }
   return template.cover
 }
 
 function onImageError(e: any, template: TemplateItem) {
-  // 图片加载失败时用默认图
-  const target = e.target as any
-  if (target) {
-    target.src = '/static/images/templates/wedding-1.svg'
-  }
+  template.cover = '/static/images/templates/wedding-1.svg'
 }
 
 function onBack() {
-  uni.navigateBack()
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    uni.switchTab({ url: '/pages/index/index' })
+  }
 }
 </script>
 
@@ -438,6 +422,10 @@ function onBack() {
   padding: 6rpx 14rpx;
   border-radius: 8rpx;
   flex-shrink: 0;
+}
+
+.template-tag.landscape-tag {
+  background: #8e24aa !important;
 }
 
 .tag-text { font-size: 20rpx; color: #fff; font-weight: 500; }

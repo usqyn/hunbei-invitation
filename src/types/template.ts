@@ -19,9 +19,17 @@ export interface TemplateData {
   photoSubtitle: string
   footerText: string
   footerSubText: string
+  // 智能字段（快捷编辑用）
+  inviter?: string
+  invitee?: string
+  date?: string
+  time?: string
+  location?: string
+  address?: string
+  phone?: string
 }
 
-// 用户填写的基本信息（新人信息/生日信息等）
+// 用户填写的基本信息（新人信息/节日信息等）
 export interface BasicInfo {
   groomName: string
   brideName: string
@@ -81,8 +89,8 @@ export interface Material {
 
 // 模板分类
 export interface TemplateCategory {
-  id: string              // 分类ID: wedding/birthday/baby/graduation/festival/business
-  name: string            // 分类名称: 婚礼/生日/宝宝/毕业/节日/商务
+  id: string              // 分类ID: wedding/festival/baby/graduation/festival-invitation/business
+  name: string            // 分类名称: 婚礼/割礼/宝宝/升学宴/节日请柬/耳环礼
   icon: string            // emoji或图标
   templates: TemplateItem[]
 }
@@ -102,6 +110,8 @@ export interface TemplateItem {
   elements: EditableElement[]
   // 画布尺寸（admin 模板）
   canvasSize?: { width: number; height: number }
+  // 横屏/竖屏
+  orientation?: 'portrait' | 'landscape'
   // 主题色
   primaryColor: string
   // 首页标签（网红爆款/婚礼请帖等）

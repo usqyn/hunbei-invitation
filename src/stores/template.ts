@@ -13,6 +13,13 @@ export const useTemplateStore = defineStore('template', () => {
   const templateList = ref<Template[]>([])
   const loading = ref(false)
   const selectedMusicId = ref<number | null>(null)
+  const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
+  const orientation = ref<'portrait' | 'landscape'>('portrait')
+
+  function setCanvasSize(size: { width: number; height: number }) {
+    canvasSize.value = { ...size }
+    orientation.value = size.width > size.height ? 'landscape' : 'portrait'
+  }
 
   function updateBasicInfo(info: Partial<BasicInfo>) {
     Object.assign(basicInfo, info)
@@ -40,6 +47,8 @@ export const useTemplateStore = defineStore('template', () => {
         basicInfo: { ...basicInfo },
         settings: { ...settings },
         selectedMusicId: selectedMusicId.value,
+        canvasSize: { ...canvasSize.value },
+        orientation: orientation.value,
       })
     } catch (e) { console.error('template persist failed', e) }
   }
@@ -52,6 +61,8 @@ export const useTemplateStore = defineStore('template', () => {
         if (saved.basicInfo) Object.assign(basicInfo, saved.basicInfo)
         if (saved.settings) Object.assign(settings, saved.settings)
         if (saved.selectedMusicId) selectedMusicId.value = saved.selectedMusicId
+        if (saved.canvasSize) canvasSize.value = { ...saved.canvasSize }
+        if (saved.orientation) orientation.value = saved.orientation
       }
     } catch (e) { console.error('template restore failed', e) }
   }
@@ -74,7 +85,9 @@ export const useTemplateStore = defineStore('template', () => {
 
   return {
     templateData, basicInfo, settings, templateList, loading, selectedMusicId,
+    canvasSize, orientation,
     updateBasicInfo, updateField, toggleSetting, setSelectedMusic,
+    setCanvasSize,
     fetchTemplates, persist, reset,
   }
 })

@@ -118,7 +118,7 @@
             <img v-if="coverPreview" :src="coverPreview" class="cover-img" alt="封面预览" />
             <div v-else class="cover-placeholder">
               <span>📷</span>
-              <text>点击「生成封面」获取预览图</text>
+              <span>点击「生成封面」获取预览图</span>
             </div>
           </div>
           <div class="cover-actions">
@@ -219,6 +219,7 @@ const props = defineProps<{
   elementCount: number
   getDraft: () => any
   getCanvasEl: () => HTMLCanvasElement | null
+  pageMode: string
 }>()
 
 const emit = defineEmits<{
@@ -234,7 +235,7 @@ const STEPS = [
 ]
 
 const TAG_LIST = [
-  '网红爆款', '婚礼请帖', '生日邀请', '限时免费',
+  '网红爆款', '新婚', '节日邀请', '限时免费',
   '中国风', '简约', '复古', '浪漫', '活泼', '典雅', '大气', '温馨', '西式', '韩式',
 ]
 
@@ -282,6 +283,12 @@ watch(() => props.visible, (val) => {
     publishSuccess.value = false
     coverPreview.value = ''
     uploadProgress.value = 0
+    form.name = ''
+    form.subtitle = ''
+    form.category = 'wedding'
+    form.tags = []
+    form.pageCount = 10
+    form.likes = 1000
   }
 })
 
@@ -404,6 +411,7 @@ async function doPublish() {
       primaryColor: '#e84a6e',
       likes: form.likes,
       pageCount: form.pageCount,
+      orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
       data: {
         coverImage: coverPreview.value || '',
         coverTitle: form.name,
@@ -458,18 +466,30 @@ async function doPublish() {
           base.style = {
             font: '',
             color: '',
-            fontSize: 0,
             spacing: 0,
-            lineHeight: 0,
             borderRadius: el.borderRadius ?? 0,
             borderColor: el.borderColor || 'transparent',
             borderWidth: el.borderWidth ?? 0,
-          }
+          } as any
         }
 
         return base
       }),
     }
+
+    // Auto-assign dataKey for text elements whose content matches template data values
+    // This enables mini-program user edits to propagate back to templateData
+    const dataValueToKey: Record<string, string> = {}
+    for (const [key, value] of Object.entries(payload.data)) {
+      if (value && typeof value === 'string') {
+        dataValueToKey[value] = key
+      }
+    }
+    payload.elements.forEach((el: any) => {
+      if (el.type === 'text' && !el.dataKey && el.text && dataValueToKey[el.text]) {
+        el.dataKey = dataValueToKey[el.text]
+      }
+    })
 
     uploadProgress.value = 50
     uploadProgressText.value = '保存到服务器...'
@@ -485,7 +505,8 @@ async function doPublish() {
     uploadProgress.value = 100
     publishSuccess.value = true
     publishDone.value = true
-    emit('published', result.id)
+    emit('published', { id: result.id, name: form.name, category: form.category, subtitle: form.subtitle })
+    window.dispatchEvent(new CustomEvent('publish-success'))
   } catch (e: any) {
     publishSuccess.value = false
     publishDone.value = true
@@ -503,7 +524,7 @@ function retryPublish() {
 }
 
 function onViewTemplate() {
-  // 打开小程序模板页（由外部处理）
+  window.open(`/pages/preview/index`, '_blank')
   onClose()
 }
 </script>

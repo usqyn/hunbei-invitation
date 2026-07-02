@@ -11,6 +11,14 @@ export interface TemplateData {
   photoSubtitle: string
   footerText: string
   footerSubText: string
+  // 智能字段（快捷编辑用）
+  inviter?: string
+  invitee?: string
+  date?: string
+  time?: string
+  location?: string
+  address?: string
+  phone?: string
 }
 
 // 元素样式
@@ -59,6 +67,7 @@ export interface TemplateItem {
   data: TemplateData
   elements: EditableElement[]
   canvasSize?: { width: number; height: number }
+  orientation?: 'portrait' | 'landscape'
   background?: {
     type: string
     color1: string
@@ -108,6 +117,13 @@ export const DEFAULT_TEMPLATE_DATA: TemplateData = {
   photoSubtitle: 'Welcome to our wedding',
   footerText: '我们曾各自奔赴人海，直到目光交汇的那一刻\n才懂归属感的意义\n诚邀生命中重要的你\n共同见证这场"双向奔赴"的圆满',
   footerSubText: 'GROOM',
+  inviter: '',
+  invitee: '',
+  date: '',
+  time: '',
+  location: '',
+  address: '',
+  phone: '',
 }
 
 export const DEFAULT_ELEMENT_STYLE: ElementStyle = {
@@ -127,10 +143,13 @@ export const COLOR_LIST = [
 ]
 
 export const CATEGORIES = [
-  { id: 'wedding', name: '婚礼请柬', icon: '💒' },
-  { id: 'birthday', name: '生日派对', icon: '🎂' },
-  { id: 'baby', name: '周岁宴', icon: '🎉' },
-  { id: 'graduation', name: '升学宴', icon: '🎉' },
+  { id: 'wedding', name: '新婚', icon: '💒' },
+  { id: 'proposal', name: '求婚', icon: '💍' },
+  { id: 'consultation-tea', name: '商量茶', icon: '🍵' },
   { id: 'festival', name: '割礼', icon: '🎁' },
   { id: 'business', name: '耳环礼', icon: '💎' },
+  { id: 'baby', name: '周岁宴', icon: '🎉' },
+  { id: 'graduation', name: '升学宴', icon: '🎓' },
+  { id: 'festival-invitation', name: '节日请柬', icon: '🎊' },
+  { id: 'housewarming', name: '乔迁', icon: '🏠' },
 ]
