@@ -27,13 +27,11 @@ export function request<T = any>(options: string | {
   url: string; method?: string; data?: any; header?: any; hideLoading?: boolean
 }): Promise<T> {
   if (typeof options === 'string') options = { url: options }
-  console.log('[request-debug] options:', JSON.stringify(options), 'API_BASE:', API_BASE)
   const token = getToken()
   const header: Record<string, string> = { 'Content-Type': 'application/json', ...options.header }
   if (token) header['Authorization'] = `Bearer ${token}`
   if (!options.hideLoading) showLoadingSafe()
   return new Promise((resolve, reject) => {
-    console.log('[request-debug] final URL:', API_BASE + options.url)
     uni.request({
       url: API_BASE + options.url,
       method: (options.method as any) || 'GET',

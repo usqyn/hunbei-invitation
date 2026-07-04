@@ -95,6 +95,15 @@ export interface Material {
 
 // ========== 新增：多模板系统类型 ==========
 
+// 模板背景配置
+export interface TemplateBackground {
+  type: 'solid' | 'linear-gradient' | 'radial-gradient' | 'image'
+  color1: string
+  color2?: string
+  angle?: number
+  image?: string
+}
+
 // 模板分类
 export interface TemplateCategory {
   id: string              // 分类ID: wedding/festival/baby/graduation/festival-invitation/business
@@ -121,7 +130,7 @@ export interface TemplateItem {
   // 横屏/竖屏
   orientation?: 'portrait' | 'landscape'
   // 背景配置
-  background?: { type: string; color1: string; color2?: string; angle?: number; image?: string }
+  background?: TemplateBackground
   // 主题色
   primaryColor: string
   // 首页标签（网红爆款/婚礼请帖等）

@@ -163,7 +163,7 @@ onMounted(() => {
 
 // 微信分享配置 - 同时支持右上角 ... 菜单和自定义按钮
 onShareAppMessage(() => {
-  const templateId = templateStore.currentTemplateId || ''
+  const templateId = editorStore.currentTemplateId || ''
   const workId = editorStore.currentWorkId || ''
   let path = '/pages/preview/index'
   const params: string[] = []

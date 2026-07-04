@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import type { EditableElement } from '@/types'
@@ -105,6 +105,27 @@ const displayTitle = computed(() => {
   return 'toy tamaxia'
 })
 
+const fontScale = ref(0.67)
+
+function updateFontScale() {
+  if (!isCanvasMode.value) {
+    fontScale.value = 1
+    return
+  }
+  nextTick(() => {
+    const query = uni.createSelectorQuery()
+    query
+      .select('.preview-card--canvas')
+      .boundingClientRect((rect: any) => {
+        if (rect && rect.width > 0) {
+          const sysInfo = uni.getSystemInfoSync()
+          fontScale.value = rect.width / sysInfo.windowWidth
+        }
+      })
+      .exec()
+  })
+}
+
 onMounted(() => {
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
@@ -112,6 +133,7 @@ onMounted(() => {
   if (options.templateId) {
     editorStore.loadTemplateById(options.templateId)
   }
+  setTimeout(() => updateFontScale(), 500)
 })
 
 // 画布模式检测：有元素且任一元素有完整定位数据（x/y/width/height）
@@ -178,6 +200,10 @@ function getCanvasElementStyle(el: EditableElement) {
     style.height = `${(el.height! / canvasHeight.value) * 100}%`
   }
   if (el.rotation) style.transform = `rotate(${el.rotation}deg)`
+  if (el.type === 'image' && el.style?.borderRadius) {
+    const fs = fontScale.value
+    style.borderRadius = Math.round(el.style.borderRadius * fs) + 'rpx'
+  }
   return style
 }
 
@@ -188,20 +214,26 @@ function getFontFamily(font: string | undefined) {
 
 function getTextStyle(el: EditableElement) {
   const s = el.style
+  const fs = fontScale.value
   if (!s) {
-    return { fontSize: '30rpx', color: '#333333', lineHeight: 1.6, letterSpacing: '2rpx' }
+    return {
+      fontSize: Math.round(30 * fs) + 'rpx',
+      color: '#333333',
+      lineHeight: 1.6,
+      letterSpacing: Math.round(2 * fs) + 'rpx',
+    }
   }
   return {
-    fontSize: (s.fontSize || 28) + 'rpx',
+    fontSize: Math.round((s.fontSize || 28) * fs) + 'rpx',
     color: s.color,
     lineHeight: String(s.lineHeight || 1.6),
-    letterSpacing: (s.spacing ?? 2) + 'rpx',
+    letterSpacing: Math.round((s.spacing ?? 2) * fs) + 'rpx',
     fontFamily: getFontFamily(s.font),
     fontWeight: s.fontWeight || 'normal',
     fontStyle: s.fontStyle || 'normal',
     textAlign: s.textAlign || 'center',
-    WebkitTextStroke: s.strokeWidth ? `${s.strokeWidth}px ${s.strokeColor || 'transparent'}` : undefined,
-    textShadow: s.shadowBlur ? `${s.shadowOffsetX ?? 0}px ${s.shadowOffsetY ?? 0}px ${s.shadowBlur}px ${s.shadowColor || 'transparent'}` : undefined,
+    WebkitTextStroke: s.strokeWidth ? `${Math.round(s.strokeWidth * fs)}rpx ${s.strokeColor || 'transparent'}` : undefined,
+    textShadow: s.shadowBlur ? `${Math.round((s.shadowOffsetX ?? 0) * fs)}rpx ${Math.round((s.shadowOffsetY ?? 0) * fs)}rpx ${Math.round(s.shadowBlur * fs)}rpx ${s.shadowColor || 'transparent'}` : undefined,
     textDecoration: s.textDecoration || 'none',
   }
 }

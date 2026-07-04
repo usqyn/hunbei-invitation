@@ -32,7 +32,7 @@
     </view>
 
     <!-- 错误状态 -->
-    <view v-else-if="loadError" class="error-state">
+    <view v-else-if="loadError" class="error-state" @click="loadTemplates">
       <image class="error-icon-image" :src="pageConfig.errorIcon" mode="aspectFit" />
       <text class="error-text">{{ pageConfig.errorText }}</text>
     </view>
@@ -367,6 +367,10 @@ function onBack() {
   align-items: center;
   justify-content: center;
   gap: 16rpx;
+}
+
+.error-state {
+  cursor: pointer;
 }
 
 .loading-text { font-size: 28rpx; color: #999; }

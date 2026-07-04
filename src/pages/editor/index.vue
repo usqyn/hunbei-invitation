@@ -25,7 +25,8 @@
                 class="canvas-element"
                 :class="{
                   'active-element': editorStore.selectedElement === idx,
-                  'text-element': el.type === 'text'
+                  'text-element': el.type === 'text',
+                  'non-editable': el.editable === false
                 }"
                 :style="getCanvasElementStyle(el)"
                 @click="onOpenEditor(idx)"
@@ -421,7 +422,6 @@ function goBack() {
 
 function onImageError(e: any) {
   console.warn('Editor image load failed')
-  uni.showToast({ title: '图片加载失败', icon: 'none' })
 }
 
 function handleMusic() {
@@ -675,6 +675,11 @@ watch(() => editorStore.editableElements.length, () => {
 .canvas-text {
   display: block;
   word-break: break-word;
+}
+
+.non-editable {
+  cursor: default;
+  opacity: 0.85;
 }
 
 .active-element {
