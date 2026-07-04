@@ -3,6 +3,14 @@ import { ref, reactive } from 'vue'
 import { useTemplateStore } from './template'
 import { DEFAULT_ELEMENT_STYLE, getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { MATERIAL_LIST } from '@/constants/editor'
+import { API_BASE } from '@/config'
+
+/** 补全 /uploads/ 开头的相对路径为完整 URL */
+function resolveImageUrl(url: string): string {
+  if (!url) return url
+  if (url.startsWith('/uploads/')) return API_BASE + url
+  return url
+}
 import type { EditableElement, ElementStyle, TemplateData, TemplateItem } from '@/types'
 import { request } from '@/utils/request'
 
@@ -30,6 +38,7 @@ export const useEditorStore = defineStore('editor', () => {
   const currentLineHeight = ref<number>(2)
   const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
   const background = ref<{ type: string; color1: string; color2?: string; angle?: number; image?: string }>({ type: 'solid', color1: '#ffffff' })
+  const renderedImage = ref<string>('')
 
   // 可编辑元素列表 - 根据模板动态生成
   const editableElements = reactive<EditableElement[]>([])
@@ -50,12 +59,15 @@ export const useEditorStore = defineStore('editor', () => {
       const data = await request<TemplateItem>({ url: `/api/templates/${templateId}`, hideLoading: true })
       if (reqId !== _loadReqId) return false // 忽略过期请求
 
-      if (local) {
-        // 模板在本地存在（内置模板），本地数据更完整，优先使用本地
+      if (data) {
+        // API 数据优先（admin 发布的模板是最新的）
+        applyTemplateData(data as TemplateItem)
+      } else if (local) {
+        // API 无数据则使用本地内置模板
         applyTemplateData(local)
       } else {
-        // 仅 API 有的模板（admin 创建），使用 API 数据
-        applyTemplateData(data as TemplateItem)
+        templateLoading.value = false
+        return false
       }
       currentTemplateId.value = templateId
       persistTemplate()
@@ -81,11 +93,12 @@ export const useEditorStore = defineStore('editor', () => {
 
   // ============ 应用模板数据到编辑区 ============
   function applyTemplateData(template: TemplateItem) {
+    if (!template) return
     editableElements.splice(0, editableElements.length)
-    template.elements.forEach(el => {
+    ;(template.elements || []).forEach(el => {
       editableElements.push({
         type: el.type,
-        text: el.text,
+        text: el.type === 'image' ? resolveImageUrl(el.text) : el.text,
         dataKey: el.dataKey,
         label: el.label,
         style: el.style ? { ...el.style } : undefined,
@@ -109,14 +122,26 @@ export const useEditorStore = defineStore('editor', () => {
 
     // 同步背景配置
     if (template.background) {
-      background.value = { ...template.background }
+      const bg = { ...template.background } as any
+      // admin 存储 image 字段名是 imageUrl，小程序读 image 字段
+      if (bg.imageUrl && !bg.image) {
+        bg.image = bg.imageUrl
+      }
+      // 补全背景图相对路径
+      if (bg.image) {
+        bg.image = resolveImageUrl(bg.image)
+      }
+      background.value = bg
     } else {
       background.value = { type: 'solid', color1: '#ffffff' }
     }
 
+    // 同步渲染图
+    renderedImage.value = resolveImageUrl(template.renderedImage || '')
+
     // 同步到 TemplateStore（只覆盖有实际值的字段，保留非空默认值）
     const templateStore = useTemplateStore()
-    const data: TemplateData = template.data
+    const data: TemplateData = template.data || {}
     Object.keys(data).forEach(key => {
       const k = key as keyof TemplateData
       if (k in templateStore.templateData) {
@@ -124,7 +149,9 @@ export const useEditorStore = defineStore('editor', () => {
         const current = templateStore.templateData[k]
         // 仅当 incoming 非空，或 current 为空时覆盖
         if (incoming || !current) {
-          templateStore.templateData[k] = incoming
+          // 对图片类型的 data 字段补全相对路径
+          const imageKeys = ['coverImage', 'photo1', 'photo2', 'photo3', 'photo4']
+          templateStore.templateData[k] = imageKeys.includes(k) ? resolveImageUrl(incoming) : incoming
         }
       }
     })
@@ -287,7 +314,7 @@ export const useEditorStore = defineStore('editor', () => {
     showTextEditor, showBasicInfoEditor, showQuickEdit, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
     currentFontSize, currentSpacing, currentLineHeight,
-    editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background,
+    editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
     loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
     closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField,
     selectMaterial, applyImageToElement, setCurrentWorkId,

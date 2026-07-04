@@ -43,6 +43,7 @@ async function initDatabase() {
     background TEXT,
     tags TEXT,
     status TEXT DEFAULT 'draft',
+    renderedImage TEXT DEFAULT '',
     createdAt TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   )`)
@@ -76,10 +77,9 @@ async function initDatabase() {
     value TEXT
   )`)
 
-  // 迁移：为旧数据库添加 status 列
-  try {
-    db.run("ALTER TABLE templates ADD COLUMN status TEXT DEFAULT 'draft'")
-  } catch (_) {}
+  // 迁移：为旧数据库添加 status 和 renderedImage 列
+  try { db.run("ALTER TABLE templates ADD COLUMN status TEXT DEFAULT 'draft'") } catch (_) {}
+  try { db.run("ALTER TABLE templates ADD COLUMN renderedImage TEXT DEFAULT ''") } catch (_) {}
   // 已有模板全部标记为 published
   db.run("UPDATE templates SET status = 'published' WHERE status IS NULL OR status = ''")
   saveDatabase()
@@ -102,6 +102,11 @@ function setVersion(v) {
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+
+// ============ 字体目录 ============
+const FONTS_DIR = path.join(__dirname, 'uploads', 'fonts')
+if (!fs.existsSync(FONTS_DIR)) fs.mkdirSync(FONTS_DIR, { recursive: true })
+app.use('/uploads/fonts', express.static(FONTS_DIR))
 
 // 简单的 IP 限流（登录接口防暴力破解）
 const loginAttempts = {}
@@ -134,7 +139,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.mp3', '.wav', '.ogg', '.aac']
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.mp3', '.wav', '.ogg', '.aac', '.ttf', '.otf', '.woff', '.woff2']
     const ext = path.extname(file.originalname).toLowerCase()
     if (allowed.includes(ext)) {
       cb(null, true)
@@ -419,7 +424,62 @@ app.post('/api/upload', upload.array('images', 10), (req, res) => {
   }
 })
 
-// 上传音乐
+// 上传字体
+const fontStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!fs.existsSync(FONTS_DIR)) fs.mkdirSync(FONTS_DIR, { recursive: true })
+    cb(null, FONTS_DIR)
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname)
+    cb(null, `${uuidv4()}${ext}`)
+  },
+})
+const fontUpload = multer({
+  storage: fontStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.ttf', '.otf', '.woff', '.woff2']
+    const ext = path.extname(file.originalname).toLowerCase()
+    if (allowed.includes(ext)) cb(null, true)
+    else cb(new Error('不支持的字体格式，请上传 ttf/otf/woff/woff2'))
+  },
+})
+
+app.post('/api/fonts/upload', fontUpload.array('fonts', 10), (req, res) => {
+  try {
+    const files = req.files.map(f => ({
+      filename: f.filename,
+      originalName: f.originalname,
+      url: `/uploads/fonts/${f.filename}`,
+      size: f.size,
+    }))
+    // 更新字体映射表
+    const mapPath = path.join(FONTS_DIR, 'font-map.json')
+    let fontMap = {}
+    if (fs.existsSync(mapPath)) fontMap = JSON.parse(fs.readFileSync(mapPath, 'utf-8'))
+    files.forEach((f, i) => {
+      const name = req.body.name || req.body.names?.[i] || f.originalName.replace(/\.[^.]+$/, '')
+      fontMap[name] = f.url
+    })
+    fs.writeFileSync(mapPath, JSON.stringify(fontMap, null, 2))
+    res.json({ success: true, data: files })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// 获取已上传字体列表（含映射）
+app.get('/api/fonts', (req, res) => {
+  try {
+    const mapPath = path.join(FONTS_DIR, 'font-map.json')
+    let fontMap = {}
+    if (fs.existsSync(mapPath)) fontMap = JSON.parse(fs.readFileSync(mapPath, 'utf-8'))
+    res.json({ success: true, data: fontMap })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
 app.post('/api/music/upload', upload.array('music', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
@@ -474,8 +534,8 @@ app.post('/api/templates', (req, res) => {
     }
 
     db.run(`INSERT INTO templates
-      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       id,
       body.name,
       body.subtitle || '',
@@ -491,6 +551,7 @@ app.post('/api/templates', (req, res) => {
       body.background ? JSON.stringify(body.background) : null,
       body.tags ? JSON.stringify(body.tags) : null,
       body.status || 'draft',
+      body.renderedImage || '',
       new Date().toISOString(),
       new Date().toISOString(),
     ])
@@ -517,7 +578,7 @@ app.put('/api/templates/:id', (req, res) => {
     const fields = []
     const params = []
 
-    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'likes', 'pageCount', 'orientation', 'status']
+    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'likes', 'pageCount', 'orientation', 'status', 'renderedImage']
     allowedFields.forEach(f => {
       if (body[f] !== undefined) {
         fields.push(`${f} = ?`)

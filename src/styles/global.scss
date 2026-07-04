@@ -1,3 +1,5 @@
+@use './fonts' as *;
+
 page {
   --color-primary: #e84a6e;
   --color-primary-gradient: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);

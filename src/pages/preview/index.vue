@@ -13,7 +13,12 @@
     <scroll-view class="preview-content" scroll-y>
       <!-- 画布模式：绝对定位渲染（与编辑器一致） -->
       <template v-if="isCanvasMode">
-        <view class="preview-card preview-card--canvas" :style="{ ...canvasCardStyle, ...canvasBackgroundStyle }">
+        <!-- 有渲染图时直接显示图片 -->
+        <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="canvasCardStyle">
+          <image class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" />
+        </view>
+        <!-- 无渲染图时走原有元素渲染 -->
+        <view v-else class="preview-card preview-card--canvas" :style="{ ...canvasCardStyle, ...canvasBackgroundStyle }">
           <view
             v-for="(el, idx) in editorStore.editableElements"
             :key="idx"
@@ -89,9 +94,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
+import { loadFontsForElements } from '@/utils/fontLoader'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -134,6 +140,13 @@ onMounted(() => {
     editorStore.loadTemplateById(options.templateId)
   }
   setTimeout(() => updateFontScale(), 500)
+})
+
+// 模板加载完成后加载自定义字体
+watch(() => editorStore.templateLoading, (loading) => {
+  if (!loading) {
+    loadFontsForElements(editorStore.editableElements as any)
+  }
 })
 
 // 画布模式检测：有元素且任一元素有完整定位数据（x/y/width/height）
@@ -349,6 +362,11 @@ const onImageError = () => {
   border-radius: 12rpx;
   overflow: hidden;
   margin: 24rpx auto;
+}
+
+.rendered-image {
+  width: 100%;
+  display: block;
 }
 
 .preview-element {

@@ -102,6 +102,7 @@ export interface TemplateBackground {
   color2?: string
   angle?: number
   image?: string
+  imageUrl?: string
 }
 
 // 模板分类
@@ -135,6 +136,8 @@ export interface TemplateItem {
   primaryColor: string
   // 首页标签（网红爆款/婚礼请帖等）
   tags?: string[]
+  // 渲染图（admin 发布时生成的高清截图）
+  renderedImage?: string
 }
 
 // 当前选中的模板状态

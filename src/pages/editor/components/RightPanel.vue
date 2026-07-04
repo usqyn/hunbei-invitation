@@ -7,35 +7,35 @@
 
     <view v-if="contentOpen" class="content-list" :class="{ 'content-list--horizontal': mode === 'bottom' }">
       <view
-        v-for="(element, idx) in editableElements"
-        :key="idx"
+        v-for="item in visibleItems"
+        :key="item.originalIdx"
         class="content-item"
         :class="{
-          selected: selectedElement === idx,
+          selected: selectedElement === item.originalIdx,
           'content-item--thumb': mode === 'bottom',
         }"
-        @click="$emit('openEditor', idx)"
+        @click="$emit('openEditor', item.originalIdx)"
       >
-        <view v-if="element.type === 'image'" class="image-item" :class="{ 'image-item--thumb': mode === 'bottom' }">
-          <image class="item-image" :src="element.text" mode="aspectFill"></image>
+        <view v-if="item.el.type === 'image'" class="image-item" :class="{ 'image-item--thumb': mode === 'bottom' }">
+          <image class="item-image" :src="item.el.text" mode="aspectFill"></image>
           <view class="replace-icon-wrapper">
             <text class="replace-icon">🖼️</text>
           </view>
         </view>
         <view v-else class="text-item" :class="{ 'text-item--thumb': mode === 'bottom' }">
-          <text class="item-text">{{ element.text }}</text>
+          <text class="item-text">{{ item.el.text }}</text>
         </view>
-        <view v-if="mode === 'bottom'" class="item-label">{{ element.label || (element.type === 'image' ? '图片' : '文字') }}</view>
+        <view v-if="mode === 'bottom'" class="item-label">{{ item.el.label || (item.el.type === 'image' ? '图片' : '文字') }}</view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { EditableElement, Material, TemplateSettings } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   activePanelTab: string
   editableElements: EditableElement[]
   selectedElement: number | null
@@ -43,6 +43,14 @@ defineProps<{
   settings: TemplateSettings
   mode?: 'sidebar' | 'bottom'
 }>()
+
+// 过滤掉不可编辑的背景图片元素，保留文字元素（点击时提示不可编辑即可）
+const visibleItems = computed(() => {
+  if (!props.editableElements || !Array.isArray(props.editableElements)) return []
+  return props.editableElements
+    .map((el, idx) => ({ el, originalIdx: idx }))
+    .filter(item => !(item.el.editable === false && item.el.type === 'image'))
+})
 
 defineEmits<{
   'update:activePanelTab': [key: string]

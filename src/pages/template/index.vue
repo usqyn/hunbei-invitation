@@ -98,7 +98,8 @@ import { ref, computed, onMounted } from 'vue'
 import type { TemplateItem, TemplateCategory } from '@/types'
 import { TEMPLATE_LIST } from '@/constants/templates-data'
 import { HOME_CATEGORIES } from '@/constants/categories'
-import { TEMPLATE_PAGE_CONFIG, API_BASE } from '@/config'
+import { TEMPLATE_PAGE_CONFIG } from '@/config'
+import { request } from '@/utils/request'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
 
@@ -173,23 +174,21 @@ onMounted(async () => {
 
 async function loadCategories() {
   try {
-        const res = await uni.request({ url: API_BASE + '/api/categories' }) as any
-        const data = res.data?.success ? res.data.data as { id: string; name: string; icon: string; count: number }[] : null
-    if (data) {
-      // 合并 API 返回的分类（含模板数量）与静态配置
+    const data = await request<{ id: string; name: string; icon: string; count: number }[]>({ url: '/api/categories', hideLoading: true })
+    if (data && Array.isArray(data)) {
       categoryList.value = data.map((cat: any) => {
         const staticCat = STATIC_CATEGORIES.find(s => s.id === cat.id)
         return {
           id: cat.id,
           name: staticCat?.name || cat.name,
-            icon: staticCat?.icon || '/static/images/icons/document.svg',
+          icon: staticCat?.icon || '/static/images/icons/document.svg',
           count: cat.count ?? 0,
           templates: allTemplates.value.filter(t => t.category === cat.id),
         }
       })
     }
   } catch (e) {
-    // API 失败则用静态分类
+    console.warn('加载分类失败，使用静态分类:', e)
     categoryList.value = STATIC_CATEGORIES.map(cat => ({
       id: cat.id,
       name: cat.name,
@@ -205,9 +204,10 @@ async function loadTemplates() {
   loadError.value = false
 
   try {
-        const res = await uni.request({ url: API_BASE + '/api/templates' }) as any
-        const data = res.data?.success ? res.data.data as TemplateItem[] : null
-    if (data) allTemplates.value = data
+    const data = await request<TemplateItem[]>({ url: '/api/templates', hideLoading: true })
+    if (data && Array.isArray(data)) {
+      allTemplates.value = data
+    }
   } catch (e) {
     console.error('加载模板列表失败:', e)
     loadError.value = true

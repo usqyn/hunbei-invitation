@@ -169,6 +169,10 @@
 
         <!-- 图层 Tab -->
         <div v-if="leftTab === 'layers'" class="panel-body">
+          <div class="tpl-name-row">
+            <span class="tpl-name-label">模板名称</span>
+            <input class="tpl-name-input" v-model="currentTemplateName" placeholder="输入模板名称…" @blur="onTemplateNameBlur" />
+          </div>
           <div v-if="layers.length === 0" class="empty-hint">画布暂无元素<br/>点击「添加文字/图片」开始</div>
           <div v-for="el in layers" :key="el.id" class="layer-row" :class="{ active: selectedId === el.id }">
             <span class="layer-icon" @click="selectElement(el.id)">{{ el.type === 'text' ? 'T' : el.type === 'image' ? '🖼' : '✦' }}</span>
@@ -439,13 +443,19 @@
             <div class="section-title">字体与大小</div>
             <div class="form-row">
               <label>字体</label>
-              <select
-                class="form-input"
-                :value="(selectedElement as any).fontFamily"
-                @change="e => updateSelected({ fontFamily: (e.target as HTMLSelectElement).value })"
-              >
-                <option v-for="f in fontList" :key="f" :value="f">{{ f }}</option>
-              </select>
+              <div class="font-select-row">
+                <select
+                  class="form-input"
+                  :value="(selectedElement as any).fontFamily"
+                  @change="e => updateSelected({ fontFamily: (e.target as HTMLSelectElement).value })"
+                >
+                  <option v-for="f in fontList" :key="f" :value="f">{{ f }}</option>
+                </select>
+                <label class="font-upload-btn" title="上传字体文件">
+                  📎
+                  <input type="file" accept=".ttf,.otf,.woff,.woff2" multiple style="display:none" @change="onFontUpload" />
+                </label>
+              </div>
             </div>
             <div class="form-row two-col">
               <div>
@@ -843,6 +853,9 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } 
 import { useCanvas } from './composables/useCanvas'
 import {
   uploadImage,
+  uploadImages,
+  uploadFonts,
+  fetchFonts,
   API_BASE,
   fetchTemplates,
   fetchTemplate,
@@ -894,7 +907,7 @@ const SMART_FIELDS: SmartFieldConfig[] = [
 ]
 
 // 字体列表
-const fontList = [
+const fontListBase = [
   'KazakhSoftAsilya',
   'KazakhSoftAsilyaQaniq',
   'KazakhSoftBaspa',
@@ -920,6 +933,31 @@ const fontList = [
   'Arial, sans-serif',
   'Georgia, serif',
 ]
+
+const uploadedFontNames = ref<string[]>([])
+const fontList = computed(() => [...uploadedFontNames.value, ...fontListBase])
+
+async function onFontUpload(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = input.files
+  if (!files?.length) return
+  try {
+    const fileList = Array.from(files)
+    await uploadFonts(fileList)
+    await loadUploadedFonts()
+    alert('字体上传成功！')
+  } catch (err: any) {
+    alert('字体上传失败: ' + (err.message || err))
+  }
+  input.value = ''
+}
+
+async function loadUploadedFonts() {
+  try {
+    const fontMap = await fetchFonts()
+    uploadedFontNames.value = Object.keys(fontMap)
+  } catch {}
+}
 
 // 颜色与渐变预设
 const bgColors = [
@@ -1170,6 +1208,12 @@ const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
+function onTemplateNameBlur() {
+  if (currentTemplateName.value.trim()) return
+  // 如果为空则恢复默认
+  currentTemplateName.value = ''
+}
+
 // 起始模板
 const activePresetCat = ref('scene')
 const filteredPresets = computed(() => getPresetsByCategory(activePresetCat.value))
@@ -1206,14 +1250,20 @@ async function onLoadTemplate(id: string) {
     const draft = {
       canvasSize: tpl.canvasSize || { width: 375, height: 667 },
       background: tpl.background || { type: 'solid', color1: '#ffffff' },
-      elements: (tpl.elements || []).map((el: any, idx: number) => ({
-        id: el.id || `el_${idx}`,
-        type: el.type,
-        name: el.label || (el.type === 'text' ? '文字' : '图片'),
-        x: el.x ?? 187,
-        y: el.y ?? 200 + idx * 80,
-        width: el.width ?? 240,
-        height: el.height ?? 60,
+      elements: (tpl.elements || []).map((el: any, idx: number) => {
+        const w = el.width ?? 240
+        const h = el.height ?? 60
+        // 服务器存储的是左上角坐标，Fabric 使用中心原点，需转换
+        const centerX = (el.x ?? 187) + w / 2
+        const centerY = (el.y ?? (200 + idx * 80)) + h / 2
+        return {
+          id: el.id || `el_${idx}`,
+          type: el.type,
+          name: el.label || (el.type === 'text' ? '文字' : '图片'),
+          x: centerX,
+          y: centerY,
+          width: w,
+          height: h,
         rotation: el.rotation ?? 0,
         opacity: el.opacity ?? 1,
         locked: false,
@@ -1222,7 +1272,7 @@ async function onLoadTemplate(id: string) {
         content: el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '',
         dataKey: el.dataKey,
         fontFamily: el.style?.font || '思源宋体, serif',
-        fontSize: el.style?.fontSize || 24,
+        fontSize: el.style?.fontSize ? Math.round(el.style.fontSize * (tpl.canvasSize?.width || 375) / 750) : 24,
         fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
         fontStyle: el.style?.fontStyle || 'normal',
         color: el.style?.color || '#333333',
@@ -1247,7 +1297,8 @@ async function onLoadTemplate(id: string) {
         blur: 0,
         grayscale: 0,
         saturate: 100,
-      })),
+        }
+      }),
     }
     loadDraft(draft)
     currentTemplateId.value = id
@@ -1416,11 +1467,35 @@ function applyTextFx(type: string) {
 }
 
 // ============ 保存到服务器 ============
+
+// 从画布生成高清渲染图（2x 分辨率）
+async function generateRenderedImage(): Promise<string> {
+  const canvas = getCanvasEl()
+  if (!canvas) return ''
+  try {
+    const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
+    const res = await fetch(dataUrl)
+    const blob = await res.blob()
+    const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })
+    const urls = await uploadImages([file])
+    return urls[0] || ''
+  } catch (e) {
+    console.error('generateRenderedImage failed:', e)
+    return ''
+  }
+}
+
 async function saveToServer() {
   try {
     const draft = getDraft()
     const cSize = draft?.canvasSize || { width: 375, height: 667 }
-    const name = currentTemplateName.value || '未命名模板'
+    let name = currentTemplateName.value || ''
+    if (!name) {
+      name = window.prompt('请输入模板名称', name) || ''
+      if (!name.trim()) return
+      name = name.trim()
+      currentTemplateName.value = name
+    }
 
     // 从画布生成封面缩略图
     let coverDataUrl = ''
@@ -1439,6 +1514,7 @@ async function saveToServer() {
       likes: 0,
       pageCount: 10,
       status: 'draft',
+      renderedImage: await generateRenderedImage(),
       orientation: cSize.width > cSize.height ? 'landscape' : 'portrait',
       data: {
         coverImage: coverDataUrl,
@@ -1825,6 +1901,7 @@ onMounted(async () => {
   }
   autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
   loadTemplateList()
+  loadUploadedFonts()
   window.addEventListener('publish-success', () => showToast('模板发布成功！'))
 })
 </script>
@@ -1958,6 +2035,58 @@ onMounted(async () => {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+}
+
+.tpl-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+.tpl-name-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+  white-space: nowrap;
+}
+.tpl-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.tpl-name-input:focus {
+  border-color: #e84a6e;
+}
+
+.font-select-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.font-select-row .form-input {
+  flex: 1;
+}
+.font-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: border-color 0.15s;
+}
+.font-upload-btn:hover {
+  border-color: #e84a6e;
 }
 
 .section-title {

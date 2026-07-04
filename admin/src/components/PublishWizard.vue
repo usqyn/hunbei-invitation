@@ -211,7 +211,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { CATEGORIES } from '../types/template'
-import { createTemplate, fetchVersion, API_BASE } from '../composables/useApi'
+import { createTemplate, fetchVersion, API_BASE, uploadImages } from '../composables/useApi'
 
 const props = defineProps<{
   visible: boolean
@@ -398,6 +398,25 @@ async function doPublish() {
     const draft = props.getDraft()
 
     uploadProgress.value = 20
+    uploadProgressText.value = '生成高清渲染图...'
+
+    // 生成 2x 渲染图
+    let renderedImageUrl = ''
+    const canvas = props.getCanvasEl()
+    if (canvas) {
+      try {
+        const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
+        const res = await fetch(dataUrl)
+        const blob = await res.blob()
+        const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })
+        const urls = await uploadImages([file])
+        renderedImageUrl = urls[0] || ''
+      } catch (e) {
+        console.error('renderedImage upload failed:', e)
+      }
+    }
+
+    uploadProgress.value = 40
     uploadProgressText.value = '上传模板数据...'
 
     // 构建 payload
@@ -412,6 +431,7 @@ async function doPublish() {
       likes: form.likes,
       pageCount: form.pageCount,
       status: 'published',
+      renderedImage: renderedImageUrl,
       orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
       data: {
         coverImage: coverPreview.value || '',

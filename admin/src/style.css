@@ -10,8 +10,129 @@ html, body, #app {
   width: 100%;
 }
 
+/* ============ KazakhSoft 字体 ============ */
+@font-face {
+  font-family: 'KazakhSoftAsilya';
+  src: url('/fonts/KazakhSoftAsilya.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftAsilyaQaniq';
+  src: url('/fonts/KazakhSoftAsilyaQaniq.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftBaspa';
+  src: url('/fonts/KazakhSoftBaspa.TTF') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftBaspaQaniq';
+  src: url('/fonts/KazakhSoftBaspaQaniq.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftJurnal';
+  src: url('/fonts/KazakhSoftJurnal.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftJurnalQaniq';
+  src: url('/fonts/KazakhSoftJurnalQaniq.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftKorkem';
+  src: url('/fonts/KazakhSoftKorkem.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftKufy';
+  src: url('/fonts/KazakhSoftKufy.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftNaqis';
+  src: url('/fonts/KazakhSoftNaqis.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftNet';
+  src: url('/fonts/KazakhSoftNet.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftOziek';
+  src: url('/fonts/KazakhSoftOziek.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftQaniq';
+  src: url('/fonts/KazakhSoftQaniq.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftRwqy';
+  src: url('/fonts/KazakhSoftRwqy.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftRwqyJolaq';
+  src: url('/fonts/KazakhSoftRwqyJolaq.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazakhSoftSulus';
+  src: url('/fonts/KazakhSoftSulus.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KazNet';
+  src: url('/fonts/KazNet.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'UKKUniKuf';
+  src: url('/fonts/UKKUniKuf.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'KazakhSoftAsilya', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

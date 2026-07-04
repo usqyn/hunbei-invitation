@@ -13,24 +13,19 @@ export const HOME_CONFIG = {
   moreText: '查看全部 ›',
   banners: [
     {
-      image: '/static/images/banners/banner-1.jpg',
+      image: '/static/images/banners/banner-1.png',
       linkType: 'category',
       linkValue: 'wedding',
     },
     {
-      image: '/static/images/banners/banner-2.jpg',
+      image: '/static/images/banners/banner-2.png',
       linkType: 'category',
       linkValue: 'festival-invitation',
     },
     {
-      image: '/static/images/banners/banner-3.jpg',
+      image: '/static/images/banners/banner-3.png',
       linkType: 'category',
       linkValue: 'ceremony',
-    },
-    {
-      image: '/static/images/banners/banner-4.jpg',
-      linkType: 'category',
-      linkValue: 'baby',
     },
   ],
   featureCards: [

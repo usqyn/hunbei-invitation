@@ -76,3 +76,27 @@ export async function uploadImage(file: File): Promise<string> {
 }
 
 export { API_BASE }
+
+// ============ 字体 API ============
+
+export async function uploadFonts(files: File[]): Promise<Array<{ filename: string; originalName: string; url: string; size: number }>> {
+  const formData = new FormData()
+  files.forEach(f => {
+    formData.append('fonts', f)
+    // 使用文件名（去掉扩展名）作为字体名
+    const name = f.name.replace(/\.[^.]+$/, '')
+    formData.append('names', name)
+  })
+  const res = await axios.post(`${API_BASE}/api/fonts/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+  if (!res.data.success) throw new Error(res.data.error)
+  return res.data.data
+}
+
+export async function fetchFonts(): Promise<Array<{ filename: string; url: string; size: number }>> {
+  const res = await axios.get(`${API_BASE}/api/fonts`)
+  if (!res.data.success) throw new Error(res.data.error)
+  return res.data.data || []
+}

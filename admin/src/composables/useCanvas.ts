@@ -1,4 +1,5 @@
 import * as fabric from 'fabric'
+import { loadSVGFromString, util as fabricUtil } from 'fabric'
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
 import type {
   AnyCanvasElement,
@@ -176,6 +177,11 @@ export function useCanvas(opts: UseCanvasOptions) {
     })
 
     canvas.on('object:modified', () => {
+      clearGuideLines()
+    })
+
+    // mouse:up 兜底清理参考线，防止 object:modified 未触发时残留
+    canvas.on('mouse:up', () => {
       clearGuideLines()
     })
 
@@ -372,6 +378,72 @@ export function useCanvas(opts: UseCanvasOptions) {
   function addImage(src: string, partial?: Partial<ImageElement>) {
     const canvas = fabricCanvas.value
     if (!canvas) return Promise.resolve<ImageElement | null>(null)
+
+    const isSvgDataUrl = src.startsWith('data:image/svg+xml')
+
+    if (isSvgDataUrl) {
+      // SVG data URL: 使用 loadSVGFromString 加载
+      const svgString = atob(src.split(',')[1])
+      return loadSVGFromString(svgString).then((result: any) => {
+        const obj = fabricUtil.groupSVGElements(result.objects, result.options)
+        if (!obj) return null
+
+        const el: ImageElement = {
+          id: createId('image'),
+          type: 'image',
+          name: '图片',
+          x: canvasSize.value.width / 2,
+          y: canvasSize.value.height / 2,
+          width: (obj.width || 200),
+          height: (obj.height || 200),
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: elements.value.length,
+          editable: true,
+          dataKey: undefined,
+          src,
+          scale: 'cover',
+          mask: 'rect',
+          borderRadius: 0,
+          borderColor: 'transparent',
+          borderWidth: 0,
+          brightness: 100,
+          contrast: 0,
+          blur: 0,
+          grayscale: 0,
+          saturate: 100,
+          ...partial,
+        }
+
+        const maxWidth = canvasSize.value.width * 0.8
+        const sc = Math.min(1, maxWidth / (obj.width || maxWidth))
+
+        obj.set({
+          left: el.x,
+          top: el.y,
+          originX: 'center',
+          originY: 'center',
+          scaleX: sc,
+          scaleY: sc,
+          opacity: el.opacity,
+          lockRotation: el.locked,
+        })
+        ;(obj as any).id = el.id
+        ;(obj as any).elementType = 'image'
+        ;(obj as any).srcUrl = src
+
+        canvas.add(obj)
+        canvas.setActiveObject(obj)
+        elements.value.push(el)
+        selectedId.value = el.id
+        return el
+      }).catch((err: any) => {
+        console.error('addImage SVG failed:', err, 'src:', src.slice(0, 80))
+        return null
+      })
+    }
 
     const isDataUrl = src.startsWith('data:')
     const loadOpts = isDataUrl ? {} : { crossOrigin: 'anonymous' }
@@ -868,16 +940,15 @@ export function useCanvas(opts: UseCanvasOptions) {
       const o = obj as any
       const scaleX = Math.abs(obj.scaleX || 1)
       const scaleY = Math.abs(obj.scaleY || 1)
-      el.x = (o.left ?? 0) + (el.type === 'text' ? 0 : 0)
+      el.x = (o.left ?? 0)
       el.y = (o.top ?? 0)
       el.rotation = (o.angle ?? 0)
       el.opacity = (o.opacity ?? 1)
+      // 同步所有元素类型的宽高（Fabric 对象的实际尺寸 = 原始尺寸 × scale）
+      el.width = (obj.width || el.width) * scaleX
+      el.height = (obj.height || el.height) * scaleY
       if (el.type === 'text') {
         el.content = o.text ?? el.content
-      }
-      if (el.type === 'image') {
-        el.width = (obj.width || el.width) * scaleX
-        el.height = (obj.height || el.height) * scaleY
       }
     })
   }
@@ -915,6 +986,7 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     const addTasks: Array<() => void> = []
     sorted.forEach(el => {
+      // loadDraft 期望的坐标系与 Fabric 一致（中心原点）
       if (el.type === 'text') {
         const t = new fabric.IText(el.content, {
           left: el.x, top: el.y,
@@ -937,7 +1009,7 @@ export function useCanvas(opts: UseCanvasOptions) {
             const sx = ie.width / (img.width || 1)
             const sy = ie.height / (img.height || 1)
             img.set({
-              left: ie.x, top: ie.y,
+              left: el.x, top: el.y,
               originX: 'center', originY: 'center',
               scaleX: sx, scaleY: sy,
               opacity: ie.opacity, angle: ie.rotation,
@@ -1036,8 +1108,10 @@ export function useCanvas(opts: UseCanvasOptions) {
   // ---- 网格与参考线 ----
   function clearGuideLines() {
     const canvas = fabricCanvas.value
-    if (!canvas || !guideLines.value.length) return
-    guideLines.value.forEach(g => canvas.remove(g))
+    if (!canvas) return
+    // 同时清理 guideLines 引用和画布上所有 isGuide 标记的对象
+    const toRemove = canvas.getObjects().filter((obj: any) => obj.isGuide)
+    toRemove.forEach(g => canvas.remove(g))
     guideLines.value = []
     canvas.renderAll()
   }

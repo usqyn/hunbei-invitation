@@ -19,6 +19,7 @@
         <scroll-view class="preview-scroll" scroll-y>
           <!-- 画布模式：admin 发布的绝对定位模板 -->
           <template v-if="isCanvasMode">
+            <!-- 编辑器始终显示可编辑元素，不使用 renderedImage -->
             <view class="preview-card preview-card--canvas" :style="{ ...canvasCardStyle, ...canvasBackgroundStyle }">
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="idx"
@@ -178,6 +179,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
 import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
+import { loadFontsForElements } from '@/utils/fontLoader'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
@@ -504,6 +506,8 @@ watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     nextTick(() => {
       setTimeout(() => updateFontScale(), 300)
+      // 加载模板中使用的自定义字体
+      loadFontsForElements(editorStore.editableElements as any)
     })
   }
 })
@@ -664,6 +668,11 @@ watch(() => editorStore.editableElements.length, () => {
 }
 .canvas-element.text-element {
   overflow: hidden;
+}
+
+.rendered-image {
+  width: 100%;
+  display: block;
 }
 
 .canvas-image {
