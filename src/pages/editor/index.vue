@@ -27,10 +27,11 @@
                 :class="{
                   'active-element': editorStore.selectedElement === idx,
                   'text-element': el.type === 'text',
-                  'non-editable': el.editable === false
+                  'non-editable': el.editable === false,
+                  'canvas-element--no-interact': el.editable === false
                 }"
                 :style="getCanvasElementStyle(el)"
-                @click="onOpenEditor(idx)"
+                @click="el.editable === false ? null : onOpenEditor(idx)"
               >
                 <image
                   v-if="el.type === 'image'"
@@ -54,8 +55,8 @@
                 <view
                   v-if="el.type === 'image'"
                   class="section image-section"
-                  :class="{ 'active-section': editorStore.selectedElement === idx }"
-                  @click="onOpenEditor(idx)"
+                  :class="{ 'active-section': el.editable !== false && editorStore.selectedElement === idx, 'non-editable': el.editable === false }"
+                  @click="el.editable === false ? null : onOpenEditor(idx)"
                 >
                   <image
                     class="section-image"
@@ -70,8 +71,8 @@
                 <view
                   v-else-if="el.type === 'text'"
                   class="section text-section"
-                  :class="{ 'active-section': editorStore.selectedElement === idx }"
-                  @click="onOpenEditor(idx)"
+                  :class="{ 'active-section': el.editable !== false && editorStore.selectedElement === idx, 'non-editable': el.editable === false }"
+                  @click="el.editable === false ? null : onOpenEditor(idx)"
                 >
                   <text
                     class="section-text"
@@ -345,10 +346,7 @@ function getTextStyle(idx: number) {
 // 打开编辑器
 function onOpenEditor(idx: number) {
   const el = editorStore.editableElements[idx]
-  if (el.editable === false) {
-    uni.showToast({ title: '该元素不可编辑', icon: 'none' })
-    return
-  }
+  if (el.editable === false) return
   editorStore.selectedElement = idx
 
   if (el.type === 'image') {
@@ -698,7 +696,11 @@ watch(() => editorStore.editableElements.length, () => {
 
 .non-editable {
   cursor: default;
-  opacity: 0.85;
+  opacity: 1;
+}
+
+.canvas-element--no-interact {
+  pointer-events: none;
 }
 
 .active-element {

@@ -44,12 +44,12 @@ const props = defineProps<{
   mode?: 'sidebar' | 'bottom'
 }>()
 
-// 过滤掉不可编辑的背景图片元素，保留文字元素（点击时提示不可编辑即可）
+// 过滤掉所有不可编辑元素，右侧面板只显示可编辑元素
 const visibleItems = computed(() => {
   if (!props.editableElements || !Array.isArray(props.editableElements)) return []
   return props.editableElements
     .map((el, idx) => ({ el, originalIdx: idx }))
-    .filter(item => !(item.el.editable === false && item.el.type === 'image'))
+    .filter(item => item.el.editable !== false)
 })
 
 defineEmits<{
