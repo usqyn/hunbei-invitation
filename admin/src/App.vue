@@ -725,6 +725,23 @@ const SMART_FIELDS: SmartFieldConfig[] = [
 
 // 字体列表
 const fontList = [
+  'KazakhSoftAsilya',
+  'KazakhSoftAsilyaQaniq',
+  'KazakhSoftBaspa',
+  'KazakhSoftBaspaQaniq',
+  'KazakhSoftJurnal',
+  'KazakhSoftJurnalQaniq',
+  'KazakhSoftKorkem',
+  'KazakhSoftKufy',
+  'KazakhSoftNaqis',
+  'KazakhSoftNet',
+  'KazakhSoftOziek',
+  'KazakhSoftQaniq',
+  'KazakhSoftRwqy',
+  'KazakhSoftRwqyJolaq',
+  'KazakhSoftSulus',
+  'KazNet',
+  'UKKUniKuf',
   '思源宋体, serif',
   '思源黑体, sans-serif',
   '华文楷体, KaiTi, serif',
@@ -959,17 +976,18 @@ async function onLoadTemplate(id: string) {
         fontFamily: el.style?.font || '思源宋体, serif',
         fontSize: el.style?.fontSize || 24,
         fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
-        fontStyle: 'normal',
+        fontStyle: el.style?.fontStyle || 'normal',
         color: el.style?.color || '#333333',
         textAlign: el.style?.textAlign || 'center',
         lineHeight: el.style?.lineHeight || 1.5,
         letterSpacing: el.style?.spacing || 2,
-        strokeColor: 'transparent',
-        strokeWidth: 0,
-        shadowColor: 'transparent',
-        shadowOffsetX: 0,
-        shadowOffsetY: 0,
-        shadowBlur: 0,
+        strokeColor: el.style?.strokeColor || 'transparent',
+        strokeWidth: el.style?.strokeWidth ?? 0,
+        shadowColor: el.style?.shadowColor || 'transparent',
+        shadowOffsetX: el.style?.shadowOffsetX ?? 0,
+        shadowOffsetY: el.style?.shadowOffsetY ?? 0,
+        shadowBlur: el.style?.shadowBlur ?? 0,
+        textDecoration: el.style?.textDecoration || 'none',
         src: el.type === 'image' ? (el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '') : '',
         scale: 'cover',
         mask: 'rect',
@@ -1037,18 +1055,27 @@ async function saveToServer() {
     const draft = getDraft()
     const cSize = draft?.canvasSize || { width: 375, height: 667 }
     const name = currentTemplateName.value || '未命名模板'
+
+    // 从画布生成封面缩略图
+    let coverDataUrl = ''
+    const canvas = getCanvasEl()
+    if (canvas) {
+      try { coverDataUrl = canvas.toDataURL('image/jpeg', 0.85) } catch (_) {}
+    }
+
     const payload: any = {
       name,
       subtitle: currentTemplateSubtitle.value || '',
       category: currentTemplateCategory.value || 'wedding',
       tags: [],
-      cover: '',
+      cover: coverDataUrl,
       primaryColor: '#e84a6e',
       likes: 0,
       pageCount: 10,
+      status: 'draft',
       orientation: cSize.width > cSize.height ? 'landscape' : 'portrait',
       data: {
-        coverImage: '',
+        coverImage: coverDataUrl,
         coverTitle: name,
         coverSubtitle: currentTemplateSubtitle.value || '',
         photo1: '', photo2: '', photo3: '', photo4: '',
@@ -1080,7 +1107,15 @@ async function saveToServer() {
           spacing: el.letterSpacing ?? 2,
           lineHeight: el.lineHeight ?? 1.5,
           fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
+          fontStyle: el.fontStyle ?? 'normal',
           textAlign: el.textAlign || 'center',
+          strokeColor: el.strokeColor || 'transparent',
+          strokeWidth: el.strokeWidth ?? 0,
+          shadowColor: el.shadowColor || 'transparent',
+          shadowOffsetX: el.shadowOffsetX ?? 0,
+          shadowOffsetY: el.shadowOffsetY ?? 0,
+          shadowBlur: el.shadowBlur ?? 0,
+          textDecoration: el.textDecoration || 'none',
         } : el.type === 'image' ? {
           font: '', color: '', spacing: 0,
           borderRadius: el.borderRadius ?? 0,

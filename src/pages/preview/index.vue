@@ -13,7 +13,7 @@
     <scroll-view class="preview-content" scroll-y>
       <!-- 画布模式：绝对定位渲染（与编辑器一致） -->
       <template v-if="isCanvasMode">
-        <view class="preview-card preview-card--canvas" :style="canvasCardStyle">
+        <view class="preview-card preview-card--canvas" :style="{ ...canvasCardStyle, ...canvasBackgroundStyle }">
           <view
             v-for="(el, idx) in editorStore.editableElements"
             :key="idx"
@@ -141,6 +141,25 @@ const canvasCardStyle = computed(() => {
   }
 })
 
+// 画布背景样式
+const canvasBackgroundStyle = computed(() => {
+  const bg = editorStore.background
+  if (!bg || bg.type === 'solid') {
+    return { background: bg?.color1 || '#ffffff' }
+  }
+  if (bg.type === 'linear-gradient') {
+    const angle = bg.angle ?? 135
+    return { background: `linear-gradient(${angle}deg, ${bg.color1}, ${bg.color2 || bg.color1})` }
+  }
+  if (bg.type === 'radial-gradient') {
+    return { background: `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})` }
+  }
+  if (bg.type === 'image' && bg.image) {
+    return { background: `url(${bg.image}) center/cover no-repeat` }
+  }
+  return { background: bg?.color1 || '#ffffff' }
+})
+
 function getCanvasElementStyle(el: EditableElement) {
   if (el.x == null) return {}
   const isText = el.type === 'text'
@@ -153,7 +172,8 @@ function getCanvasElementStyle(el: EditableElement) {
     opacity: String(el.opacity ?? 1),
   }
   if (isText) {
-    style.height = 'auto'
+    style.height = `${(el.height! / canvasHeight.value) * 100}%`
+    style.overflow = 'hidden'
   } else {
     style.height = `${(el.height! / canvasHeight.value) * 100}%`
   }
@@ -178,7 +198,11 @@ function getTextStyle(el: EditableElement) {
     letterSpacing: (s.spacing ?? 2) + 'rpx',
     fontFamily: getFontFamily(s.font),
     fontWeight: s.fontWeight || 'normal',
+    fontStyle: s.fontStyle || 'normal',
     textAlign: s.textAlign || 'center',
+    WebkitTextStroke: s.strokeWidth ? `${s.strokeWidth}px ${s.strokeColor || 'transparent'}` : undefined,
+    textShadow: s.shadowBlur ? `${s.shadowOffsetX ?? 0}px ${s.shadowOffsetY ?? 0}px ${s.shadowBlur}px ${s.shadowColor || 'transparent'}` : undefined,
+    textDecoration: s.textDecoration || 'none',
   }
 }
 
@@ -290,7 +314,6 @@ const onImageError = () => {
   display: block;
   padding: 0;
   position: relative;
-  background: #fff;
   border-radius: 12rpx;
   overflow: hidden;
   margin: 24rpx auto;

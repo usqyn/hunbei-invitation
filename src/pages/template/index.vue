@@ -253,10 +253,12 @@ function onSelectTemplate(template: TemplateItem) {
 }
 
 function getImageUrl(template: TemplateItem): string {
-  if (!template.cover) {
-    return (template as any).data?.coverImage || '/static/images/templates/wedding-1.svg'
-  }
-  return template.cover
+  if (template.cover) return template.cover
+  if ((template as any).data?.coverImage) return (template as any).data.coverImage
+  // fallback: 用第一个图片元素作为封面
+  const firstImg = template.elements?.find((e: any) => e.type === 'image')
+  if (firstImg?.text) return firstImg.text
+  return '/static/images/templates/wedding-1.svg'
 }
 
 function onImageError(e: any, template: TemplateItem) {

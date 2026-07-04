@@ -15,7 +15,8 @@ export async function initApi() {}
 // ============ 模板 API ============
 
 export async function fetchTemplates(category?: string): Promise<TemplateItem[]> {
-  const params = category ? { category } : {}
+  const params: Record<string, any> = { all: '1' }
+  if (category) params.category = category
   const res = await api.get('/api/templates', { params })
   if (!res.data.success) throw new Error(res.data.error)
   return res.data.data || []

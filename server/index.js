@@ -42,6 +42,7 @@ async function initDatabase() {
     orientation TEXT DEFAULT 'portrait',
     background TEXT,
     tags TEXT,
+    status TEXT DEFAULT 'draft',
     createdAt TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   )`)
@@ -74,6 +75,13 @@ async function initDatabase() {
     key TEXT PRIMARY KEY,
     value TEXT
   )`)
+
+  // 迁移：为旧数据库添加 status 列
+  try {
+    db.run("ALTER TABLE templates ADD COLUMN status TEXT DEFAULT 'draft'")
+  } catch (_) {}
+  // 已有模板全部标记为 published
+  db.run("UPDATE templates SET status = 'published' WHERE status IS NULL OR status = ''")
   saveDatabase()
 }
 
@@ -336,10 +344,20 @@ app.get('/api/templates', (req, res) => {
   try {
     let sql = "SELECT * FROM templates"
     const params = []
+    const conditions = []
+
+    // 默认只返回已发布的模板；admin 传 ?all=true 返回全部
+    if (!req.query.all) {
+      conditions.push("status = 'published'")
+    }
 
     if (req.query.category) {
-      sql += " WHERE category = ?"
+      conditions.push("category = ?")
       params.push(req.query.category)
+    }
+
+    if (conditions.length) {
+      sql += " WHERE " + conditions.join(" AND ")
     }
     sql += " ORDER BY updatedAt DESC"
 
@@ -456,8 +474,8 @@ app.post('/api/templates', (req, res) => {
     }
 
     db.run(`INSERT INTO templates
-      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       id,
       body.name,
       body.subtitle || '',
@@ -472,6 +490,7 @@ app.post('/api/templates', (req, res) => {
       body.orientation || 'portrait',
       body.background ? JSON.stringify(body.background) : null,
       body.tags ? JSON.stringify(body.tags) : null,
+      body.status || 'draft',
       new Date().toISOString(),
       new Date().toISOString(),
     ])
@@ -498,7 +517,7 @@ app.put('/api/templates/:id', (req, res) => {
     const fields = []
     const params = []
 
-    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'likes', 'pageCount', 'orientation']
+    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'likes', 'pageCount', 'orientation', 'status']
     allowedFields.forEach(f => {
       if (body[f] !== undefined) {
         fields.push(`${f} = ?`)

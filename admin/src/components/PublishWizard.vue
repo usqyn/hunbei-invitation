@@ -411,6 +411,7 @@ async function doPublish() {
       primaryColor: '#e84a6e',
       likes: form.likes,
       pageCount: form.pageCount,
+      status: 'published',
       orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
       data: {
         coverImage: coverPreview.value || '',
@@ -424,6 +425,8 @@ async function doPublish() {
         photoSubtitle: '',
         footerText: '',
         footerSubText: '',
+        inviter: '', invitee: '', date: '', time: '',
+        location: '', address: '', phone: '',
       },
       canvasSize: cSize,
       background: draft?.background || { type: 'solid', color1: '#ffffff' },
@@ -438,6 +441,7 @@ async function doPublish() {
         const fontSize = el.fontSize != null ? Math.round(el.fontSize * pxToRpx) : undefined
 
         const base: any = {
+          id: el.id,
           type: el.type === 'sticker' ? 'image' : el.type,
           text: el.content || el.src || '',
           dataKey: el.dataKey,
@@ -460,7 +464,15 @@ async function doPublish() {
             spacing: el.letterSpacing ?? 2,
             lineHeight: el.lineHeight ?? 1.5,
             fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
+            fontStyle: el.fontStyle ?? 'normal',
             textAlign: el.textAlign || 'center',
+            strokeColor: el.strokeColor || 'transparent',
+            strokeWidth: el.strokeWidth ?? 0,
+            shadowColor: el.shadowColor || 'transparent',
+            shadowOffsetX: el.shadowOffsetX ?? 0,
+            shadowOffsetY: el.shadowOffsetY ?? 0,
+            shadowBlur: el.shadowBlur ?? 0,
+            textDecoration: el.textDecoration || 'none',
           }
         } else if (el.type === 'image') {
           base.style = {

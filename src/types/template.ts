@@ -57,7 +57,15 @@ export interface ElementStyle {
   spacing: number
   lineHeight: number
   fontWeight?: 'normal' | 'bold'
+  fontStyle?: 'normal' | 'italic'
   textAlign?: 'left' | 'center' | 'right'
+  strokeColor?: string
+  strokeWidth?: number
+  shadowColor?: string
+  shadowOffsetX?: number
+  shadowOffsetY?: number
+  shadowBlur?: number
+  textDecoration?: 'none' | 'underline' | 'line-through'
 }
 
 // 单个可编辑元素（图片/文字/基本信息）
@@ -112,6 +120,8 @@ export interface TemplateItem {
   canvasSize?: { width: number; height: number }
   // 横屏/竖屏
   orientation?: 'portrait' | 'landscape'
+  // 背景配置
+  background?: { type: string; color1: string; color2?: string; angle?: number; image?: string }
   // 主题色
   primaryColor: string
   // 首页标签（网红爆款/婚礼请帖等）

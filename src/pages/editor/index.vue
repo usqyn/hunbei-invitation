@@ -19,7 +19,7 @@
         <scroll-view class="preview-scroll" scroll-y>
           <!-- 画布模式：admin 发布的绝对定位模板 -->
           <template v-if="isCanvasMode">
-            <view class="preview-card preview-card--canvas" :style="canvasCardStyle">
+            <view class="preview-card preview-card--canvas" :style="{ ...canvasCardStyle, ...canvasBackgroundStyle }">
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="idx"
                 class="canvas-element"
@@ -172,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, ref, onMounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
@@ -222,12 +222,49 @@ const canvasCardStyle = computed(() => {
   }
 })
 
-// 编辑器内画布卡片相对于全屏的固定比例，用于缩放 rpx 值
-const fontScale = computed(() => {
-  if (!isCanvasMode.value) return 1
-  // (750rpx - 32rpx padding - 16rpx gap) × 2.5/3.5 / 750
-  return 0.67
+// 画布背景样式（从 admin 模板配置读取）
+const canvasBackgroundStyle = computed(() => {
+  const bg = editorStore.background
+  if (!bg || bg.type === 'solid') {
+    return { background: bg?.color1 || '#ffffff' }
+  }
+  if (bg.type === 'linear-gradient') {
+    const angle = bg.angle ?? 135
+    return { background: `linear-gradient(${angle}deg, ${bg.color1}, ${bg.color2 || bg.color1})` }
+  }
+  if (bg.type === 'radial-gradient') {
+    return { background: `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})` }
+  }
+  if (bg.type === 'image' && bg.image) {
+    return { background: `url(${bg.image}) center/cover no-repeat` }
+  }
+  return { background: bg?.color1 || '#ffffff' }
 })
+
+// 预览卡片 DOM 引用
+const previewCardRef = ref<HTMLElement | null>(null)
+
+// 动态 fontScale：基于预览卡片实际宽度与屏幕宽度的比值
+const fontScale = ref(0.67)
+
+function updateFontScale() {
+  if (!isCanvasMode.value) {
+    fontScale.value = 1
+    return
+  }
+  nextTick(() => {
+    const query = uni.createSelectorQuery()
+    query
+      .select('.preview-card')
+      .boundingClientRect((rect: any) => {
+        if (rect && rect.width > 0) {
+          const sysInfo = uni.getSystemInfoSync()
+          fontScale.value = rect.width / sysInfo.windowWidth
+        }
+      })
+      .exec()
+  })
+}
 
 // 画布模式下获取元素的绝对定位样式
 function getCanvasElementStyle(el: EditableElement) {
@@ -248,8 +285,8 @@ function getCanvasElementStyle(el: EditableElement) {
     ...imgStyle,
   }
   if (isText) {
-    style.height = 'auto'
-    style.minHeight = Math.round(40 * fs) + 'rpx'
+    style.height = `${(el.height! / canvasHeight.value) * 100}%`
+    style.overflow = 'hidden'
   } else {
     style.height = `${(el.height! / canvasHeight.value) * 100}%`
   }
@@ -265,17 +302,17 @@ function getFontFamily(font: string | undefined) {
 // 根据元素索引获取样式
 function getTextStyle(idx: number) {
   const el = editorStore.editableElements[idx]
+  const fs = fontScale.value
   if (!el || !el.style) {
     return {
-      fontSize: Math.round(30 * fontScale.value) + 'rpx',
+      fontSize: Math.round(30 * fs) + 'rpx',
       color: '#333333',
       lineHeight: 1.6,
-      letterSpacing: Math.round(2 * fontScale.value) + 'rpx',
+      letterSpacing: Math.round(2 * fs) + 'rpx',
     }
   }
 
   const style: ElementStyle = el.style
-  const fs = fontScale.value
 
   return {
     fontSize: Math.round((style.fontSize || 28) * fs) + 'rpx',
@@ -284,7 +321,11 @@ function getTextStyle(idx: number) {
     letterSpacing: Math.round((style.spacing ?? 2) * fs) + 'rpx',
     fontFamily: getFontFamily(style.font),
     fontWeight: style.fontWeight || 'normal',
+    fontStyle: style.fontStyle || 'normal',
     textAlign: style.textAlign || 'center',
+    WebkitTextStroke: style.strokeWidth ? `${Math.round(style.strokeWidth * fs)}rpx ${style.strokeColor || 'transparent'}` : undefined,
+    textShadow: style.shadowBlur ? `${Math.round((style.shadowOffsetX ?? 0) * fs)}rpx ${Math.round((style.shadowOffsetY ?? 0) * fs)}rpx ${Math.round(style.shadowBlur * fs)}rpx ${style.shadowColor || 'transparent'}` : undefined,
+    textDecoration: style.textDecoration || 'none',
   }
 }
 
@@ -448,6 +489,28 @@ onMounted(() => {
   } else {
     editorStore.loadTemplateById(DEFAULT_TEMPLATE_ID)
   }
+
+  // 延迟计算 fontScale，等待模板渲染完成
+  setTimeout(() => updateFontScale(), 500)
+})
+
+// 监听横屏/竖屏切换（侧边栏展开收起会影响布局），重新计算 fontScale
+watch(isLandscape, () => {
+  nextTick(() => updateFontScale())
+})
+
+// 监听编辑器模板加载完成，重新计算 fontScale
+watch(() => editorStore.templateLoading, (loading) => {
+  if (!loading) {
+    nextTick(() => {
+      setTimeout(() => updateFontScale(), 300)
+    })
+  }
+})
+
+// 监听 editableElements 变化（编辑内容变化可能导致布局变化）
+watch(() => editorStore.editableElements.length, () => {
+  nextTick(() => updateFontScale())
 })
 </script>
 
@@ -592,7 +655,6 @@ onMounted(() => {
   padding: 0;
   gap: 0;
   position: relative;
-  background: #fff;
   border-radius: 12rpx;
   overflow: hidden;
 }
@@ -601,10 +663,7 @@ onMounted(() => {
   overflow: hidden;
 }
 .canvas-element.text-element {
-  height: auto !important;
-  min-height: 40rpx;
-  max-height: 50%;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .canvas-image {

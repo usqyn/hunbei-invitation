@@ -29,6 +29,7 @@ export const useEditorStore = defineStore('editor', () => {
   const currentSpacing = ref<number>(2)
   const currentLineHeight = ref<number>(2)
   const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
+  const background = ref<{ type: string; color1: string; color2?: string; angle?: number; image?: string }>({ type: 'solid', color1: '#ffffff' })
 
   // 可编辑元素列表 - 根据模板动态生成
   const editableElements = reactive<EditableElement[]>([])
@@ -106,13 +107,25 @@ export const useEditorStore = defineStore('editor', () => {
       canvasSize.value = { width: 375, height: 667 }
     }
 
-    // 同步到 TemplateStore
+    // 同步背景配置
+    if (template.background) {
+      background.value = { ...template.background }
+    } else {
+      background.value = { type: 'solid', color1: '#ffffff' }
+    }
+
+    // 同步到 TemplateStore（只覆盖有实际值的字段，保留非空默认值）
     const templateStore = useTemplateStore()
     const data: TemplateData = template.data
     Object.keys(data).forEach(key => {
       const k = key as keyof TemplateData
       if (k in templateStore.templateData) {
-        templateStore.templateData[k] = data[k]
+        const incoming = data[k]
+        const current = templateStore.templateData[k]
+        // 仅当 incoming 非空，或 current 为空时覆盖
+        if (incoming || !current) {
+          templateStore.templateData[k] = incoming
+        }
       }
     })
 
@@ -274,7 +287,7 @@ export const useEditorStore = defineStore('editor', () => {
     showTextEditor, showBasicInfoEditor, showQuickEdit, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
     currentFontSize, currentSpacing, currentLineHeight,
-    editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize,
+    editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background,
     loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
     closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField,
     selectMaterial, applyImageToElement, setCurrentWorkId,
