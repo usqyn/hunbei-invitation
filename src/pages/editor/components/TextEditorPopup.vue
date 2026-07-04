@@ -15,6 +15,7 @@
         <view class="textarea-section">
           <textarea
             class="editor-textarea"
+            :class="{ 'editor-textarea--rtl': isRtl }"
             :value="editingText"
             @input="onInput"
             :maxlength="500"
@@ -32,7 +33,9 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue'
+
+const props = defineProps<{
   visible: boolean
   editingText: string
 }>()
@@ -42,6 +45,11 @@ const emit = defineEmits<{
   confirm: []
   input: [value: string]
 }>()
+
+const isRtl = computed(() => {
+  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+  return rtlChars.test(props.editingText)
+})
 
 const onInput = (e: any) => {
   emit('input', e.detail.value)
@@ -124,6 +132,13 @@ const onInput = (e: any) => {
   background: #fff;
   border-radius: 12rpx;
   box-sizing: border-box;
+  direction: ltr;
+  text-align: left;
+}
+
+.editor-textarea--rtl {
+  direction: rtl;
+  text-align: right;
 }
 
 .textarea-placeholder {

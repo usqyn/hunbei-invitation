@@ -30,6 +30,7 @@ export interface ElementStyle {
   lineHeight: number
   fontWeight?: 'normal' | 'bold'
   textAlign?: 'left' | 'center' | 'right'
+  direction?: 'ltr' | 'rtl' | 'auto'
   borderRadius?: number
   borderColor?: string
   borderWidth?: number
@@ -134,7 +135,10 @@ export const DEFAULT_ELEMENT_STYLE: ElementStyle = {
   lineHeight: 2,
 }
 
-export const FONT_LIST = ['思源宋体', '思源黑体', '华文楷体', '华文行楷', '华文隶书', 'Arial', 'Georgia']
+export const FONT_LIST = [
+  '思源宋体', '思源黑体', '华文楷体', '华文行楷', '华文隶书', 'Arial', 'Georgia',
+  'KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq', 'KazNet', 'UKKUniKuf',
+]
 
 export const COLOR_LIST = [
   '#333333', '#666666', '#999999', '#e84a6e', '#ff6b8a',

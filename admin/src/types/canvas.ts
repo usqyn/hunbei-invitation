@@ -51,6 +51,7 @@ export interface TextElement extends BaseElement {
   fontStyle: 'normal' | 'italic'
   color: string
   textAlign: 'left' | 'center' | 'right' | 'justify'
+  direction: 'ltr' | 'rtl' | 'auto'
   lineHeight: number
   letterSpacing: number
   strokeColor: string

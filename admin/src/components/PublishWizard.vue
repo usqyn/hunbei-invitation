@@ -477,6 +477,12 @@ async function doPublish() {
         }
 
         if (el.type === 'text') {
+          const content = el.content || ''
+          const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+          const detectedDirection = rtlChars.test(content) ? 'rtl' : 'ltr'
+          const direction = el.direction === 'auto' ? detectedDirection : (el.direction || 'ltr')
+          const textAlign = el.textAlign || (direction === 'rtl' ? 'right' : 'center')
+
           base.style = {
             font: el.fontFamily,
             color: el.color,
@@ -485,7 +491,8 @@ async function doPublish() {
             lineHeight: el.lineHeight ?? 1.5,
             fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
             fontStyle: el.fontStyle ?? 'normal',
-            textAlign: el.textAlign || 'center',
+            textAlign,
+            direction,
             strokeColor: el.strokeColor || 'transparent',
             strokeWidth: el.strokeWidth ?? 0,
             shadowColor: el.shadowColor || 'transparent',

@@ -51,6 +51,7 @@ function makeText(partial: Partial<TextElement> & { content: string }): TextElem
     fontStyle: partial.fontStyle || 'normal',
     color: partial.color || '#333333',
     textAlign: partial.textAlign || 'center',
+    direction: partial.direction || 'auto',
     lineHeight: partial.lineHeight ?? 1.5,
     letterSpacing: partial.letterSpacing ?? 2,
     strokeColor: partial.strokeColor || 'transparent',

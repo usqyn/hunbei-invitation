@@ -59,6 +59,7 @@ export interface ElementStyle {
   fontWeight?: 'normal' | 'bold'
   fontStyle?: 'normal' | 'italic'
   textAlign?: 'left' | 'center' | 'right'
+  direction?: 'ltr' | 'rtl' | 'auto'
   strokeColor?: string
   strokeWidth?: number
   shadowColor?: string

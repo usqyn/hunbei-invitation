@@ -505,6 +505,26 @@
               </div>
             </div>
             <div class="form-row">
+              <label>文字方向</label>
+              <div class="btn-group">
+                <button
+                  class="btn-seg"
+                  :class="{ active: (selectedElement as any).direction === 'ltr' }"
+                  @click="updateSelected({ direction: 'ltr' })"
+                >LTR</button>
+                <button
+                  class="btn-seg"
+                  :class="{ active: (selectedElement as any).direction === 'rtl' }"
+                  @click="updateSelected({ direction: 'rtl' })"
+                >RTL</button>
+                <button
+                  class="btn-seg"
+                  :class="{ active: (selectedElement as any).direction === 'auto' }"
+                  @click="updateSelected({ direction: 'auto' })"
+                >自动</button>
+              </div>
+            </div>
+            <div class="form-row">
               <label>行高 {{ ((selectedElement as any).lineHeight ?? 1.5).toFixed(2) }}</label>
               <input
                 type="range"

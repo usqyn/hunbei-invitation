@@ -302,6 +302,11 @@ function getFontFamily(font: string | undefined) {
   return `"${font}", 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif`
 }
 
+function detectTextDirection(text: string): 'ltr' | 'rtl' {
+  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+  return rtlChars.test(text) ? 'rtl' : 'ltr'
+}
+
 // 根据元素索引获取样式
 function getTextStyle(idx: number) {
   const el = editorStore.editableElements[idx]
@@ -317,6 +322,10 @@ function getTextStyle(idx: number) {
 
   const style: ElementStyle = el.style
 
+  const detectedDirection = detectTextDirection(el.text)
+  const direction = style.direction === 'auto' ? detectedDirection : (style.direction || 'ltr')
+  const textAlign = style.textAlign || (direction === 'rtl' ? 'right' : 'center')
+
   return {
     fontSize: Math.round((style.fontSize || 28) * fs) + 'rpx',
     color: style.color,
@@ -325,7 +334,8 @@ function getTextStyle(idx: number) {
     fontFamily: getFontFamily(style.font),
     fontWeight: style.fontWeight || 'normal',
     fontStyle: style.fontStyle || 'normal',
-    textAlign: style.textAlign || 'center',
+    textAlign,
+    direction,
     WebkitTextStroke: style.strokeWidth ? `${Math.round(style.strokeWidth * fs)}rpx ${style.strokeColor || 'transparent'}` : undefined,
     textShadow: style.shadowBlur ? `${Math.round((style.shadowOffsetX ?? 0) * fs)}rpx ${Math.round((style.shadowOffsetY ?? 0) * fs)}rpx ${Math.round(style.shadowBlur * fs)}rpx ${style.shadowColor || 'transparent'}` : undefined,
     textDecoration: style.textDecoration || 'none',

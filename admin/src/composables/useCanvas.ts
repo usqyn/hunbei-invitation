@@ -329,6 +329,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       fontStyle: 'normal',
       color: '#333333',
       textAlign: 'center',
+      direction: 'auto',
       lineHeight: 1.5,
       letterSpacing: 2,
       strokeColor: 'transparent',
