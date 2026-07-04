@@ -97,7 +97,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
-import { loadFontsForElements } from '@/utils/fontLoader'
+import { loadFontsForElements } from '@/stores/editor'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
