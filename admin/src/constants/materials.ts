@@ -175,6 +175,35 @@ const BUSINESS_STICKERS: MaterialItem[] = [
   { id: 'sticker-briefcase', type: 'sticker', name: '公文包', category: '商务', svg: `<svg viewBox="0 0 100 100"><rect x="15" y="35" width="70" height="55" rx="5" fill="none" stroke="currentColor" stroke-width="4"/><rect x="35" y="15" width="30" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="4"/><path d="M48 60 L52 60" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M15 55 L48 55 M52 55 L85 55" stroke="currentColor" stroke-width="3"/></svg>`, color: '#8e44ad' },
 ]
 
+// ============ 边框/画框 ============
+const FRAMES: MaterialItem[] = [
+  { id: 'frame-chinese', type: 'shape', name: '中式窗棂', category: '边框', svg: `<svg viewBox="0 0 100 100"><rect x="5" y="5" width="90" height="90" fill="none" stroke="currentColor" stroke-width="3"/><path d="M5 25 L95 25 M5 50 L95 50 M5 75 L95 75 M25 5 L25 95 M50 5 L50 95 M75 5 L75 95" stroke="currentColor" stroke-width="2"/><circle cx="25" cy="25" r="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="75" cy="25" r="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="25" cy="75" r="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="75" cy="75" r="6" fill="none" stroke="currentColor" stroke-width="2"/></svg>`, color: '#8B4513' },
+  { id: 'frame-elegant', type: 'shape', name: '欧式相框', category: '边框', svg: `<svg viewBox="0 0 100 100"><rect x="8" y="8" width="84" height="84" rx="4" fill="none" stroke="currentColor" stroke-width="4"/><rect x="15" y="15" width="70" height="70" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8 L15 15 M92 8 L85 15 M8 92 L15 85 M92 92 L85 85" stroke="currentColor" stroke-width="2"/></svg>`, color: '#D4AF37' },
+  { id: 'frame-rounded', type: 'shape', name: '圆角画框', category: '边框', svg: `<svg viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="20" fill="none" stroke="currentColor" stroke-width="4"/><rect x="18" y="18" width="64" height="64" rx="12" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="4,3"/></svg>`, color: '#666666' },
+  { id: 'frame-simple', type: 'shape', name: '简约线框', category: '边框', svg: `<svg viewBox="0 0 100 100"><rect x="12" y="12" width="76" height="76" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`, color: '#333333' },
+  { id: 'frame-double', type: 'shape', name: '双线条框', category: '边框', svg: `<svg viewBox="0 0 100 100"><rect x="8" y="8" width="84" height="84" fill="none" stroke="currentColor" stroke-width="3"/><rect x="16" y="16" width="68" height="68" fill="none" stroke="currentColor" stroke-width="2"/></svg>`, color: '#555555' },
+  { id: 'frame-fancy', type: 'shape', name: '花纹边框', category: '边框', svg: `<svg viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" fill="none" stroke="currentColor" stroke-width="3"/><path d="M10 10 Q30 5 50 10 Q70 5 90 10 Q95 30 90 50 Q95 70 90 90 Q70 95 50 90 Q30 95 10 90 Q5 70 10 50 Q5 30 10 10Z" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3,3"/></svg>`, color: '#B8860B' },
+]
+
+// ============ 分隔线/装饰带 ============
+const DIVIDERS: MaterialItem[] = [
+  { id: 'div-wave', type: 'shape', name: '波浪线', category: '分隔线', svg: `<svg viewBox="0 0 100 20"><path d="M0 10 Q12 0 25 10 Q38 20 50 10 Q62 0 75 10 Q88 20 100 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`, color: '#e84a6e' },
+  { id: 'div-dots', type: 'shape', name: '点线', category: '分隔线', svg: `<svg viewBox="0 0 100 20"><circle cx="10" cy="10" r="3" fill="currentColor"/><circle cx="30" cy="10" r="3" fill="currentColor"/><circle cx="50" cy="10" r="3" fill="currentColor"/><circle cx="70" cy="10" r="3" fill="currentColor"/><circle cx="90" cy="10" r="3" fill="currentColor"/></svg>`, color: '#999999' },
+  { id: 'div-diamond', type: 'shape', name: '钻石链', category: '分隔线', svg: `<svg viewBox="0 0 100 20"><path d="M10 10 L15 5 L20 10 L15 15 Z M30 10 L35 5 L40 10 L35 15 Z M50 10 L55 5 L60 10 L55 15 Z M70 10 L75 5 L80 10 L75 15 Z M90 10 L95 5 L100 10 L95 15 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`, color: '#D4AF37' },
+  { id: 'div-leaf', type: 'shape', name: '花叶分隔', category: '分隔线', svg: `<svg viewBox="0 0 100 20"><path d="M0 10 L40 10 M60 10 L100 10" stroke="currentColor" stroke-width="2"/><ellipse cx="50" cy="10" rx="8" ry="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M50 5 Q55 0 60 5 M50 5 Q45 0 40 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`, color: '#2e7d32' },
+  { id: 'div-line', type: 'shape', name: '细线', category: '分隔线', svg: `<svg viewBox="0 0 100 20"><line x1="5" y1="10" x2="95" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`, color: '#cccccc' },
+  { id: 'div-bold', type: 'shape', name: '粗线', category: '分隔线', svg: `<svg viewBox="0 0 100 20"><line x1="5" y1="10" x2="95" y2="10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`, color: '#333333' },
+]
+
+// ============ 角落装饰 ============
+const CORNERS: MaterialItem[] = [
+  { id: 'corner-floral', type: 'shape', name: '花纹角饰', category: '角落装饰', svg: `<svg viewBox="0 0 50 50"><path d="M5 25 Q5 5 25 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M10 20 Q10 10 20 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>`, color: '#B8860B' },
+  { id: 'corner-line', type: 'shape', name: '直角线', category: '角落装饰', svg: `<svg viewBox="0 0 50 50"><path d="M5 20 L5 5 L20 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`, color: '#666666' },
+  { id: 'corner-fancy', type: 'shape', name: '卷草角', category: '角落装饰', svg: `<svg viewBox="0 0 50 50"><path d="M5 25 Q5 5 25 5 Q20 15 15 15 Q10 15 10 20 Q10 25 15 25" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`, color: '#8B4513' },
+  { id: 'corner-dot', type: 'shape', name: '圆点角', category: '角落装饰', svg: `<svg viewBox="0 0 50 50"><circle cx="8" cy="8" r="4" fill="currentColor"/><circle cx="18" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="18" r="2" fill="currentColor"/></svg>`, color: '#e84a6e' },
+  { id: 'corner-bracket', type: 'shape', name: '括号角', category: '角落装饰', svg: `<svg viewBox="0 0 50 50"><path d="M5 15 L5 5 L15 5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`, color: '#333333' },
+]
+
 // 全部素材
 export const ALL_MATERIALS: MaterialItem[] = [
   ...SHAPES,
@@ -182,12 +211,15 @@ export const ALL_MATERIALS: MaterialItem[] = [
   ...BABY_STICKERS,
   ...FESTIVAL_STICKERS,
   ...BUSINESS_STICKERS,
+  ...FRAMES,
+  ...DIVIDERS,
+  ...CORNERS,
 ]
 
 // 按分类分组（返回唯一分类列表）
 export function getMaterialCategories(): string[] {
   const cats = new Set(ALL_MATERIALS.map(m => m.category))
-  return ['全部', '基础图形', '浪漫元素', '婚礼', '宝宝', '节日', '毕业', '商务', '装饰元素']
+  return ['全部', '基础图形', '浪漫元素', '婚礼', '宝宝', '节日', '毕业', '商务', '边框', '分隔线', '角落装饰', '装饰元素']
     .filter(c => cats.has(c) || c === '全部')
 }
 

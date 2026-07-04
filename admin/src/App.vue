@@ -49,6 +49,8 @@
         <button class="tb-btn sm" @click="zoom = 1">100%</button>
         <button class="tb-btn sm" @click="zoom = Math.min(3, zoom + 0.1)">+</button>
         <span class="toolbar-divider"></span>
+        <button class="tb-btn sm" :class="{ active: showGrid }" @click="toggleGrid" title="网格/吸附">{{ showGrid ? '🧲' : '⊞' }}</button>
+        <span class="toolbar-divider"></span>
         <button class="tb-btn danger" @click="deleteSelected" title="删除选中 (Del)">🗑 删除</button>
         <span class="toolbar-divider"></span>
         <button class="tb-btn" @click="saveToServer" title="保存到服务器 (Ctrl+S)">💾 保存</button>
@@ -94,6 +96,20 @@
             </button>
           </div>
           <div class="section-divider"></div>
+          <div class="section-title">文字样式预设</div>
+          <div class="text-preset-grid">
+            <button
+              v-for="tp in TEXT_PRESETS"
+              :key="tp.name"
+              class="text-preset-btn"
+              :title="tp.description"
+              @click="applyTextPreset(tp)"
+            >
+              <span class="tp-sample" :style="tp.previewStyle">{{ tp.sample }}</span>
+              <span class="tp-name">{{ tp.name }}</span>
+            </button>
+          </div>
+          <div class="section-divider"></div>
           <div class="section-title">快捷字段</div>
           <div class="material-grid">
             <button
@@ -112,8 +128,26 @@
             <button v-for="c in bgColors" :key="c" class="color-chip" :style="{ background: c }" @click="setBackground({ type: 'solid', color1: c } as any)"></button>
           </div>
           <div class="section-title">背景渐变</div>
-          <div class="color-grid">
-            <button v-for="(g, idx) in gradients" :key="'g' + idx" class="color-chip wide" :style="{ background: g.css }" @click="setBackground({ type: 'linear-gradient', color1: g.c1, color2: g.c2, angle: g.angle } as any)"></button>
+          <div class="mat-cats" style="margin-bottom:10px;">
+            <button v-for="cat in GRADIENT_CATEGORIES" :key="cat" class="mat-cat-btn" :class="{ active: activeGradientCat === cat }" @click="activeGradientCat = cat">{{ cat }}</button>
+          </div>
+          <div class="gradient-grid">
+            <button v-for="g in filteredGradients" :key="g.name" class="gradient-chip" :style="{ background: g.css }" @click="setBackground({ type: 'linear-gradient', color1: g.c1, color2: g.c2, angle: g.angle } as any)">
+              <span class="gradient-name">{{ g.name }}</span>
+            </button>
+          </div>
+          <div class="section-title">配色方案</div>
+          <div class="color-scheme-grid">
+            <button
+              v-for="cs in COLOR_SCHEMES"
+              :key="cs.id"
+              class="color-scheme-btn"
+              :style="{ background: cs.thumbnail }"
+              @click="applyColorScheme(cs)"
+              :title="`${cs.name}：${cs.textColor} 文字`"
+            >
+              <span class="cs-name">{{ cs.name }}</span>
+            </button>
           </div>
           <div class="section-title">上传背景图</div>
           <label class="upload-btn">点击上传背景图<input type="file" accept="image/*" style="display:none" @change="onBgImageFile" /></label>
@@ -152,6 +186,36 @@
         <!-- 模板 Tab -->
         <div v-if="leftTab === 'templates'" class="panel-body templates-body">
           <button class="btn-new-template" @click="createNewFromCanvas">+ 新建空白模板</button>
+
+          <!-- 起始模板 -->
+          <div class="section-title">🚀 起始模板</div>
+          <div class="preset-cats">
+            <button
+              v-for="cat in PRESET_CATEGORIES"
+              :key="cat.id"
+              class="preset-cat-btn"
+              :class="{ active: activePresetCat === cat.id }"
+              @click="activePresetCat = cat.id"
+            >{{ cat.icon }} {{ cat.name }}</button>
+          </div>
+          <div class="preset-grid">
+            <div
+              v-for="preset in filteredPresets"
+              :key="preset.id"
+              class="preset-card"
+              @click="loadPreset(preset)"
+              :title="preset.description"
+            >
+              <div class="preset-thumb" :style="{ background: preset.thumbnail }"></div>
+              <div class="preset-name">{{ preset.name }}</div>
+              <div class="preset-desc">{{ preset.description }}</div>
+            </div>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <!-- 我的模板 -->
+          <div class="section-title">📁 我的模板</div>
           <div v-if="loadingTemplates" class="empty-hint">加载中...</div>
           <div v-else-if="!templateList.length" class="empty-hint">暂无模板<br/>先在画布制作，再发布</div>
           <div v-for="tpl in templateList" :key="tpl.id" class="template-item" :class="{ active: currentTemplateId === tpl.id }">
@@ -692,6 +756,11 @@ import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvas
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
 import { CATEGORIES } from './types/template'
 import { ALL_MATERIALS, getMaterialCategories, getMaterialsByCategory } from './constants/materials'
+import { ALL_PRESETS, PRESET_CATEGORIES, getPresetsByCategory } from './constants/presets'
+import type { TemplatePreset } from './constants/presets'
+import { GRADIENT_CATEGORIES, GRADIENT_PRESETS, getGradientsByCategory } from './constants/gradients'
+import { COLOR_SCHEMES } from './constants/colorSchemes'
+import type { ColorScheme } from './constants/colorSchemes'
 
 // 模板数据字段（用于 dataKey 绑定）
 const TEMPLATE_DATA_KEYS = [
@@ -759,15 +828,75 @@ const bgColors = [
   '#f0f4c3', '#ffebee', '#e3f2fd', '#e8eaf6', '#fce4ec',
 ]
 
-const gradients = [
-  { css: 'linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%)', c1: '#fce4ec', c2: '#f8bbd0', angle: 135 },
-  { css: 'linear-gradient(180deg, #e3f2fd 0%, #90caf9 100%)', c1: '#e3f2fd', c2: '#90caf9', angle: 180 },
-  { css: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', c1: '#e8f5e9', c2: '#c8e6c9', angle: 135 },
-  { css: 'linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%)', c1: '#fff3e0', c2: '#ffcc80', angle: 135 },
-  { css: 'linear-gradient(135deg, #f3e5f5 0%, #ce93d8 100%)', c1: '#f3e5f5', c2: '#ce93d8', angle: 135 },
-  { css: 'linear-gradient(135deg, #e0e0e0 0%, #9e9e9e 100%)', c1: '#e0e0e0', c2: '#9e9e9e', angle: 135 },
-  { css: 'linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%)', c1: '#ffffff', c2: '#f5f5f5', angle: 180 },
-  { css: 'linear-gradient(135deg, #ffecb3 0%, #ffe082 100%)', c1: '#ffecb3', c2: '#ffe082', angle: 135 },
+const activeGradientCat = ref('全部')
+const filteredGradients = computed(() => getGradientsByCategory(activeGradientCat.value))
+
+// 文字样式预设
+interface TextPreset {
+  name: string
+  description: string
+  sample: string
+  previewStyle: Record<string, string>
+  config: Partial<TextElement>
+}
+
+const TEXT_PRESETS: TextPreset[] = [
+  {
+    name: '中式大标题',
+    description: '金色行楷，适合喜庆场景',
+    sample: '标题',
+    previewStyle: { fontFamily: '华文行楷, cursive', fontSize: '16px', fontWeight: 'bold', color: '#B8860B', letterSpacing: '2px' },
+    config: { fontFamily: '华文行楷, cursive', fontSize: 40, fontWeight: 'bold', color: '#FFD700', letterSpacing: 6, textAlign: 'center', lineHeight: 1.2, shadowColor: 'rgba(0,0,0,0.4)', shadowBlur: 4, shadowOffsetX: 2, shadowOffsetY: 2 },
+  },
+  {
+    name: '优雅衬线',
+    description: 'Georgia 英文标题，简约高级',
+    sample: 'Elegant',
+    previewStyle: { fontFamily: 'Georgia, serif', fontSize: '14px', color: '#4a4a4a', letterSpacing: '1px' },
+    config: { fontFamily: 'Georgia, serif', fontSize: 28, fontWeight: 'normal', color: '#4a4a4a', letterSpacing: 3, textAlign: 'center', lineHeight: 1.2 },
+  },
+  {
+    name: '浪漫粉字',
+    description: '粉色斜体，少女心满满',
+    sample: 'Love',
+    previewStyle: { fontFamily: '华文楷体, cursive', fontSize: '16px', color: '#e84a6e', fontStyle: 'italic', letterSpacing: '1px' },
+    config: { fontFamily: '华文楷体, cursive', fontSize: 32, fontWeight: 'normal', color: '#e84a6e', fontStyle: 'italic', letterSpacing: 4, textAlign: 'center', lineHeight: 1.2 },
+  },
+  {
+    name: '商务白字',
+    description: '黑体加粗白字，适合深色背景',
+    sample: '商务',
+    previewStyle: { fontFamily: '思源黑体, sans-serif', fontSize: '14px', fontWeight: 'bold', color: '#555', letterSpacing: '1px' },
+    config: { fontFamily: '思源黑体, sans-serif', fontSize: 28, fontWeight: 'bold', color: '#ffffff', letterSpacing: 2, textAlign: 'center', lineHeight: 1.2 },
+  },
+  {
+    name: '金色描边',
+    description: '金色文字+描边，华丽醒目',
+    sample: '描边',
+    previewStyle: { fontFamily: '华文行楷, cursive', fontSize: '16px', fontWeight: 'bold', color: '#B8860B', WebkitTextStroke: '1px #D4AF37', letterSpacing: '1px' },
+    config: { fontFamily: '华文行楷, cursive', fontSize: 36, fontWeight: 'bold', color: '#FFD700', strokeColor: '#B8860B', strokeWidth: 1, letterSpacing: 4, textAlign: 'center', lineHeight: 1.2 },
+  },
+  {
+    name: '诗意正文',
+    description: '宋体棕色，行距宽松',
+    sample: '诗',
+    previewStyle: { fontFamily: '思源宋体, serif', fontSize: '12px', color: '#8B4513', lineHeight: '1.6' },
+    config: { fontFamily: '思源宋体, serif', fontSize: 14, fontWeight: 'normal', color: '#8B4513', lineHeight: 2, letterSpacing: 1, textAlign: 'center' },
+  },
+  {
+    name: '活泼可爱',
+    description: '楷体粉色，活泼俏皮',
+    sample: '可爱',
+    previewStyle: { fontFamily: '华文楷体, cursive', fontSize: '14px', color: '#FF6B6B', fontStyle: 'italic' },
+    config: { fontFamily: '华文楷体, cursive', fontSize: 24, fontWeight: 'normal', color: '#FF6B6B', fontStyle: 'italic', letterSpacing: 2, textAlign: 'center', lineHeight: 1.5 },
+  },
+  {
+    name: '简约现代',
+    description: 'Arial 大写英文，极简风格',
+    sample: 'MODERN',
+    previewStyle: { fontFamily: 'Arial, sans-serif', fontSize: '13px', fontWeight: 'bold', color: '#333', letterSpacing: '2px' },
+    config: { fontFamily: 'Arial, sans-serif', fontSize: 24, fontWeight: 'bold', color: '#333333', letterSpacing: 6, textAlign: 'center', lineHeight: 1.2 },
+  },
 ]
 
 // ============ 全局 Toast ============
@@ -809,6 +938,8 @@ const {
   zoom,
   canUndo,
   canRedo,
+  showGrid,
+  toggleGrid,
   init,
   setSize,
   setBackground,
@@ -936,6 +1067,10 @@ const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
+// 起始模板
+const activePresetCat = ref('scene')
+const filteredPresets = computed(() => getPresetsByCategory(activePresetCat.value))
+
 function getCanvasEl(): HTMLCanvasElement | null {
   return canvasRef.value || null
 }
@@ -1047,6 +1182,66 @@ function createNewFromCanvas() {
   clearCanvas()
   historyVersions.value = []
   pushHistory('new')
+}
+
+function loadPreset(preset: TemplatePreset) {
+  if (!confirm(`使用「${preset.name}」模板？当前未保存的内容将丢失。`)) return
+  currentTemplateId.value = null
+  currentTemplateName.value = ''
+  currentTemplateCategory.value = 'wedding'
+  currentTemplateSubtitle.value = ''
+  loadDraft(preset.draft)
+  historyVersions.value = []
+  pushHistory('load preset: ' + preset.name)
+  showToast(`已加载「${preset.name}」模板 ✅`)
+}
+
+function applyTextPreset(tp: TextPreset) {
+  const sel = selectedElement.value
+  if (sel && sel.type === 'text') {
+    // 选中文字：应用样式
+    updateSelected(tp.config as any)
+    showToast(`已应用「${tp.name}」样式 ✅`)
+  } else {
+    // 未选中：插入新文字
+    const content = tp.config.content || tp.sample
+    addText({ content, ...tp.config } as any)
+    showToast(`已插入「${tp.name}」文字 ✅`)
+  }
+}
+
+function applyColorScheme(cs: ColorScheme) {
+  // 1. 替换背景
+  setBackground(cs.background as any)
+  // 2. 遍历文字元素智能换色
+  const allEls = [...elements.value]
+  let changed = 0
+  allEls.forEach((el) => {
+    if (el.type !== 'text') return
+    const textEl = el as TextElement
+    const oldColor = textEl.color
+    // 亮度判断：简单 hex 亮度计算
+    const luminance = getLuminance(oldColor)
+    let newColor = cs.textColor
+    if (luminance > 0.75 && cs.subTextColor) {
+      newColor = cs.subTextColor // 原来是浅色，用副色
+    }
+    if (oldColor !== newColor) {
+      updateElementStyle(textEl.id, { color: newColor })
+      changed++
+    }
+  })
+  pushHistory('apply color scheme: ' + cs.name)
+  showToast(`已应用「${cs.name}」配色，修改 ${changed} 个元素 ✅`)
+}
+
+// 简单 hex 亮度计算
+function getLuminance(hex: string): number {
+  const rgb = parseInt(hex.replace('#', ''), 16)
+  const r = (rgb >> 16) & 0xff
+  const g = (rgb >> 8) & 0xff
+  const b = (rgb >> 0) & 0xff
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255
 }
 
 // ============ 保存到服务器 ============
@@ -1517,6 +1712,7 @@ onMounted(async () => {
 
 .tb-btn:hover:not(:disabled) { background: #4a5160; }
 .tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tb-btn.active { background: #4a5160; border-color: #64b5f6; color: #64b5f6; }
 .tb-btn.primary { background: #1976d2; border-color: #1565c0; }
 .tb-btn.primary:hover:not(:disabled) { background: #1565c0; }
 .tb-btn.danger { background: #c62828; border-color: #b71c1c; }
@@ -2239,4 +2435,197 @@ label {
 
 .toast-fade-enter-active, .toast-fade-leave-active { transition: all 0.3s ease; }
 .toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+
+/* ====== 起始模板 ====== */
+.preset-cats {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.preset-cat-btn {
+  padding: 5px 12px;
+  background: #f0f2f5;
+  border: 1px solid #e0e4ea;
+  border-radius: 14px;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.preset-cat-btn:hover { background: #e3f2fd; border-color: #90caf9; color: #1976d2; }
+.preset-cat-btn.active { background: #e3f2fd; border-color: #1976d2; color: #1976d2; font-weight: 600; }
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1.5px solid #e8eaed;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-card:hover {
+  border-color: #90caf9;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.12);
+  transform: translateY(-2px);
+}
+
+.preset-thumb {
+  width: 100%;
+  height: 80px;
+  background-size: cover;
+  background-position: center;
+}
+
+.preset-name {
+  padding: 8px 10px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preset-desc {
+  padding: 0 10px 8px;
+  font-size: 10px;
+  color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ====== 渐变网格 ====== */
+.gradient-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.gradient-chip {
+  position: relative;
+  height: 44px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  overflow: hidden;
+}
+
+.gradient-chip:hover {
+  transform: scale(1.03);
+  border-color: #90caf9;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.gradient-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  background: linear-gradient(transparent, rgba(0,0,0,0.3));
+  text-align: left;
+}
+
+/* ====== 文字样式预设 ====== */
+.text-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.text-preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  background: #f8f9fb;
+  border: 1.5px solid #e8eaed;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.text-preset-btn:hover {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  transform: scale(1.03);
+}
+
+.tp-sample {
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.tp-name {
+  font-size: 10px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ====== 配色方案 ====== */
+.color-scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.color-scheme-btn {
+  position: relative;
+  height: 44px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  overflow: hidden;
+}
+
+.color-scheme-btn:hover {
+  transform: scale(1.05);
+  border-color: #90caf9;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.cs-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  background: linear-gradient(transparent, rgba(0,0,0,0.35));
+  text-align: left;
+}
 </style>

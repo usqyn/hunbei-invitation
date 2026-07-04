@@ -56,6 +56,12 @@ export function useCanvas(opts: UseCanvasOptions) {
   const historyIdx = ref(-1)
   let suppressHistory = false
 
+  // 网格与吸附
+  const showGrid = ref(false)
+  const snapToGrid = ref(false)
+  const gridSize = ref(10)
+  const guideLines = ref<fabric.Line[]>([])
+
   // 计算属性：当前选中的元素
   const selectedElement = computed<AnyCanvasElement | null>(() => {
     if (!selectedId.value) return null
@@ -95,6 +101,83 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.on('object:added', pushHistoryIfNeeded)
     canvas.on('object:removed', pushHistoryIfNeeded)
     canvas.on('object:modified', pushHistoryIfNeeded)
+
+    // 拖拽吸附 + 对齐参考线
+    canvas.on('object:moving', (e: any) => {
+      const target = e.target
+      if (!target) return
+
+      // 网格吸附
+      if (snapToGrid.value) {
+        const gs = gridSize.value
+        target.set({
+          left: Math.round(target.left / gs) * gs,
+          top: Math.round(target.top / gs) * gs,
+        })
+      }
+
+      // 对齐参考线（中心线 + 边缘对齐）
+      clearGuideLines()
+      const w = canvasSize.value.width
+      const h = canvasSize.value.height
+      const cx = target.left + (target.width * (target.scaleX || 1)) / 2
+      const cy = target.top + (target.height * (target.scaleY || 1)) / 2
+      const threshold = 5
+      const guides: fabric.Line[] = []
+
+      // 画布中心对齐
+      if (Math.abs(cx - w / 2) < threshold) {
+        target.set({ left: w / 2 - (target.width * (target.scaleX || 1)) / 2 })
+        guides.push(new fabric.Line([w / 2, 0, w / 2, h], { stroke: '#e84a6e', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.8 } as any))
+      }
+      if (Math.abs(cy - h / 2) < threshold) {
+        target.set({ top: h / 2 - (target.height * (target.scaleY || 1)) / 2 })
+        guides.push(new fabric.Line([0, h / 2, w, h / 2], { stroke: '#e84a6e', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.8 } as any))
+      }
+
+      // 与其他对象边缘对齐
+      canvas.getObjects().forEach((obj: any) => {
+        if (obj === target || (obj as any).isGuide) return
+        const oLeft = obj.left
+        const oTop = obj.top
+        const oRight = obj.left + (obj.width * (obj.scaleX || 1))
+        const oBottom = obj.top + (obj.height * (obj.scaleY || 1))
+        const oCx = (oLeft + oRight) / 2
+        const oCy = (oTop + oBottom) / 2
+        const tLeft = target.left
+        const tTop = target.top
+        const tRight = target.left + (target.width * (target.scaleX || 1))
+        const tBottom = target.top + (target.height * (target.scaleY || 1))
+
+        if (Math.abs(tLeft - oLeft) < threshold) {
+          target.set({ left: oLeft })
+          guides.push(new fabric.Line([oLeft, 0, oLeft, h], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+        }
+        if (Math.abs(tRight - oRight) < threshold) {
+          target.set({ left: oRight - (target.width * (target.scaleX || 1)) })
+          guides.push(new fabric.Line([oRight, 0, oRight, h], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+        }
+        if (Math.abs(tTop - oTop) < threshold) {
+          target.set({ top: oTop })
+          guides.push(new fabric.Line([0, oTop, w, oTop], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+        }
+        if (Math.abs(tBottom - oBottom) < threshold) {
+          target.set({ top: oBottom - (target.height * (target.scaleY || 1)) })
+          guides.push(new fabric.Line([0, oBottom, w, oBottom], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+        }
+      })
+
+      if (guides.length) {
+        guides.forEach((g: any) => { g.isGuide = true })
+        canvas.add(...guides)
+        guideLines.value = guides
+        canvas.renderAll()
+      }
+    })
+
+    canvas.on('object:modified', () => {
+      clearGuideLines()
+    })
 
     // 初始化背景
     applyBackground(background.value)
@@ -874,6 +957,46 @@ export function useCanvas(opts: UseCanvasOptions) {
     selectedId.value = null
   }
 
+  // ---- 网格与参考线 ----
+  function clearGuideLines() {
+    const canvas = fabricCanvas.value
+    if (!canvas || !guideLines.value.length) return
+    guideLines.value.forEach(g => canvas.remove(g))
+    guideLines.value = []
+    canvas.renderAll()
+  }
+
+  function drawGrid() {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    canvas.getObjects().forEach((obj: any) => {
+      if (obj.isGrid) canvas.remove(obj)
+    })
+    if (!showGrid.value) {
+      canvas.renderAll()
+      return
+    }
+    const w = canvasSize.value.width
+    const h = canvasSize.value.height
+    const gs = gridSize.value
+    const lines: fabric.Line[] = []
+    for (let x = gs; x < w; x += gs) {
+      lines.push(new fabric.Line([x, 0, x, h], { stroke: 'rgba(0,0,0,0.05)', strokeWidth: 1, selectable: false, evented: false } as any))
+    }
+    for (let y = gs; y < h; y += gs) {
+      lines.push(new fabric.Line([0, y, w, y], { stroke: 'rgba(0,0,0,0.05)', strokeWidth: 1, selectable: false, evented: false } as any))
+    }
+    lines.forEach((l: any) => { l.isGrid = true })
+    canvas.add(...lines)
+    canvas.renderAll()
+  }
+
+  function toggleGrid() {
+    showGrid.value = !showGrid.value
+    snapToGrid.value = !snapToGrid.value
+    drawGrid()
+  }
+
   // 组件挂载/卸载钩子
   onMounted(() => init())
   onBeforeUnmount(() => dispose())
@@ -889,6 +1012,9 @@ export function useCanvas(opts: UseCanvasOptions) {
     canUndo,
     canRedo,
     fabricCanvas,
+    showGrid,
+    snapToGrid,
+    gridSize,
 
     // 操作
     init,
@@ -926,5 +1052,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     loadDraft,
     clearCanvas,
     dispose,
+    clearGuideLines,
+    drawGrid,
+    toggleGrid,
   }
 }
