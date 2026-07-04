@@ -333,6 +333,22 @@
           <span>画布：{{ canvasSize.width }} × {{ canvasSize.height }}</span>
           <span v-if="selectedId">已选中：{{ selectedElement?.type === 'text' ? '文字' : '图片' }}（{{ Math.round((selectedElement as any).width || 0) }} × {{ Math.round((selectedElement as any).height || 0) }}）</span>
           <span v-else>未选中元素 · 提示：点击画布元素以编辑</span>
+          <button class="preview-toggle-btn" @click="showPreview = !showPreview">
+            {{ showPreview ? '收起预览' : '预览效果' }}
+          </button>
+        </div>
+
+        <!-- 实时预览面板 -->
+        <div v-if="showPreview" class="preview-panel">
+          <div class="preview-phone-frame">
+            <div class="preview-phone-notch"></div>
+            <div class="preview-phone-screen">
+              <img v-if="previewImage" :src="previewImage" class="preview-img" alt="预览" />
+              <div v-else class="preview-placeholder">点击刷新获取预览</div>
+            </div>
+            <div class="preview-phone-home"></div>
+          </div>
+          <button class="preview-refresh-btn" @click="refreshPreview">刷新预览</button>
         </div>
       </section>
 
@@ -591,7 +607,15 @@
                 </label>
               </label>
             </div>
-
+            <div class="section-title">文字特效</div>
+            <div class="text-fx-grid">
+              <button class="text-fx-btn" @click="applyTextFx('gradient')" title="渐变填充">渐变</button>
+              <button class="text-fx-btn" @click="applyTextFx('longShadow')" title="长阴影">长阴影</button>
+              <button class="text-fx-btn" @click="applyTextFx('neon')" title="霓虹发光">霓虹</button>
+              <button class="text-fx-btn" @click="applyTextFx('outline')" title="空心描边">描边</button>
+              <button class="text-fx-btn" @click="applyTextFx('underline')" title="下划线">下划线</button>
+              <button class="text-fx-btn" @click="applyTextFx('clearFx')" title="清除特效">清除</button>
+            </div>
             <div class="section-title">模板数据绑定</div>
             <div class="form-row">
               <label>数据字段</label>
@@ -674,6 +698,83 @@
                 :class="{ active: (selectedElement as any).mask === 'heart' }"
                 @click="updateSelected({ mask: 'heart' } as any)"
               >心</button>
+            </div>
+            <div class="section-title">圆角</div>
+            <div class="form-row">
+              <label>圆角 {{ (selectedElement as any).borderRadius || 0 }}px</label>
+              <input
+                type="range" class="form-input" min="0" max="100"
+                :value="(selectedElement as any).borderRadius || 0"
+                @change="e => updateSelected({ borderRadius: Number((e.target as HTMLInputElement).value) } as any)"
+              />
+            </div>
+            <div class="section-title">边框</div>
+            <div class="form-row two-col">
+              <div>
+                <label>粗细</label>
+                <input
+                  type="number" class="form-input" min="0" max="20"
+                  :value="(selectedElement as any).borderWidth || 0"
+                  @change="e => updateSelected({ borderWidth: Number((e.target as HTMLInputElement).value) } as any)"
+                />
+              </div>
+              <div>
+                <label>颜色</label>
+                <input
+                  type="color" class="form-input color-input"
+                  :value="(selectedElement as any).borderColor || '#ffffff'"
+                  @change="e => updateSelected({ borderColor: (e.target as HTMLInputElement).value } as any)"
+                />
+              </div>
+            </div>
+            <div class="section-title">滤镜</div>
+            <div class="filter-presets">
+              <button class="filter-preset-btn" @click="applyFilterPreset('none')">原图</button>
+              <button class="filter-preset-btn" @click="applyFilterPreset('vintage')">复古</button>
+              <button class="filter-preset-btn" @click="applyFilterPreset('cool')">冷色</button>
+              <button class="filter-preset-btn" @click="applyFilterPreset('warm')">暖色</button>
+              <button class="filter-preset-btn" @click="applyFilterPreset('bw')">黑白</button>
+              <button class="filter-preset-btn" @click="applyFilterPreset('soft')">柔光</button>
+            </div>
+            <div class="form-row">
+              <label>亮度 {{ (selectedElement as any).brightness ?? 100 }}%</label>
+              <input
+                type="range" class="form-input" min="0" max="200"
+                :value="(selectedElement as any).brightness ?? 100"
+                @change="e => updateSelected({ brightness: Number((e.target as HTMLInputElement).value) } as any)"
+              />
+            </div>
+            <div class="form-row">
+              <label>对比度 {{ (selectedElement as any).contrast ?? 0 }}</label>
+              <input
+                type="range" class="form-input" min="-100" max="100"
+                :value="(selectedElement as any).contrast ?? 0"
+                @change="e => updateSelected({ contrast: Number((e.target as HTMLInputElement).value) } as any)"
+              />
+            </div>
+            <div class="form-row">
+              <label>饱和度 {{ (selectedElement as any).saturate ?? 100 }}%</label>
+              <input
+                type="range" class="form-input" min="0" max="200"
+                :value="(selectedElement as any).saturate ?? 100"
+                @change="e => updateSelected({ saturate: Number((e.target as HTMLInputElement).value) } as any)"
+              />
+            </div>
+            <div class="form-row">
+              <label>模糊 {{ (selectedElement as any).blur ?? 0 }}px</label>
+              <input
+                type="range" class="form-input" min="0" max="20"
+                :value="(selectedElement as any).blur ?? 0"
+                @change="e => updateSelected({ blur: Number((e.target as HTMLInputElement).value) } as any)"
+              />
+            </div>
+            <div class="form-row">
+              <label>灰度 {{ (selectedElement as any).grayscale ?? 0 }}%</label>
+              <input
+                type="range" class="form-input" min="0" max="100"
+                :value="(selectedElement as any).grayscale ?? 0"
+                @change="e => updateSelected({ grayscale: Number((e.target as HTMLInputElement).value) } as any)"
+              />
             </div>
             <div class="section-title">对齐</div>
             <div class="btn-group">
@@ -940,6 +1041,8 @@ const {
   canRedo,
   showGrid,
   toggleGrid,
+  nudgeElement,
+  duplicateSelected,
   init,
   setSize,
   setBackground,
@@ -1070,6 +1173,16 @@ const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 // 起始模板
 const activePresetCat = ref('scene')
 const filteredPresets = computed(() => getPresetsByCategory(activePresetCat.value))
+
+// 实时预览
+const showPreview = ref(false)
+const previewImage = ref('')
+
+function refreshPreview() {
+  const el = document.querySelector('.fabric-canvas') as HTMLCanvasElement
+  if (!el) return
+  previewImage.value = el.toDataURL('image/png', 0.9)
+}
 
 function getCanvasEl(): HTMLCanvasElement | null {
   return canvasRef.value || null
@@ -1242,6 +1355,64 @@ function getLuminance(hex: string): number {
   const g = (rgb >> 8) & 0xff
   const b = (rgb >> 0) & 0xff
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+}
+
+// 滤镜预设
+const FILTER_PRESETS: Record<string, { brightness: number; contrast: number; saturate: number; blur: number; grayscale: number }> = {
+  none: { brightness: 100, contrast: 0, saturate: 100, blur: 0, grayscale: 0 },
+  vintage: { brightness: 110, contrast: -10, saturate: 70, blur: 0, grayscale: 10 },
+  cool: { brightness: 105, contrast: 10, saturate: 90, blur: 0, grayscale: 0 },
+  warm: { brightness: 105, contrast: 5, saturate: 120, blur: 0, grayscale: 0 },
+  bw: { brightness: 100, contrast: 10, saturate: 0, blur: 0, grayscale: 100 },
+  soft: { brightness: 110, contrast: -15, saturate: 90, blur: 1, grayscale: 0 },
+}
+
+function applyFilterPreset(name: string) {
+  const preset = FILTER_PRESETS[name]
+  if (!preset) return
+  updateSelected({ ...preset })
+  showToast(`已应用「${name === 'none' ? '原图' : name === 'bw' ? '黑白' : name === 'soft' ? '柔光' : name === 'vintage' ? '复古' : name === 'cool' ? '冷色' : '暖色'}」滤镜 ✅`)
+}
+
+// 文字特效
+function applyTextFx(type: string) {
+  const sel = selectedElement.value
+  if (!sel || sel.type !== 'text') {
+    showToast('请先选中一个文字元素')
+    return
+  }
+  const currentColor = (sel as any).color || '#333333'
+  switch (type) {
+    case 'gradient':
+      updateSelected({ gradientFill: { c1: '#e84a6e', c2: '#FFD700' }, color: '#e84a6e' } as any)
+      showToast('已应用渐变特效 ✅')
+      break
+    case 'longShadow':
+      updateSelected({ longShadow: true, longShadowColor: 'rgba(0,0,0,0.3)', longShadowLength: 6, longShadowBlur: 2, shadowColor: 'transparent', shadowBlur: 0 } as any)
+      showToast('已应用长阴影特效 ✅')
+      break
+    case 'neon':
+      updateSelected({ neonGlow: true, neonColor: currentColor, strokeColor: currentColor, strokeWidth: 1, shadowColor: currentColor, shadowBlur: 15 } as any)
+      showToast('已应用霓虹发光特效 ✅')
+      break
+    case 'outline':
+      updateSelected({ color: 'transparent', strokeColor: currentColor, strokeWidth: 2, shadowColor: 'transparent', shadowBlur: 0 } as any)
+      showToast('已应用空心描边特效 ✅')
+      break
+    case 'underline':
+      updateSelected({ textDecoration: 'underline' } as any)
+      showToast('已应用下划线 ✅')
+      break
+    case 'clearFx':
+      updateSelected({
+        gradientFill: undefined, longShadow: false, neonGlow: false,
+        color: '#333333', strokeColor: 'transparent', strokeWidth: 0,
+        shadowColor: 'transparent', shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0,
+        textDecoration: 'none',
+      } as any)
+      showToast('已清除所有特效 ✅')
+      break
+  }
 }
 
 // ============ 保存到服务器 ============
@@ -1620,6 +1791,18 @@ function onKeyDown(e: KeyboardEvent) {
       e.preventDefault()
       deleteSelected()
     }
+    return
+  }
+  // 方向键精确移动
+  const step = e.shiftKey ? 10 : 1
+  if (e.key === 'ArrowLeft' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, -step, 0) }
+  if (e.key === 'ArrowRight' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, step, 0) }
+  if (e.key === 'ArrowUp' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, 0, -step) }
+  if (e.key === 'ArrowDown' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, 0, step) }
+  // Ctrl+D 原地复制
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+    e.preventDefault()
+    duplicateSelected()
     return
   }
 }
@@ -2628,4 +2811,143 @@ label {
   background: linear-gradient(transparent, rgba(0,0,0,0.35));
   text-align: left;
 }
+
+/* ====== 滤镜预设 ====== */
+.filter-presets {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 10px;
+  flex-wrap: wrap;
+}
+
+.filter-preset-btn {
+  padding: 4px 10px;
+  background: #f0f2f5;
+  border: 1px solid #e0e4ea;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-preset-btn:hover {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #1976d2;
+}
+
+/* ====== 文字特效 ====== */
+.text-fx-grid {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 10px;
+  flex-wrap: wrap;
+}
+
+.text-fx-btn {
+  padding: 5px 12px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border: none;
+  border-radius: 14px;
+  font-size: 11px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.text-fx-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+/* ====== 实时预览面板 ====== */
+.preview-toggle-btn {
+  margin-left: auto;
+  padding: 4px 12px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.preview-toggle-btn:hover { background: #1565c0; }
+
+.preview-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px;
+  background: #e3f2fd;
+  border-top: 1px solid #bbdefb;
+}
+
+.preview-phone-frame {
+  position: relative;
+  width: 180px;
+  height: 320px;
+  background: #1a1a1a;
+  border-radius: 24px;
+  padding: 12px 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.preview-phone-notch {
+  width: 32px;
+  height: 5px;
+  background: #333;
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+
+.preview-phone-screen {
+  flex: 1;
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.preview-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #999;
+}
+
+.preview-phone-home {
+  width: 40px;
+  height: 4px;
+  background: #555;
+  border-radius: 2px;
+  margin-top: 6px;
+}
+
+.preview-refresh-btn {
+  padding: 8px 16px;
+  background: #fff;
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1976d2;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.preview-refresh-btn:hover { background: #e3f2fd; }
 </style>

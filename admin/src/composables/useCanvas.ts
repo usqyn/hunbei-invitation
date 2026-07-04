@@ -733,13 +733,31 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (el.type === 'text') {
       const t = el as TextElement
       const textObj = obj as fabric.IText
+
+      // 文字特效处理
+      const patchAny = patch as any
+      let fillValue: string | fabric.Gradient | undefined = patch.color ?? t.color
+
+      // 渐变文字
+      if (patchAny.gradientFill) {
+        const gf = patchAny.gradientFill as { c1: string; c2: string }
+        fillValue = new fabric.Gradient({
+          type: 'linear',
+          coords: { x1: 0, y1: 0, x2: (obj.width || 200), y2: 0 },
+          colorStops: [
+            { offset: 0, color: gf.c1 },
+            { offset: 1, color: gf.c2 },
+          ],
+        } as any)
+      }
+
       textObj.set({
         text: patch.content ?? t.content,
         fontFamily: patch.fontFamily ?? t.fontFamily,
         fontSize: patch.fontSize ?? t.fontSize,
         fontWeight: (patch.fontWeight ?? t.fontWeight) as any,
         fontStyle: (patch.fontStyle ?? t.fontStyle) as any,
-        fill: patch.color ?? t.color,
+        fill: fillValue,
         textAlign: (patch.textAlign ?? t.textAlign) as any,
         lineHeight: patch.lineHeight ?? t.lineHeight,
         charSpacing: (patch.letterSpacing ?? t.letterSpacing) * 10,
@@ -747,9 +765,20 @@ export function useCanvas(opts: UseCanvasOptions) {
         strokeWidth: patch.strokeWidth ?? t.strokeWidth,
         opacity: patch.opacity ?? t.opacity,
         angle: patch.rotation ?? t.rotation,
+        textDecoration: patch.textDecoration ?? t.textDecoration as any,
       } as any)
-      if (patch.shadowColor !== undefined || patch.shadowBlur !== undefined) {
-        if (t.shadowColor && t.shadowColor !== 'transparent' && t.shadowBlur > 0) {
+
+      // 阴影
+      if (patch.shadowColor !== undefined || patch.shadowBlur !== undefined || patchAny.longShadow) {
+        if (patchAny.longShadow) {
+          // 长阴影特效
+          const lsColor = patchAny.longShadowColor || t.color
+          const lsBlur = patchAny.longShadowBlur || 0
+          const lsLen = patchAny.longShadowLength || 8
+          ;(textObj as any).set('shadow', new fabric.Shadow({
+            color: lsColor, blur: lsBlur, offsetX: lsLen, offsetY: lsLen,
+          }))
+        } else if (t.shadowColor && t.shadowColor !== 'transparent' && t.shadowBlur > 0) {
           ;(textObj as any).set('shadow', new fabric.Shadow({
             color: t.shadowColor, blur: t.shadowBlur, offsetX: t.shadowOffsetX, offsetY: t.shadowOffsetY,
           }))
@@ -757,13 +786,60 @@ export function useCanvas(opts: UseCanvasOptions) {
           ;(textObj as any).set('shadow', null)
         }
       }
+
+      // 霓虹发光：双层描边+外发光
+      if (patchAny.neonGlow) {
+        const neonColor = patchAny.neonColor || t.color
+        ;(textObj as any).set('shadow', new fabric.Shadow({
+          color: neonColor, blur: 15, offsetX: 0, offsetY: 0,
+        }))
+      }
     }
 
     if (el.type === 'image') {
+      const img = el as ImageElement
       obj.set({
-        opacity: (patch as Partial<ImageElement>).opacity ?? (el as ImageElement).opacity,
-        angle: (patch as Partial<ImageElement>).rotation ?? (el as ImageElement).rotation,
+        opacity: (patch as Partial<ImageElement>).opacity ?? img.opacity,
+        angle: (patch as Partial<ImageElement>).rotation ?? img.rotation,
       } as any)
+      // 应用图片滤镜（CSS filter 方式）
+      const brightness = patch.brightness ?? img.brightness
+      const contrast = patch.contrast ?? img.contrast
+      const saturate = patch.saturate ?? img.saturate
+      const blur = patch.blur ?? img.blur
+      const grayscale = patch.grayscale ?? img.grayscale
+      const cssFilter = `brightness(${brightness}%) contrast(${100 + contrast}%) saturate(${saturate}%) blur(${blur}px) grayscale(${grayscale}%)`
+      ;(obj as any).set('filters', [])
+      ;(obj as any).set('dirty', true)
+      // 使用 CSS filter 通过样式注入
+      if ((obj as any)._element) {
+        ;(obj as any)._element.style.filter = cssFilter
+      }
+      // borderRadius → clipPath
+      const br = patch.borderRadius ?? img.borderRadius
+      const bw = patch.borderWidth ?? img.borderWidth
+      const bc = patch.borderColor ?? img.borderColor
+      if (br > 0) {
+        ;(obj as any).set('clipPath' as any, new fabric.Rect({
+          absolutePositioned: true,
+          width: (obj as any).width,
+          height: (obj as any).height,
+          rx: br,
+          ry: br,
+          originX: 'left',
+          originY: 'top',
+        } as any))
+      } else {
+        ;(obj as any).set('clipPath' as any, null)
+      }
+      // border
+      if (bw > 0 && bc) {
+        ;(obj as any).set('stroke', bc)
+        ;(obj as any).set('strokeWidth', bw)
+      } else {
+        ;(obj as any).set('stroke', undefined)
+        ;(obj as any).set('strokeWidth', 0)
+      }
     }
 
     canvas.renderAll()
@@ -997,6 +1073,55 @@ export function useCanvas(opts: UseCanvasOptions) {
     drawGrid()
   }
 
+  // 精确移动
+  function nudgeElement(id: string, dx: number, dy: number) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    if (!obj) return
+    obj.set({
+      left: (obj.left || 0) + dx,
+      top: (obj.top || 0) + dy,
+    } as any)
+    obj.setCoords()
+    canvas.renderAll()
+    // 同步 model
+    const el = elements.value.find(e => e.id === id)
+    if (el) {
+      el.x = (obj.left || 0)
+      el.y = (obj.top || 0)
+    }
+  }
+
+  // 原地复制（Ctrl+D）
+  function duplicateSelected() {
+    const canvas = fabricCanvas.value
+    if (!canvas || !selectedId.value) return
+    const obj = canvas.getObjects().find(o => (o as any).id === selectedId.value)
+    if (!obj) return
+    obj.clone().then((cloned: any) => {
+      cloned.set({ left: (cloned.left || 0) + 10, top: (cloned.top || 0) + 10 })
+      cloned.id = createId(obj.type === 'i-text' ? 'text' : obj.type === 'image' ? 'image' : 'sticker')
+      ;(cloned as any).elementType = (obj as any).elementType || 'sticker'
+      canvas.add(cloned)
+      canvas.setActiveObject(cloned)
+      canvas.renderAll()
+
+      // 同步 model
+      const sourceEl = elements.value.find(e => e.id === selectedId.value)
+      if (sourceEl) {
+        const newEl = JSON.parse(JSON.stringify(sourceEl))
+        newEl.id = cloned.id
+        newEl.x = cloned.left || 0
+        newEl.y = cloned.top || 0
+        newEl.name = (sourceEl.name || '元素') + ' 副本'
+        elements.value.push(newEl)
+        selectedId.value = newEl.id
+      }
+      pushHistory('duplicate')
+    })
+  }
+
   // 组件挂载/卸载钩子
   onMounted(() => init())
   onBeforeUnmount(() => dispose())
@@ -1055,5 +1180,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     clearGuideLines,
     drawGrid,
     toggleGrid,
+    nudgeElement,
+    duplicateSelected,
   }
 }
