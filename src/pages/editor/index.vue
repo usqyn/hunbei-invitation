@@ -9,12 +9,12 @@
       <view class="header-right"></view>
     </view>
 
-    <!-- Body: 左侧预览 + 右侧编辑面板 / 横屏模式：上预览 + 下编辑 -->
+    <!-- Body: 全屏画布 + 浮动右侧面板 / 横屏模式：上预览 + 下编辑 -->
     <view v-if="editorStore.templateLoading" class="loading-overlay">
       <text class="loading-overlay-text">加载模板中...</text>
     </view>
     <view v-else class="editor-body" :class="{ 'editor-body--landscape': isLandscape }">
-      <!-- 预览区 -->
+      <!-- 预览区：全屏宽度 -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
         <scroll-view class="preview-scroll" scroll-y>
           <!-- 画布模式：admin 发布的绝对定位模板 -->
@@ -85,7 +85,7 @@
         </scroll-view>
       </view>
 
-      <!-- 右侧/底部编辑面板 -->
+      <!-- 右侧浮动编辑面板（竖屏模式） -->
       <view v-if="!isLandscape" class="sidebar-area">
         <view class="sidebar-main">
           <RightPanel
@@ -113,6 +113,7 @@
           </view>
         </view>
       </view>
+      <!-- 底部面板（横屏模式） -->
       <view v-else class="bottom-panel">
         <RightPanel
           :active-panel-tab="editorStore.activePanelTab"
@@ -256,12 +257,12 @@ function updateCardHeight(cardWidth: number) {
 const canvasCardStyle = computed(() => {
   const w = canvasWidth.value
   const h = canvasHeight.value
-  const isLand = w > h
   return {
-    aspectRatio: `${w} / ${h}`,  // CSS 保底：即使 JS 未测量也有正确比例
-    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined, // JS 测量后精确覆盖
-    width: isLand ? '70%' : '100%',
-    margin: isLand ? '0 auto' : '0',
+    aspectRatio: `${w} / ${h}`,
+    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined,
+    width: '100%',
+    margin: '0',
+    maxWidth: '100%',
   }
 })
 
@@ -287,12 +288,10 @@ const canvasBackgroundStyle = computed(() => {
 // 预览卡片 DOM 引用
 const previewCardRef = ref<HTMLElement | null>(null)
 
-// 动态 fontScale：基于预览卡片实际宽度与屏幕宽度的比值
-const fontScale = ref(0.67)
+const fontScale = ref(1)
 
-// 重试机制：DOM 查询失败时自动重试
 let _retryCount = 0
-const MAX_RETRY = 5
+const MAX_RETRY = 3
 
 function updateFontScale() {
   if (!isCanvasMode.value) {
@@ -306,25 +305,24 @@ function updateFontScale() {
       .boundingClientRect((rect: any) => {
         if (rect && rect.width > 0) {
           const sysInfo = uni.getSystemInfoSync()
-          fontScale.value = rect.width / sysInfo.windowWidth
+          const ratio = rect.width / sysInfo.windowWidth
+          fontScale.value = Math.abs(ratio - 1) < 0.05 ? 1 : ratio
           updateCardHeight(rect.width)
           _retryCount = 0
         } else if (_retryCount < MAX_RETRY) {
           _retryCount++
-          setTimeout(() => updateFontScale(), 200)
+          setTimeout(() => updateFontScale(), 150)
         }
       })
       .exec()
   })
 }
 
-// 画布模式下获取元素的绝对定位样式
 function getCanvasElementStyle(el: EditableElement) {
   if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
-  const fs = fontScale.value
   const imgStyle: Record<string, string> = {}
   if (el.type === 'image' && el.style?.borderRadius) {
-    imgStyle.borderRadius = Math.round(el.style.borderRadius * fs) + 'rpx'
+    imgStyle.borderRadius = `${el.style.borderRadius}rpx`
   }
   const isText = el.type === 'text'
   const style: Record<string, string> = {
@@ -361,15 +359,13 @@ function resolveText(text: string): string {
   return resolveDatePlaceholders(text, templateStore.templateData)
 }
 
-// 根据元素获取文本样式（与 preview 保持一致）
 function getTextStyle(el: EditableElement) {
-  const fs = fontScale.value
   if (!el || !el.style) {
     return {
-      fontSize: Math.round(30 * fs) + 'rpx',
+      fontSize: '30rpx',
       color: '#333333',
       lineHeight: 1.6,
-      letterSpacing: Math.round(2 * fs) + 'rpx',
+      letterSpacing: '2rpx',
     }
   }
 
@@ -380,10 +376,10 @@ function getTextStyle(el: EditableElement) {
   const textAlign = style.textAlign || (direction === 'rtl' ? 'right' : 'center')
 
   return {
-    fontSize: Math.round((style.fontSize || 28) * fs) + 'rpx',
+    fontSize: `${style.fontSize || 28}rpx`,
     color: style.color || '#333333',
     lineHeight: String(style.lineHeight || 1.6),
-    letterSpacing: direction === 'rtl' ? 'normal' : Math.round((style.spacing ?? 2) * fs) + 'rpx',
+    letterSpacing: direction === 'rtl' ? 'normal' : `${style.spacing ?? 2}rpx`,
     fontFamily: getFontFamily(style.font),
     fontWeight: style.fontWeight || 'normal',
     fontStyle: style.fontStyle || 'normal',
@@ -393,8 +389,8 @@ function getTextStyle(el: EditableElement) {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     writingMode: 'horizontal-tb',
-    WebkitTextStroke: style.strokeWidth ? `${Math.round(style.strokeWidth * fs)}rpx ${style.strokeColor || 'transparent'}` : undefined,
-    textShadow: style.shadowBlur ? `${Math.round((style.shadowOffsetX ?? 0) * fs)}rpx ${Math.round((style.shadowOffsetY ?? 0) * fs)}rpx ${Math.round(style.shadowBlur * fs)}rpx ${style.shadowColor || 'transparent'}` : undefined,
+    WebkitTextStroke: style.strokeWidth ? `${style.strokeWidth}rpx ${style.strokeColor || 'transparent'}` : undefined,
+    textShadow: style.shadowBlur ? `${style.shadowOffsetX ?? 0}rpx ${style.shadowOffsetY ?? 0}rpx ${style.shadowBlur}rpx ${style.shadowColor || 'transparent'}` : undefined,
     textDecoration: style.textDecoration || 'none',
   }
 }
@@ -709,9 +705,8 @@ onMounted(() => {
     track('edit_start', { template_id: DEFAULT_TEMPLATE_ID })
   }
 
-  // 延迟计算 fontScale，等待卡片渲染完成
   nextTick(() => {
-    setTimeout(() => updateFontScale(), 300)
+    setTimeout(() => updateFontScale(), 100)
   })
 
   // 加载商城推荐
@@ -723,12 +718,10 @@ watch(isLandscape, () => {
   nextTick(() => updateFontScale())
 })
 
-// 监听编辑器模板加载完成，重新计算 fontScale
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     nextTick(() => {
-      setTimeout(() => updateFontScale(), 300)
-      // 加载模板中使用的自定义字体
+      setTimeout(() => updateFontScale(), 100)
       loadFontsForElements(editorStore.editableElements as any)
     })
   }
@@ -794,17 +787,15 @@ watch(() => editorStore.editableElements, () => {
   display: flex;
   flex: 1;
   min-height: 0;
-  padding: 16rpx;
-  gap: 16rpx;
 }
 
-/* Preview Area - 左侧更大 */
+/* Preview Area - 全屏宽度 */
 .preview-area {
-  flex: 2.5;
+  flex: 1;
   display: flex;
   flex-direction: column;
   background: #fff;
-  border-radius: 12rpx;
+  border-radius: 0;
   overflow: hidden;
   min-height: 0;
   min-width: 0;
@@ -886,9 +877,9 @@ watch(() => editorStore.editableElements, () => {
   padding: 0;
   gap: 0;
   position: relative;
-  border-radius: 12rpx;
+  border-radius: 0;
   overflow: hidden;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .canvas-element {
@@ -928,14 +919,20 @@ watch(() => editorStore.editableElements, () => {
   outline-offset: -4rpx;
 }
 
-/* Sidebar Area - 右侧编辑面板 */
+/* Sidebar Area - 右侧浮动编辑面板 */
 .sidebar-area {
-  flex: 1;
-  flex-shrink: 0;
+  position: fixed;
+  right: 0;
+  top: 100rpx;
+  bottom: 120rpx;
+  width: 320rpx;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  min-width: 0;
+  background: #fff;
+  border-left: 1rpx solid #f0e0e5;
+  box-shadow: -4rpx 0 20rpx rgba(0, 0, 0, 0.08);
+  z-index: 100;
+  overflow: hidden;
 }
 
 /* Bottom Panel - 横屏模式下底部编辑面板 */

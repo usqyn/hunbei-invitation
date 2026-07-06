@@ -159,7 +159,7 @@ const displayTitle = computed(() => {
   return 'toy tamaxia'
 })
 
-const fontScale = ref(0.67)
+const fontScale = ref(1)
 const templateId = ref('')
 
 const watermarkedPreview = computed(() => editorStore.renderedImage || '')
@@ -172,9 +172,8 @@ const recommendProducts = ref([
   { id: 4, name: '婚车装饰定制', price: 888, image: '/static/images/mall/banner2.jpg' },
 ])
 
-// 重试机制：DOM 查询失败时自动重试
 let _retryCount = 0
-const MAX_RETRY = 5
+const MAX_RETRY = 3
 
 function updateFontScale() {
   if (!isCanvasMode.value) {
@@ -188,12 +187,13 @@ function updateFontScale() {
       .boundingClientRect((rect: any) => {
         if (rect && rect.width > 0) {
           const sysInfo = uni.getSystemInfoSync()
-          fontScale.value = rect.width / sysInfo.windowWidth
+          const ratio = rect.width / sysInfo.windowWidth
+          fontScale.value = Math.abs(ratio - 1) < 0.05 ? 1 : ratio
           updateCardHeight(rect.width)
           _retryCount = 0
         } else if (_retryCount < MAX_RETRY) {
           _retryCount++
-          setTimeout(() => updateFontScale(), 200)
+          setTimeout(() => updateFontScale(), 150)
         }
       })
       .exec()
@@ -209,9 +209,8 @@ onMounted(() => {
     editorStore.loadTemplateById(options.templateId)
   }
   track('preview_view', { template_id: templateId.value })
-  // 延迟计算 fontScale，等待卡片渲染完成
   nextTick(() => {
-    setTimeout(() => updateFontScale(), 300)
+    setTimeout(() => updateFontScale(), 100)
   })
 })
 
@@ -220,7 +219,7 @@ watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     loadFontsForElements(editorStore.editableElements as any)
     nextTick(() => {
-      setTimeout(() => updateFontScale(), 300)
+      setTimeout(() => updateFontScale(), 100)
     })
   }
 })
@@ -260,12 +259,11 @@ function updateCardHeight(cardWidth: number) {
 const canvasCardStyle = computed(() => {
   const w = canvasWidth.value
   const h = canvasHeight.value
-  const isLand = w > h
   return {
-    aspectRatio: `${w} / ${h}`,  // CSS 保底：即使 JS 未测量也有正确比例
-    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined, // JS 测量后精确覆盖
-    width: isLand ? '70%' : '100%',
-    margin: isLand ? '0 auto' : '0',
+    aspectRatio: `${w} / ${h}`,
+    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined,
+    width: '100%',
+    margin: '0',
   }
 })
 
@@ -307,8 +305,7 @@ function getCanvasElementStyle(el: EditableElement) {
   }
   if (el.rotation) style.transform = `rotate(${el.rotation}deg)`
   if (el.type === 'image' && el.style?.borderRadius) {
-    const fs = fontScale.value
-    style.borderRadius = Math.round(el.style.borderRadius * fs) + 'rpx'
+    style.borderRadius = `${el.style.borderRadius}rpx`
   }
   return style
 }
@@ -329,13 +326,12 @@ function resolveText(text: string): string {
 
 function getTextStyle(el: EditableElement) {
   const s = el.style
-  const fs = fontScale.value
   if (!s) {
     return {
-      fontSize: Math.round(30 * fs) + 'rpx',
+      fontSize: '30rpx',
       color: '#333333',
       lineHeight: 1.6,
-      letterSpacing: Math.round(2 * fs) + 'rpx',
+      letterSpacing: '2rpx',
     }
   }
 
@@ -344,10 +340,10 @@ function getTextStyle(el: EditableElement) {
   const textAlign = s.textAlign || (direction === 'rtl' ? 'right' : 'center')
 
   return {
-    fontSize: Math.round((s.fontSize || 28) * fs) + 'rpx',
+    fontSize: `${s.fontSize || 28}rpx`,
     color: s.color || '#333333',
     lineHeight: String(s.lineHeight || 1.6),
-    letterSpacing: direction === 'rtl' ? 'normal' : Math.round((s.spacing ?? 2) * fs) + 'rpx',
+    letterSpacing: direction === 'rtl' ? 'normal' : `${s.spacing ?? 2}rpx`,
     fontFamily: getFontFamily(s.font),
     fontWeight: s.fontWeight || 'normal',
     fontStyle: s.fontStyle || 'normal',
@@ -357,8 +353,8 @@ function getTextStyle(el: EditableElement) {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     writingMode: 'horizontal-tb',
-    WebkitTextStroke: s.strokeWidth ? `${Math.round(s.strokeWidth * fs)}rpx ${s.strokeColor || 'transparent'}` : undefined,
-    textShadow: s.shadowBlur ? `${Math.round((s.shadowOffsetX ?? 0) * fs)}rpx ${Math.round((s.shadowOffsetY ?? 0) * fs)}rpx ${Math.round(s.shadowBlur * fs)}rpx ${s.shadowColor || 'transparent'}` : undefined,
+    WebkitTextStroke: s.strokeWidth ? `${s.strokeWidth}rpx ${s.strokeColor || 'transparent'}` : undefined,
+    textShadow: s.shadowBlur ? `${s.shadowOffsetX ?? 0}rpx ${s.shadowOffsetY ?? 0}rpx ${s.shadowBlur}rpx ${s.shadowColor || 'transparent'}` : undefined,
     textDecoration: s.textDecoration || 'none',
   }
 }
@@ -488,9 +484,9 @@ const onImageError = () => {
   display: block;
   padding: 0;
   position: relative;
-  border-radius: 12rpx;
+  border-radius: 0;
   overflow: hidden;
-  margin: 24rpx auto;
+  margin: 0;
 }
 
 .rendered-image {

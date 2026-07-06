@@ -513,18 +513,18 @@ async function doPublish() {
             font: el.fontFamily,
             color: el.color,
             fontSize: fontSize ?? 28,
-            spacing: el.letterSpacing ?? 2,
+            spacing: Math.round((el.letterSpacing ?? 2) * pxToRpx),
             lineHeight: el.lineHeight ?? 1.5,
             fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
             fontStyle: el.fontStyle ?? 'normal',
             textAlign,
             direction,
             strokeColor: el.strokeColor || 'transparent',
-            strokeWidth: el.strokeWidth ?? 0,
+            strokeWidth: Math.round((el.strokeWidth ?? 0) * pxToRpx),
             shadowColor: el.shadowColor || 'transparent',
-            shadowOffsetX: el.shadowOffsetX ?? 0,
-            shadowOffsetY: el.shadowOffsetY ?? 0,
-            shadowBlur: el.shadowBlur ?? 0,
+            shadowOffsetX: Math.round((el.shadowOffsetX ?? 0) * pxToRpx),
+            shadowOffsetY: Math.round((el.shadowOffsetY ?? 0) * pxToRpx),
+            shadowBlur: Math.round((el.shadowBlur ?? 0) * pxToRpx),
             textDecoration: el.textDecoration || 'none',
           }
         } else if (el.type === 'image') {
@@ -532,9 +532,9 @@ async function doPublish() {
             font: '',
             color: '',
             spacing: 0,
-            borderRadius: el.borderRadius ?? 0,
+            borderRadius: Math.round((el.borderRadius ?? 0) * pxToRpx),
             borderColor: el.borderColor || 'transparent',
-            borderWidth: el.borderWidth ?? 0,
+            borderWidth: Math.round((el.borderWidth ?? 0) * pxToRpx),
           } as any
         }
 
