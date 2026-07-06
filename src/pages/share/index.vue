@@ -114,6 +114,11 @@
         </scroll-view>
       </view>
     </view>
+
+    <view class="share-shop-entry" @click="goToMall">
+      <text>&#128722; 为婚礼准备用品</text>
+      <text class="arrow">></text>
+    </view>
   </view>
 </template>
 
@@ -265,6 +270,10 @@ function onCopyLink() {
       uni.showToast({ title: '链接已复制', icon: 'success' })
     },
   })
+}
+
+function goToMall() {
+  uni.switchTab({ url: '/pages/mall/index' })
 }
 </script>
 
@@ -582,5 +591,23 @@ function onCopyLink() {
   font-size: 28rpx;
   color: #333333;
   line-height: 1.6;
+}
+
+.share-shop-entry {
+  margin: 30rpx;
+  padding: 28rpx 30rpx;
+  background: #ffffff;
+  border-radius: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 30rpx;
+  color: #333333;
+  font-weight: 500;
+}
+
+.share-shop-entry .arrow {
+  font-size: 28rpx;
+  color: #999999;
 }
 </style>

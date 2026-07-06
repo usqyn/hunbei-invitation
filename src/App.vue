@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onLaunch } from '@dcloudio/uni-app'
+import { onLaunch, onShow } from '@dcloudio/uni-app'
+import { flushTrackQueue } from '@/utils/track'
 
 onLaunch(() => {
   try {
@@ -8,6 +9,10 @@ onLaunch(() => {
       uni.setStorageSync('token', saved.token)
     }
   } catch {}
+})
+
+onShow(() => {
+  flushTrackQueue()
 })
 </script>
 

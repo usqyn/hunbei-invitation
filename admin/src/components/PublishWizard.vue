@@ -61,8 +61,25 @@
               </button>
             </div>
           </div>
-          <div class="form-field">
-            <label class="field-label">标签（可多选）</label>
+        <div class="form-field">
+          <label class="field-label">付费设置</label>
+          <div class="price-setting">
+            <label class="switch-label">
+              <input type="checkbox" v-model="form.isPaid" />
+              <span>设为付费模板</span>
+            </label>
+            <div v-if="form.isPaid" class="price-input-wrap">
+              <input v-model.number="form.price" type="number" class="field-input price-input" placeholder="价格（元）" min="1" max="99" />
+              <span class="price-unit">元</span>
+            </div>
+            <label class="switch-label">
+              <input type="checkbox" v-model="form.isPremium" />
+              <span>含付费元素（VIP专属素材/字体/特效）</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="field-label">标签（可多选）</label>
             <div class="tag-chips">
               <button
                 v-for="tag in TAG_LIST"
@@ -247,6 +264,9 @@ const form = reactive({
   tags: [] as string[],
   pageCount: 10,
   likes: 1000,
+  isPaid: false,
+  price: 3,
+  isPremium: false,
 })
 
 const validationResults = ref<Array<{
@@ -289,6 +309,9 @@ watch(() => props.visible, (val) => {
     form.tags = []
     form.pageCount = 10
     form.likes = 1000
+    form.isPaid = false
+    form.price = 3
+    form.isPremium = false
   }
 })
 
@@ -431,6 +454,9 @@ async function doPublish() {
       likes: form.likes,
       pageCount: form.pageCount,
       status: 'published',
+      isPaid: form.isPaid,
+      price: form.isPaid ? form.price : 0,
+      isPremium: form.isPremium,
       renderedImage: renderedImageUrl,
       orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
       data: {
@@ -955,5 +981,38 @@ function onViewTemplate() {
   padding: 16px 24px;
   border-top: 1px solid #eee;
   background: #fafafa;
+}
+
+/* 付费设置 */
+.price-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+.switch-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.price-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 24px;
+}
+.price-input {
+  width: 120px;
+}
+.price-unit {
+  font-size: 13px;
+  color: #666;
 }
 </style>

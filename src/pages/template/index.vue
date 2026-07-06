@@ -26,6 +26,19 @@
       </view>
     </scroll-view>
 
+    <!-- 筛选标签栏 -->
+    <view class="filter-bar">
+      <view
+        v-for="filter in filters"
+        :key="filter.value"
+        class="filter-item"
+        :class="{ active: activeFilter === filter.value }"
+        @click="activeFilter = filter.value"
+      >
+        <text>{{ filter.label }}</text>
+      </view>
+    </view>
+
     <!-- 加载状态 -->
     <view v-if="loading" class="loading-state">
       <text class="loading-text">{{ pageConfig.loadingText }}</text>
@@ -58,6 +71,9 @@
             mode="aspectFill"
             @error="onImageError($event, template)"
           ></image>
+          <view v-if="template.is_paid" class="price-tag">
+            <text>{{ template.price }}元</text>
+          </view>
 
           <!-- 模板信息 -->
           <view class="template-info">
@@ -124,6 +140,14 @@ const searchKeyword = ref<string>('')
 const loading = ref(false)
 const loadError = ref(false)
 
+const filters = [
+  { label: '全部', value: 'all' },
+  { label: '免费', value: 'free' },
+  { label: '付费', value: 'paid' },
+  { label: 'VIP免费', value: 'vip' },
+]
+const activeFilter = ref<string>('all')
+
 // ============ 计算属性 ============
 const filteredTemplates = computed<TemplateItem[]>(() => {
   let list = allTemplates.value
@@ -131,6 +155,15 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
   // 按分类筛选
   if (activeCategory.value && activeCategory.value !== 'all') {
     list = list.filter(t => t.category === activeCategory.value)
+  }
+
+  // 按付费状态筛选
+  if (activeFilter.value === 'free') {
+    list = list.filter(t => !t.is_paid || t.is_paid === 0 || t.is_paid === false)
+  } else if (activeFilter.value === 'paid') {
+    list = list.filter(t => t.is_paid === 1 || t.is_paid === true)
+  } else if (activeFilter.value === 'vip') {
+    list = list.filter(t => t.is_paid === 1 || t.is_paid === true)
   }
 
   // 按关键词搜索（名称/副标题/分类名称/标签/元素内容）
@@ -166,6 +199,9 @@ onMounted(async () => {
   }
   if (options.search) {
     searchKeyword.value = decodeURIComponent(options.search)
+  }
+  if (options.filter) {
+    activeFilter.value = options.filter
   }
 
   await loadCategories()
@@ -247,6 +283,26 @@ function formatLikes(num: number): string {
 }
 
 function onSelectTemplate(template: TemplateItem) {
+  if (template.is_paid) {
+    const isVip = false // TODO: 从用户状态获取
+    const isPurchased = false // TODO: 从用户状态获取
+    if (!isVip && !isPurchased) {
+      uni.showModal({
+        title: '付费模板',
+        content: `该模板需要支付 ${template.price || 0} 元，或开通VIP免费使用`,
+        confirmText: '去购买',
+        cancelText: '取消',
+        success: (res) => {
+          if (res.confirm) {
+            uni.navigateTo({
+              url: '/pages/vip/index',
+            })
+          }
+        },
+      })
+      return
+    }
+  }
   uni.navigateTo({
     url: `/pages/editor/index?templateId=${template.id}`,
   })
@@ -398,6 +454,7 @@ function onBack() {
   box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
+  position: relative;
   &:active { opacity: 0.9; }
   &:nth-child(odd) { margin-right: 30rpx; }
 }
@@ -460,6 +517,44 @@ function onBack() {
 }
 
 .select-btn-text { font-size: 26rpx; color: #fff; font-weight: 500; }
+
+/* 筛选标签栏 */
+.filter-bar {
+  display: flex;
+  gap: 16rpx;
+  padding: 20rpx 30rpx;
+  background: #ffffff;
+  border-bottom: 2rpx solid #f0f0f0;
+}
+
+.filter-item {
+  padding: 10rpx 24rpx;
+  background: #f5f5f5;
+  border-radius: 30rpx;
+  font-size: 24rpx;
+  color: #666;
+  cursor: pointer;
+
+  &.active {
+    background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+    color: #fff;
+    font-weight: 500;
+  }
+}
+
+/* 价格标签 */
+.price-tag {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 6rpx 14rpx;
+  border-radius: 12rpx;
+  z-index: 1;
+}
 
 /* 空状态 */
 .empty-state {

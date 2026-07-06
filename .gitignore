@@ -8,3 +8,5 @@ unpackage/
 .idea/
 *.err
 *.db
+monetization-funnel/_shared/fonts/
+monetization-funnel/_shared/js/

@@ -87,18 +87,31 @@
 
       <!-- 右侧/底部编辑面板 -->
       <view v-if="!isLandscape" class="sidebar-area">
-        <RightPanel
-          :active-panel-tab="editorStore.activePanelTab"
-          :editable-elements="editorStore.editableElements"
-          :selected-element="editorStore.selectedElement"
-          :material-list="editorStore.materialList"
-          :settings="templateStore.settings"
-          mode="sidebar"
-          @update:active-panel-tab="editorStore.activePanelTab = $event"
-          @open-editor="onOpenEditor"
-          @select-material="onSelectMaterial"
-          @toggle-setting="toggleSetting"
-        />
+        <view class="sidebar-main">
+          <RightPanel
+            :active-panel-tab="editorStore.activePanelTab"
+            :editable-elements="editorStore.editableElements"
+            :selected-element="editorStore.selectedElement"
+            :material-list="editorStore.materialList"
+            :settings="templateStore.settings"
+            mode="sidebar"
+            @update:active-panel-tab="editorStore.activePanelTab = $event"
+            @open-editor="onOpenEditor"
+            @select-material="onSelectMaterial"
+            @toggle-setting="toggleSetting"
+          />
+        </view>
+        <!-- 商城推荐 -->
+        <view class="shop-recommend" v-if="recommendProducts.length > 0">
+          <view class="shop-rec-title">\u{1F6D2} 婚礼推荐</view>
+          <view class="shop-rec-list">
+            <view v-for="product in recommendProducts.slice(0, 3)" :key="product.id" class="shop-rec-item" @click="goToShop(product)">
+              <image class="shop-rec-img" :src="product.image" mode="aspectFill" />
+              <text class="shop-rec-name">{{ product.name }}</text>
+              <text class="shop-rec-price">{{ product.price }}元</text>
+            </view>
+          </view>
+        </view>
       </view>
       <view v-else class="bottom-panel">
         <RightPanel
@@ -137,6 +150,10 @@
       <view class="footer-item" @click="handleSave">
         <text class="footer-icon">💾</text>
         <text class="footer-label">保存</text>
+      </view>
+      <view class="footer-item" @click="handleExport">
+        <text class="footer-icon">📤</text>
+        <text class="footer-label">导出</text>
       </view>
       <view class="footer-share-btn" @click="handleShare">
         <text class="share-btn-text">预览分享</text>
@@ -179,8 +196,10 @@ import { computed, ref, onMounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
+import { useUserStore } from '@/stores/user'
 import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { loadFontsForElements } from '@/stores/editor'
+import { track } from '@/utils/track'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
@@ -190,6 +209,12 @@ import type { Material, ElementStyle, EditableElement, Work } from '@/types'
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const worksStore = useWorksStore()
+const userStore = useUserStore()
+
+// 编辑完成度与付费弹窗
+const editProgress = ref(0)
+const hasShownProgressPopup = ref(false)
+const editStartTime = ref(Date.now())
 
 // 当前模板名
 const templateName = computed(() => {
@@ -347,10 +372,68 @@ function getTextStyle(idx: number) {
   }
 }
 
+// 计算编辑完成度
+function calculateProgress(): number {
+  const elements = editorStore.editableElements
+  if (!elements.length) return 0
+  let completed = 0
+  elements.forEach(el => {
+    if (el.type === 'text' && el.text && el.text.trim()) completed++
+    if (el.type === 'image' && el.text && !el.text.includes('default')) completed++
+  })
+  // 基本信息也算进度
+  if (templateStore.basicInfo?.groomName || templateStore.basicInfo?.brideName) completed += 2
+  return Math.min(100, Math.round((completed / (elements.length + 2)) * 100))
+}
+
+// 监听进度变化
+watch(editProgress, (val) => {
+  if (val >= 30 && val < 40 && !hasShownProgressPopup.value && !userStore.isVip()) {
+    hasShownProgressPopup.value = true
+    showProgressPopup()
+  }
+})
+
+// 30% 完成度弹窗
+function showProgressPopup() {
+  track('edit_progress_30', { elapsed_time: Date.now() - editStartTime.value })
+  uni.showModal({
+    title: '\u{1F389} 您的请柬已初具雏形',
+    content: '解锁高级模板、去水印导出、高清大图，让请柬更完美',
+    confirmText: '解锁全部 9.9元/月',
+    cancelText: '继续免费编辑',
+    success: (res) => {
+      if (res.confirm) {
+        track('click_unlock_vip', { trigger_point: 'edit_progress_30' })
+        uni.navigateTo({ url: '/pages/vip/index' })
+      }
+    }
+  })
+}
+
 // 打开编辑器
 function onOpenEditor(idx: number) {
   const el = editorStore.editableElements[idx]
-  if (el.editable === false) return
+  if (!el || el.editable === false) return
+
+  // 付费元素拦截
+  if (el.isPremium && !userStore.isVip()) {
+    track('click_premium_element', { element_type: el.type })
+    uni.showModal({
+      title: '\u{1F512} 高级素材',
+      content: '该素材为 VIP 专属，开通 VIP 立即可用',
+      confirmText: '开通VIP',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          uni.navigateTo({ url: '/pages/vip/index' })
+        }
+      }
+    })
+    return
+  }
+
+  track('edit_element_click', { element_type: el.type })
   editorStore.selectedElement = idx
 
   if (el.type === 'image') {
@@ -454,6 +537,7 @@ function handleSettings() {
 }
 
 function handleSave() {
+  track('edit_save', { progress: editProgress.value })
   if (editorStore.currentWorkId) {
     const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
     if (existing) {
@@ -482,6 +566,49 @@ function handleSave() {
   uni.showToast({ title: '已保存', icon: 'success' })
 }
 
+function handleExport() {
+  track('click_export')
+  if (userStore.isVip()) {
+    // VIP：直接高清无水印导出
+    doExport({ watermark: false, quality: 'high' })
+  } else {
+    // 免费用户：弹出选择
+    uni.showActionSheet({
+      title: '选择导出方式',
+      itemList: ['\u{1F4E6} 高清无水印导出（3元）', '\u{1F4E6} 免费导出（带水印）'],
+      success: (res: any) => {
+        if (res.tapIndex === 0) {
+          track('click_export', { export_type: 'paid' })
+          // 跳转支付流程（简化版：直接提示）
+          uni.showModal({
+            title: '高清导出',
+            content: '支付 3 元即可高清无水印导出',
+            confirmText: '立即支付',
+            success: (r) => {
+              if (r.confirm) {
+                // TODO: 调用微信支付
+                doExport({ watermark: false, quality: 'high' })
+              }
+            }
+          })
+        } else {
+          track('click_export', { export_type: 'free' })
+          doExport({ watermark: true, quality: 'normal' })
+        }
+      }
+    })
+  }
+}
+
+function doExport(options: { watermark: boolean; quality: string }) {
+  // 实际导出逻辑
+  uni.showLoading({ title: '导出中...' })
+  setTimeout(() => {
+    uni.hideLoading()
+    uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
+  }, 1500)
+}
+
 function handleShare() {
   handleSave()
   const templateId = editorStore.currentTemplateId
@@ -492,20 +619,74 @@ function handleShare() {
   }
 }
 
+// 商城推荐数据
+const recommendProducts = ref<Array<{ id: string; name: string; price: number; image: string; category: string }>>([])
+
+// 根据模板分类映射商品分类
+function getCategoryByTemplate(): string {
+  const category = (templateStore.templateData as any).category || '婚礼'
+  if (category.includes('婚礼')) return '婚礼饰品/摄影'
+  if (category.includes('割礼')) return '仪式用品'
+  if (category.includes('生日')) return '生日派对用品'
+  if (category.includes('节日')) return '节日装饰品'
+  return '婚礼饰品/摄影'
+}
+
+// 加载推荐商品（简化版：本地模拟数据）
+function loadRecommendProducts() {
+  const category = getCategoryByTemplate()
+  // 模拟推荐商品，实际可替换为接口请求
+  const mockProducts: Record<string, Array<{ id: string; name: string; price: number; image: string; category: string }>> = {
+    '婚礼饰品/摄影': [
+      { id: '1', name: '婚礼现场摄影套餐', price: 2999, image: 'https://picsum.photos/200/200?random=1', category: '婚礼饰品/摄影' },
+      { id: '2', name: '新娘手捧花', price: 199, image: 'https://picsum.photos/200/200?random=2', category: '婚礼饰品/摄影' },
+      { id: '3', name: '婚礼甜品台布置', price: 899, image: 'https://picsum.photos/200/200?random=3', category: '婚礼饰品/摄影' },
+      { id: '4', name: '婚礼气球套装', price: 59, image: 'https://picsum.photos/200/200?random=4', category: '婚礼饰品/摄影' },
+    ],
+    '仪式用品': [
+      { id: '5', name: '传统仪式服饰', price: 499, image: 'https://picsum.photos/200/200?random=5', category: '仪式用品' },
+      { id: '6', name: '仪式装饰花环', price: 129, image: 'https://picsum.photos/200/200?random=6', category: '仪式用品' },
+      { id: '7', name: '纪念相册定制', price: 159, image: 'https://picsum.photos/200/200?random=7', category: '仪式用品' },
+    ],
+    '生日派对用品': [
+      { id: '8', name: '生日主题背景板', price: 89, image: 'https://picsum.photos/200/200?random=8', category: '生日派对用品' },
+      { id: '9', name: '生日蛋糕装饰', price: 39, image: 'https://picsum.photos/200/200?random=9', category: '生日派对用品' },
+      { id: '10', name: '派对气球套装', price: 49, image: 'https://picsum.photos/200/200?random=10', category: '生日派对用品' },
+    ],
+    '节日装饰品': [
+      { id: '11', name: '节日彩灯串', price: 29, image: 'https://picsum.photos/200/200?random=11', category: '节日装饰品' },
+      { id: '12', name: '节日贺卡套装', price: 19, image: 'https://picsum.photos/200/200?random=12', category: '节日装饰品' },
+      { id: '13', name: '主题装饰摆件', price: 69, image: 'https://picsum.photos/200/200?random=13', category: '节日装饰品' },
+    ],
+  }
+  recommendProducts.value = mockProducts[category] || mockProducts['婚礼饰品/摄影']
+}
+
+function goToShop(product: { id: string; name: string; price: number; image: string; category: string }) {
+  track('click_shop_recommend', { product_id: product.id, product_name: product.name, price: product.price })
+  uni.navigateTo({ url: `/pages/shop/detail?id=${product.id}` })
+}
+
 // 页面加载时根据参数切换模板
 onMounted(() => {
+  editStartTime.value = Date.now()
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
 
   if (options.templateId) {
     editorStore.loadTemplateById(options.templateId)
+    track('edit_start', { template_id: options.templateId })
   } else {
     editorStore.loadTemplateById(DEFAULT_TEMPLATE_ID)
+    track('edit_start', { template_id: DEFAULT_TEMPLATE_ID })
   }
 
   // 延迟计算 fontScale，等待模板渲染完成
   setTimeout(() => updateFontScale(), 500)
+
+  // 加载商城推荐
+  loadRecommendProducts()
 })
 
 // 监听横屏/竖屏切换（侧边栏展开收起会影响布局），重新计算 fontScale
@@ -528,6 +709,11 @@ watch(() => editorStore.templateLoading, (loading) => {
 watch(() => editorStore.editableElements.length, () => {
   nextTick(() => updateFontScale())
 })
+
+// 监听元素内容变化，更新完成度
+watch(() => editorStore.editableElements, () => {
+  editProgress.value = calculateProgress()
+}, { deep: true })
 </script>
 
 <style lang="scss" scoped>
@@ -806,6 +992,70 @@ watch(() => editorStore.editableElements.length, () => {
 .loading-overlay-text {
   font-size: 28rpx;
   color: #999;
+}
+
+/* Sidebar 主内容区 */
+.sidebar-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 商城推荐 */
+.shop-recommend {
+  flex-shrink: 0;
+  background: #fff;
+  border-top: 1rpx solid #f0e0e5;
+  padding: 16rpx;
+  margin-top: 8rpx;
+  border-radius: 12rpx;
+}
+
+.shop-rec-title {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12rpx;
+}
+
+.shop-rec-list {
+  display: flex;
+  gap: 12rpx;
+  overflow-x: auto;
+}
+
+.shop-rec-item {
+  flex-shrink: 0;
+  width: 140rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.shop-rec-img {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 10rpx;
+  background: #f5f5f5;
+}
+
+.shop-rec-name {
+  font-size: 18rpx;
+  color: #333;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.shop-rec-price {
+  font-size: 18rpx;
+  color: #e84a6e;
+  font-weight: 600;
 }
 
 </style>

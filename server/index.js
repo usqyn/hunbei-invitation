@@ -77,9 +77,36 @@ async function initDatabase() {
     value TEXT
   )`)
 
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    phone TEXT NOT NULL,
+    nickname TEXT DEFAULT '',
+    avatar TEXT DEFAULT '',
+    vip_status INTEGER DEFAULT 0,
+    vip_expire_at INTEGER,
+    vip_plan TEXT,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  )`)
+
+  db.run(`CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event TEXT NOT NULL,
+    user_id TEXT,
+    session_id TEXT,
+    timestamp INTEGER,
+    params TEXT,
+    platform TEXT,
+    version TEXT
+  )`)
+
   // 迁移：为旧数据库添加 status 和 renderedImage 列
   try { db.run("ALTER TABLE templates ADD COLUMN status TEXT DEFAULT 'draft'") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN renderedImage TEXT DEFAULT ''") } catch (_) {}
+  // 迁移：为旧数据库添加 monetization 字段
+  try { db.run("ALTER TABLE templates ADD COLUMN is_paid INTEGER DEFAULT 0") } catch (_) {}
+  try { db.run("ALTER TABLE templates ADD COLUMN price INTEGER DEFAULT 0") } catch (_) {}
+  try { db.run("ALTER TABLE templates ADD COLUMN is_premium INTEGER DEFAULT 0") } catch (_) {}
   // 已有模板全部标记为 published
   db.run("UPDATE templates SET status = 'published' WHERE status IS NULL OR status = ''")
   saveDatabase()
@@ -101,6 +128,15 @@ function setVersion(v) {
 // ============ 中间件 ============
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
+app.use((req, res, next) => {
+  const auth = req.headers.authorization
+  if (auth && auth.startsWith('Bearer ')) {
+    try {
+      req.user = jwt.verify(auth.slice(7), JWT_SECRET)
+    } catch (_) {}
+  }
+  next()
+})
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 // ============ 字体目录 ============
@@ -281,6 +317,15 @@ app.post('/api/user/login', rateLimit, (req, res) => {
     // 生产环境应调用 wx.login 服务端接口验证
     // 演示环境直接放行
     const token = jwt.sign({ phone: 'wechat_user', role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
+    const now = new Date().toISOString()
+    const userCheck = db.exec("SELECT id FROM users WHERE phone = ?", ['wechat_user'])
+    if (!userCheck.length || !userCheck[0].values.length) {
+      db.run(`INSERT INTO users (id, phone, nickname, avatar, vip_status, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+        uuidv4(), 'wechat_user', '微信用户', '', 0, now, now,
+      ])
+      saveDatabase()
+    }
     return res.json({ success: true, data: { token, nickname: '微信用户', phone: 'wechat_user' } })
   }
 
@@ -300,6 +345,15 @@ app.post('/api/user/login', rateLimit, (req, res) => {
     }
 
     const token = jwt.sign({ phone, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
+    const now = new Date().toISOString()
+    const userCheck = db.exec("SELECT id FROM users WHERE phone = ?", [phone])
+    if (!userCheck.length || !userCheck[0].values.length) {
+      db.run(`INSERT INTO users (id, phone, nickname, avatar, vip_status, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+        uuidv4(), phone, phone.substring(0, 3) + '****' + phone.substring(7), '', 0, now, now,
+      ])
+      saveDatabase()
+    }
     return res.json({
       success: true,
       data: {
@@ -313,12 +367,53 @@ app.post('/api/user/login', rateLimit, (req, res) => {
   res.status(400).json({ success: false, error: '缺少登录参数' })
 })
 
+// 事件追踪
+app.post('/api/track', (req, res) => {
+  try {
+    const { event, params, platform, version } = req.body
+    if (!event) {
+      return res.status(400).json({ success: false, error: '缺少 event 字段' })
+    }
+    const sessionId = req.headers['x-session-id'] || req.headers['session-id'] || uuidv4()
+    const userId = req.user?.phone || ''
+    const timestamp = Date.now()
+    db.run(`INSERT INTO events (event, user_id, session_id, timestamp, params, platform, version)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+      event, userId, sessionId, timestamp,
+      params ? JSON.stringify(params) : null,
+      platform || '',
+      version || '',
+    ])
+    saveDatabase()
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
 // 用户信息
 app.get('/api/user/info', (req, res) => {
-  res.json({
-    success: true,
-    data: { nickname: req.user?.nickname || '用户', phone: req.user?.phone || '', avatar: '' },
-  })
+  try {
+    const phone = req.user?.phone || ''
+    if (!phone) {
+      return res.json({
+        success: true,
+        data: { nickname: '用户', phone: '', avatar: '', vip_status: 0, vip_expire_at: null, vip_plan: null },
+      })
+    }
+    const result = db.exec("SELECT * FROM users WHERE phone = ?", [phone])
+    if (result.length && result[0].values.length) {
+      const user = rowToObject(result)
+      res.json({ success: true, data: user })
+    } else {
+      res.json({
+        success: true,
+        data: { nickname: '用户', phone, avatar: '', vip_status: 0, vip_expire_at: null, vip_plan: null },
+      })
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
 })
 
 // 获取分类列表
@@ -354,6 +449,10 @@ app.get('/api/templates', (req, res) => {
     // 默认只返回已发布的模板；admin 传 ?all=true 返回全部
     if (!req.query.all) {
       conditions.push("status = 'published'")
+    }
+    // 默认只返回免费模板；?includePaid=1 返回全部
+    if (!req.query.includePaid) {
+      conditions.push("is_paid = 0")
     }
 
     if (req.query.category) {
@@ -534,8 +633,8 @@ app.post('/api/templates', (req, res) => {
     }
 
     db.run(`INSERT INTO templates
-      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, is_paid, price, is_premium, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       id,
       body.name,
       body.subtitle || '',
@@ -552,6 +651,9 @@ app.post('/api/templates', (req, res) => {
       body.tags ? JSON.stringify(body.tags) : null,
       body.status || 'draft',
       body.renderedImage || '',
+      body.is_paid || 0,
+      body.price || 0,
+      body.is_premium || 0,
       new Date().toISOString(),
       new Date().toISOString(),
     ])
@@ -578,7 +680,7 @@ app.put('/api/templates/:id', (req, res) => {
     const fields = []
     const params = []
 
-    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'likes', 'pageCount', 'orientation', 'status', 'renderedImage']
+    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'likes', 'pageCount', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium']
     allowedFields.forEach(f => {
       if (body[f] !== undefined) {
         fields.push(`${f} = ?`)
@@ -766,3 +868,5 @@ start().catch(e => {
   console.error('启动失败:', e)
   process.exit(1)
 })
+
+// MONETIZATION-PHASE1-COMPLETE

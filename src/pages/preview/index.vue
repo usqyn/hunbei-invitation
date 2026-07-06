@@ -83,7 +83,51 @@
           </view>
         </view>
       </view>
+
+      <!-- 导出效果对比 -->
+      <view class="watermark-compare" v-if="!userStore.isVip()">
+        <view class="compare-title">&#128064; 导出效果对比</view>
+        <view class="compare-row">
+          <view class="compare-col">
+            <view class="compare-label">免费导出</view>
+            <image class="compare-img" :src="watermarkedPreview" mode="aspectFill" />
+            <view class="compare-desc">带水印 · 720px</view>
+          </view>
+          <view class="compare-col compare-highlight">
+            <view class="compare-label">高清导出</view>
+            <image class="compare-img" :src="hdPreview" mode="aspectFill" />
+            <view class="compare-desc">无水印 · 1440px</view>
+          </view>
+        </view>
+        <view class="compare-action">
+          <button class="btn-primary" @click="goToVip">3元 高清导出</button>
+          <button class="btn-secondary" @click="exportFree">免费导出</button>
+        </view>
+      </view>
+
+      <!-- 婚礼推荐 -->
+      <view class="shop-recommend-preview" v-if="recommendProducts.length > 0">
+        <view class="shop-rec-header">
+          <text class="shop-rec-title">&#128722; 为你的婚礼推荐</text>
+          <text class="shop-rec-more" @click="goToMall">更多 ></text>
+        </view>
+        <scroll-view class="shop-rec-scroll" scroll-x>
+          <view class="shop-rec-list">
+            <view v-for="p in recommendProducts" :key="p.id" class="shop-rec-card" @click="goToProduct(p)">
+              <image class="shop-rec-img" :src="p.image" mode="aspectFill" />
+              <text class="shop-rec-name">{{ p.name }}</text>
+              <text class="shop-rec-price">{{ p.price }}元</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
     </scroll-view>
+
+    <view class="vip-bar" v-if="!userStore.isVip()" @click="goToVip">
+      <text class="vip-icon">&#9733;</text>
+      <text class="vip-text">开通VIP，本次请柬免费导出 + 全模板解锁 + 商城9折</text>
+      <text class="vip-btn">去开通</text>
+    </view>
 
     <view class="preview-footer">
       <view class="create-button" @click="handleCreate">
@@ -97,11 +141,14 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
+import { useUserStore } from '@/stores/user'
 import { loadFontsForElements } from '@/stores/editor'
+import { track } from '@/utils/track'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
+const userStore = useUserStore()
 
 const displayTitle = computed(() => {
   const g = templateStore.basicInfo.groomName
@@ -112,6 +159,17 @@ const displayTitle = computed(() => {
 })
 
 const fontScale = ref(0.67)
+const templateId = ref('')
+
+const watermarkedPreview = computed(() => editorStore.renderedImage || '')
+const hdPreview = computed(() => editorStore.renderedImage || '')
+
+const recommendProducts = ref([
+  { id: 1, name: '哈萨克风格耳环', price: 188, image: '/static/images/categories/earring.jpg' },
+  { id: 2, name: '气球拱门定制', price: 688, image: '/static/images/mall/banner1.jpg' },
+  { id: 3, name: '新娘手捧花定制', price: 398, image: '/static/images/mall/banner2.jpg' },
+  { id: 4, name: '婚车装饰定制', price: 888, image: '/static/images/mall/banner2.jpg' },
+])
 
 function updateFontScale() {
   if (!isCanvasMode.value) {
@@ -137,8 +195,10 @@ onMounted(() => {
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
   if (options.templateId) {
+    templateId.value = options.templateId
     editorStore.loadTemplateById(options.templateId)
   }
+  track('preview_view', { template_id: templateId.value })
   setTimeout(() => updateFontScale(), 500)
 })
 
@@ -283,6 +343,7 @@ const goBack = () => {
 }
 
 const handleShare = () => {
+  track('click_share', { channel: 'wechat' })
   uni.setClipboardData({
     data: 'https://www.hunbei.com/invitation/preview',
     success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
@@ -306,6 +367,22 @@ const handleCreate = () => {
   } else {
     uni.navigateTo({ url: '/pages/editor/index' })
   }
+}
+
+const goToVip = () => {
+  uni.navigateTo({ url: '/pages/vip/index' })
+}
+
+const exportFree = () => {
+  uni.showToast({ title: '开始免费导出（带水印）', icon: 'none' })
+}
+
+const goToMall = () => {
+  uni.switchTab({ url: '/pages/mall/index' })
+}
+
+const goToProduct = (p: any) => {
+  uni.navigateTo({ url: '/pages/mall/index' })
 }
 
 const onImageError = () => {
@@ -548,5 +625,197 @@ const onImageError = () => {
   font-weight: 600;
   color: #fff;
   letter-spacing: 4rpx;
+}
+
+/* 导出效果对比 */
+.watermark-compare {
+  margin: 24rpx 32rpx;
+  padding: 24rpx;
+  background: #fff;
+  border-radius: 20rpx;
+}
+
+.compare-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.compare-row {
+  display: flex;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.compare-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx;
+  background: #f8f8f8;
+  border-radius: 16rpx;
+}
+
+.compare-highlight {
+  background: #fff8f0;
+  border: 2rpx solid #ffb347;
+}
+
+.compare-label {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.compare-img {
+  width: 100%;
+  height: 200rpx;
+  border-radius: 12rpx;
+  background: #eee;
+}
+
+.compare-desc {
+  font-size: 22rpx;
+  color: #999;
+}
+
+.compare-action {
+  display: flex;
+  gap: 20rpx;
+}
+
+.btn-primary {
+  flex: 1;
+  height: 80rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  color: #fff;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  line-height: 1;
+}
+
+.btn-primary::after {
+  border: none;
+}
+
+.btn-secondary {
+  flex: 1;
+  height: 80rpx;
+  background: #f5f5f5;
+  color: #666;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  line-height: 1;
+}
+
+.btn-secondary::after {
+  border: none;
+}
+
+/* 商城推荐 */
+.shop-recommend-preview {
+  margin: 24rpx 32rpx;
+  padding: 24rpx;
+  background: #fff;
+  border-radius: 20rpx;
+}
+
+.shop-rec-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.shop-rec-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.shop-rec-more {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.shop-rec-scroll {
+  white-space: nowrap;
+}
+
+.shop-rec-list {
+  display: inline-flex;
+  gap: 20rpx;
+}
+
+.shop-rec-card {
+  width: 200rpx;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.shop-rec-img {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 16rpx;
+  background: #f5f5f5;
+}
+
+.shop-rec-name {
+  font-size: 24rpx;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shop-rec-price {
+  font-size: 26rpx;
+  color: #e84a6e;
+  font-weight: 700;
+}
+
+/* VIP 提示条 */
+.vip-bar {
+  padding: 20rpx 32rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 100%);
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.vip-bar .vip-icon {
+  font-size: 32rpx;
+  color: #fff;
+}
+
+.vip-bar .vip-text {
+  flex: 1;
+  font-size: 26rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+.vip-bar .vip-btn {
+  font-size: 26rpx;
+  color: #fff;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 8rpx 20rpx;
+  border-radius: 24rpx;
 }
 </style>

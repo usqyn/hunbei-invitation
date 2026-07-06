@@ -86,6 +86,8 @@ export interface EditableElement {
   opacity?: number
   // admin 端控制是否允许用户编辑
   editable?: boolean
+  // 是否为付费/VIP 专属素材
+  isPremium?: boolean
 }
 
 // 素材

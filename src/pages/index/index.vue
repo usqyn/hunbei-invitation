@@ -26,6 +26,20 @@
       />
     </view>
 
+    <!-- 商城入口 -->
+    <view class="mall-entry-bar" @click="goToMall">
+      <text class="mall-entry-icon">&#128722;</text>
+      <text class="mall-entry-text">婚礼商城</text>
+      <text class="mall-entry-arrow">></text>
+    </view>
+
+    <!-- VIP入口 -->
+    <view class="vip-entry-bar" @click="goToVipPage">
+      <text class="vip-icon">&#9733;</text>
+      <text class="vip-text">开通VIP 全站免费</text>
+      <text class="vip-arrow">></text>
+    </view>
+
     <!-- 分类网格 - 点击跳转到对应分类的模板列表 -->
     <view class="category-grid">
       <view
@@ -87,6 +101,33 @@
       </scroll-view>
     </view>
 
+    <!-- 热门付费模板 -->
+    <view class="section" v-if="paidTemplates.length > 0">
+      <view class="section-header">
+        <text class="section-title">热门付费模板</text>
+        <view class="section-more" @click="goToTemplatePage('paid')">
+          <text class="more-text">查看更多</text>
+        </view>
+      </view>
+      <scroll-view class="card-scroll" scroll-x>
+        <view class="card-list">
+          <view
+            v-for="card in paidTemplates"
+            :key="card.id"
+            class="scroll-card paid-card"
+            @click="handlePaidCardClick(card)"
+          >
+            <image class="card-image" :src="card.cover || card.image" mode="aspectFill" />
+            <view class="paid-badge">{{ card.price }}元</view>
+            <view class="card-info">
+              <text class="card-title">{{ card.name }}</text>
+              <text class="card-sub">{{ card.subtitle }}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
     <!-- 全部分类区 - 展示所有分类的模板数 -->
     <view class="section">
       <view class="section-header">
@@ -120,13 +161,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
+const paidTemplates = ref<any[]>([])
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
@@ -187,6 +229,10 @@ const goToEditor = (categoryId: string) => {
 
 // 跳转到模板选择页
 const goToTemplatePage = (categoryId?: string) => {
+  if (categoryId === 'paid') {
+    uni.navigateTo({ url: '/pages/template/index?filter=paid' })
+    return
+  }
   const url = categoryId
     ? `/pages/template/index?category=${categoryId}`
     : '/pages/template/index'
@@ -197,6 +243,62 @@ const goToTemplatePage = (categoryId?: string) => {
 const onImageError = () => {
   console.warn('Home page image load failed')
 }
+
+// 加载热门付费模板
+async function loadPaidTemplates() {
+  try {
+    const { request } = await import('@/utils/request')
+    const data = await request({ url: '/api/templates?is_paid=1', hideLoading: true })
+    if (data && Array.isArray(data)) {
+      paidTemplates.value = data
+    }
+  } catch (e) {
+    console.warn('加载付费模板失败:', e)
+  }
+}
+
+// 点击付费模板卡片
+function handlePaidCardClick(card: any) {
+  uni.showModal({
+    title: card.name,
+    content: `${card.subtitle || ''}\n价格：${card.price}元`,
+    confirmText: '立即使用',
+    cancelText: '关闭',
+    success: (res) => {
+      if (res.confirm) {
+        const isVip = false // TODO: 从用户状态获取
+        const isPurchased = false // TODO: 从用户状态获取
+        if (!isVip && !isPurchased) {
+          uni.navigateTo({
+            url: `/pages/template/index?filter=paid`,
+          })
+        } else {
+          uni.navigateTo({
+            url: `/pages/editor/index?templateId=${card.id}`,
+          })
+        }
+      }
+    },
+  })
+}
+
+// 跳转到VIP页面
+function goToVipPage() {
+  uni.navigateTo({
+    url: '/pages/vip/index',
+  })
+}
+
+// 跳转到婚礼商城
+function goToMall() {
+  uni.switchTab({
+    url: '/pages/mall/index',
+  })
+}
+
+onMounted(() => {
+  loadPaidTemplates()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -466,6 +568,88 @@ const onImageError = () => {
 }
 
 .count-num {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+/* VIP入口 */
+.vip-entry-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  margin: 16rpx 24rpx 0;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 100%);
+  border-radius: 16rpx;
+  cursor: pointer;
+}
+
+.vip-icon {
+  font-size: 32rpx;
+  color: #fff;
+  margin-right: 12rpx;
+}
+
+.vip-text {
+  flex: 1;
+  font-size: 28rpx;
+  color: #fff;
+  font-weight: 600;
+}
+
+.vip-arrow {
+  font-size: 28rpx;
+  color: #fff;
+}
+
+/* 商城入口 */
+.mall-entry-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  margin: 16rpx 24rpx 0;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 16rpx;
+  cursor: pointer;
+}
+
+.mall-entry-icon {
+  font-size: 32rpx;
+  color: #fff;
+  margin-right: 12rpx;
+}
+
+.mall-entry-text {
+  flex: 1;
+  font-size: 28rpx;
+  color: #fff;
+  font-weight: 600;
+}
+
+.mall-entry-arrow {
+  font-size: 28rpx;
+  color: #fff;
+}
+
+/* 付费模板卡片 */
+.paid-card {
+  position: relative;
+}
+
+.paid-badge {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  color: #ffffff;
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.card-sub {
   font-size: 22rpx;
   color: #999999;
 }
