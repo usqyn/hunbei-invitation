@@ -22,6 +22,7 @@
             placeholder="请输入文字内容"
             placeholder-class="textarea-placeholder"
             :auto-height="false"
+            :style="textareaStyle"
           />
           <view class="textarea-footer">
             <text class="char-count">{{ editingText.length }}/500</text>
@@ -49,6 +50,15 @@ const emit = defineEmits<{
 const isRtl = computed(() => {
   const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
   return rtlChars.test(props.editingText)
+})
+
+const textareaStyle = computed(() => {
+  const fontFamily = isRtl.value
+    ? '"KazakhSoftAsilya", "Scheherazade New", "Amiri", "Noto Sans Arabic", "PingFang SC", "Microsoft YaHei", sans-serif'
+    : '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif'
+  return {
+    fontFamily,
+  }
 })
 
 const onInput = (e: any) => {

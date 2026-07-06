@@ -300,7 +300,7 @@ function getCanvasElementStyle(el: EditableElement) {
 
 function getFontFamily(font: string | undefined) {
   if (!font) return 'sans-serif'
-  return `"${font}", 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif`
+  return `"${font}", 'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', sans-serif`
 }
 
 function detectTextDirection(text: string): 'ltr' | 'rtl' {
@@ -331,12 +331,16 @@ function getTextStyle(idx: number) {
     fontSize: Math.round((style.fontSize || 28) * fs) + 'rpx',
     color: style.color,
     lineHeight: String(style.lineHeight || 1.6),
-    letterSpacing: Math.round((style.spacing ?? 2) * fs) + 'rpx',
+    letterSpacing: direction === 'rtl' ? 'normal' : Math.round((style.spacing ?? 2) * fs) + 'rpx',
     fontFamily: getFontFamily(style.font),
     fontWeight: style.fontWeight || 'normal',
     fontStyle: style.fontStyle || 'normal',
     textAlign,
     direction,
+    unicodeBidi: direction === 'rtl' ? 'isolate' : undefined,
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    writingMode: 'horizontal-tb',
     WebkitTextStroke: style.strokeWidth ? `${Math.round(style.strokeWidth * fs)}rpx ${style.strokeColor || 'transparent'}` : undefined,
     textShadow: style.shadowBlur ? `${Math.round((style.shadowOffsetX ?? 0) * fs)}rpx ${Math.round((style.shadowOffsetY ?? 0) * fs)}rpx ${Math.round(style.shadowBlur * fs)}rpx ${style.shadowColor || 'transparent'}` : undefined,
     textDecoration: style.textDecoration || 'none',

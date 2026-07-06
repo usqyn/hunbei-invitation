@@ -342,6 +342,11 @@ export function useCanvas(opts: UseCanvasOptions) {
       ...partial,
     }
 
+    const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+    const resolvedDirection = el.direction === 'auto'
+      ? (rtlChars.test(el.content) ? 'rtl' : 'ltr')
+      : el.direction
+
     const text = new fabric.IText(el.content, {
       left: el.x,
       top: el.y,
@@ -354,11 +359,12 @@ export function useCanvas(opts: UseCanvasOptions) {
       fill: el.color,
       textAlign: el.textAlign,
       lineHeight: el.lineHeight,
-      charSpacing: el.letterSpacing * 10,
+      charSpacing: resolvedDirection === 'rtl' ? 0 : el.letterSpacing * 10,
       stroke: el.strokeColor,
       strokeWidth: el.strokeWidth,
       opacity: el.opacity,
       angle: el.rotation,
+      direction: resolvedDirection,
       ...(el.shadowColor && el.shadowColor !== 'transparent'
         ? { shadow: new fabric.Shadow({ color: el.shadowColor, blur: el.shadowBlur, offsetX: el.shadowOffsetX, offsetY: el.shadowOffsetY }) }
         : {}),
@@ -824,6 +830,11 @@ export function useCanvas(opts: UseCanvasOptions) {
         } as any)
       }
 
+      const rtlCharsUpdate = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+      const resolvedDirectionUpdate = t.direction === 'auto'
+        ? (rtlCharsUpdate.test(t.content) ? 'rtl' : 'ltr')
+        : t.direction
+
       textObj.set({
         text: patch.content ?? t.content,
         fontFamily: patch.fontFamily ?? t.fontFamily,
@@ -833,12 +844,13 @@ export function useCanvas(opts: UseCanvasOptions) {
         fill: fillValue,
         textAlign: (patch.textAlign ?? t.textAlign) as any,
         lineHeight: patch.lineHeight ?? t.lineHeight,
-        charSpacing: (patch.letterSpacing ?? t.letterSpacing) * 10,
+        charSpacing: resolvedDirectionUpdate === 'rtl' ? 0 : (patch.letterSpacing ?? t.letterSpacing) * 10,
         stroke: patch.strokeColor ?? t.strokeColor,
         strokeWidth: patch.strokeWidth ?? t.strokeWidth,
         opacity: patch.opacity ?? t.opacity,
         angle: patch.rotation ?? t.rotation,
         textDecoration: patch.textDecoration ?? t.textDecoration as any,
+        direction: resolvedDirectionUpdate,
       } as any)
 
       // 阴影
@@ -989,15 +1001,22 @@ export function useCanvas(opts: UseCanvasOptions) {
     sorted.forEach(el => {
       // loadDraft 期望的坐标系与 Fabric 一致（中心原点）
       if (el.type === 'text') {
+        const rtlCharsDraft = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+        const et = el as TextElement
+        const resolvedDirectionDraft = et.direction === 'auto'
+          ? (rtlCharsDraft.test(el.content) ? 'rtl' : 'ltr')
+          : et.direction
+
         const t = new fabric.IText(el.content, {
           left: el.x, top: el.y,
           originX: 'center', originY: 'center',
           fontFamily: el.fontFamily, fontSize: el.fontSize,
           fontWeight: el.fontWeight as any, fontStyle: el.fontStyle as any,
           fill: el.color, textAlign: el.textAlign,
-          lineHeight: el.lineHeight, charSpacing: el.letterSpacing * 10,
+          lineHeight: el.lineHeight, charSpacing: resolvedDirectionDraft === 'rtl' ? 0 : el.letterSpacing * 10,
           stroke: el.strokeColor, strokeWidth: el.strokeWidth,
           opacity: el.opacity, angle: el.rotation,
+          direction: resolvedDirectionDraft,
           lockRotation: el.locked, selectable: !el.locked,
         })
         ;(t as any).id = el.id

@@ -362,12 +362,21 @@ function loadCustomFont(fontFamily: string) {
 
 export function loadFontsForElements(elements: Array<{ type: string; style?: { font?: string } }>) {
   const fontSet = new Set<string>()
+  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+
   elements.forEach(el => {
-    if (el.type === 'text' && el.style?.font) {
-      const primary = el.style.font.split(',')[0].trim().replace(/['"]/g, '')
-      if (primary) fontSet.add(primary)
+    if (el.type === 'text') {
+      if (el.style?.font) {
+        const primary = el.style.font.split(',')[0].trim().replace(/['"]/g, '')
+        if (primary) fontSet.add(primary)
+      }
+      if (el.text && rtlChars.test(el.text)) {
+        fontSet.add('KazakhSoftAsilya')
+        fontSet.add('KazakhSoftAsilyaQaniq')
+      }
     }
   })
+
   if (!fontMap) {
     fetchFontMap()
     setTimeout(() => fontSet.forEach(f => loadCustomFont(f)), 600)
