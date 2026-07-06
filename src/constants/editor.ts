@@ -19,6 +19,9 @@ export const DEFAULT_TEMPLATE_DATA: TemplateData = {
   location: '',
   address: '',
   phone: '',
+  year: '',
+  month: '',
+  day: '',
 }
 
 export const DEFAULT_BASIC_INFO: BasicInfo = {

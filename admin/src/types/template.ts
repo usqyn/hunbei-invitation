@@ -137,7 +137,7 @@ export const DEFAULT_ELEMENT_STYLE: ElementStyle = {
 
 export const FONT_LIST = [
   '思源宋体', '思源黑体', '华文楷体', '华文行楷', '华文隶书', 'Arial', 'Georgia',
-  'KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq', 'KazNet', 'UKKUniKuf',
+  'KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq',
 ]
 
 export const COLOR_LIST = [

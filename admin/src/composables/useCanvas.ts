@@ -662,15 +662,22 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
 
     if (newEl.type === 'text') {
+      const rtlCharsPaste = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+      const resolvedDirectionPaste = newEl.direction === 'auto'
+        ? (rtlCharsPaste.test(newEl.content) ? 'rtl' : 'ltr')
+        : (newEl.direction || 'ltr')
+
       const t = new fabric.IText(newEl.content, {
         left: newEl.x, top: newEl.y,
         originX: 'center', originY: 'center',
         fontFamily: newEl.fontFamily, fontSize: newEl.fontSize,
         fontWeight: newEl.fontWeight as any, fontStyle: newEl.fontStyle as any,
         fill: newEl.color, textAlign: newEl.textAlign,
-        lineHeight: newEl.lineHeight, charSpacing: newEl.letterSpacing * 10,
+        lineHeight: newEl.lineHeight,
+        charSpacing: resolvedDirectionPaste === 'rtl' ? 0 : newEl.letterSpacing * 10,
         stroke: newEl.strokeColor, strokeWidth: newEl.strokeWidth,
         opacity: newEl.opacity, angle: newEl.rotation,
+        direction: resolvedDirectionPaste,
         lockRotation: newEl.locked, selectable: !newEl.locked,
       })
       ;(t as any).id = newEl.id
@@ -977,6 +984,27 @@ export function useCanvas(opts: UseCanvasOptions) {
     }
   }
 
+  // ---- 日期占位符实时预览 ----
+  function refreshDatePlaceholders(dateValues: Record<string, string | undefined>) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const placeholderRe = /\{year\}|\{month\}|\{day\}/
+    elements.value.forEach(el => {
+      if (el.type !== 'text') return
+      const t = el as TextElement
+      if (!placeholderRe.test(t.content)) return
+      const resolved = t.content
+        .replace(/\{year\}/g, dateValues.year ?? '')
+        .replace(/\{month\}/g, dateValues.month ?? '')
+        .replace(/\{day\}/g, dateValues.day ?? '')
+      const obj = canvas.getObjects().find(o => (o as any).id === el.id)
+      if (obj) {
+        ;(obj as fabric.IText).set('text', resolved)
+      }
+    })
+    canvas.renderAll()
+  }
+
   function loadDraft(draft: CanvasDraft) {
     const canvas = fabricCanvas.value
     if (!canvas) return
@@ -1276,5 +1304,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     toggleGrid,
     nudgeElement,
     duplicateSelected,
+    refreshDatePlaceholders,
   }
 }

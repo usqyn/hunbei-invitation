@@ -33,7 +33,7 @@
                 mode="aspectFit"
                 @error="onImageError"
               />
-            <text v-else-if="el.type === 'text'" class="preview-text-el" :style="getTextStyle(el)">{{ el.text }}</text>
+            <text v-else-if="el.type === 'text'" class="preview-text-el" :style="getTextStyle(el)">{{ resolveText(el.text) }}</text>
           </view>
         </view>
       </template>
@@ -57,7 +57,7 @@
               v-else-if="el.type === 'text'"
               class="preview-section-text"
               :style="getTextStyle(el)"
-            >{{ el.text }}</text>
+            >{{ resolveText(el.text) }}</text>
           </view>
         </view>
       </template>
@@ -144,6 +144,7 @@ import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
 import { loadFontsForElements } from '@/stores/editor'
 import { track } from '@/utils/track'
+import { resolveDatePlaceholders } from '@/utils/placeholders'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -171,6 +172,10 @@ const recommendProducts = ref([
   { id: 4, name: '婚车装饰定制', price: 888, image: '/static/images/mall/banner2.jpg' },
 ])
 
+// 重试机制：DOM 查询失败时自动重试
+let _retryCount = 0
+const MAX_RETRY = 5
+
 function updateFontScale() {
   if (!isCanvasMode.value) {
     fontScale.value = 1
@@ -184,6 +189,11 @@ function updateFontScale() {
         if (rect && rect.width > 0) {
           const sysInfo = uni.getSystemInfoSync()
           fontScale.value = rect.width / sysInfo.windowWidth
+          updateCardHeight(rect.width)
+          _retryCount = 0
+        } else if (_retryCount < MAX_RETRY) {
+          _retryCount++
+          setTimeout(() => updateFontScale(), 200)
         }
       })
       .exec()
@@ -199,14 +209,25 @@ onMounted(() => {
     editorStore.loadTemplateById(options.templateId)
   }
   track('preview_view', { template_id: templateId.value })
-  setTimeout(() => updateFontScale(), 500)
+  // 延迟计算 fontScale，等待卡片渲染完成
+  nextTick(() => {
+    setTimeout(() => updateFontScale(), 300)
+  })
 })
 
 // 模板加载完成后加载自定义字体
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     loadFontsForElements(editorStore.editableElements as any)
+    nextTick(() => {
+      setTimeout(() => updateFontScale(), 300)
+    })
   }
+})
+
+// 监听 editableElements 变化（编辑内容变化可能导致布局变化）
+watch(() => editorStore.editableElements.length, () => {
+  nextTick(() => updateFontScale())
 })
 
 // 画布模式检测：有元素且任一元素有完整定位数据（x/y/width/height）
@@ -225,12 +246,24 @@ const isLandscape = computed(() => {
 const canvasWidth = computed(() => editorStore.canvasSize?.width || 375)
 const canvasHeight = computed(() => editorStore.canvasSize?.height || 667)
 
+// 动态卡片高度：基于实际宽度 × admin 宽高比
+const cardHeight = ref(0)
+
+function updateCardHeight(cardWidth: number) {
+  const w = canvasWidth.value
+  const h = canvasHeight.value
+  if (cardWidth > 0) {
+    cardHeight.value = Math.round(cardWidth * (h / w))
+  }
+}
+
 const canvasCardStyle = computed(() => {
   const w = canvasWidth.value
   const h = canvasHeight.value
   const isLand = w > h
   return {
-    aspectRatio: `${w} / ${h}`,
+    aspectRatio: `${w} / ${h}`,  // CSS 保底：即使 JS 未测量也有正确比例
+    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined, // JS 测量后精确覆盖
     width: isLand ? '70%' : '100%',
     margin: isLand ? '0 auto' : '0',
   }
@@ -256,21 +289,21 @@ const canvasBackgroundStyle = computed(() => {
 })
 
 function getCanvasElementStyle(el: EditableElement) {
-  if (el.x == null) return {}
+  if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
   const isText = el.type === 'text'
   const style: Record<string, string> = {
     position: 'absolute',
     left: `${(el.x / canvasWidth.value) * 100}%`,
-    top: `${(el.y! / canvasHeight.value) * 100}%`,
-    width: `${(el.width! / canvasWidth.value) * 100}%`,
+    top: `${(el.y / canvasHeight.value) * 100}%`,
+    width: `${(el.width / canvasWidth.value) * 100}%`,
     zIndex: String(el.zIndex ?? 0),
     opacity: String(el.opacity ?? 1),
   }
   if (isText) {
-    style.height = `${(el.height! / canvasHeight.value) * 100}%`
+    style.height = `${(el.height / canvasHeight.value) * 100}%`
     style.overflow = 'hidden'
   } else {
-    style.height = `${(el.height! / canvasHeight.value) * 100}%`
+    style.height = `${(el.height / canvasHeight.value) * 100}%`
   }
   if (el.rotation) style.transform = `rotate(${el.rotation}deg)`
   if (el.type === 'image' && el.style?.borderRadius) {
@@ -288,6 +321,10 @@ function getFontFamily(font: string | undefined) {
 function detectTextDirection(text: string): 'ltr' | 'rtl' {
   const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
   return rtlChars.test(text) ? 'rtl' : 'ltr'
+}
+
+function resolveText(text: string): string {
+  return resolveDatePlaceholders(text, templateStore.templateData)
 }
 
 function getTextStyle(el: EditableElement) {
@@ -308,7 +345,7 @@ function getTextStyle(el: EditableElement) {
 
   return {
     fontSize: Math.round((s.fontSize || 28) * fs) + 'rpx',
-    color: s.color,
+    color: s.color || '#333333',
     lineHeight: String(s.lineHeight || 1.6),
     letterSpacing: direction === 'rtl' ? 'normal' : Math.round((s.spacing ?? 2) * fs) + 'rpx',
     fontFamily: getFontFamily(s.font),
@@ -464,11 +501,6 @@ const onImageError = () => {
 .preview-element {
   display: block;
   overflow: hidden;
-}
-
-.preview-element.preview-text {
-  max-height: 50%;
-  overflow-y: auto;
 }
 
 .preview-image-el {

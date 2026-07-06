@@ -43,8 +43,8 @@
                 <text
                   v-else-if="el.type === 'text'"
                   class="canvas-text"
-                  :style="getTextStyle(idx)"
-                >{{ el.text }}</text>
+                  :style="getTextStyle(el)"
+                >{{ resolveText(el.text) }}</text>
               </view>
             </view>
           </template>
@@ -76,8 +76,8 @@
                 >
                   <text
                     class="section-text"
-                    :style="getTextStyle(idx)"
-                  >{{ el.text }}</text>
+                    :style="getTextStyle(el)"
+                  >{{ resolveText(el.text) }}</text>
                 </view>
               </block>
             </view>
@@ -184,6 +184,7 @@
       v-if="editorStore.showQuickEdit"
       :visible="editorStore.showQuickEdit"
       :elements="editorStore.editableElements"
+      :template-data="templateStore.templateData"
       @close="editorStore.closeQuickEdit"
       @update="onSmartFieldUpdate"
     />
@@ -200,6 +201,7 @@ import { useUserStore } from '@/stores/user'
 import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { loadFontsForElements } from '@/stores/editor'
 import { track } from '@/utils/track'
+import { resolveDatePlaceholders } from '@/utils/placeholders'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
@@ -240,12 +242,24 @@ const isLandscape = computed(() => {
 const canvasWidth = computed(() => editorStore.canvasSize?.width || 375)
 const canvasHeight = computed(() => editorStore.canvasSize?.height || 667)
 
+// 动态卡片高度：基于实际宽度 × admin 宽高比
+const cardHeight = ref(0)
+
+function updateCardHeight(cardWidth: number) {
+  const w = canvasWidth.value
+  const h = canvasHeight.value
+  if (cardWidth > 0) {
+    cardHeight.value = Math.round(cardWidth * (h / w))
+  }
+}
+
 const canvasCardStyle = computed(() => {
   const w = canvasWidth.value
   const h = canvasHeight.value
   const isLand = w > h
   return {
-    aspectRatio: `${w} / ${h}`,
+    aspectRatio: `${w} / ${h}`,  // CSS 保底：即使 JS 未测量也有正确比例
+    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined, // JS 测量后精确覆盖
     width: isLand ? '70%' : '100%',
     margin: isLand ? '0 auto' : '0',
   }
@@ -276,6 +290,10 @@ const previewCardRef = ref<HTMLElement | null>(null)
 // 动态 fontScale：基于预览卡片实际宽度与屏幕宽度的比值
 const fontScale = ref(0.67)
 
+// 重试机制：DOM 查询失败时自动重试
+let _retryCount = 0
+const MAX_RETRY = 5
+
 function updateFontScale() {
   if (!isCanvasMode.value) {
     fontScale.value = 1
@@ -284,11 +302,16 @@ function updateFontScale() {
   nextTick(() => {
     const query = uni.createSelectorQuery()
     query
-      .select('.preview-card')
+      .select('.preview-card--canvas')
       .boundingClientRect((rect: any) => {
         if (rect && rect.width > 0) {
           const sysInfo = uni.getSystemInfoSync()
           fontScale.value = rect.width / sysInfo.windowWidth
+          updateCardHeight(rect.width)
+          _retryCount = 0
+        } else if (_retryCount < MAX_RETRY) {
+          _retryCount++
+          setTimeout(() => updateFontScale(), 200)
         }
       })
       .exec()
@@ -297,7 +320,7 @@ function updateFontScale() {
 
 // 画布模式下获取元素的绝对定位样式
 function getCanvasElementStyle(el: EditableElement) {
-  if (el.x == null) return {}
+  if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
   const fs = fontScale.value
   const imgStyle: Record<string, string> = {}
   if (el.type === 'image' && el.style?.borderRadius) {
@@ -333,9 +356,13 @@ function detectTextDirection(text: string): 'ltr' | 'rtl' {
   return rtlChars.test(text) ? 'rtl' : 'ltr'
 }
 
-// 根据元素索引获取样式
-function getTextStyle(idx: number) {
-  const el = editorStore.editableElements[idx]
+// 解析文本中的日期占位符 {year} {month} {day}
+function resolveText(text: string): string {
+  return resolveDatePlaceholders(text, templateStore.templateData)
+}
+
+// 根据元素获取文本样式（与 preview 保持一致）
+function getTextStyle(el: EditableElement) {
   const fs = fontScale.value
   if (!el || !el.style) {
     return {
@@ -354,7 +381,7 @@ function getTextStyle(idx: number) {
 
   return {
     fontSize: Math.round((style.fontSize || 28) * fs) + 'rpx',
-    color: style.color,
+    color: style.color || '#333333',
     lineHeight: String(style.lineHeight || 1.6),
     letterSpacing: direction === 'rtl' ? 'normal' : Math.round((style.spacing ?? 2) * fs) + 'rpx',
     fontFamily: getFontFamily(style.font),
@@ -664,7 +691,7 @@ function loadRecommendProducts() {
 
 function goToShop(product: { id: string; name: string; price: number; image: string; category: string }) {
   track('click_shop_recommend', { product_id: product.id, product_name: product.name, price: product.price })
-  uni.navigateTo({ url: `/pages/shop/detail?id=${product.id}` })
+  uni.switchTab({ url: '/pages/mall/index' })
 }
 
 // 页面加载时根据参数切换模板
@@ -682,8 +709,10 @@ onMounted(() => {
     track('edit_start', { template_id: DEFAULT_TEMPLATE_ID })
   }
 
-  // 延迟计算 fontScale，等待模板渲染完成
-  setTimeout(() => updateFontScale(), 500)
+  // 延迟计算 fontScale，等待卡片渲染完成
+  nextTick(() => {
+    setTimeout(() => updateFontScale(), 300)
+  })
 
   // 加载商城推荐
   loadRecommendProducts()
@@ -859,6 +888,7 @@ watch(() => editorStore.editableElements, () => {
   position: relative;
   border-radius: 12rpx;
   overflow: hidden;
+  margin: 0 auto;
 }
 
 .canvas-element {

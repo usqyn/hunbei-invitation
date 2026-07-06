@@ -27,6 +27,10 @@ export interface TemplateData {
   location?: string
   address?: string
   phone?: string
+  // 日期占位符字段
+  year?: string
+  month?: string
+  day?: string
 }
 
 // 用户填写的基本信息（新人信息/节日信息等）

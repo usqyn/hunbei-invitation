@@ -59,11 +59,18 @@ const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholde
   location: { label: '地点', icon: '📍', placeholder: '请填写地点' },
   address: { label: '详细地址', icon: '🏠', placeholder: '请填写详细地址' },
   phone: { label: '联系电话', icon: '📞', placeholder: '请填写联系电话' },
+  year: { label: '年份', icon: '📅', placeholder: '例如: 2025' },
+  month: { label: '月份', icon: '📅', placeholder: '例如: 6' },
+  day: { label: '日', icon: '📅', placeholder: '例如: 15' },
 }
+
+// 日期占位符字段（全局字段，不绑定到单个元素）
+const DATE_PLACEHOLDER_KEYS = ['year', 'month', 'day']
 
 const props = defineProps<{
   visible: boolean
   elements: EditableElement[]
+  templateData?: Record<string, string | undefined>
 }>()
 
 const emit = defineEmits<{
@@ -74,6 +81,8 @@ const emit = defineEmits<{
 const smartFields = computed<SmartFieldItem[]>(() => {
   const seen = new Set<string>()
   const result: SmartFieldItem[] = []
+
+  // 从元素中收集 dataKey 字段
   props.elements.forEach(el => {
     if (el.dataKey && el.dataKey in SMART_FIELD_META && !seen.has(el.dataKey)) {
       seen.add(el.dataKey)
@@ -87,6 +96,24 @@ const smartFields = computed<SmartFieldItem[]>(() => {
       })
     }
   })
+
+  // 添加日期占位符全局字段（从 templateData 读取值）
+  if (props.templateData) {
+    DATE_PLACEHOLDER_KEYS.forEach(key => {
+      if (!seen.has(key) && key in SMART_FIELD_META) {
+        seen.add(key)
+        const meta = SMART_FIELD_META[key]
+        result.push({
+          key,
+          label: meta.label,
+          icon: meta.icon,
+          placeholder: meta.placeholder,
+          value: props.templateData![key] || '',
+        })
+      }
+    })
+  }
+
   return result
 })
 

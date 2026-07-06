@@ -123,6 +123,22 @@
             </button>
           </div>
           <div class="section-divider"></div>
+          <div class="section-title">日期占位符预览</div>
+          <div class="date-preview-inputs">
+            <div class="date-input-row">
+              <label>年份</label>
+              <input v-model="dateValues.year" placeholder="2025" class="date-input" />
+            </div>
+            <div class="date-input-row">
+              <label>月份</label>
+              <input v-model="dateValues.month" placeholder="6" class="date-input" />
+            </div>
+            <div class="date-input-row">
+              <label>日</label>
+              <input v-model="dateValues.day" placeholder="15" class="date-input" />
+            </div>
+          </div>
+          <div class="section-divider"></div>
           <div class="section-title">背景颜色</div>
           <div class="color-grid">
             <button v-for="c in bgColors" :key="c" class="color-chip" :style="{ background: c }" @click="setBackground({ type: 'solid', color1: c } as any)"></button>
@@ -904,6 +920,7 @@ const TEMPLATE_DATA_KEYS = [
   'footerText', 'footerSubText',
   'inviter', 'invitee', 'date', 'time',
   'location', 'address', 'phone',
+  'year', 'month', 'day',
 ]
 
 // 快捷字段配置
@@ -924,27 +941,21 @@ const SMART_FIELDS: SmartFieldConfig[] = [
   { key: 'location', label: '地点', icon: '📍', placeholder: '点击填写地点', fontSize: 18, fontWeight: 'normal', color: '#666666' },
   { key: 'address', label: '详细地址', icon: '🏠', placeholder: 'xx酒店xx厅', fontSize: 16, fontWeight: 'normal', color: '#999999' },
   { key: 'phone', label: '联系电话', icon: '📞', placeholder: '138xxxxxxxx', fontSize: 16, fontWeight: 'normal', color: '#999999' },
+  { key: 'year', label: '年份', icon: '📅', placeholder: '2025', fontSize: 14, fontWeight: 'normal', color: '#666666' },
+  { key: 'month', label: '月份', icon: '📅', placeholder: '6', fontSize: 14, fontWeight: 'normal', color: '#666666' },
+  { key: 'day', label: '日期(日)', icon: '📅', placeholder: '15', fontSize: 14, fontWeight: 'normal', color: '#666666' },
 ]
+
+// 日期占位符预览值
+const dateValues = reactive<Record<string, string>>({ year: '', month: '', day: '' })
+watch(dateValues, (val) => {
+  refreshDatePlaceholders(val)
+}, { deep: true })
 
 // 字体列表
 const fontListBase = [
   'KazakhSoftAsilya',
   'KazakhSoftAsilyaQaniq',
-  'KazakhSoftBaspa',
-  'KazakhSoftBaspaQaniq',
-  'KazakhSoftJurnal',
-  'KazakhSoftJurnalQaniq',
-  'KazakhSoftKorkem',
-  'KazakhSoftKufy',
-  'KazakhSoftNaqis',
-  'KazakhSoftNet',
-  'KazakhSoftOziek',
-  'KazakhSoftQaniq',
-  'KazakhSoftRwqy',
-  'KazakhSoftRwqyJolaq',
-  'KazakhSoftSulus',
-  'KazNet',
-  'UKKUniKuf',
   '思源宋体, serif',
   '思源黑体, sans-serif',
   '华文楷体, KaiTi, serif',
@@ -1131,6 +1142,7 @@ const {
   loadDraft,
   clearCanvas,
   dispose,
+  refreshDatePlaceholders,
 } = useCanvas({
   canvasRef,
   initialSize: { ...DEFAULT_CANVAS_SIZE },
@@ -1545,6 +1557,7 @@ async function saveToServer() {
         footerText: '', footerSubText: '',
         inviter: '', invitee: '', date: '', time: '',
         location: '', address: '', phone: '',
+        year: '', month: '', day: '',
       },
       canvasSize: cSize,
       background: draft?.background || { type: 'solid', color1: '#ffffff' },
@@ -1571,6 +1584,7 @@ async function saveToServer() {
           fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
           fontStyle: el.fontStyle ?? 'normal',
           textAlign: el.textAlign || 'center',
+          direction: el.direction || 'auto',
           strokeColor: el.strokeColor || 'transparent',
           strokeWidth: el.strokeWidth ?? 0,
           shadowColor: el.shadowColor || 'transparent',
@@ -2153,6 +2167,34 @@ onMounted(async () => {
 .text-item { display: flex; align-items: center; justify-content: center; }
 .mi-label { font-size: 14px; font-weight: 600; color: #333; }
 .mi-label.small { font-size: 12px; color: #666; }
+
+/* 日期占位符预览 */
+.date-preview-inputs {
+  margin-bottom: 8px;
+}
+.date-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.date-input-row label {
+  font-size: 13px;
+  color: #666;
+  min-width: 40px;
+}
+.date-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.date-input:focus {
+  border-color: #409eff;
+}
 
 .smart-field-item {
   display: flex;
