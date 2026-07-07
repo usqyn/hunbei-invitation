@@ -250,8 +250,8 @@ const onImageError = () => {
 // 加载热门付费模板
 async function loadPaidTemplates() {
   try {
-    const data = await request({ url: '/api/templates?is_paid=1', hideLoading: true })
-    if (data && Array.isArray(data)) {
+    const data = await request<any[]>({ url: '/api/templates?is_paid=1', hideLoading: true })
+    if (Array.isArray(data)) {
       paidTemplates.value = data
     }
   } catch (e) {

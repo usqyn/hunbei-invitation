@@ -444,14 +444,16 @@ app.get('/api/templates', (req, res) => {
   try {
     let sql = "SELECT * FROM templates"
     const params = []
-    const conditions = []
+    let conditions = []
 
     // 默认只返回已发布的模板；admin 传 ?all=true 返回全部
     if (!req.query.all) {
       conditions.push("status = 'published'")
     }
-    // 默认只返回免费模板；?includePaid=1 返回全部
-    if (!req.query.includePaid) {
+    // 支持 is_paid=1 只返回付费模板；?includePaid=1 返回全部；默认只返回免费模板
+    if (req.query.is_paid === '1') {
+      conditions.push("is_paid = 1")
+    } else if (!req.query.includePaid) {
       conditions.push("is_paid = 0")
     }
 

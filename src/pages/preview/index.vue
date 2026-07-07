@@ -11,14 +11,14 @@
     </view>
 
     <scroll-view class="preview-content" scroll-y>
-      <!-- 画布模式：绝对定位渲染（与编辑器一致） -->
+      <!-- 画布模式：绝对定位渲染 -->
       <template v-if="isCanvasMode">
         <!-- 有渲染图时直接显示图片 -->
         <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="canvasCardStyle">
           <image class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" />
         </view>
-        <!-- 无渲染图时走原有元素渲染 -->
-        <view v-else class="preview-card preview-card--canvas" :style="{ ...canvasCardStyle, ...canvasBackgroundStyle }">
+        <!-- 无渲染图时走百分比定位元素渲染 -->
+        <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
           <view
             v-for="(el, idx) in editorStore.editableElements"
             :key="idx"
@@ -26,13 +26,13 @@
             :class="{ 'preview-text': el.type === 'text', 'preview-image': el.type === 'image' }"
             :style="getCanvasElementStyle(el)"
           >
-              <image
-                v-if="el.type === 'image'"
-                class="preview-image-el"
-                :src="el.text"
-                mode="aspectFit"
-                @error="onImageError"
-              />
+            <image
+              v-if="el.type === 'image'"
+              class="preview-image-el"
+              :src="el.text"
+              mode="aspectFit"
+              @error="onImageError"
+            />
             <text v-else-if="el.type === 'text'" class="preview-text-el" :style="getTextStyle(el)">{{ resolveText(el.text) }}</text>
           </view>
         </view>

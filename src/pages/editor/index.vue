@@ -19,34 +19,58 @@
         <scroll-view class="preview-scroll" scroll-y>
           <!-- 画布模式：admin 发布的绝对定位模板 -->
           <template v-if="isCanvasMode">
-            <!-- 编辑器始终显示可编辑元素，不使用 renderedImage -->
-            <view class="preview-card preview-card--canvas" :style="{ ...canvasCardStyle, ...canvasBackgroundStyle }">
-              <view
-                v-for="(el, idx) in editorStore.editableElements" :key="idx"
-                class="canvas-element"
-                :class="{
-                  'active-element': editorStore.selectedElement === idx,
-                  'text-element': el.type === 'text',
-                  'non-editable': el.editable === false,
-                  'canvas-element--no-interact': el.editable === false
-                }"
-                :style="getCanvasElementStyle(el)"
-                @click="el.editable === false ? null : onOpenEditor(idx)"
-              >
+            <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
+            <template v-if="editorStore.renderedImage && !renderedImageStale">
+              <view class="rendered-image-container">
                 <image
-                  v-if="el.type === 'image'"
-                  class="canvas-image"
-                  :src="el.text"
-                  mode="aspectFit"
-                  @error="onImageError"
+                  class="rendered-image"
+                  :src="editorStore.renderedImage"
+                  mode="widthFix"
+                  @load="onRenderedImageLoad"
                 />
-                <text
-                  v-else-if="el.type === 'text'"
-                  class="canvas-text"
-                  :style="getTextStyle(el)"
-                >{{ resolveText(el.text) }}</text>
+                <!-- 透明交互层：覆盖在图片上，用于点击编辑 -->
+                <view
+                  v-for="(el, idx) in editorStore.editableElements" :key="idx"
+                  class="rendered-overlay-element"
+                  :class="{
+                    'rendered-overlay-element--active': editorStore.selectedElement === idx,
+                    'rendered-overlay-element--no-click': el.editable === false
+                  }"
+                  :style="getOverlayElementStyle(el)"
+                  @click="el.editable === false ? null : onOpenEditor(idx)"
+                />
               </view>
-            </view>
+            </template>
+            <!-- 无 renderedImage：回退到百分比定位渲染 -->
+            <template v-else>
+              <view class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
+                <view
+                  v-for="(el, idx) in editorStore.editableElements" :key="idx"
+                  class="canvas-element"
+                  :class="{
+                    'active-element': editorStore.selectedElement === idx,
+                    'text-element': el.type === 'text',
+                    'non-editable': el.editable === false,
+                    'canvas-element--no-interact': el.editable === false
+                  }"
+                  :style="getCanvasElementStyle(el)"
+                  @click="el.editable === false ? null : onOpenEditor(idx)"
+                >
+                  <image
+                    v-if="el.type === 'image'"
+                    class="canvas-image"
+                    :src="el.text"
+                    mode="aspectFit"
+                    @error="onImageError"
+                  />
+                  <text
+                    v-else-if="el.type === 'text'"
+                    class="canvas-text"
+                    :style="getTextStyle(el)"
+                  >{{ resolveText(el.text) }}</text>
+                </view>
+              </view>
+            </template>
           </template>
           <!-- Flex 模式：静态模板的垂直排列 -->
           <template v-else>
@@ -97,7 +121,7 @@
             mode="sidebar"
             @update:active-panel-tab="editorStore.activePanelTab = $event"
             @open-editor="onOpenEditor"
-            @select-material="onSelectMaterial"
+        @select-material="onMaterialSelect"
             @toggle-setting="toggleSetting"
           />
         </view>
@@ -168,7 +192,7 @@
       :editing-text="editorStore.editingText"
       @input="(v: string) => editorStore.editingText = v"
       @close="editorStore.closeTextEditor"
-      @confirm="editorStore.confirmTextEdit"
+      @confirm="onTextEditorConfirm"
     />
 
     <!-- Basic Info Popup -->
@@ -231,6 +255,65 @@ const {
   getCanvasSize: () => editorStore.canvasSize,
   getBackground: () => editorStore.background as any,
 })
+
+// renderedImage 实际显示尺寸（由 @load 事件回调更新）
+const renderedImageWidth = ref(0)
+const renderedImageHeight = ref(0)
+
+// renderedImage 加载完成，获取实际渲染尺寸
+function onRenderedImageLoad(e: any) {
+  if (e?.detail) {
+    renderedImageWidth.value = e.detail.width
+    renderedImageHeight.value = e.detail.height
+  }
+}
+
+// 交互层元素定位：基于 renderedImage 实际显示尺寸，将 Admin px 值转为百分比
+function getOverlayElementStyle(el: EditableElement): Record<string, string> {
+  if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
+  if (!renderedImageWidth.value || !renderedImageHeight.value) {
+    // 图片未加载完成，先用 canvasSize 比例
+    const cw = editorStore.canvasSize?.width || 375
+    const ch = editorStore.canvasSize?.height || 667
+    return {
+      position: 'absolute',
+      left: `${(el.x / cw) * 100}%`,
+      top: `${(el.y / ch) * 100}%`,
+      width: `${(el.width / cw) * 100}%`,
+      height: `${(el.height / ch) * 100}%`,
+    }
+  }
+  // 使用实际渲染尺寸
+  return {
+    position: 'absolute',
+    left: `${(el.x / editorStore.canvasSize!.width!) * 100}%`,
+    top: `${(el.y / editorStore.canvasSize!.height!) * 100}%`,
+    width: `${(el.width / editorStore.canvasSize!.width!) * 100}%`,
+    height: `${(el.height / editorStore.canvasSize!.height!) * 100}%`,
+  }
+}
+
+// 标记 renderedImage 已过期（用户编辑后需要重新渲染）
+const renderedImageStale = ref(false)
+
+// 编辑文本后标记过期
+function onTextEditorConfirm() {
+  editorStore.confirmTextEdit()
+  renderedImageStale.value = true
+}
+
+// 替换图片后标记过期
+function onMaterialSelect(material: Material) {
+  if (editorStore.selectedElement === null) return
+  editorStore.applyImageToElement(editorStore.selectedElement, material.url)
+  renderedImageStale.value = true
+}
+
+// 智能字段更新后标记过期
+function onSmartFieldUpdate(key: string, value: string) {
+  editorStore.syncSmartField(key, value)
+  renderedImageStale.value = true
+}
 
 const editProgress = ref(0)
 const hasShownProgressPopup = ref(false)
@@ -346,6 +429,7 @@ function chooseLocalImage(idx: number) {
     success: (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0) {
         editorStore.applyImageToElement(idx, res.tempFiles[0].tempFilePath)
+        renderedImageStale.value = true
       }
     },
     fail: () => {
@@ -363,6 +447,7 @@ function chooseLocalImage(idx: number) {
     success: (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
         editorStore.applyImageToElement(idx, res.tempFilePaths[0])
+        renderedImageStale.value = true
       }
     },
     fail: () => {
@@ -372,12 +457,7 @@ function chooseLocalImage(idx: number) {
   // #endif
 }
 
-// 选择素材
-function onSelectMaterial(material: Material) {
-  if (editorStore.selectedElement === null) return
-  const idx = editorStore.selectedElement
-  editorStore.applyImageToElement(idx, material.url)
-}
+// 选择素材（已移至 onMaterialSelect）
 
 // 打开基本信息编辑器
 function openBasicInfoEditor() {
@@ -388,9 +468,7 @@ function openQuickEdit() {
   editorStore.openQuickEdit()
 }
 
-function onSmartFieldUpdate(key: string, value: string) {
-  editorStore.syncSmartField(key, value)
-}
+// smart field update handled by onSmartFieldUpdate wrapper
 
 // 切换设置
 function toggleSetting(key: string) {
@@ -643,7 +721,7 @@ watch(() => editorStore.editableElements, () => {
   min-height: 0;
 }
 
-/* Preview Area - 全屏宽度 */
+/* Preview Area - 全屏宽度，竖屏时右侧留出 sidebar 宽度 */
 .preview-area {
   flex: 1;
   display: flex;
@@ -653,6 +731,7 @@ watch(() => editorStore.editableElements, () => {
   overflow: hidden;
   min-height: 0;
   min-width: 0;
+  margin-right: 320rpx;
 }
 
 .preview-scroll {
@@ -726,6 +805,30 @@ watch(() => editorStore.editableElements, () => {
 }
 
 /* ===== 画布模式 ===== */
+.rendered-image-container {
+  position: relative;
+  width: 100%;
+}
+
+.rendered-image {
+  width: 100%;
+  display: block;
+}
+
+.rendered-overlay-element {
+  position: absolute;
+  z-index: 10;
+}
+
+.rendered-overlay-element--active {
+  outline: 4rpx solid #e84a6e;
+  outline-offset: -4rpx;
+}
+
+.rendered-overlay-element--no-click {
+  pointer-events: none;
+}
+
 .preview-card--canvas {
   display: block;
   padding: 0;
@@ -741,11 +844,6 @@ watch(() => editorStore.editableElements, () => {
 }
 .canvas-element.text-element {
   overflow: hidden;
-}
-
-.rendered-image {
-  width: 100%;
-  display: block;
 }
 
 .canvas-image {
@@ -817,6 +915,7 @@ watch(() => editorStore.editableElements, () => {
   background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
   padding: 20rpx 16rpx;
   min-height: 0;
+  margin-right: 0;
 }
 
 /* Footer Toolbar */
