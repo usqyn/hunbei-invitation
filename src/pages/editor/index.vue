@@ -110,29 +110,34 @@
       </view>
 
       <!-- 右侧浮动编辑面板（竖屏模式） -->
-      <view v-if="!isLandscape" class="sidebar-area">
-        <view class="sidebar-main">
-          <RightPanel
-            :active-panel-tab="editorStore.activePanelTab"
-            :editable-elements="editorStore.editableElements"
-            :selected-element="editorStore.selectedElement"
-            :material-list="editorStore.materialList"
-            :settings="templateStore.settings"
-            mode="sidebar"
-            @update:active-panel-tab="editorStore.activePanelTab = $event"
-            @open-editor="onOpenEditor"
-        @select-material="onMaterialSelect"
-            @toggle-setting="toggleSetting"
-          />
+      <view v-if="!isLandscape" class="sidebar-area" :class="{ 'sidebar-area--collapsed': sidebarCollapsed }">
+        <view class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+          <text class="sidebar-toggle-icon">{{ sidebarCollapsed ? '›' : '‹' }}</text>
         </view>
-        <!-- 商城推荐 -->
-        <view class="shop-recommend" v-if="recommendProducts.length > 0">
-          <view class="shop-rec-title">\u{1F6D2} 婚礼推荐</view>
-          <view class="shop-rec-list">
-            <view v-for="product in recommendProducts.slice(0, 3)" :key="product.id" class="shop-rec-item" @click="goToShop(product)">
-              <image class="shop-rec-img" :src="product.image" mode="aspectFill" />
-              <text class="shop-rec-name">{{ product.name }}</text>
-              <text class="shop-rec-price">{{ product.price }}元</text>
+        <view class="sidebar-content" v-if="!sidebarCollapsed">
+          <view class="sidebar-main">
+            <RightPanel
+              :active-panel-tab="editorStore.activePanelTab"
+              :editable-elements="editorStore.editableElements"
+              :selected-element="editorStore.selectedElement"
+              :material-list="editorStore.materialList"
+              :settings="templateStore.settings"
+              mode="sidebar"
+              @update:active-panel-tab="editorStore.activePanelTab = $event"
+              @open-editor="onOpenEditor"
+          @select-material="onMaterialSelect"
+              @toggle-setting="toggleSetting"
+            />
+          </view>
+          <!-- 商城推荐 -->
+          <view class="shop-recommend" v-if="recommendProducts.length > 0">
+            <view class="shop-rec-title">\u{1F6D2} 婚礼推荐</view>
+            <view class="shop-rec-list">
+              <view v-for="product in recommendProducts.slice(0, 3)" :key="product.id" class="shop-rec-item" @click="goToShop(product)">
+                <image class="shop-rec-img" :src="product.image" mode="aspectFill" />
+                <text class="shop-rec-name">{{ product.name }}</text>
+                <text class="shop-rec-price">{{ product.price }}元</text>
+              </view>
             </view>
           </view>
         </view>
@@ -220,6 +225,8 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick, watch } from 'vue'
+
+const sidebarCollapsed = ref(false)
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
@@ -731,7 +738,6 @@ watch(() => editorStore.editableElements, () => {
   overflow: hidden;
   min-height: 0;
   min-width: 0;
-  margin-right: 320rpx;
 }
 
 .preview-scroll {
@@ -879,12 +885,40 @@ watch(() => editorStore.editableElements, () => {
   bottom: 120rpx;
   width: 320rpx;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   background: #fff;
   border-left: 1rpx solid #f0e0e5;
   box-shadow: -4rpx 0 20rpx rgba(0, 0, 0, 0.08);
   z-index: 100;
   overflow: hidden;
+}
+
+.sidebar-toggle {
+  flex-shrink: 0;
+  width: 50rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fdf6f8;
+  border-right: 1rpx solid #f0e0e5;
+  cursor: pointer;
+}
+
+.sidebar-toggle-icon {
+  font-size: 36rpx;
+  color: #999;
+  font-weight: 300;
+}
+
+.sidebar-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-area--collapsed {
+  width: 50rpx;
 }
 
 /* Bottom Panel - 横屏模式下底部编辑面板 */
