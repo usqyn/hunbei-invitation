@@ -1,5 +1,17 @@
 import type { TemplateData, BasicInfo, TemplateSettings, EditableElement, Material, ElementStyle } from '@/types'
 
+export const DEFAULT_CANVAS_WIDTH = 375
+export const DEFAULT_CANVAS_HEIGHT = 667
+
+export const DEFAULT_FONT_SIZE = 28
+export const DEFAULT_FONT_SIZE_FALLBACK = 30
+export const DEFAULT_LINE_HEIGHT = 1.6
+export const DEFAULT_LETTER_SPACING = 2
+
+export const RTL_CHAR_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+
+export const FONT_FAMILY_BASE = "'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', sans-serif"
+
 export const DEFAULT_TEMPLATE_DATA: TemplateData = {
   coverImage: '/static/images/templates/wedding-1.svg',
   coverTitle: '好久不见',

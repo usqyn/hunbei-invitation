@@ -145,11 +145,25 @@ import { useUserStore } from '@/stores/user'
 import { loadFontsForElements } from '@/stores/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { useCanvasRender } from '@/composables/useCanvasRender'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const userStore = useUserStore()
+
+const {
+  isCanvasMode,
+  canvasCardStyle,
+  canvasBackgroundStyle,
+  updateCardHeight,
+  getCanvasElementStyle,
+  getTextStyle,
+} = useCanvasRender({
+  getElements: () => editorStore.editableElements,
+  getCanvasSize: () => editorStore.canvasSize,
+  getBackground: () => editorStore.background as any,
+})
 
 const displayTitle = computed(() => {
   const g = templateStore.basicInfo.groomName
@@ -159,7 +173,6 @@ const displayTitle = computed(() => {
   return 'toy tamaxia'
 })
 
-const fontScale = ref(1)
 const templateId = ref('')
 
 const watermarkedPreview = computed(() => editorStore.renderedImage || '')
@@ -172,28 +185,19 @@ const recommendProducts = ref([
   { id: 4, name: '婚车装饰定制', price: 888, image: '/static/images/mall/banner2.jpg' },
 ])
 
-let _retryCount = 0
-const MAX_RETRY = 3
+function resolveText(text: string): string {
+  return resolveDatePlaceholders(text, templateStore.templateData)
+}
 
-function updateFontScale() {
-  if (!isCanvasMode.value) {
-    fontScale.value = 1
-    return
-  }
+function updateCardSize() {
+  if (!isCanvasMode.value) return
   nextTick(() => {
     const query = uni.createSelectorQuery()
     query
       .select('.preview-card--canvas')
       .boundingClientRect((rect: any) => {
         if (rect && rect.width > 0) {
-          const sysInfo = uni.getSystemInfoSync()
-          const ratio = rect.width / sysInfo.windowWidth
-          fontScale.value = Math.abs(ratio - 1) < 0.05 ? 1 : ratio
           updateCardHeight(rect.width)
-          _retryCount = 0
-        } else if (_retryCount < MAX_RETRY) {
-          _retryCount++
-          setTimeout(() => updateFontScale(), 150)
         }
       })
       .exec()
@@ -210,154 +214,22 @@ onMounted(() => {
   }
   track('preview_view', { template_id: templateId.value })
   nextTick(() => {
-    setTimeout(() => updateFontScale(), 100)
+    setTimeout(() => updateCardSize(), 100)
   })
 })
 
-// 模板加载完成后加载自定义字体
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     loadFontsForElements(editorStore.editableElements as any)
     nextTick(() => {
-      setTimeout(() => updateFontScale(), 100)
+      setTimeout(() => updateCardSize(), 100)
     })
   }
 })
 
-// 监听 editableElements 变化（编辑内容变化可能导致布局变化）
 watch(() => editorStore.editableElements.length, () => {
-  nextTick(() => updateFontScale())
+  nextTick(() => updateCardSize())
 })
-
-// 画布模式检测：有元素且任一元素有完整定位数据（x/y/width/height）
-const isCanvasMode = computed(() => {
-  return editorStore.editableElements.length > 0 &&
-    editorStore.editableElements.some(el => el.x != null && el.y != null && el.width != null && el.height != null)
-})
-
-const isLandscape = computed(() => {
-  if (!isCanvasMode.value) return false
-  const w = editorStore.canvasSize?.width || 375
-  const h = editorStore.canvasSize?.height || 667
-  return w > h
-})
-
-const canvasWidth = computed(() => editorStore.canvasSize?.width || 375)
-const canvasHeight = computed(() => editorStore.canvasSize?.height || 667)
-
-// 动态卡片高度：基于实际宽度 × admin 宽高比
-const cardHeight = ref(0)
-
-function updateCardHeight(cardWidth: number) {
-  const w = canvasWidth.value
-  const h = canvasHeight.value
-  if (cardWidth > 0) {
-    cardHeight.value = Math.round(cardWidth * (h / w))
-  }
-}
-
-const canvasCardStyle = computed(() => {
-  const w = canvasWidth.value
-  const h = canvasHeight.value
-  return {
-    aspectRatio: `${w} / ${h}`,
-    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined,
-    width: '100%',
-    margin: '0',
-  }
-})
-
-// 画布背景样式
-const canvasBackgroundStyle = computed(() => {
-  const bg = editorStore.background
-  if (!bg || bg.type === 'solid') {
-    return { background: bg?.color1 || '#ffffff' }
-  }
-  if (bg.type === 'linear-gradient') {
-    const angle = bg.angle ?? 135
-    return { background: `linear-gradient(${angle}deg, ${bg.color1}, ${bg.color2 || bg.color1})` }
-  }
-  if (bg.type === 'radial-gradient') {
-    return { background: `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})` }
-  }
-  if (bg.type === 'image' && bg.image) {
-    return { background: `url(${bg.image}) center/cover no-repeat` }
-  }
-  return { background: bg?.color1 || '#ffffff' }
-})
-
-function getCanvasElementStyle(el: EditableElement) {
-  if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
-  const isText = el.type === 'text'
-  const style: Record<string, string> = {
-    position: 'absolute',
-    left: `${(el.x / canvasWidth.value) * 100}%`,
-    top: `${(el.y / canvasHeight.value) * 100}%`,
-    width: `${(el.width / canvasWidth.value) * 100}%`,
-    zIndex: String(el.zIndex ?? 0),
-    opacity: String(el.opacity ?? 1),
-  }
-  if (isText) {
-    style.height = `${(el.height / canvasHeight.value) * 100}%`
-    style.overflow = 'hidden'
-  } else {
-    style.height = `${(el.height / canvasHeight.value) * 100}%`
-  }
-  if (el.rotation) style.transform = `rotate(${el.rotation}deg)`
-  if (el.type === 'image' && el.style?.borderRadius) {
-    style.borderRadius = `${el.style.borderRadius}rpx`
-  }
-  return style
-}
-
-function getFontFamily(font: string | undefined) {
-  if (!font) return 'sans-serif'
-  return `"${font}", 'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', sans-serif`
-}
-
-function detectTextDirection(text: string): 'ltr' | 'rtl' {
-  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-  return rtlChars.test(text) ? 'rtl' : 'ltr'
-}
-
-function resolveText(text: string): string {
-  return resolveDatePlaceholders(text, templateStore.templateData)
-}
-
-function getTextStyle(el: EditableElement) {
-  const s = el.style
-  if (!s) {
-    return {
-      fontSize: '30rpx',
-      color: '#333333',
-      lineHeight: 1.6,
-      letterSpacing: '2rpx',
-    }
-  }
-
-  const detectedDirection = detectTextDirection(el.text)
-  const direction = s.direction === 'auto' ? detectedDirection : (s.direction || 'ltr')
-  const textAlign = s.textAlign || (direction === 'rtl' ? 'right' : 'center')
-
-  return {
-    fontSize: `${s.fontSize || 28}rpx`,
-    color: s.color || '#333333',
-    lineHeight: String(s.lineHeight || 1.6),
-    letterSpacing: direction === 'rtl' ? 'normal' : `${s.spacing ?? 2}rpx`,
-    fontFamily: getFontFamily(s.font),
-    fontWeight: s.fontWeight || 'normal',
-    fontStyle: s.fontStyle || 'normal',
-    textAlign,
-    direction,
-    unicodeBidi: direction === 'rtl' ? 'isolate' : undefined,
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-    writingMode: 'horizontal-tb',
-    WebkitTextStroke: s.strokeWidth ? `${s.strokeWidth}rpx ${s.strokeColor || 'transparent'}` : undefined,
-    textShadow: s.shadowBlur ? `${s.shadowOffsetX ?? 0}rpx ${s.shadowOffsetY ?? 0}rpx ${s.shadowBlur}rpx ${s.shadowColor || 'transparent'}` : undefined,
-    textDecoration: s.textDecoration || 'none',
-  }
-}
 
 const similarTemplates = ref([
   { title: '我们结婚啦', subtitle: 'Welcome to our wedding', likes: '52.86w', image: '/static/images/templates/wedding-1.svg' },

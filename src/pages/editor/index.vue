@@ -203,196 +203,59 @@ import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { loadFontsForElements } from '@/stores/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { useCanvasRender } from '@/composables/useCanvasRender'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
 import QuickEditForm from './components/QuickEditForm.vue'
-import type { Material, ElementStyle, EditableElement, Work } from '@/types'
+import type { Material, EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const worksStore = useWorksStore()
 const userStore = useUserStore()
 
-// 编辑完成度与付费弹窗
+const {
+  isCanvasMode,
+  isLandscape,
+  canvasCardStyle,
+  canvasBackgroundStyle,
+  updateCardHeight,
+  getCanvasElementStyle,
+  getTextStyle,
+} = useCanvasRender({
+  getElements: () => editorStore.editableElements,
+  getCanvasSize: () => editorStore.canvasSize,
+  getBackground: () => editorStore.background as any,
+})
+
 const editProgress = ref(0)
 const hasShownProgressPopup = ref(false)
 const editStartTime = ref(Date.now())
 
-// 当前模板名
 const templateName = computed(() => {
   return templateStore.templateData.coverTitle || '请柬'
 })
 
 const basicInfo = computed(() => templateStore.basicInfo)
 
-// 画布模式判断：有元素且任一元素有完整定位数据（x/y/width/height）
-const isCanvasMode = computed(() => {
-  return editorStore.editableElements.length > 0 &&
-    editorStore.editableElements.some(el => el.x != null && el.y != null && el.width != null && el.height != null)
-})
-
-// 横屏检测：画布宽 > 高时为横屏模式
-const isLandscape = computed(() => {
-  if (!isCanvasMode.value) return false
-  const w = editorStore.canvasSize?.width || 375
-  const h = editorStore.canvasSize?.height || 667
-  return w > h
-})
-
-const canvasWidth = computed(() => editorStore.canvasSize?.width || 375)
-const canvasHeight = computed(() => editorStore.canvasSize?.height || 667)
-
-// 动态卡片高度：基于实际宽度 × admin 宽高比
-const cardHeight = ref(0)
-
-function updateCardHeight(cardWidth: number) {
-  const w = canvasWidth.value
-  const h = canvasHeight.value
-  if (cardWidth > 0) {
-    cardHeight.value = Math.round(cardWidth * (h / w))
-  }
+function resolveText(text: string): string {
+  return resolveDatePlaceholders(text, templateStore.templateData)
 }
 
-const canvasCardStyle = computed(() => {
-  const w = canvasWidth.value
-  const h = canvasHeight.value
-  return {
-    aspectRatio: `${w} / ${h}`,
-    height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined,
-    width: '100%',
-    margin: '0',
-    maxWidth: '100%',
-  }
-})
-
-// 画布背景样式（从 admin 模板配置读取）
-const canvasBackgroundStyle = computed(() => {
-  const bg = editorStore.background
-  if (!bg || bg.type === 'solid') {
-    return { background: bg?.color1 || '#ffffff' }
-  }
-  if (bg.type === 'linear-gradient') {
-    const angle = bg.angle ?? 135
-    return { background: `linear-gradient(${angle}deg, ${bg.color1}, ${bg.color2 || bg.color1})` }
-  }
-  if (bg.type === 'radial-gradient') {
-    return { background: `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})` }
-  }
-  if (bg.type === 'image' && bg.image) {
-    return { background: `url(${bg.image}) center/cover no-repeat` }
-  }
-  return { background: bg?.color1 || '#ffffff' }
-})
-
-// 预览卡片 DOM 引用
-const previewCardRef = ref<HTMLElement | null>(null)
-
-const fontScale = ref(1)
-
-let _retryCount = 0
-const MAX_RETRY = 3
-
-function updateFontScale() {
-  if (!isCanvasMode.value) {
-    fontScale.value = 1
-    return
-  }
+function updateCardSize() {
+  if (!isCanvasMode.value) return
   nextTick(() => {
     const query = uni.createSelectorQuery()
     query
       .select('.preview-card--canvas')
       .boundingClientRect((rect: any) => {
         if (rect && rect.width > 0) {
-          const sysInfo = uni.getSystemInfoSync()
-          const ratio = rect.width / sysInfo.windowWidth
-          fontScale.value = Math.abs(ratio - 1) < 0.05 ? 1 : ratio
           updateCardHeight(rect.width)
-          _retryCount = 0
-        } else if (_retryCount < MAX_RETRY) {
-          _retryCount++
-          setTimeout(() => updateFontScale(), 150)
         }
       })
       .exec()
   })
-}
-
-function getCanvasElementStyle(el: EditableElement) {
-  if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
-  const imgStyle: Record<string, string> = {}
-  if (el.type === 'image' && el.style?.borderRadius) {
-    imgStyle.borderRadius = `${el.style.borderRadius}rpx`
-  }
-  const isText = el.type === 'text'
-  const style: Record<string, string> = {
-    position: 'absolute',
-    left: `${(el.x / canvasWidth.value) * 100}%`,
-    top: `${(el.y! / canvasHeight.value) * 100}%`,
-    width: `${(el.width! / canvasWidth.value) * 100}%`,
-    zIndex: String(el.zIndex ?? 0),
-    opacity: String(el.opacity ?? 1),
-    ...imgStyle,
-  }
-  if (isText) {
-    style.height = `${(el.height! / canvasHeight.value) * 100}%`
-    style.overflow = 'hidden'
-  } else {
-    style.height = `${(el.height! / canvasHeight.value) * 100}%`
-  }
-  if (el.rotation) style.transform = `rotate(${el.rotation}deg)`
-  return style
-}
-
-function getFontFamily(font: string | undefined) {
-  if (!font) return 'sans-serif'
-  return `"${font}", 'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', sans-serif`
-}
-
-function detectTextDirection(text: string): 'ltr' | 'rtl' {
-  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-  return rtlChars.test(text) ? 'rtl' : 'ltr'
-}
-
-// 解析文本中的日期占位符 {year} {month} {day}
-function resolveText(text: string): string {
-  return resolveDatePlaceholders(text, templateStore.templateData)
-}
-
-function getTextStyle(el: EditableElement) {
-  if (!el || !el.style) {
-    return {
-      fontSize: '30rpx',
-      color: '#333333',
-      lineHeight: 1.6,
-      letterSpacing: '2rpx',
-    }
-  }
-
-  const style: ElementStyle = el.style
-
-  const detectedDirection = detectTextDirection(el.text)
-  const direction = style.direction === 'auto' ? detectedDirection : (style.direction || 'ltr')
-  const textAlign = style.textAlign || (direction === 'rtl' ? 'right' : 'center')
-
-  return {
-    fontSize: `${style.fontSize || 28}rpx`,
-    color: style.color || '#333333',
-    lineHeight: String(style.lineHeight || 1.6),
-    letterSpacing: direction === 'rtl' ? 'normal' : `${style.spacing ?? 2}rpx`,
-    fontFamily: getFontFamily(style.font),
-    fontWeight: style.fontWeight || 'normal',
-    fontStyle: style.fontStyle || 'normal',
-    textAlign,
-    direction,
-    unicodeBidi: direction === 'rtl' ? 'isolate' : undefined,
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-    writingMode: 'horizontal-tb',
-    WebkitTextStroke: style.strokeWidth ? `${style.strokeWidth}rpx ${style.strokeColor || 'transparent'}` : undefined,
-    textShadow: style.shadowBlur ? `${style.shadowOffsetX ?? 0}rpx ${style.shadowOffsetY ?? 0}rpx ${style.shadowBlur}rpx ${style.shadowColor || 'transparent'}` : undefined,
-    textDecoration: style.textDecoration || 'none',
-  }
 }
 
 // 计算编辑完成度
@@ -690,7 +553,6 @@ function goToShop(product: { id: string; name: string; price: number; image: str
   uni.switchTab({ url: '/pages/mall/index' })
 }
 
-// 页面加载时根据参数切换模板
 onMounted(() => {
   editStartTime.value = Date.now()
   const pages = getCurrentPages()
@@ -706,30 +568,27 @@ onMounted(() => {
   }
 
   nextTick(() => {
-    setTimeout(() => updateFontScale(), 100)
+    setTimeout(() => updateCardSize(), 100)
   })
 
-  // 加载商城推荐
   loadRecommendProducts()
 })
 
-// 监听横屏/竖屏切换（侧边栏展开收起会影响布局），重新计算 fontScale
 watch(isLandscape, () => {
-  nextTick(() => updateFontScale())
+  nextTick(() => updateCardSize())
 })
 
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     nextTick(() => {
-      setTimeout(() => updateFontScale(), 100)
+      setTimeout(() => updateCardSize(), 100)
       loadFontsForElements(editorStore.editableElements as any)
     })
   }
 })
 
-// 监听 editableElements 变化（编辑内容变化可能导致布局变化）
 watch(() => editorStore.editableElements.length, () => {
-  nextTick(() => updateFontScale())
+  nextTick(() => updateCardSize())
 })
 
 // 监听元素内容变化，更新完成度
