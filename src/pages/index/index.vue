@@ -166,10 +166,12 @@ import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/cat
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
 import { request } from '@/utils/request'
+import { useUserStore } from '@/stores/user'
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
 const paidTemplates = ref<any[]>([])
+const userStore = useUserStore()
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
@@ -259,6 +261,12 @@ async function loadPaidTemplates() {
 
 // 点击付费模板卡片
 function handlePaidCardClick(card: any) {
+  if (userStore.isVip()) {
+    uni.navigateTo({
+      url: `/pages/editor/index?templateId=${card.id}`,
+    })
+    return
+  }
   uni.showModal({
     title: card.name,
     content: `${card.subtitle || ''}\n价格：${card.price}元`,
@@ -266,9 +274,8 @@ function handlePaidCardClick(card: any) {
     cancelText: '关闭',
     success: (res) => {
       if (res.confirm) {
-        const isVip = false // TODO: 从用户状态获取
         const isPurchased = false // TODO: 从用户状态获取
-        if (!isVip && !isPurchased) {
+        if (!isPurchased) {
           uni.navigateTo({
             url: `/pages/template/index?filter=paid`,
           })

@@ -116,6 +116,7 @@ import { TEMPLATE_LIST } from '@/constants/templates-data'
 import { HOME_CATEGORIES } from '@/constants/categories'
 import { TEMPLATE_PAGE_CONFIG } from '@/config'
 import { request } from '@/utils/request'
+import { useUserStore } from '@/stores/user'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
 
@@ -147,6 +148,7 @@ const filters = [
   { label: 'VIP免费', value: 'vip' },
 ]
 const activeFilter = ref<string>('all')
+const userStore = useUserStore()
 
 // ============ 计算属性 ============
 const filteredTemplates = computed<TemplateItem[]>(() => {
@@ -163,7 +165,7 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
   } else if (activeFilter.value === 'paid') {
     list = list.filter(t => t.is_paid === 1 || t.is_paid === true)
   } else if (activeFilter.value === 'vip') {
-    list = list.filter(t => t.is_paid === 1 || t.is_paid === true)
+    list = list.filter((t: any) => t.is_paid === 1 && t.vip_free === true)
   }
 
   // 按关键词搜索（名称/副标题/分类名称/标签/元素内容）
@@ -284,7 +286,7 @@ function formatLikes(num: number): string {
 
 function onSelectTemplate(template: TemplateItem) {
   if (template.is_paid) {
-    const isVip = false // TODO: 从用户状态获取
+    const isVip = userStore.isVip()
     const isPurchased = false // TODO: 从用户状态获取
     if (!isVip && !isPurchased) {
       uni.showModal({

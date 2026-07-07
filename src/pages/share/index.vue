@@ -128,6 +128,7 @@ import { onShareAppMessage } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useGoBack } from '@/composables/useGoBack'
+import { generatePoster } from '@/api'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
@@ -228,32 +229,61 @@ function onSelectTemplate(item: string) {
 }
 
 // 分享渠道
-function onShareMoments() {
-  uni.showToast({ title: '请在微信中分享到朋友圈', icon: 'none' })
+async function onShareMoments() {
+  uni.showLoading({ title: '生成海报中...' })
+  try {
+    const res = await generatePoster(String(editorStore.currentWorkId))
+    uni.hideLoading()
+    uni.downloadFile({
+      url: res.url,
+      success: (r) => {
+        uni.saveImageToPhotosAlbum({
+          filePath: r.tempFilePath,
+          success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
+          fail: () => uni.showToast({ title: '保存失败', icon: 'none' }),
+        })
+      },
+      fail: () => uni.showToast({ title: '下载失败', icon: 'none' }),
+    })
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: '生成海报失败', icon: 'none' })
+  }
 }
 
-function onSharePoster() {
+async function onSharePoster() {
   uni.showLoading({ title: '生成海报中...' })
-  setTimeout(() => {
+  try {
+    const res = await generatePoster(String(editorStore.currentWorkId))
     uni.hideLoading()
     uni.showModal({
       title: '分享海报',
       content: '如需将请柬分享到朋友圈，请保存下方图片后从相册分享。',
       confirmText: '保存图片',
-      success: (res) => {
-        if (res.confirm) {
-          uni.showToast({ title: '图片已保存到相册', icon: 'success' })
+      success: (modalRes) => {
+        if (modalRes.confirm) {
+          uni.downloadFile({
+            url: res.url,
+            success: (r) => {
+              uni.saveImageToPhotosAlbum({
+                filePath: r.tempFilePath,
+                success: () => uni.showToast({ title: '图片已保存到相册', icon: 'success' }),
+                fail: () => uni.showToast({ title: '保存失败', icon: 'none' }),
+              })
+            },
+            fail: () => uni.showToast({ title: '下载失败', icon: 'none' }),
+          })
         }
       },
     })
-  }, 1000)
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: '生成海报失败', icon: 'none' })
+  }
 }
 
 function onCopyLink() {
-  const info = templateStore.basicInfo
-  const groom = info.groomName || '新郎'
-  const bride = info.brideName || '新娘'
-  const link = `【toy tamaxia】${groom}与${bride}的婚礼邀请，点击查看 https://www.hunbei.com/invitation`
+  const link = `https://www.hunbei.com/invitation/${editorStore.currentWorkId}`
   uni.setClipboardData({
     data: link,
     success: () => {

@@ -22,11 +22,11 @@
       <view class="vip-content">
         <view class="vip-icon">👑</view>
         <view class="vip-info">
-          <text class="vip-title">婚贝VIP</text>
-          <text class="vip-desc">开通会员享6大权益</text>
+          <text class="vip-title">{{ userStore.isVip() ? 'VIP会员' : '婚贝VIP' }}</text>
+          <text class="vip-desc">{{ userStore.isVip() ? vipExpireText : '开通会员享6大权益' }}</text>
         </view>
       </view>
-      <view class="vip-btn">立即开通 ></view>
+      <view class="vip-btn">{{ userStore.isVip() ? '查看权益 >' : '立即开通 >' }}</view>
     </view>
 
     <view class="quick-actions">
@@ -84,12 +84,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const { isLoggedIn, nickname } = storeToRefs(userStore)
+
+const vipExpireText = computed(() => {
+  if (!userStore.vipExpireAt) return ''
+  const date = new Date(userStore.vipExpireAt)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `有效期至 ${y}-${m}-${d}`
+})
 
 const quickActions = ref([
   { id: 1, name: '收藏', icon: '⭐', bgColor: '#fff3e0' },
@@ -122,22 +131,30 @@ const handleAvatarClick = () => {
 }
 
 const handleSetting = () => {
-  uni.showToast({ title: '设置', icon: 'none' })
+  uni.navigateTo({ url: '/pages/settings/index' })
 }
 
 const handleBell = () => {
-  uni.showToast({ title: '通知', icon: 'none' })
+  uni.navigateTo({ url: '/pages/notification/index' })
 }
 
 const handleVip = () => {
-  uni.showToast({ title: '开通VIP', icon: 'none' })
+  if (userStore.isVip()) {
+    uni.showToast({ title: '您已是VIP会员', icon: 'none' })
+  } else {
+    uni.navigateTo({ url: '/pages/vip/index' })
+  }
 }
 
 const handleQuickAction = (item: any) => {
   if (item.name === '收藏') {
     uni.switchTab({ url: '/pages/works/index' })
-  } else {
-    uni.showToast({ title: item.name, icon: 'none' })
+  } else if (item.name === '足迹') {
+    uni.navigateTo({ url: '/pages/footprint/index' })
+  } else if (item.name === '卡券包') {
+    uni.showToast({ title: '暂无优惠券', icon: 'none' })
+  } else if (item.name === '回收站') {
+    uni.navigateTo({ url: '/pages/recycle/index' })
   }
 }
 
@@ -150,16 +167,24 @@ const handleToolClick = (tool: any) => {
     uni.navigateTo({ url: '/pages/music/index' })
   } else if (tool.name === '收到的请柬') {
     uni.switchTab({ url: '/pages/works/index' })
-  } else {
-    uni.showToast({ title: tool.name, icon: 'none' })
+  } else if (tool.name === '朋友圈图片') {
+    uni.navigateTo({ url: '/pages/share/index' })
+  } else if (tool.name === '迎宾海报') {
+    uni.navigateTo({ url: '/pages/share/index' })
+  } else if (tool.name === '一键出片') {
+    uni.navigateTo({ url: '/pages/editor/index' })
   }
 }
 
 const handleMenuItemClick = (item: any) => {
   if (item.id === 1) {
     uni.navigateTo({ url: '/pages/mall/orders' })
-  } else {
-    uni.showToast({ title: item.name, icon: 'none' })
+  } else if (item.id === 2) {
+    uni.openCustomerServiceConversation({})
+  } else if (item.id === 3) {
+    uni.navigateTo({ url: '/pages/feedback/index' })
+  } else if (item.id === 4) {
+    uni.navigateTo({ url: '/pages/settings/index' })
   }
 }
 

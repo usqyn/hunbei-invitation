@@ -60,6 +60,7 @@
 import { ref, computed } from 'vue'
 import { track } from '@/utils/track'
 import { useUserStore } from '@/stores/user'
+import { createVipOrder } from '@/api'
 
 const userStore = useUserStore()
 
@@ -90,28 +91,33 @@ const compareList = [
   { feature: '客服支持', free: '无', vip: '专属客服' },
 ]
 
-function handlePay() {
+async function handlePay() {
   track('vip_click_pay', { plan: selectedPlan.value, price: currentPlan.value.price })
-  
-  // 模拟微信支付（实际项目接入微信支付统一下单）
-  uni.showLoading({ title: '支付中...' })
-  setTimeout(() => {
+  uni.showLoading({ title: '创建订单中...' })
+  try {
+    const order = await createVipOrder(selectedPlan.value, currentPlan.value.price)
     uni.hideLoading()
-    // 模拟支付成功
-    const expireDays = selectedPlan.value === 'monthly' ? 30 : selectedPlan.value === 'quarterly' ? 90 : 365
-    const expireAt = Date.now() + expireDays * 24 * 60 * 60 * 1000
-    
-    // 更新本地VIP状态
-    userStore.vipStatus.value = 1
-    userStore.vipExpireAt.value = expireAt
-    userStore.vipPlan.value = selectedPlan.value
-    userStore.persist()
-    
-    track('vip_pay_success', { plan: selectedPlan.value, price: currentPlan.value.price })
-    
-    uni.showToast({ title: '开通成功！', icon: 'success' })
-    setTimeout(() => uni.navigateBack(), 1500)
-  }, 2000)
+    // 调用微信支付
+    uni.requestPayment({
+      provider: 'wxpay',
+      orderInfo: { prepayId: order.prepayId },
+      success: () => {
+        const expireDays = selectedPlan.value === 'monthly' ? 30 : selectedPlan.value === 'quarterly' ? 90 : 365
+        const expireAt = Date.now() + expireDays * 24 * 60 * 60 * 1000
+        userStore.vipStatus.value = 1
+        userStore.vipExpireAt.value = expireAt
+        userStore.vipPlan.value = selectedPlan.value
+        userStore.persist()
+        track('vip_pay_success', { plan: selectedPlan.value, price: currentPlan.value.price })
+        uni.showToast({ title: '开通成功！', icon: 'success' })
+        setTimeout(() => uni.navigateBack(), 1500)
+      },
+      fail: () => uni.showToast({ title: '支付取消', icon: 'none' }),
+    })
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: '创建订单失败', icon: 'none' })
+  }
 }
 
 // 页面曝光埋点

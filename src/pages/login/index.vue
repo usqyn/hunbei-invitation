@@ -116,13 +116,7 @@ onUnmounted(() => {
 })
 
 const openAgreement = (type: string) => {
-  uni.showModal({
-    title: type === 'user' ? '用户协议' : '隐私协议',
-    content: type === 'user'
-      ? '用户协议内容：使用本服务即表示您同意遵守相关法律法规。我们将为您提供婚礼请柬制作和分享服务。'
-      : '隐私协议内容：我们重视您的隐私。我们收集的信息仅用于提供和改善服务，不会与第三方分享您的个人信息。',
-    showCancel: false,
-  })
+  uni.navigateTo({ url: '/pages/agreement/index' })
 }
 
 const toggleAgreement = () => {

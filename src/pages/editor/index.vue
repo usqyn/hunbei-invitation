@@ -178,6 +178,7 @@
       :basic-info="basicInfo"
       @close="editorStore.closeBasicInfoEditor"
       @confirm="editorStore.closeBasicInfoEditor"
+      @location="handleLocation"
     />
 
     <!-- Quick Edit Popup -->
@@ -205,6 +206,7 @@ import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
+import { exportInvitation, fetchRecommendProducts } from '@/api'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
@@ -480,13 +482,20 @@ function handleExport() {
   }
 }
 
-function doExport(options: { watermark: boolean; quality: string }) {
-  // 实际导出逻辑
+async function doExport(options: { watermark: boolean; quality: string }) {
   uni.showLoading({ title: '导出中...' })
-  setTimeout(() => {
+  try {
+    const res = await exportInvitation(String(editorStore.currentWorkId), options)
     uni.hideLoading()
     uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
-  }, 1500)
+    // 可以下载图片
+    uni.downloadFile({ url: res.url, success: (r) => {
+      uni.saveImageToPhotosAlbum({ filePath: r.tempFilePath })
+    }})
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: '导出失败', icon: 'none' })
+  }
 }
 
 function handleShare() {
@@ -512,39 +521,31 @@ function getCategoryByTemplate(): string {
   return '婚礼饰品/摄影'
 }
 
-// 加载推荐商品（简化版：本地模拟数据）
-function loadRecommendProducts() {
+// 加载推荐商品
+async function loadRecommendProducts() {
   const category = getCategoryByTemplate()
-  // 模拟推荐商品，实际可替换为接口请求
-  const mockProducts: Record<string, Array<{ id: string; name: string; price: number; image: string; category: string }>> = {
-    '婚礼饰品/摄影': [
-      { id: '1', name: '婚礼现场摄影套餐', price: 2999, image: 'https://picsum.photos/200/200?random=1', category: '婚礼饰品/摄影' },
-      { id: '2', name: '新娘手捧花', price: 199, image: 'https://picsum.photos/200/200?random=2', category: '婚礼饰品/摄影' },
-      { id: '3', name: '婚礼甜品台布置', price: 899, image: 'https://picsum.photos/200/200?random=3', category: '婚礼饰品/摄影' },
-      { id: '4', name: '婚礼气球套装', price: 59, image: 'https://picsum.photos/200/200?random=4', category: '婚礼饰品/摄影' },
-    ],
-    '仪式用品': [
-      { id: '5', name: '传统仪式服饰', price: 499, image: 'https://picsum.photos/200/200?random=5', category: '仪式用品' },
-      { id: '6', name: '仪式装饰花环', price: 129, image: 'https://picsum.photos/200/200?random=6', category: '仪式用品' },
-      { id: '7', name: '纪念相册定制', price: 159, image: 'https://picsum.photos/200/200?random=7', category: '仪式用品' },
-    ],
-    '生日派对用品': [
-      { id: '8', name: '生日主题背景板', price: 89, image: 'https://picsum.photos/200/200?random=8', category: '生日派对用品' },
-      { id: '9', name: '生日蛋糕装饰', price: 39, image: 'https://picsum.photos/200/200?random=9', category: '生日派对用品' },
-      { id: '10', name: '派对气球套装', price: 49, image: 'https://picsum.photos/200/200?random=10', category: '生日派对用品' },
-    ],
-    '节日装饰品': [
-      { id: '11', name: '节日彩灯串', price: 29, image: 'https://picsum.photos/200/200?random=11', category: '节日装饰品' },
-      { id: '12', name: '节日贺卡套装', price: 19, image: 'https://picsum.photos/200/200?random=12', category: '节日装饰品' },
-      { id: '13', name: '主题装饰摆件', price: 69, image: 'https://picsum.photos/200/200?random=13', category: '节日装饰品' },
-    ],
+  try {
+    const data = await fetchRecommendProducts(category)
+    if (data && Array.isArray(data)) {
+      recommendProducts.value = data
+    }
+  } catch (e) {
+    console.warn('加载推荐商品失败:', e)
   }
-  recommendProducts.value = mockProducts[category] || mockProducts['婚礼饰品/摄影']
 }
 
 function goToShop(product: { id: string; name: string; price: number; image: string; category: string }) {
   track('click_shop_recommend', { product_id: product.id, product_name: product.name, price: product.price })
-  uni.switchTab({ url: '/pages/mall/index' })
+  uni.navigateTo({ url: `/pages/mall/index?productId=${product.id}` })
+}
+
+function handleLocation() {
+  uni.chooseLocation({
+    success: (res) => {
+      templateStore.basicInfo.location = res.name
+      templateStore.basicInfo.detailAddress = res.address
+    }
+  })
 }
 
 onMounted(() => {

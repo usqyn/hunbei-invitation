@@ -147,6 +147,7 @@ import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
+import { exportInvitation, addFavorite, removeFavorite, fetchSimilarTemplates } from '@/api'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -217,6 +218,7 @@ onMounted(() => {
   nextTick(() => {
     setTimeout(() => updateCardSize(), 100)
   })
+  loadSimilarTemplates()
 })
 
 watch(() => editorStore.templateLoading, (loading) => {
@@ -232,12 +234,19 @@ watch(() => editorStore.editableElements.length, () => {
   nextTick(() => updateCardSize())
 })
 
-const similarTemplates = ref([
-  { title: '我们结婚啦', subtitle: 'Welcome to our wedding', likes: '52.86w', image: '/static/images/templates/wedding-1.svg' },
-  { title: '浪漫婚礼', subtitle: 'FOREVER TOGETHER', likes: '48.12w', image: '/static/images/templates/wedding-2.svg' },
-  { title: '圣洁婚礼', subtitle: 'HOLY MATRIMONY', likes: '35.76w', image: '/static/images/templates/wedding-3.svg' },
-  { title: '喜结良缘', subtitle: 'HAPPY MARRIAGE', likes: '62.43w', image: '/static/images/templates/wedding-4.svg' },
-])
+const similarTemplates = ref<any[]>([])
+
+async function loadSimilarTemplates() {
+  if (!templateId.value) return
+  try {
+    const data = await fetchSimilarTemplates(templateId.value)
+    if (data && Array.isArray(data)) {
+      similarTemplates.value = data
+    }
+  } catch (e) {
+    console.warn('加载相似模板失败:', e)
+  }
+}
 
 const goBack = useGoBack()
 
@@ -249,12 +258,30 @@ const handleShare = () => {
   })
 }
 
+const isFavorited = ref(false)
+
+async function toggleFavorite() {
+  try {
+    if (isFavorited.value) {
+      await removeFavorite(String(editorStore.currentWorkId))
+      isFavorited.value = false
+      uni.showToast({ title: '已取消收藏', icon: 'none' })
+    } else {
+      await addFavorite(String(editorStore.currentWorkId))
+      isFavorited.value = true
+      uni.showToast({ title: '已收藏', icon: 'success' })
+    }
+  } catch (e) {
+    uni.showToast({ title: '操作失败', icon: 'none' })
+  }
+}
+
 const handleMore = () => {
   uni.showActionSheet({
-    itemList: ['分享', '收藏'],
+    itemList: ['分享', isFavorited.value ? '取消收藏' : '收藏'],
     success: (res: any) => {
       if (res.tapIndex === 0) handleShare()
-      else uni.showToast({ title: '已收藏', icon: 'none' })
+      else toggleFavorite()
     },
   })
 }
@@ -272,8 +299,16 @@ const goToVip = () => {
   uni.navigateTo({ url: '/pages/vip/index' })
 }
 
-const exportFree = () => {
-  uni.showToast({ title: '开始免费导出（带水印）', icon: 'none' })
+async function exportFree() {
+  uni.showLoading({ title: '导出中...' })
+  try {
+    const res = await exportInvitation(String(editorStore.currentWorkId), { watermark: true, quality: 'normal' })
+    uni.hideLoading()
+    uni.showToast({ title: '已导出', icon: 'success' })
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: '导出失败', icon: 'none' })
+  }
 }
 
 const goToMall = () => {
@@ -281,7 +316,7 @@ const goToMall = () => {
 }
 
 const goToProduct = (p: any) => {
-  uni.navigateTo({ url: '/pages/mall/index' })
+  uni.navigateTo({ url: `/pages/mall/index?productId=${p.id}` })
 }
 
 const onImageError = () => {
