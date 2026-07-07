@@ -276,6 +276,24 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
+  function syncBasicInfoToElements() {
+    const templateStore = useTemplateStore()
+    const info = templateStore.basicInfo
+    const fieldMap: Record<string, string> = {
+      groomName: info.groomName || '',
+      brideName: info.brideName || '',
+      date: info.weddingDate || '',
+      location: info.location || '',
+      address: info.detailAddress || '',
+    }
+    editableElements.forEach(el => {
+      if (el.dataKey && fieldMap[el.dataKey] !== undefined) {
+        el.text = fieldMap[el.dataKey]
+        templateStore.updateField(el.dataKey as keyof TemplateData, fieldMap[el.dataKey])
+      }
+    })
+  }
+
   function selectMaterial(material: { url: string; name: string }) {
     if (selectedElement.value === null) return
     const el = editableElements[selectedElement.value]
@@ -316,7 +334,7 @@ export const useEditorStore = defineStore('editor', () => {
     currentFontSize, currentSpacing, currentLineHeight,
     editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
     loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
-    closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField,
+    closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField, syncBasicInfoToElements,
     selectMaterial, applyImageToElement, setCurrentWorkId,
   }
 })

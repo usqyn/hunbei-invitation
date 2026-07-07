@@ -206,7 +206,7 @@
       :visible="editorStore.showBasicInfoEditor"
       :basic-info="basicInfo"
       @close="editorStore.closeBasicInfoEditor"
-      @confirm="editorStore.closeBasicInfoEditor"
+      @confirm="onBasicInfoConfirm"
       @location="handleLocation"
     />
 
@@ -306,6 +306,13 @@ const renderedImageStale = ref(false)
 // 编辑文本后标记过期
 function onTextEditorConfirm() {
   editorStore.confirmTextEdit()
+  renderedImageStale.value = true
+}
+
+// 基本信息确认：同步到可编辑元素，标记过期
+function onBasicInfoConfirm() {
+  editorStore.syncBasicInfoToElements()
+  editorStore.closeBasicInfoEditor()
   renderedImageStale.value = true
 }
 
