@@ -127,9 +127,11 @@ import { ref, onMounted } from 'vue'
 import { onShareAppMessage } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
+import { useGoBack } from '@/composables/useGoBack'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
+const goBack = useGoBack()
 
 // 分享信息
 const shareTitle = ref('')
@@ -182,18 +184,6 @@ onShareAppMessage(() => {
     desc: shareDesc.value,
   }
 })
-
-function onTitleInput() {}
-function onDescInput() {}
-
-function goBack() {
-  const pages = getCurrentPages()
-  if (pages.length > 1) {
-    uni.navigateBack({ delta: 1 })
-  } else {
-    uni.switchTab({ url: '/pages/index/index' })
-  }
-}
 
 // 更换封面
 function onChangeCover() {

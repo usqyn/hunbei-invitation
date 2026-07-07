@@ -129,27 +129,13 @@ const toggleAgreement = () => {
   agreed.value = !agreed.value
 }
 
-const goBack = () => {
-  const pages = getCurrentPages()
-  if (pages.length > 1) {
-    uni.navigateBack()
-  } else {
-    uni.switchTab({ url: '/pages/index/index' })
-  }
-}
+const goBack = useGoBack()
 
 const loginSuccess = () => {
   logging.value = false
   uni.hideLoading()
   uni.showToast({ title: '登录成功', icon: 'success' })
-  setTimeout(() => {
-    const pages = getCurrentPages()
-    if (pages.length > 1) {
-      uni.navigateBack()
-    } else {
-      uni.switchTab({ url: '/pages/index/index' })
-    }
-  }, 1000)
+  setTimeout(() => goBack(), 1500)
 }
 
 const onGetPhoneNumber = (e: any) => {

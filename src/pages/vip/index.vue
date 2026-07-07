@@ -118,30 +118,30 @@ function handlePay() {
 track('vip_page_view')
 </script>
 
-<style scoped>
-.page { min-height: 100vh; background: #0f172a; color: #f1f5f9; padding-bottom: 120px; }
-.vip-header { text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #f59e0b22, #ec489922); }
-.vip-title { font-size: 28px; font-weight: 700; display: block; }
-.vip-subtitle { font-size: 14px; color: #94a3b8; margin-top: 8px; display: block; }
-.vip-benefits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 20px; }
-.benefit-item { background: #1e293b; border-radius: 12px; padding: 16px 8px; text-align: center; }
-.benefit-icon { font-size: 24px; display: block; }
-.benefit-title { font-size: 13px; font-weight: 600; margin-top: 8px; display: block; }
-.benefit-desc { font-size: 11px; color: #94a3b8; margin-top: 4px; display: block; }
-.vip-plans { display: flex; gap: 12px; padding: 0 20px; }
-.plan-card { flex: 1; background: #1e293b; border: 2px solid #334155; border-radius: 12px; padding: 16px; text-align: center; position: relative; }
+<style lang="scss" scoped>
+.page { min-height: 100vh; background: #0f172a; color: #f1f5f9; padding-bottom: 240rpx; }
+.vip-header { text-align: center; padding: 80rpx 40rpx; background: linear-gradient(135deg, #f59e0b22, #ec489922); }
+.vip-title { font-size: 56rpx; font-weight: 700; display: block; }
+.vip-subtitle { font-size: 28rpx; color: #94a3b8; margin-top: 16rpx; display: block; }
+.vip-benefits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24rpx; padding: 40rpx; }
+.benefit-item { background: #1e293b; border-radius: 24rpx; padding: 32rpx 16rpx; text-align: center; }
+.benefit-icon { font-size: 48rpx; display: block; }
+.benefit-title { font-size: 26rpx; font-weight: 600; margin-top: 16rpx; display: block; }
+.benefit-desc { font-size: 22rpx; color: #94a3b8; margin-top: 8rpx; display: block; }
+.vip-plans { display: flex; gap: 24rpx; padding: 0 40rpx; }
+.plan-card { flex: 1; background: #1e293b; border: 2rpx solid #334155; border-radius: 24rpx; padding: 32rpx; text-align: center; position: relative; }
 .plan-card.active { border-color: #f59e0b; background: #f59e0b11; }
-.best-badge { position: absolute; top: -10px; right: 8px; background: #f59e0b; color: #0f172a; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
-.plan-name { font-size: 14px; display: block; }
-.plan-price { font-size: 24px; font-weight: 700; color: #f59e0b; display: block; margin-top: 4px; }
-.plan-original { font-size: 11px; color: #94a3b8; text-decoration: line-through; display: block; }
-.plan-unit { font-size: 12px; color: #94a3b8; }
-.vip-compare { margin: 20px; background: #1e293b; border-radius: 12px; overflow: hidden; }
-.compare-row { display: flex; border-bottom: 1px solid #334155; }
+.best-badge { position: absolute; top: -20rpx; right: 16rpx; background: #f59e0b; color: #0f172a; font-size: 20rpx; font-weight: 700; padding: 4rpx 16rpx; border-radius: 20rpx; }
+.plan-name { font-size: 28rpx; display: block; }
+.plan-price { font-size: 48rpx; font-weight: 700; color: #f59e0b; display: block; margin-top: 8rpx; }
+.plan-original { font-size: 22rpx; color: #94a3b8; text-decoration: line-through; display: block; }
+.plan-unit { font-size: 24rpx; color: #94a3b8; }
+.vip-compare { margin: 40rpx; background: #1e293b; border-radius: 24rpx; overflow: hidden; }
+.compare-row { display: flex; border-bottom: 2rpx solid #334155; }
 .compare-header { background: #334155; font-weight: 600; }
-.compare-cell { flex: 1; padding: 12px 8px; font-size: 13px; text-align: center; }
+.compare-cell { flex: 1; padding: 24rpx 16rpx; font-size: 26rpx; text-align: center; }
 .vip-cell { color: #f59e0b; font-weight: 600; }
-.vip-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #334155; padding: 16px 20px; }
-.pay-btn { width: 100%; background: linear-gradient(135deg, #f59e0b, #ec4899); color: #0f172a; font-weight: 700; font-size: 16px; border: none; border-radius: 24px; padding: 14px; }
-.pay-tip { display: block; text-align: center; font-size: 11px; color: #94a3b8; margin-top: 8px; }
+.vip-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 2rpx solid #334155; padding: 32rpx 40rpx; z-index: 100; }
+.pay-btn { width: 100%; background: linear-gradient(135deg, #f59e0b, #ec4899); color: #0f172a; font-weight: 700; font-size: 32rpx; border: none; border-radius: 48rpx; padding: 28rpx; }
+.pay-tip { display: block; text-align: center; font-size: 22rpx; color: #94a3b8; margin-top: 16rpx; }
 </style>

@@ -66,6 +66,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { MUSIC_TAGS, fetchMusicFromApi } from '@/constants/music'
+import { useGoBack } from '@/composables/useGoBack'
 import type { Music } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -160,18 +161,19 @@ const handleUpload = () => {
   })
   // #endif
   // #ifndef MP-WEIXIN
-  uni.chooseImage({
+  uni.chooseFile({
     count: 1,
-    sizeType: ['compressed'],
-    sourceType: ['album', 'camera'],
+    type: 'all',
+    extension: ['.mp3', '.wav', '.m4a', '.aac', '.flac'],
     success: (res: any) => {
-      if (res.tempFilePaths && res.tempFilePaths.length > 0) {
+      const tempPath = res.tempFilePaths?.[0] || res.tempFiles?.[0]?.path
+      if (tempPath) {
         musicList.value.push({
           id: Date.now(),
           name: '本地音乐',
           hot: false,
           tag: '本地上传',
-          src: res.tempFilePaths[0],
+          src: tempPath,
         })
         uni.showToast({ title: '上传成功', icon: 'success' })
       }
@@ -470,7 +472,6 @@ onUnmounted(() => {
   background: #f0f0f0;
   border-radius: 4rpx;
   position: relative;
-  cursor: pointer;
 }
 
 .progress-fill {

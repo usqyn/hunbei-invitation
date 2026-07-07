@@ -262,7 +262,6 @@ const onDateChange = (e: any) => {
   transition: border-color 0.2s ease;
 
   &.clickable {
-    cursor: pointer;
   }
 }
 

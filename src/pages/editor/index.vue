@@ -204,6 +204,7 @@ import { loadFontsForElements } from '@/stores/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { useGoBack } from '@/composables/useGoBack'
 import RightPanel from './components/RightPanel.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
@@ -394,14 +395,7 @@ function toggleSetting(key: string) {
   templateStore.toggleSetting(key)
 }
 
-function goBack() {
-  const pages = getCurrentPages()
-  if (pages.length > 1) {
-    uni.navigateBack({ delta: 1 })
-  } else {
-    uni.switchTab({ url: '/pages/index/index' })
-  }
-}
+const goBack = useGoBack()
 
 function onImageError(e: any) {
   console.warn('Editor image load failed')

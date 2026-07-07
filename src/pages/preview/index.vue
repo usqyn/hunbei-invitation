@@ -146,6 +146,7 @@ import { loadFontsForElements } from '@/stores/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { useGoBack } from '@/composables/useGoBack'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -238,14 +239,7 @@ const similarTemplates = ref([
   { title: '喜结良缘', subtitle: 'HAPPY MARRIAGE', likes: '62.43w', image: '/static/images/templates/wedding-4.svg' },
 ])
 
-const goBack = () => {
-  const pages = getCurrentPages()
-  if (pages.length > 1) {
-    uni.navigateBack()
-  } else {
-    uni.switchTab({ url: '/pages/index/index' })
-  }
-}
+const goBack = useGoBack()
 
 const handleShare = () => {
   track('click_share', { channel: 'wechat' })

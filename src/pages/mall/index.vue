@@ -33,7 +33,7 @@
     <view class="product-grid">
       <view class="product-card" v-for="item in filteredProducts" :key="item.id">
         <view class="product-img-wrap" @click="viewDetail(item)">
-          <image class="product-img" :src="item.image" mode="aspectFill" />
+          <image class="product-img" lazy-load :src="item.image" mode="aspectFill" />
           <view class="product-badge" v-if="item.badge">{{ item.badge }}</view>
           <view class="product-promo" v-if="item.promo">{{ item.promo }}</view>
         </view>

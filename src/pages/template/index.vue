@@ -426,7 +426,6 @@ function onBack() {
 }
 
 .error-state {
-  cursor: pointer;
 }
 
 .loading-text { font-size: 28rpx; color: #999; }
@@ -533,7 +532,6 @@ function onBack() {
   border-radius: 30rpx;
   font-size: 24rpx;
   color: #666;
-  cursor: pointer;
 
   &.active {
     background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);

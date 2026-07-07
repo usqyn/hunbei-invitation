@@ -91,7 +91,7 @@
             class="scroll-card"
             @click="handleCardClick(card)"
           >
-            <image class="card-image" :src="card.image" mode="aspectFill" @error="onImageError" />
+            <image class="card-image" lazy-load :src="card.image" mode="aspectFill" @error="onImageError" />
             <view class="card-info">
               <text class="card-title">{{ card.title }}</text>
               <text class="card-date">{{ card.date }}</text>
@@ -117,7 +117,7 @@
             class="scroll-card paid-card"
             @click="handlePaidCardClick(card)"
           >
-            <image class="card-image" :src="card.cover || card.image" mode="aspectFill" />
+            <image class="card-image" lazy-load :src="card.cover || card.image" mode="aspectFill" />
             <view class="paid-badge">{{ card.price }}元</view>
             <view class="card-info">
               <text class="card-title">{{ card.name }}</text>
@@ -165,6 +165,7 @@ import { ref, computed, onMounted } from 'vue'
 import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
+import { request } from '@/utils/request'
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
@@ -247,7 +248,6 @@ const onImageError = () => {
 // 加载热门付费模板
 async function loadPaidTemplates() {
   try {
-    const { request } = await import('@/utils/request')
     const data = await request({ url: '/api/templates?is_paid=1', hideLoading: true })
     if (data && Array.isArray(data)) {
       paidTemplates.value = data
@@ -351,7 +351,6 @@ onMounted(() => {
   align-items: center;
   gap: 12rpx;
   padding: 16rpx 0;
-  cursor: pointer;
 }
 
 .category-icon {
@@ -396,7 +395,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  cursor: pointer;
   min-height: 180rpx;
 }
 
@@ -462,7 +460,6 @@ onMounted(() => {
 }
 
 .section-more {
-  cursor: pointer;
 }
 
 .more-text {
@@ -553,7 +550,6 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 12rpx;
-  cursor: pointer;
 }
 
 .count-icon-image {
@@ -581,7 +577,6 @@ onMounted(() => {
   margin: 16rpx 24rpx 0;
   background: linear-gradient(135deg, #ffd700 0%, #ffb700 100%);
   border-radius: 16rpx;
-  cursor: pointer;
 }
 
 .vip-icon {
@@ -611,7 +606,6 @@ onMounted(() => {
   margin: 16rpx 24rpx 0;
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
   border-radius: 16rpx;
-  cursor: pointer;
 }
 
 .mall-entry-icon {
