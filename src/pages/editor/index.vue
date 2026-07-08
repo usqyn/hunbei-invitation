@@ -291,7 +291,6 @@ function onMaterialSelect(material: Material) {
 // 智能字段更新后标记过期
 function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
-  renderedImageStale.value = true
 }
 
 const editProgress = ref(0)

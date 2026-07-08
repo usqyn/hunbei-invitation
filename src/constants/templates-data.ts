@@ -1,13 +1,7 @@
-import type { TemplateData, EditableElement, ElementStyle, TemplateItem, PageSection } from '@/types'
+import type { TemplateData, EditableElement, TemplateItem, PageSection } from '@/types'
+import { DEFAULT_ELEMENT_STYLE } from './editor'
 
-// ============ 共享基础配置 ============
-export const DEFAULT_ELEMENT_STYLE: ElementStyle = {
-  font: '思源宋体',
-  color: '#666666',
-  fontSize: 12,
-  spacing: 2,
-  lineHeight: 2,
-}
+export { DEFAULT_ELEMENT_STYLE }
 
 // ============ 【模板 1】婚礼 - 好久不见 ============
 const WEDDING_1_DATA: TemplateData = {

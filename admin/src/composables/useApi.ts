@@ -2,6 +2,8 @@ import axios from 'axios'
 import type { TemplateItem, Category } from '../types/template'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || '13800138000'
+const DEV_CODE = import.meta.env.VITE_DEV_CODE || '000000'
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -9,8 +11,33 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 测试阶段跳过所有 token 校验
-export async function initApi() {}
+let adminToken = ''
+
+export function setAdminToken(token: string) {
+  adminToken = token
+  api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+  localStorage.setItem('admin_token', token)
+}
+
+export function getAdminToken(): string {
+  return adminToken || localStorage.getItem('admin_token') || ''
+}
+
+export async function initApi(): Promise<boolean> {
+  const saved = localStorage.getItem('admin_token')
+  if (saved) {
+    setAdminToken(saved)
+    return true
+  }
+  try {
+    const res = await api.post('/api/user/login', { phone: ADMIN_PHONE, code: DEV_CODE })
+    if (res.data.success && res.data.data?.token) {
+      setAdminToken(res.data.data.token)
+      return true
+    }
+  } catch (_) {}
+  return false
+}
 
 // ============ 模板 API ============
 

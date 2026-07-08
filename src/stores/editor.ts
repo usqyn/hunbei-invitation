@@ -220,19 +220,6 @@ export const useEditorStore = defineStore('editor', () => {
     } catch (e) { console.error('persistStyles failed', e) }
   }
 
-  function restoreStyles() {
-    try {
-      const saved = uni.getStorageSync(STORAGE_KEY_STYLES)
-      if (saved && Array.isArray(saved)) {
-        saved.forEach((style: ElementStyle | null, idx: number) => {
-          if (style && editableElements[idx]) {
-            editableElements[idx].style = { ...style }
-          }
-        })
-      }
-    } catch (e) { console.error('restoreStyles failed', e) }
-  }
-
   function persistTemplate() {
     try {
       uni.setStorageSync(STORAGE_KEY_TEMPLATE, currentTemplateId.value)

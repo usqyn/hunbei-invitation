@@ -100,6 +100,57 @@ async function initDatabase() {
     version TEXT
   )`)
 
+  // 收藏表
+  db.run(`CREATE TABLE IF NOT EXISTS favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    work_id TEXT NOT NULL,
+    template_id TEXT DEFAULT '',
+    title TEXT DEFAULT '',
+    image TEXT DEFAULT '',
+    createdAt TEXT NOT NULL
+  )`)
+
+  // 足迹表
+  db.run(`CREATE TABLE IF NOT EXISTS footprints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    template_id TEXT NOT NULL,
+    template_name TEXT DEFAULT '',
+    template_cover TEXT DEFAULT '',
+    timestamp INTEGER NOT NULL
+  )`)
+
+  // 通知表
+  db.run(`CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    type TEXT DEFAULT 'system',
+    read INTEGER DEFAULT 0,
+    createdAt TEXT NOT NULL
+  )`)
+
+  // 反馈表
+  db.run(`CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    content TEXT NOT NULL,
+    contact TEXT DEFAULT '',
+    status TEXT DEFAULT 'pending',
+    createdAt TEXT NOT NULL
+  )`)
+
+  // 回收站表
+  db.run(`CREATE TABLE IF NOT EXISTS recycle_bin (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    work_id TEXT NOT NULL,
+    work_data TEXT NOT NULL,
+    deletedAt TEXT NOT NULL
+  )`)
+
   // 迁移：为旧数据库添加 status 和 renderedImage 列
   try { db.run("ALTER TABLE templates ADD COLUMN status TEXT DEFAULT 'draft'") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN renderedImage TEXT DEFAULT ''") } catch (_) {}
@@ -138,6 +189,22 @@ app.use((req, res, next) => {
   next()
 })
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+
+// ============ 鉴权中间件 ============
+function requireAuth(req, res, next) {
+  if (!req.user || !req.user.phone) {
+    return res.status(401).json({ success: false, error: '请先登录' })
+  }
+  next()
+}
+
+function requireAdmin(req, res, next) {
+  const adminPhone = process.env.ADMIN_PHONE || '13800138000'
+  if (!req.user || req.user.phone !== adminPhone) {
+    return res.status(403).json({ success: false, error: '无管理员权限' })
+  }
+  next()
+}
 
 // ============ 字体目录 ============
 const FONTS_DIR = path.join(__dirname, 'uploads', 'fonts')
@@ -621,7 +688,7 @@ app.get('/api/music', (req, res) => {
 })
 
 // 创建模板
-app.post('/api/templates', (req, res) => {
+app.post('/api/templates', requireAdmin, (req, res) => {
   try {
     const body = req.body
     if (!body.name || !body.category) {
@@ -671,7 +738,7 @@ app.post('/api/templates', (req, res) => {
 })
 
 // 更新模板
-app.put('/api/templates/:id', (req, res) => {
+app.put('/api/templates/:id', requireAdmin, (req, res) => {
   try {
     const existing = db.exec("SELECT id FROM templates WHERE id = ?", [req.params.id])
     if (!existing.length || !existing[0].values.length) {
@@ -726,7 +793,7 @@ app.put('/api/templates/:id', (req, res) => {
 })
 
 // 删除模板
-app.delete('/api/templates/:id', (req, res) => {
+app.delete('/api/templates/:id', requireAdmin, (req, res) => {
   try {
     const existing = db.exec("SELECT id FROM templates WHERE id = ?", [req.params.id])
     if (!existing.length || !existing[0].values.length) {
@@ -804,6 +871,385 @@ app.put('/api/orders/:id/status', (req, res) => {
       [status, new Date().toISOString(), req.params.id])
     saveDatabase()
     res.json({ success: true, message: '状态已更新' })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 推荐商品 ==========
+app.get('/api/products/recommend', (req, res) => {
+  try {
+    const category = req.query.category || ''
+    let sql = "SELECT * FROM templates WHERE status = 'published'"
+    const params = []
+    if (category) {
+      sql += " AND category = ?"
+      params.push(category)
+    }
+    sql += " ORDER BY likes DESC LIMIT 10"
+    const result = db.exec(sql, params)
+    const products = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => {
+        if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background') {
+          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+        } else {
+          obj[cols[i]] = val
+        }
+      })
+      return obj
+    }) : []
+    res.json({ success: true, data: products })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 商品目录 ==========
+app.get('/api/products', (req, res) => {
+  try {
+    let sql = "SELECT * FROM templates WHERE status = 'published'"
+    const params = []
+    if (req.query.category) {
+      sql += " AND category = ?"
+      params.push(req.query.category)
+    }
+    sql += " ORDER BY likes DESC"
+    const result = db.exec(sql, params)
+    const products = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => {
+        if (['data', 'elements', 'tags', 'canvasSize', 'background'].includes(cols[i])) {
+          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+        } else {
+          obj[cols[i]] = val
+        }
+      })
+      return obj
+    }) : []
+    res.json({ success: true, data: products, total: products.length })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.get('/api/products/:id', (req, res) => {
+  try {
+    const result = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '商品不存在' })
+    }
+    const row = result[0].values[0]
+    const cols = result[0].columns
+    const obj = {}
+    row.forEach((val, i) => {
+      if (['data', 'elements', 'tags', 'canvasSize', 'background'].includes(cols[i])) {
+        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+      } else {
+        obj[cols[i]] = val
+      }
+    })
+    res.json({ success: true, data: obj })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== VIP 系统 ==========
+app.get('/api/vip/status', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) {
+      return res.json({ success: true, data: { isVip: false, expireAt: null, plan: null } })
+    }
+    const result = db.exec("SELECT vip_status, vip_expire_at, vip_plan FROM users WHERE phone = ?", [phone])
+    if (result.length && result[0].values.length) {
+      const [status, expireAt, plan] = result[0].values[0]
+      const isVip = status === 1 && expireAt && Date.now() < expireAt
+      res.json({ success: true, data: { isVip: !!isVip, expireAt: expireAt || null, plan: plan || null } })
+    } else {
+      res.json({ success: true, data: { isVip: false, expireAt: null, plan: null } })
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.post('/api/vip/order', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    const { plan, price } = req.body
+    const planDuration = { monthly: 30, quarterly: 90, yearly: 365 }
+    const days = planDuration[plan] || 30
+    const expireAt = Date.now() + days * 24 * 60 * 60 * 1000
+    db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
+      [String(expireAt), plan, new Date().toISOString(), phone])
+    saveDatabase()
+    const orderId = uuidv4()
+    res.json({ success: true, data: { orderId, prepayId: `prepay_${orderId}` } })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 相似模板 ==========
+app.get('/api/templates/similar', (req, res) => {
+  try {
+    const { templateId } = req.query
+    if (!templateId) {
+      return res.json({ success: true, data: [] })
+    }
+    const tmplResult = db.exec("SELECT category FROM templates WHERE id = ?", [templateId])
+    const category = tmplResult.length && tmplResult[0].values.length ? tmplResult[0].values[0][0] : ''
+    const result = db.exec(
+      "SELECT * FROM templates WHERE status = 'published' AND id != ? AND category = ? ORDER BY likes DESC LIMIT 6",
+      [templateId, category]
+    )
+    const templates = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => {
+        if (['data', 'elements', 'tags', 'canvasSize', 'background'].includes(cols[i])) {
+          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+        } else {
+          obj[cols[i]] = val
+        }
+      })
+      return obj
+    }) : []
+    res.json({ success: true, data: templates })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 收藏系统 ==========
+app.post('/api/favorites', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const { workId, templateId, title, image } = req.body
+    if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
+    const existing = db.exec("SELECT id FROM favorites WHERE phone = ? AND work_id = ?", [phone, workId])
+    if (existing.length && existing[0].values.length) {
+      return res.json({ success: true, message: '已收藏' })
+    }
+    db.run("INSERT INTO favorites (phone, work_id, template_id, title, image, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
+      [phone, workId, templateId || '', title || '', image || '', new Date().toISOString()])
+    saveDatabase()
+    res.json({ success: true, message: '收藏成功' })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.delete('/api/favorites/:workId', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    db.run("DELETE FROM favorites WHERE phone = ? AND work_id = ?", [phone, req.params.workId])
+    saveDatabase()
+    res.json({ success: true, message: '已取消收藏' })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.get('/api/favorites', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.json({ success: true, data: [] })
+    const result = db.exec("SELECT * FROM favorites WHERE phone = ? ORDER BY createdAt DESC", [phone])
+    const favorites = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => { obj[cols[i]] = val })
+      return obj
+    }) : []
+    res.json({ success: true, data: favorites })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 导出系统 ==========
+app.post('/api/export', (req, res) => {
+  try {
+    const { workId, watermark, quality } = req.body
+    if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
+    const result = db.exec("SELECT renderedImage FROM templates WHERE id = ?", [workId])
+    let url = ''
+    if (result.length && result[0].values.length && result[0].values[0][0]) {
+      url = result[0].values[0][0]
+    }
+    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
+    res.json({ success: true, data: { url: url || '/static/images/placeholder.png', expiresAt } })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.post('/api/export/poster', (req, res) => {
+  try {
+    const { workId } = req.body
+    if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
+    res.json({ success: true, data: { url: '/static/images/poster-placeholder.png' } })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 支付订单 ==========
+app.post('/api/orders/:id/pay', (req, res) => {
+  try {
+    const existing = db.exec("SELECT id FROM orders WHERE id = ?", [req.params.id])
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ success: false, error: '订单不存在' })
+    }
+    const prepayId = `prepay_${req.params.id}`
+    res.json({ success: true, data: { prepayId } })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 足迹系统 ==========
+app.get('/api/footprints', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.json({ success: true, data: [] })
+    const result = db.exec("SELECT * FROM footprints WHERE phone = ? ORDER BY timestamp DESC LIMIT 50", [phone])
+    const footprints = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => { obj[cols[i]] = val })
+      return obj
+    }) : []
+    res.json({ success: true, data: footprints })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 通知系统 ==========
+app.get('/api/notifications', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.json({ success: true, data: [] })
+    const result = db.exec("SELECT * FROM notifications WHERE phone = ? ORDER BY createdAt DESC LIMIT 50", [phone])
+    const notifications = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => { obj[cols[i]] = val })
+      return obj
+    }) : []
+    res.json({ success: true, data: notifications })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
+  try {
+    db.run("UPDATE notifications SET read = 1 WHERE id = ?", [req.params.id])
+    saveDatabase()
+    res.json({ success: true, message: '已标记已读' })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 反馈系统 ==========
+app.post('/api/feedback', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone || ''
+    const { content, contact } = req.body
+    if (!content) return res.status(400).json({ success: false, error: '请输入反馈内容' })
+    db.run("INSERT INTO feedback (phone, content, contact, createdAt) VALUES (?, ?, ?, ?)",
+      [phone, content, contact || '', new Date().toISOString()])
+    saveDatabase()
+    res.json({ success: true, message: '反馈已提交' })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 回收站系统 ==========
+app.get('/api/works/recycle', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.json({ success: true, data: [] })
+    const result = db.exec("SELECT * FROM recycle_bin WHERE phone = ? ORDER BY deletedAt DESC", [phone])
+    const items = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => {
+        if (cols[i] === 'work_data') {
+          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+        } else {
+          obj[cols[i]] = val
+        }
+      })
+      return obj
+    }) : []
+    res.json({ success: true, data: items })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.put('/api/works/:id/restore', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const result = db.exec("SELECT work_data FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '记录不存在' })
+    }
+    db.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+    saveDatabase()
+    res.json({ success: true, message: '已恢复' })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+app.delete('/api/works/:id', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    db.run("DELETE FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
+    saveDatabase()
+    res.json({ success: true, message: '已永久删除' })
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
+// ========== 批量事件追踪 ==========
+app.post('/api/track/batch', (req, res) => {
+  try {
+    const { events } = req.body
+    if (!events || !Array.isArray(events)) {
+      return res.status(400).json({ success: false, error: '缺少 events 数组' })
+    }
+    const sessionId = req.headers['x-session-id'] || req.headers['session-id'] || uuidv4()
+    const userId = req.user?.phone || ''
+    events.forEach(evt => {
+      db.run(`INSERT INTO events (event, user_id, session_id, timestamp, params, platform, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+        evt.event || '', userId, sessionId, evt.timestamp || Date.now(),
+        evt.params ? JSON.stringify(evt.params) : null,
+        evt.platform || '', evt.version || '',
+      ])
+    })
+    saveDatabase()
+    res.json({ success: true })
   } catch (e) {
     res.status(500).json({ success: false, error: e.message })
   }
