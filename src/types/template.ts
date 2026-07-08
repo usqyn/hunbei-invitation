@@ -120,6 +120,22 @@ export interface TemplateCategory {
   templates: TemplateItem[]
 }
 
+export type TemplateType = 'canvas' | 'page'
+
+export type PageSectionType = 'title' | 'date' | 'image' | 'text' | 'location' | 'rsvp' | 'map' | 'divider' | 'music' | 'countdown'
+
+export interface PageSection {
+  id: string
+  type: PageSectionType
+  label?: string
+  placeholder?: string
+  text?: string
+  image?: string
+  dataKey?: keyof TemplateData
+  style?: ElementStyle
+  editable?: boolean
+}
+
 // 单个模板的完整配置
 export interface TemplateItem {
   id: string              // 模板唯一ID: wedding-1, birthday-1
@@ -129,11 +145,15 @@ export interface TemplateItem {
   cover: string           // 封面图片路径
   likes: number           // 喜欢数
   pageCount: number       // 页数
+  // 模板类型：canvas（画布模式，绝对定位）/ page（页面模式，垂直滚动）
+  templateType?: TemplateType
   // 模板的数据内容配置
   data: TemplateData
-  // 可编辑元素配置（按顺序对应预览中的元素）
-  elements: EditableElement[]
-  // 画布尺寸（admin 模板）
+  // 可编辑元素配置（canvas 模式，绝对定位）
+  elements?: EditableElement[]
+  // 页面区块配置（page 模式，垂直排列）
+  sections?: PageSection[]
+  // 画布尺寸（canvas 模式）
   canvasSize?: { width: number; height: number }
   // 横屏/竖屏
   orientation?: 'portrait' | 'landscape'

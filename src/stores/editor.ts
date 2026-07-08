@@ -11,7 +11,7 @@ function resolveImageUrl(url: string): string {
   if (url.startsWith('/uploads/')) return API_BASE + url
   return url
 }
-import type { EditableElement, ElementStyle, TemplateData, TemplateItem } from '@/types'
+import type { EditableElement, ElementStyle, TemplateData, TemplateItem, PageSection } from '@/types'
 import { request } from '@/utils/request'
 
 // ============ API 配置 ============
@@ -40,8 +40,17 @@ export const useEditorStore = defineStore('editor', () => {
   const background = ref<{ type: string; color1: string; color2?: string; angle?: number; image?: string }>({ type: 'solid', color1: '#ffffff' })
   const renderedImage = ref<string>('')
 
-  // 可编辑元素列表 - 根据模板动态生成
+  // 模板类型：canvas（画布模式）/ page（页面模式）
+  const templateType = ref<'canvas' | 'page'>('canvas')
+
+  // 可编辑元素列表 - canvas 模式
   const editableElements = reactive<EditableElement[]>([])
+
+  // 页面区块列表 - page 模式
+  const pageSections = reactive<PageSection[]>([])
+
+  // 当前选中的 section id - page 模式
+  const activeSectionId = ref<string | null>(null)
 
   // 素材库
   const materialList = MATERIAL_LIST
@@ -94,6 +103,11 @@ export const useEditorStore = defineStore('editor', () => {
   // ============ 应用模板数据到编辑区 ============
   function applyTemplateData(template: TemplateItem) {
     if (!template) return
+
+    // 设置模板类型
+    templateType.value = template.templateType || 'canvas'
+
+    // canvas 模式：加载 elements
     editableElements.splice(0, editableElements.length)
     ;(template.elements || []).forEach(el => {
       editableElements.push({
@@ -110,6 +124,22 @@ export const useEditorStore = defineStore('editor', () => {
         rotation: el.rotation,
         opacity: el.opacity,
         editable: el.editable,
+      })
+    })
+
+    // page 模式：加载 sections
+    pageSections.splice(0, pageSections.length)
+    ;(template.sections || []).forEach(sec => {
+      pageSections.push({
+        id: sec.id,
+        type: sec.type,
+        label: sec.label,
+        placeholder: sec.placeholder,
+        text: sec.text,
+        image: sec.image ? resolveImageUrl(sec.image) : undefined,
+        dataKey: sec.dataKey,
+        style: sec.style ? { ...sec.style } : undefined,
+        editable: sec.editable,
       })
     })
 
@@ -226,6 +256,7 @@ export const useEditorStore = defineStore('editor', () => {
   function openEditor(idx: number) {
     const el = editableElements[idx]
     selectedElement.value = idx
+    activeSectionId.value = null
     if (el.type === 'image') {
       activePanelTab.value = 'material'
       uni.showToast({ title: '请在素材库中选择替换图片', icon: 'none' })
@@ -238,17 +269,37 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
+  function openSectionTextEditor(sectionId: string) {
+    const sec = pageSections.find(s => s.id === sectionId)
+    if (!sec) return
+    selectedElement.value = null
+    activeSectionId.value = sectionId
+    editingText.value = sec.text || ''
+    showTextEditor.value = true
+  }
+
   function closeTextEditor() {
     showTextEditor.value = false
   }
 
   function confirmTextEdit() {
+    const templateStore = useTemplateStore()
+    // canvas 模式
     if (selectedElement.value !== null) {
       const el = editableElements[selectedElement.value]
       el.text = editingText.value
       if (el.dataKey) {
-        const templateStore = useTemplateStore()
         templateStore.updateField(el.dataKey, editingText.value)
+      }
+    }
+    // page 模式
+    if (activeSectionId.value) {
+      const sec = pageSections.find(s => s.id === activeSectionId.value)
+      if (sec) {
+        sec.text = editingText.value
+        if (sec.dataKey) {
+          templateStore.updateField(sec.dataKey, editingText.value)
+        }
       }
     }
     showTextEditor.value = false
@@ -269,9 +320,16 @@ export const useEditorStore = defineStore('editor', () => {
   function syncSmartField(key: string, value: string) {
     const templateStore = useTemplateStore()
     templateStore.updateField(key as keyof TemplateData, value)
+    // canvas 模式
     editableElements.forEach(el => {
       if (el.dataKey === key) {
         el.text = value
+      }
+    })
+    // page 模式
+    pageSections.forEach(sec => {
+      if (sec.dataKey === key) {
+        sec.text = value
       }
     })
   }
@@ -286,10 +344,20 @@ export const useEditorStore = defineStore('editor', () => {
       location: info.location || '',
       address: info.detailAddress || '',
     }
+
+    // canvas 模式：同步到 editableElements
     editableElements.forEach(el => {
       if (el.dataKey && fieldMap[el.dataKey] !== undefined) {
         el.text = fieldMap[el.dataKey]
         templateStore.updateField(el.dataKey as keyof TemplateData, fieldMap[el.dataKey])
+      }
+    })
+
+    // page 模式：同步到 pageSections
+    pageSections.forEach(sec => {
+      if (sec.dataKey && fieldMap[sec.dataKey] !== undefined) {
+        sec.text = fieldMap[sec.dataKey]
+        templateStore.updateField(sec.dataKey as keyof TemplateData, fieldMap[sec.dataKey])
       }
     })
   }
@@ -328,14 +396,40 @@ export const useEditorStore = defineStore('editor', () => {
   // 启动时恢复
   restoreTemplate()
 
+  function updatePageSection(id: string, updates: Partial<PageSection>) {
+    const sec = pageSections.find(s => s.id === id)
+    if (sec) {
+      Object.assign(sec, updates)
+      if (sec.dataKey) {
+        const templateStore = useTemplateStore()
+        if (updates.text !== undefined) {
+          templateStore.updateField(sec.dataKey, updates.text)
+        }
+        if (updates.image !== undefined) {
+          templateStore.updateField(sec.dataKey, updates.image)
+        }
+      }
+    }
+  }
+
+  function updatePageSectionText(id: string, text: string) {
+    updatePageSection(id, { text })
+  }
+
+  function updatePageSectionImage(id: string, image: string) {
+    updatePageSection(id, { image })
+  }
+
   return {
     showTextEditor, showBasicInfoEditor, showQuickEdit, activePanelTab,
     selectedElement, editingText, currentFont, currentColor,
     currentFontSize, currentSpacing, currentLineHeight,
     editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
-    loadTemplateById, openEditor, closeTextEditor, confirmTextEdit,
+    templateType, pageSections, activeSectionId,
+    loadTemplateById, openEditor, openSectionTextEditor, closeTextEditor, confirmTextEdit,
     closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField, syncBasicInfoToElements,
     selectMaterial, applyImageToElement, setCurrentWorkId,
+    updatePageSection, updatePageSectionText, updatePageSectionImage,
   }
 })
 

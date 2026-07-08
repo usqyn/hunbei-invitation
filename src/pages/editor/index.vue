@@ -9,101 +9,66 @@
       <view class="header-right"></view>
     </view>
 
-    <!-- Body: 全屏画布 + 浮动右侧面板 / 横屏模式：上预览 + 下编辑 -->
+    <!-- Body: 根据模板类型渲染不同编辑界面 -->
     <view v-if="editorStore.templateLoading" class="loading-overlay">
       <text class="loading-overlay-text">加载模板中...</text>
     </view>
+    <view v-else-if="editorStore.templateType === 'page'" class="editor-body editor-body--page">
+      <PageEditor />
+    </view>
     <view v-else class="editor-body" :class="{ 'editor-body--landscape': isLandscape }">
-      <!-- 预览区：全屏宽度 -->
+      <!-- 画布模式：全屏画布 + 浮动右侧面板 -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
         <scroll-view class="preview-scroll" scroll-y>
-          <!-- 画布模式：admin 发布的绝对定位模板 -->
-          <template v-if="isCanvasMode">
-            <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
-            <template v-if="editorStore.renderedImage && !renderedImageStale">
-              <view class="rendered-image-container">
-                <image
-                  class="rendered-image"
-                  :src="editorStore.renderedImage"
-                  mode="widthFix"
-                  @load="onRenderedImageLoad"
-                />
-                <!-- 透明交互层：覆盖在图片上，用于点击编辑 -->
-                <view
-                  v-for="(el, idx) in editorStore.editableElements" :key="idx"
-                  class="rendered-overlay-element"
-                  :class="{
-                    'rendered-overlay-element--active': editorStore.selectedElement === idx,
-                    'rendered-overlay-element--no-click': el.editable === false
-                  }"
-                  :style="getOverlayElementStyle(el)"
-                  @click="el.editable === false ? null : onOpenEditor(idx)"
-                />
-              </view>
-            </template>
-            <!-- 无 renderedImage：回退到百分比定位渲染 -->
-            <template v-else>
-              <view class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
-                <view
-                  v-for="(el, idx) in editorStore.editableElements" :key="idx"
-                  class="canvas-element"
-                  :class="{
-                    'active-element': editorStore.selectedElement === idx,
-                    'text-element': el.type === 'text',
-                    'non-editable': el.editable === false,
-                    'canvas-element--no-interact': el.editable === false
-                  }"
-                  :style="getCanvasElementStyle(el)"
-                  @click="el.editable === false ? null : onOpenEditor(idx)"
-                >
-                  <image
-                    v-if="el.type === 'image'"
-                    class="canvas-image"
-                    :src="el.text"
-                    mode="aspectFit"
-                    @error="onImageError"
-                  />
-                  <text
-                    v-else-if="el.type === 'text'"
-                    class="canvas-text"
-                    :style="getTextStyle(el)"
-                  >{{ resolveText(el.text) }}</text>
-                </view>
-              </view>
-            </template>
+          <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
+          <template v-if="editorStore.renderedImage && !renderedImageStale">
+            <view class="rendered-image-container">
+              <image
+                class="rendered-image"
+                :src="editorStore.renderedImage"
+                mode="widthFix"
+                @load="onRenderedImageLoad"
+              />
+              <view
+                v-for="(el, idx) in editorStore.editableElements" :key="idx"
+                class="rendered-overlay-element"
+                :class="{
+                  'rendered-overlay-element--active': editorStore.selectedElement === idx,
+                  'rendered-overlay-element--no-click': el.editable === false
+                }"
+                :style="getOverlayElementStyle(el)"
+                @click="el.editable === false ? null : onOpenEditor(idx)"
+              />
+            </view>
           </template>
-          <!-- Flex 模式：静态模板的垂直排列 -->
+          <!-- 无 renderedImage：回退到百分比定位渲染 -->
           <template v-else>
-            <view class="preview-card preview-card--flex">
-              <block v-for="(el, idx) in editorStore.editableElements" :key="idx">
-                <view
+            <view class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
+              <view
+                v-for="(el, idx) in editorStore.editableElements" :key="idx"
+                class="canvas-element"
+                :class="{
+                  'active-element': editorStore.selectedElement === idx,
+                  'text-element': el.type === 'text',
+                  'non-editable': el.editable === false,
+                  'canvas-element--no-interact': el.editable === false
+                }"
+                :style="getCanvasElementStyle(el)"
+                @click="el.editable === false ? null : onOpenEditor(idx)"
+              >
+                <image
                   v-if="el.type === 'image'"
-                  class="section image-section"
-                  :class="{ 'active-section': el.editable !== false && editorStore.selectedElement === idx, 'non-editable': el.editable === false }"
-                  @click="el.editable === false ? null : onOpenEditor(idx)"
-                >
-                  <image
-                    class="section-image"
-                    :src="el.text"
-                    mode="aspectFill"
-                    @error="onImageError"
-                  ></image>
-                  <view v-if="idx === 0" class="image-overlay">
-                    <text class="overlay-label">{{ templateName }}</text>
-                  </view>
-                </view>
-                <view
+                  class="canvas-image"
+                  :src="el.text"
+                  mode="aspectFit"
+                  @error="onImageError"
+                />
+                <text
                   v-else-if="el.type === 'text'"
-                  class="section text-section"
-                  :class="{ 'active-section': el.editable !== false && editorStore.selectedElement === idx, 'non-editable': el.editable === false }"
-                  @click="el.editable === false ? null : onOpenEditor(idx)"
-                >
-                  <text
-                    class="section-text"
-                    :style="getTextStyle(el)"
-                  >{{ resolveText(el.text) }}</text>
-                </view>
-              </block>
+                  class="canvas-text"
+                  :style="getTextStyle(el)"
+                >{{ resolveText(el.text) }}</text>
+              </view>
             </view>
           </template>
         </scroll-view>
@@ -125,11 +90,10 @@
               mode="sidebar"
               @update:active-panel-tab="editorStore.activePanelTab = $event"
               @open-editor="onOpenEditor"
-          @select-material="onMaterialSelect"
+              @select-material="onMaterialSelect"
               @toggle-setting="toggleSetting"
             />
           </view>
-          <!-- 商城推荐 -->
           <view class="shop-recommend" v-if="recommendProducts.length > 0">
             <view class="shop-rec-title">\u{1F6D2} 婚礼推荐</view>
             <view class="shop-rec-list">
@@ -239,6 +203,7 @@ import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { exportInvitation, fetchRecommendProducts } from '@/api'
 import RightPanel from './components/RightPanel.vue'
+import PageEditor from './components/PageEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
 import QuickEditForm from './components/QuickEditForm.vue'
@@ -733,6 +698,10 @@ watch(() => editorStore.editableElements, () => {
   display: flex;
   flex: 1;
   min-height: 0;
+}
+
+.editor-body--page {
+  flex-direction: column;
 }
 
 /* Preview Area - 全屏宽度，竖屏时右侧留出 sidebar 宽度 */

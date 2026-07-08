@@ -11,13 +11,58 @@
     </view>
 
     <scroll-view class="preview-content" scroll-y>
+      <!-- Page 模式：垂直滚动区块渲染 -->
+      <template v-if="editorStore.templateType === 'page'">
+        <view class="preview-card preview-card--page" :style="canvasBackgroundStyle">
+          <view
+            v-for="(sec, idx) in editorStore.pageSections"
+            :key="sec.id"
+            class="preview-page-section"
+            :class="`preview-page-section--${sec.type}`"
+          >
+            <template v-if="sec.type === 'title'">
+              <text class="section-title" :style="getTextStyle({ type: 'text', text: sec.text || '', style: sec.style } as any)">{{ sec.text || sec.placeholder || '请输入标题' }}</text>
+            </template>
+            <template v-else-if="sec.type === 'date'">
+              <text class="section-date" :style="getTextStyle({ type: 'text', text: sec.text || '', style: sec.style } as any)">{{ sec.text || sec.placeholder || 'YYYY/MM/DD' }}</text>
+            </template>
+            <template v-else-if="sec.type === 'image'">
+              <image
+                class="section-image"
+                :src="sec.image || ''"
+                mode="aspectFit"
+                @error="onImageError"
+              />
+            </template>
+            <template v-else-if="sec.type === 'text'">
+              <text class="section-text" :style="getTextStyle({ type: 'text', text: sec.text || '', style: sec.style } as any)">{{ sec.text || sec.placeholder || '请输入正文内容' }}</text>
+            </template>
+            <template v-else-if="sec.type === 'location'">
+              <view class="location-row">
+                <text class="location-icon">📍</text>
+                <text class="location-text" :style="getTextStyle({ type: 'text', text: sec.text || '', style: sec.style } as any)">{{ sec.text || sec.placeholder || '请输入地址' }}</text>
+              </view>
+            </template>
+            <template v-else-if="sec.type === 'divider'">
+              <view class="divider-line">
+                <text class="divider-text">{{ sec.text }}</text>
+              </view>
+            </template>
+            <template v-else-if="sec.type === 'countdown'">
+              <view class="countdown-section">
+                <text class="countdown-label">距婚礼还有</text>
+                <view class="countdown-days">{{ sec.text || '0' }}</view>
+                <text class="countdown-unit">天</text>
+              </view>
+            </template>
+          </view>
+        </view>
+      </template>
       <!-- 画布模式：绝对定位渲染 -->
-      <template v-if="isCanvasMode">
-        <!-- 有渲染图时直接显示图片 -->
+      <template v-else-if="isCanvasMode">
         <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="canvasCardStyle">
           <image class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" />
         </view>
-        <!-- 无渲染图时走百分比定位元素渲染 -->
         <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
           <view
             v-for="(el, idx) in editorStore.editableElements"
@@ -37,7 +82,7 @@
           </view>
         </view>
       </template>
-      <!-- Flex 模式：垂直排列（与编辑器一致） -->
+      <!-- Flex 模式：垂直排列 -->
       <template v-else>
         <view class="preview-card preview-card--flex">
           <view
@@ -409,6 +454,108 @@ const onImageError = () => {
 .preview-text-el {
   display: block;
   word-break: break-word;
+}
+
+/* Page 模式 */
+.preview-card--page {
+  padding: 20rpx;
+}
+
+.preview-page-section {
+  position: relative;
+  margin-bottom: 30rpx;
+  padding: 16rpx;
+  border-radius: 12rpx;
+}
+
+.preview-page-section--title .section-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  text-align: center;
+  color: #333;
+  line-height: 1.5;
+}
+
+.preview-page-section--date .section-date {
+  font-size: 28rpx;
+  text-align: center;
+  color: #999;
+  margin-top: 10rpx;
+}
+
+.preview-page-section--image .section-image {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 12rpx;
+  background: #f5f5f5;
+}
+
+.preview-page-section--text .section-text {
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.preview-page-section--location .location-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+
+.preview-page-section--location .location-icon {
+  font-size: 32rpx;
+}
+
+.preview-page-section--location .location-text {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.preview-page-section--divider .divider-line {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 20rpx 0;
+}
+
+.preview-page-section--divider .divider-line::before,
+.preview-page-section--divider .divider-line::after {
+  content: '';
+  flex: 1;
+  height: 2rpx;
+  background: linear-gradient(90deg, transparent, #e0d0d5, transparent);
+}
+
+.preview-page-section--divider .divider-text {
+  font-size: 24rpx;
+  color: #999;
+  letter-spacing: 4rpx;
+}
+
+.preview-page-section--countdown .countdown-section {
+  text-align: center;
+  padding: 30rpx;
+}
+
+.preview-page-section--countdown .countdown-label {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 10rpx;
+}
+
+.preview-page-section--countdown .countdown-days {
+  font-size: 80rpx;
+  font-weight: 700;
+  color: #e84a6e;
+}
+
+.preview-page-section--countdown .countdown-unit {
+  font-size: 28rpx;
+  color: #999;
+  margin-left: 8rpx;
 }
 
 /* Flex 模式 */
