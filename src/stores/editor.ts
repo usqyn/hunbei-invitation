@@ -1,21 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { useTemplateStore } from './template'
-import { DEFAULT_ELEMENT_STYLE, getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
-import { MATERIAL_LIST } from '@/constants/editor'
-import { API_BASE } from '@/config'
-
-/** 补全 /uploads/ 开头的相对路径为完整 URL */
-function resolveImageUrl(url: string): string {
-  if (!url) return url
-  if (url.startsWith('/uploads/')) return API_BASE + url
-  return url
-}
-import type { EditableElement, ElementStyle, TemplateData, TemplateItem, PageSection } from '@/types'
+import { DEFAULT_ELEMENT_STYLE, MATERIAL_LIST } from '@/constants/editor'
+import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
+import { resolveImageUrl } from '@/utils/image'
+import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage } from '@/types'
 import { request } from '@/utils/request'
-
-// ============ API 配置 ============
-const API_TIMEOUT = 8000
 
 const STORAGE_KEY_STYLES = 'hunbei_editor_styles'
 const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
@@ -40,8 +30,8 @@ export const useEditorStore = defineStore('editor', () => {
   const background = ref<{ type: string; color1: string; color2?: string; angle?: number; image?: string }>({ type: 'solid', color1: '#ffffff' })
   const renderedImage = ref<string>('')
 
-  // 模板类型：canvas（画布模式）/ page（页面模式）
-  const templateType = ref<'canvas' | 'page'>('canvas')
+  // 模板类型：canvas（画布模式）/ page（页面模式）/ flip（翻页模式）
+  const templateType = ref<'canvas' | 'page' | 'flip'>('canvas')
 
   // 可编辑元素列表 - canvas 模式
   const editableElements = reactive<EditableElement[]>([])
@@ -51,6 +41,10 @@ export const useEditorStore = defineStore('editor', () => {
 
   // 当前选中的 section id - page 模式
   const activeSectionId = ref<string | null>(null)
+
+  // 翻页模式 - 页面列表
+  const flipPages = reactive<FlipPage[]>([])
+  const currentFlipPageIndex = ref(0)
 
   // 素材库
   const materialList = MATERIAL_LIST
@@ -142,6 +136,42 @@ export const useEditorStore = defineStore('editor', () => {
         editable: sec.editable,
       })
     })
+
+    // flip 模式：加载 pages
+    flipPages.splice(0, flipPages.length)
+    ;(template.pages || []).forEach(page => {
+      const elements = (page.elements || []).map(el => ({
+        type: el.type,
+        text: el.type === 'image' ? resolveImageUrl(el.text) : el.text,
+        dataKey: el.dataKey,
+        label: el.label,
+        style: el.style ? { ...el.style } : undefined,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        zIndex: el.zIndex,
+        rotation: el.rotation,
+        opacity: el.opacity,
+        editable: el.editable,
+      }))
+      flipPages.push({
+        id: page.id,
+        name: page.name,
+        pageType: page.pageType,
+        background: {
+          type: page.background?.type || 'solid',
+          color1: page.background?.color1 || '#ffffff',
+          color2: page.background?.color2,
+          angle: page.background?.angle,
+          imageUrl: page.background?.imageUrl ? resolveImageUrl(page.background.imageUrl) : undefined,
+          imageScale: page.background?.imageScale,
+          imageOpacity: page.background?.imageOpacity,
+        },
+        elements,
+      })
+    })
+    currentFlipPageIndex.value = 0
 
     // 同步画布尺寸，缺失则使用 admin 默认 375x667
     if (template.canvasSize) {
@@ -304,7 +334,8 @@ export const useEditorStore = defineStore('editor', () => {
     showQuickEdit.value = false
   }
 
-  function syncSmartField(key: string, value: string) {
+  /** 将字段值同步到所有模式（canvas / page / flip）的对应元素中 */
+  function syncFieldToAllModes(key: string, value: string) {
     const templateStore = useTemplateStore()
     templateStore.updateField(key as keyof TemplateData, value)
     // canvas 模式
@@ -319,6 +350,18 @@ export const useEditorStore = defineStore('editor', () => {
         sec.text = value
       }
     })
+    // flip 模式：遍历所有页面的元素
+    flipPages.forEach(page => {
+      page.elements.forEach(el => {
+        if (el.dataKey === key) {
+          el.text = value
+        }
+      })
+    })
+  }
+
+  function syncSmartField(key: string, value: string) {
+    syncFieldToAllModes(key, value)
   }
 
   function syncBasicInfoToElements() {
@@ -332,56 +375,46 @@ export const useEditorStore = defineStore('editor', () => {
       address: info.detailAddress || '',
     }
 
-    // canvas 模式：同步到 editableElements
-    editableElements.forEach(el => {
-      if (el.dataKey && fieldMap[el.dataKey] !== undefined) {
-        el.text = fieldMap[el.dataKey]
-        templateStore.updateField(el.dataKey as keyof TemplateData, fieldMap[el.dataKey])
-      }
-    })
-
-    // page 模式：同步到 pageSections
-    pageSections.forEach(sec => {
-      if (sec.dataKey && fieldMap[sec.dataKey] !== undefined) {
-        sec.text = fieldMap[sec.dataKey]
-        templateStore.updateField(sec.dataKey as keyof TemplateData, fieldMap[sec.dataKey])
-      }
+    Object.entries(fieldMap).forEach(([key, value]) => {
+      syncFieldToAllModes(key, value)
     })
   }
 
-  function selectMaterial(material: { url: string; name: string }) {
-    if (selectedElement.value === null) return
-    const el = editableElements[selectedElement.value]
-    if (el.type !== 'image') return
-    el.text = material.url
-    if (el.dataKey) {
-      const templateStore = useTemplateStore()
-      templateStore.updateField(el.dataKey, material.url)
+  /** 选择素材并应用到选中的图片元素（合并原 selectMaterial + applyImageToElement）
+   *  支持两种调用方式：
+   *  1. selectMaterial({ url, name }) -- 原素材库调用
+   *  2. selectMaterial(idx, url)       -- 原本地图/预览页调用（作为 applyImageToElement 别名）
+   */
+  function selectMaterial(materialOrIdx: { url: string; name: string } | number, url?: string) {
+    let idx: number
+    let imageUrl: string
+
+    if (typeof materialOrIdx === 'number') {
+      idx = materialOrIdx
+      imageUrl = url!
+    } else {
+      idx = selectedElement.value!
+      imageUrl = materialOrIdx.url
+      if (idx === null) return
     }
-    selectedElement.value = null
-    activePanelTab.value = 'edit'
-    uni.showToast({ title: '图片已替换', icon: 'success' })
-  }
 
-  function applyImageToElement(idx: number, url: string) {
+    if (idx === null || idx < 0) return
     const el = editableElements[idx]
     if (el.type !== 'image') return
-    el.text = url
+    el.text = imageUrl
     if (el.dataKey) {
       const templateStore = useTemplateStore()
-      templateStore.updateField(el.dataKey, url)
+      templateStore.updateField(el.dataKey, imageUrl)
     }
-    selectedElement.value = null
     persistStyles()
+    selectedElement.value = null
+    activePanelTab.value = 'edit'
     uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
   function setCurrentWorkId(id: number | null) {
     currentWorkId.value = id
   }
-
-  // 启动时恢复
-  restoreTemplate()
 
   function updatePageSection(id: string, updates: Partial<PageSection>) {
     const sec = pageSections.find(s => s.id === id)
@@ -413,102 +446,10 @@ export const useEditorStore = defineStore('editor', () => {
     currentFontSize, currentSpacing, currentLineHeight,
     editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
     templateType, pageSections, activeSectionId,
-    loadTemplateById, openEditor, openSectionTextEditor, closeTextEditor, confirmTextEdit,
+    flipPages, currentFlipPageIndex,
+    loadTemplateById, restoreTemplate, openEditor, openSectionTextEditor, closeTextEditor, confirmTextEdit,
     closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField, syncBasicInfoToElements,
-    selectMaterial, applyImageToElement, setCurrentWorkId,
+    selectMaterial, applyImageToElement: selectMaterial, setCurrentWorkId,
     updatePageSection, updatePageSectionText, updatePageSectionImage,
   }
 })
-
-// ============ 字体加载 ============
-const SYSTEM_FONTS = ['sans-serif', 'serif', 'monospace', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', 'Georgia', 'KaiTi', 'KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq']
-const loadedFonts = new Set<string>()
-let fontMap: Record<string, string> | null = null
-let fontMapLoading = false
-
-function fetchFontMap(): Promise<void> {
-  return new Promise((resolve) => {
-    if (fontMap) { resolve(); return }
-    if (fontMapLoading) {
-      const check = setInterval(() => {
-        if (fontMap !== null) { clearInterval(check); resolve() }
-      }, 100)
-      return
-    }
-    fontMapLoading = true
-    uni.request({
-      url: API_BASE + '/api/fonts',
-      method: 'GET',
-      timeout: 5000,
-      success: (res: any) => {
-        const data = res.data
-        fontMap = (data?.success && data.data) || {}
-        fontMapLoading = false
-        resolve()
-      },
-      fail: () => { fontMap = {}; fontMapLoading = false; resolve() },
-    })
-  })
-}
-
-function loadCustomFont(fontFamily: string) {
-  if (!fontFamily || loadedFonts.has(fontFamily)) return
-  if (SYSTEM_FONTS.some(f => fontFamily.includes(f))) return
-  if (!fontMap) { fetchFontMap().then(() => loadCustomFont(fontFamily)); return }
-  const fontUrl = fontMap[fontFamily]
-  if (!fontUrl) return
-  const fullUrl = fontUrl.startsWith('http') ? fontUrl : API_BASE + fontUrl
-
-  // #ifdef MP-WEIXIN
-  // 微信小程序需要先下载字体文件再加载
-  const downloadTask = (wx as any).downloadFile({
-    url: fullUrl,
-    success: (res: any) => {
-      if (res.statusCode === 200) {
-        ;(wx as any).loadFontFace({
-          family: fontFamily,
-          source: `url("${res.tempFilePath}")`,
-          success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`) },
-          fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err) },
-        })
-      } else {
-        console.warn(`[FontLoader] Download failed: ${fontFamily}, status: ${res.statusCode}`)
-      }
-    },
-    fail: (err: any) => { console.warn(`[FontLoader] Download error: ${fontFamily}`, err) },
-  })
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  try {
-    ;(wx as any).loadFontFace({
-      family: fontFamily,
-      source: `url("${fullUrl}")`,
-      success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`) },
-      fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err) },
-    })
-  } catch (e) { console.warn(`[FontLoader] Error: ${fontFamily}`, e) }
-  // #endif
-}
-
-export function loadFontsForElements(elements: Array<{ type: string; style?: { font?: string } }>) {
-  const fontSet = new Set<string>()
-  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-
-  elements.forEach(el => {
-    if (el.type === 'text') {
-      if (el.style?.font) {
-        const primary = el.style.font.split(',')[0].trim().replace(/['"]/g, '')
-        if (primary) fontSet.add(primary)
-      }
-      if (el.text && rtlChars.test(el.text)) {
-        fontSet.add('KazakhSoftAsilya')
-        fontSet.add('KazakhSoftAsilyaQaniq')
-      }
-    }
-  })
-
-  fetchFontMap().then(() => {
-    fontSet.forEach(f => loadCustomFont(f))
-  })
-}

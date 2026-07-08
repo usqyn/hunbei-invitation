@@ -2,6 +2,9 @@
 // 注意：生产环境必须使用 HTTPS 保证传输安全
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
+// ============ 应用版本 ============
+export const APP_VERSION = '1.2.3'
+
 // ============ 首页配置 ============
 export const HOME_CONFIG = {
   searchPlaceholder: '搜索模板名称/分类',
@@ -25,7 +28,7 @@ export const HOME_CONFIG = {
     {
       image: '/static/images/banners/banner-3.png',
       linkType: 'category',
-      linkValue: 'ceremony',
+      linkValue: 'festival',
     },
   ],
   featureCards: [

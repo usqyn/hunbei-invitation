@@ -9,871 +9,143 @@
         </div>
       </transition>
     </Teleport>
+
     <!-- ============ 顶部工具栏 ============ -->
-    <header class="toolbar">
-      <div class="toolbar-left">
-        <span class="logo">🎨 婚贝模板制作</span>
-        <span class="toolbar-divider"></span>
-
-        <!-- 顶部页面切换 -->
-        <button class="tb-btn" :class="{ active: currentView === 'editor' }" @click="currentView = 'editor'">✏️ 模板编辑</button>
-        <button class="tb-btn" :class="{ active: currentView === 'poster' }" @click="currentView = 'poster'">🖼 海报模板</button>
-
-        <span class="toolbar-divider"></span>
-
-        <button class="tb-btn" :disabled="!canUndo" @click="undo" title="撤销 (Ctrl+Z)">
-          ↶ 撤销
-        </button>
-        <button class="tb-btn" :disabled="!canRedo" @click="redo" title="重做 (Ctrl+Y)">
-          ↷ 重做
-        </button>
-
-        <span class="toolbar-divider"></span>
-
-        <button class="tb-btn primary" @click="addText">✎ 添加文字</button>
-        <button class="tb-btn" @click="triggerImageUpload">🖼 添加图片</button>
-        <input ref="fileInput" type="file" accept="image/*" style="display:none" @change="onImageFile" />
-
-        <span class="toolbar-divider"></span>
-
-        <!-- 画布尺寸 -->
-        <select class="tb-select" v-model="sizeLabel" @change="onPresetChange">
-          <option v-for="p in CANVAS_PRESETS" :key="p.label" :value="p.label">{{ p.label }}</option>
-        </select>
-
-        <span class="toolbar-divider"></span>
-
-        <!-- 页面模式 -->
-        <button class="tb-btn" :class="{ active: pageMode === 'single' }" @click="onPageModeChange('single')" title="单页模式">📄 单页</button>
-        <button class="tb-btn" :class="{ active: pageMode === 'long' }" @click="onPageModeChange('long')" title="长页面模式">📃 长页面</button>
-        <button class="tb-btn" :class="{ active: pageMode === 'landscape' }" @click="onPageModeChange('landscape')" title="横屏卡片模式">🃏 横屏</button>
-      </div>
-
-      <div class="toolbar-right">
-        <span class="zoom-label">缩放 {{ Math.round(zoom * 100) }}%</span>
-        <button class="tb-btn sm" @click="zoom = Math.max(0.3, zoom - 0.1)">−</button>
-        <button class="tb-btn sm" @click="zoom = 1">100%</button>
-        <button class="tb-btn sm" @click="zoom = Math.min(3, zoom + 0.1)">+</button>
-        <span class="toolbar-divider"></span>
-        <button class="tb-btn sm" :class="{ active: showGrid }" @click="toggleGrid" title="网格/吸附">{{ showGrid ? '🧲' : '⊞' }}</button>
-        <span class="toolbar-divider"></span>
-        <button class="tb-btn danger" @click="deleteSelected" title="删除选中 (Del)">🗑 删除</button>
-        <span class="toolbar-divider"></span>
-        <button class="tb-btn" @click="saveToServer" title="保存到服务器 (Ctrl+S)">💾 保存</button>
-        <button class="tb-btn publish-btn" @click="showPublishWizard = true" title="发布模板">🚀 发布</button>
-        <button class="tb-btn" @click="onExportPNG" title="导出 PNG">📥 导出</button>
-      </div>
-    </header>
+    <EditorToolbar
+      :currentView="currentView"
+      :canUndo="canUndo"
+      :canRedo="canRedo"
+      :sizeLabel="sizeLabel"
+      :pageMode="pageMode"
+      :zoom="zoom"
+      :showGrid="showGrid"
+      @changeView="v => currentView = v"
+      @undo="undo"
+      @redo="redo"
+      @addText="addText()"
+      @triggerImageUpload="triggerImageUpload"
+      @imageFile="onImageFile"
+      @update:sizeLabel="v => { sizeLabel = v; onPresetChange() }"
+      @changePageMode="onPageModeChange"
+      @zoomOut="zoom = Math.max(0.3, zoom - 0.1)"
+      @zoomIn="zoom = Math.min(3, zoom + 0.1)"
+      @zoomReset="zoom = 1"
+      @toggleGrid="toggleGrid"
+      @deleteSelected="deleteSelected"
+      @save="saveToServer"
+      @publish="showPublishWizard = true"
+      @export="onExportPNG"
+    />
 
     <!-- ============ 主工作区 ============ -->
     <main v-if="currentView === 'editor'" class="workspace">
       <!-- 左侧面板 -->
-      <aside class="panel panel-left">
-        <div class="panel-tabs">
-          <button
-            class="tab-btn"
-            :class="{ active: leftTab === 'material' }"
-            @click="leftTab = 'material'"
-          >素材</button>
-          <button
-            class="tab-btn"
-            :class="{ active: leftTab === 'layers' }"
-            @click="leftTab = 'layers'"
-          >图层</button>
-          <button
-            class="tab-btn"
-            :class="{ active: leftTab === 'templates' }"
-            @click="loadTemplateList(); leftTab = 'templates'"
-          >模板</button>
-        </div>
-
-        <!-- 素材 Tab -->
-        <div v-if="leftTab === 'material'" class="panel-body">
-          <div class="section-title">文字</div>
-          <div class="material-grid">
-            <button class="material-item text-item" @click="addText({ content: '标题文字', fontSize: 32, fontWeight: 'bold' as any })">
-              <span class="mi-label">大标题</span>
-            </button>
-            <button class="material-item text-item" @click="addText({ content: '副标题文字', fontSize: 20 } as any)">
-              <span class="mi-label small">副标题</span>
-            </button>
-            <button class="material-item text-item" @click="addText({ content: '一段正文文字，可换行编辑。', fontSize: 16, textAlign: 'left' as any } as any)">
-              <span class="mi-label small">正文</span>
-            </button>
-          </div>
-          <div class="section-divider"></div>
-          <div class="section-title">文字样式预设</div>
-          <div class="text-preset-grid">
-            <button
-              v-for="tp in TEXT_PRESETS"
-              :key="tp.name"
-              class="text-preset-btn"
-              :title="tp.description"
-              @click="applyTextPreset(tp)"
-            >
-              <span class="tp-sample" :style="tp.previewStyle">{{ tp.sample }}</span>
-              <span class="tp-name">{{ tp.name }}</span>
-            </button>
-          </div>
-          <div class="section-divider"></div>
-          <div class="section-title">快捷字段</div>
-          <div class="material-grid">
-            <button
-              v-for="sf in SMART_FIELDS" :key="sf.key"
-              class="material-item smart-field-item"
-              :title="sf.label"
-              @click="addSmartField(sf)"
-            >
-              <span class="sf-icon">{{ sf.icon }}</span>
-              <span class="mi-label">{{ sf.label }}</span>
-            </button>
-          </div>
-          <div class="section-divider"></div>
-          <div class="section-title">日期占位符预览</div>
-          <div class="date-preview-inputs">
-            <div class="date-input-row">
-              <label>年份</label>
-              <input v-model="dateValues.year" placeholder="2025" class="date-input" />
-            </div>
-            <div class="date-input-row">
-              <label>月份</label>
-              <input v-model="dateValues.month" placeholder="6" class="date-input" />
-            </div>
-            <div class="date-input-row">
-              <label>日</label>
-              <input v-model="dateValues.day" placeholder="15" class="date-input" />
-            </div>
-          </div>
-          <div class="section-divider"></div>
-          <div class="section-title">背景颜色</div>
-          <div class="color-grid">
-            <button v-for="c in bgColors" :key="c" class="color-chip" :style="{ background: c }" @click="setBackground({ type: 'solid', color1: c } as any)"></button>
-          </div>
-          <div class="section-title">背景渐变</div>
-          <div class="mat-cats" style="margin-bottom:10px;">
-            <button v-for="cat in GRADIENT_CATEGORIES" :key="cat" class="mat-cat-btn" :class="{ active: activeGradientCat === cat }" @click="activeGradientCat = cat">{{ cat }}</button>
-          </div>
-          <div class="gradient-grid">
-            <button v-for="g in filteredGradients" :key="g.name" class="gradient-chip" :style="{ background: g.css }" @click="setBackground({ type: 'linear-gradient', color1: g.c1, color2: g.c2, angle: g.angle } as any)">
-              <span class="gradient-name">{{ g.name }}</span>
-            </button>
-          </div>
-          <div class="section-title">配色方案</div>
-          <div class="color-scheme-grid">
-            <button
-              v-for="cs in COLOR_SCHEMES"
-              :key="cs.id"
-              class="color-scheme-btn"
-              :style="{ background: cs.thumbnail }"
-              @click="applyColorScheme(cs)"
-              :title="`${cs.name}：${cs.textColor} 文字`"
-            >
-              <span class="cs-name">{{ cs.name }}</span>
-            </button>
-          </div>
-          <div class="section-title">上传背景图</div>
-          <label class="upload-btn">点击上传背景图<input type="file" accept="image/*" style="display:none" @change="onBgImageFile" /></label>
-          <div class="section-divider"></div>
-          <div class="section-title">素材库</div>
-          <div class="mat-category-scroll">
-            <div class="mat-cats">
-              <button v-for="cat in materialCategories" :key="cat" class="mat-cat-btn" :class="{ active: activeMaterialCat === cat }" @click="activeMaterialCat = cat">{{ cat }}</button>
-            </div>
-          </div>
-          <div class="mat-grid">
-            <div v-for="mat in filteredMaterials" :key="mat.id" class="mat-item" draggable="true" @dragstart="onMaterialDragStart($event, mat)" @click="onMaterialClick(mat)" :title="mat.name">
-              <div v-if="mat.type === 'shape'" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
-              <div v-else-if="mat.svg" class="mat-shape" v-html="sanitizeSvg(mat.svg)" :style="{ color: mat.color || '#333' }"></div>
-              <div class="mat-name">{{ mat.name }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 图层 Tab -->
-        <div v-if="leftTab === 'layers'" class="panel-body">
-          <div class="tpl-name-row">
-            <span class="tpl-name-label">模板名称</span>
-            <input class="tpl-name-input" v-model="currentTemplateName" placeholder="输入模板名称…" @blur="onTemplateNameBlur" />
-          </div>
-          <div v-if="layers.length === 0" class="empty-hint">画布暂无元素<br/>点击「添加文字/图片」开始</div>
-          <div v-for="el in layers" :key="el.id" class="layer-row" :class="{ active: selectedId === el.id }">
-            <span class="layer-icon" @click="selectElement(el.id)">{{ el.type === 'text' ? 'T' : el.type === 'image' ? '🖼' : '✦' }}</span>
-            <span class="layer-name" @click="selectElement(el.id)">{{ el.name }}</span>
-            <button class="layer-btn" :class="{ off: !el.visible }" @click="toggleVisibility(el.id)" :title="el.visible ? '隐藏' : '显示'">👁</button>
-            <button class="layer-btn" :class="{ off: !el.locked }" @click="toggleLock(el.id)" :title="el.locked ? '解锁' : '锁定'">🔒</button>
-            <button class="layer-btn" @click="bringForward(el.id)" title="上移一层">⬆</button>
-            <button class="layer-btn" @click="sendBackwards(el.id)" title="下移一层">⬇</button>
-            <button class="layer-btn" @click="bringToFront(el.id)" title="置于顶层">🔝</button>
-            <button class="layer-btn" @click="sendToBack(el.id)" title="置于底层">🔻</button>
-            <button class="layer-btn danger" @click="deleteElement(el.id)" title="删除">🗑</button>
-          </div>
-        </div>
-
-        <!-- 模板 Tab -->
-        <div v-if="leftTab === 'templates'" class="panel-body templates-body">
-          <button class="btn-new-template" @click="createNewFromCanvas">+ 新建空白模板</button>
-
-          <!-- 起始模板 -->
-          <div class="section-title">🚀 起始模板</div>
-          <div class="preset-cats">
-            <button
-              v-for="cat in PRESET_CATEGORIES"
-              :key="cat.id"
-              class="preset-cat-btn"
-              :class="{ active: activePresetCat === cat.id }"
-              @click="activePresetCat = cat.id"
-            >{{ cat.icon }} {{ cat.name }}</button>
-          </div>
-          <div class="preset-grid">
-            <div
-              v-for="preset in filteredPresets"
-              :key="preset.id"
-              class="preset-card"
-              @click="loadPreset(preset)"
-              :title="preset.description"
-            >
-              <div class="preset-thumb" :style="{ background: preset.thumbnail }"></div>
-              <div class="preset-name">{{ preset.name }}</div>
-              <div class="preset-desc">{{ preset.description }}</div>
-            </div>
-          </div>
-
-          <div class="section-divider"></div>
-
-          <!-- 我的模板 -->
-          <div class="section-title">📁 我的模板</div>
-          <div v-if="loadingTemplates" class="empty-hint">加载中...</div>
-          <div v-else-if="!templateList.length" class="empty-hint">暂无模板<br/>先在画布制作，再发布</div>
-          <div v-for="tpl in templateList" :key="tpl.id" class="template-item" :class="{ active: currentTemplateId === tpl.id }">
-            <div class="tpl-thumb" @click="onLoadTemplate(tpl.id)">
-              <img v-if="tpl.cover" :src="tpl.cover.startsWith('http') ? tpl.cover : API_BASE + tpl.cover" class="tpl-thumb-img" />
-              <div v-else class="tpl-thumb-placeholder">📄</div>
-            </div>
-            <div class="tpl-info" @click="onLoadTemplate(tpl.id)">
-              <div class="tpl-name">{{ tpl.name }}</div>
-              <div class="tpl-cat">{{ getCategoryName(tpl.category) }}</div>
-            </div>
-            <div class="tpl-actions">
-              <button class="tpl-btn" @click="onCloneTemplate(tpl)" title="克隆">📋</button>
-              <button class="tpl-btn danger" @click="onDeleteTemplate(tpl)" title="删除">🗑</button>
-            </div>
-          </div>
-          <div class="section-divider"></div>
-          <div class="section-title">历史版本</div>
-          <div v-if="historyVersions.length === 0" class="empty-hint small">无历史记录</div>
-          <div v-for="(ver, idx) in historyVersions" :key="ver.ts" class="history-item" @click="onRestoreVersion(idx)">
-            <span class="history-label">v{{ historyVersions.length - idx }}</span>
-            <span class="history-desc">{{ ver.description }}</span>
-            <span class="history-time">{{ formatTime(ver.ts) }}</span>
-          </div>
-        </div>
-      </aside>
+      <LeftPanel
+        v-model:leftTab="leftTab"
+        :pageMode="pageMode"
+        :selectedId="selectedId"
+        :layers="layers"
+        :templateList="templateList"
+        :currentTemplateId="currentTemplateId"
+        :currentTemplateName="currentTemplateName"
+        :loadingTemplates="loadingTemplates"
+        :historyVersions="historyVersions"
+        :dateValues="dateValues"
+        v-model:activeGradientCat="activeGradientCat"
+        v-model:activeMaterialCat="activeMaterialCat"
+        v-model:activePresetCat="activePresetCat"
+        :filteredGradients="filteredGradients"
+        :filteredMaterials="filteredMaterials"
+        :filteredPresets="filteredPresets"
+        :bgColors="bgColors"
+        :SMART_FIELDS="SMART_FIELDS"
+        :TEXT_PRESETS="TEXT_PRESETS"
+        :materialCategories="materialCategories"
+        @addText="addText"
+        @applyTextPreset="applyTextPreset"
+        @addSmartField="addSmartField"
+        @updateDateValues="(p) => { dateValues[p.key] = p.value }"
+        @setBackground="setBackground"
+        @applyColorScheme="applyColorScheme"
+        @bgImageFile="onBgImageFile"
+        @materialDragStart="onMaterialDragStart"
+        @materialClick="onMaterialClick"
+        @selectElement="selectElement"
+        @toggleVisibility="toggleVisibility"
+        @toggleLock="toggleLock"
+        @bringForward="bringForward"
+        @sendBackwards="sendBackwards"
+        @bringToFront="bringToFront"
+        @sendToBack="sendToBack"
+        @deleteElement="deleteElement"
+        @createNewFromCanvas="createNewFromCanvas"
+        @loadPreset="loadPreset"
+        @loadTemplateList="loadTemplateList"
+        @loadTemplate="onLoadTemplate"
+        @cloneTemplate="onCloneTemplate"
+        @deleteTemplate="onDeleteTemplate"
+        @restoreVersion="onRestoreVersion"
+      />
 
       <!-- 中间画布 -->
-      <section class="canvas-area">
-        <!-- 单页模式：手机框 -->
-        <template v-if="pageMode === 'single'">
-          <div class="canvas-scroll" @wheel.prevent="onWheel">
-            <div
-              class="phone-frame"
-              :style="{
-                width: (canvasSize.width * zoom) + 'px',
-                height: (canvasSize.height * zoom) + 'px',
-              }"
-            >
-              <div
-                class="phone-notch"
-                :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
-              ></div>
-              <canvas
-                ref="canvasRef"
-                class="fabric-canvas"
-                :style="{
-                  width: (canvasSize.width * zoom) + 'px',
-                  height: (canvasSize.height * zoom) + 'px',
-                }"
-                @dragover="onCanvasDragOver"
-                @drop="onCanvasDrop"
-              ></canvas>
-              <div
-                class="phone-home"
-                :style="{ width: (80 * zoom) + 'px', height: (6 * zoom) + 'px' }"
-              ></div>
-            </div>
-          </div>
-        </template>
-        <!-- 长页面模式：滚动视口 -->
-        <template v-else-if="pageMode === 'long'">
-          <div class="viewport-wrap" @wheel.prevent="onWheel">
-            <div class="viewport-header">长页面 · 可上下拖动元素</div>
-            <div
-              class="viewport-scroll"
-              :style="{ height: (667 * zoom) + 'px' }"
-            >
-              <canvas
-                ref="canvasRef"
-                class="fabric-canvas"
-                :style="{
-                  width: (canvasSize.width * zoom) + 'px',
-                  height: (canvasSize.height * zoom) + 'px',
-                }"
-                @dragover="onCanvasDragOver"
-                @drop="onCanvasDrop"
-              ></canvas>
-            </div>
-            <div class="viewport-footer">
-              高 {{ canvasSize.height }}px · 区域内滚动查看全页
-            </div>
-          </div>
-        </template>
-        <!-- 横屏卡片模式 -->
-        <template v-else>
-          <div class="card-wrap" @wheel.prevent="onWheel">
-            <div class="card-header">横屏卡片 · 宽 {{ canvasSize.width }} × 高 {{ canvasSize.height }}</div>
-            <div class="card-viewport">
-              <div
-                class="card-frame"
-                :style="{
-                  width: (canvasSize.width * zoom) + 'px',
-                  height: (canvasSize.height * zoom) + 'px',
-                }"
-              >
-                <canvas
-                  ref="canvasRef"
-                  class="fabric-canvas"
-                  :style="{
-                    width: (canvasSize.width * zoom) + 'px',
-                    height: (canvasSize.height * zoom) + 'px',
-                  }"
-                  @dragover="onCanvasDragOver"
-                  @drop="onCanvasDrop"
-                ></canvas>
-              </div>
-            </div>
-            <div class="card-footer">卡片居中展示 · 传统横版贺卡风格</div>
-          </div>
-        </template>
-
-        <!-- 画布底部状态栏 -->
-        <div class="canvas-footer">
-          <span>画布：{{ canvasSize.width }} × {{ canvasSize.height }}</span>
-          <span v-if="selectedId">已选中：{{ selectedElement?.type === 'text' ? '文字' : '图片' }}（{{ Math.round((selectedElement as any).width || 0) }} × {{ Math.round((selectedElement as any).height || 0) }}）</span>
-          <span v-else>未选中元素 · 提示：点击画布元素以编辑</span>
-          <button class="preview-toggle-btn" @click="showPreview = !showPreview">
-            {{ showPreview ? '收起预览' : '预览效果' }}
-          </button>
-        </div>
-
-        <!-- 实时预览面板 -->
-        <div v-if="showPreview" class="preview-panel">
-          <div class="preview-phone-frame">
-            <div class="preview-phone-notch"></div>
-            <div class="preview-phone-screen">
-              <img v-if="previewImage" :src="previewImage" class="preview-img" alt="预览" />
-              <div v-else class="preview-placeholder">点击刷新获取预览</div>
-            </div>
-            <div class="preview-phone-home"></div>
-          </div>
-          <button class="preview-refresh-btn" @click="refreshPreview">刷新预览</button>
-        </div>
-      </section>
+      <CanvasArea
+        ref="canvasAreaRef"
+        :pageMode="pageMode"
+        :canvasSize="canvasSize"
+        :zoom="zoom"
+        :selectedId="selectedId"
+        :selectedElement="selectedElement"
+        :showPreview="showPreview"
+        :previewImage="previewImage"
+        :currentFlipPageIndex="currentFlipPageIndex"
+        :flipPages="flipPages"
+        @wheel="onWheel"
+        @canvasDrop="onCanvasDrop"
+        @canvasDragOver="onCanvasDragOver"
+        @togglePreview="showPreview = !showPreview"
+        @refreshPreview="refreshPreview"
+        @prevFlipPage="prevFlipPage"
+        @nextFlipPage="nextFlipPage"
+        @selectFlipPage="selectFlipPage"
+        @update:canvasRef="onCanvasRefUpdate"
+      />
 
       <!-- 右侧属性面板 -->
-      <aside class="panel panel-right">
-        <div class="panel-tabs">
-          <button class="tab-btn active">属性</button>
-        </div>
-
-        <div class="panel-body">
-          <!-- 未选中：显示画布属性 -->
-          <template v-if="!selectedElement">
-            <div class="section-title">画布背景</div>
-            <div class="form-row">
-              <label>类型</label>
-              <select class="form-input" v-model="bgType">
-                <option value="solid">纯色</option>
-                <option value="linear-gradient">线性渐变</option>
-                <option value="radial-gradient">径向渐变</option>
-                <option value="image">图片</option>
-              </select>
-            </div>
-
-            <div class="form-row" v-if="bgType === 'solid' || bgType === 'linear-gradient' || bgType === 'radial-gradient'">
-              <label>主色</label>
-              <input type="color" class="form-input color" v-model="bgColor1" @change="onBgColorChange" />
-            </div>
-            <div class="form-row" v-if="bgType === 'linear-gradient' || bgType === 'radial-gradient'">
-              <label>副色</label>
-              <input type="color" class="form-input color" v-model="bgColor2" @change="onBgColorChange" />
-            </div>
-            <div class="form-row" v-if="bgType === 'linear-gradient'">
-              <label>角度 {{ bgAngle }}°</label>
-              <input type="range" class="form-input" min="0" max="180" v-model.number="bgAngle" @change="onBgColorChange" />
-            </div>
-
-            <div class="form-row" v-if="bgType === 'image'">
-              <label>上传图片</label>
-              <label class="upload-btn small">
-                点击上传背景
-                <input type="file" accept="image/*" style="display:none" @change="onBgImageFile" />
-              </label>
-            </div>
-
-            <div class="form-row" v-if="bgType === 'image'">
-              <label>填充模式</label>
-              <select class="form-input" v-model="bgScale" @change="onBgImageChange">
-                <option value="cover">Cover</option>
-                <option value="contain">Contain</option>
-                <option value="fill">Fill</option>
-              </select>
-            </div>
-
-            <div class="form-row" v-if="bgType === 'image'">
-              <label>透明度 {{ bgOpacity }}%</label>
-              <input type="range" class="form-input" min="0" max="100" v-model.number="bgOpacity" @change="onBgImageChange" />
-            </div>
-
-            <div class="section-divider"></div>
-            <div class="section-title">画布尺寸</div>
-            <div class="form-row">
-              <label>预设</label>
-              <select class="form-input" v-model="sizeLabel" @change="onPresetChange">
-                <option v-for="p in CANVAS_PRESETS" :key="p.label" :value="p.label">{{ p.label }}</option>
-              </select>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>宽</label>
-                <input type="number" class="form-input" :value="canvasSize.width" @change="e => onManualSize(e, 'width')" />
-              </div>
-              <div>
-                <label>高</label>
-                <input type="number" class="form-input" :value="canvasSize.height" @change="e => onManualSize(e, 'height')" />
-              </div>
-            </div>
-          </template>
-
-          <!-- 文字元素属性 -->
-          <template v-else-if="selectedElement.type === 'text'">
-            <div class="section-title">文字内容</div>
-            <textarea
-              class="form-textarea"
-              :value="(selectedElement as any).content"
-              @change="e => updateSelected({ content: (e.target as HTMLTextAreaElement).value })"
-            ></textarea>
-
-            <div class="section-title">字体与大小</div>
-            <div class="form-row">
-              <label>字体</label>
-              <div class="font-select-row">
-                <select
-                  class="form-input"
-                  :value="(selectedElement as any).fontFamily"
-                  @change="e => updateSelected({ fontFamily: (e.target as HTMLSelectElement).value })"
-                >
-                  <option v-for="f in fontList" :key="f" :value="f">{{ f }}</option>
-                </select>
-                <label class="font-upload-btn" title="上传字体文件">
-                  📎
-                  <input type="file" accept=".ttf,.otf,.woff,.woff2" multiple style="display:none" @change="onFontUpload" />
-                </label>
-              </div>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>字号</label>
-                <input
-                  type="number"
-                  class="form-input"
-                  :value="(selectedElement as any).fontSize"
-                  min="8" max="120"
-                  @change="e => updateSelected({ fontSize: Number((e.target as HTMLInputElement).value) })"
-                />
-              </div>
-              <div>
-                <label>样式</label>
-                <select
-                  class="form-input"
-                  :value="fontStyleLabel(selectedElement as any)"
-                  @change="e => onFontStyleChange((e.target as HTMLSelectElement).value)"
-                >
-                  <option value="normal">正常</option>
-                  <option value="bold">加粗</option>
-                  <option value="italic">斜体</option>
-                  <option value="bold-italic">加粗+斜体</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="section-title">对齐与行高</div>
-            <div class="form-row">
-              <label>对齐</label>
-              <div class="btn-group">
-                <button
-                  class="btn-seg"
-                  :class="{ active: (selectedElement as any).textAlign === 'left' }"
-                  @click="updateSelected({ textAlign: 'left' })"
-                >左</button>
-                <button
-                  class="btn-seg"
-                  :class="{ active: (selectedElement as any).textAlign === 'center' }"
-                  @click="updateSelected({ textAlign: 'center' })"
-                >中</button>
-                <button
-                  class="btn-seg"
-                  :class="{ active: (selectedElement as any).textAlign === 'right' }"
-                  @click="updateSelected({ textAlign: 'right' })"
-                >右</button>
-              </div>
-            </div>
-            <div class="form-row">
-              <label>文字方向</label>
-              <div class="btn-group">
-                <button
-                  class="btn-seg"
-                  :class="{ active: (selectedElement as any).direction === 'ltr' }"
-                  @click="updateSelected({ direction: 'ltr' })"
-                >LTR</button>
-                <button
-                  class="btn-seg"
-                  :class="{ active: (selectedElement as any).direction === 'rtl' }"
-                  @click="updateSelected({ direction: 'rtl' })"
-                >RTL</button>
-                <button
-                  class="btn-seg"
-                  :class="{ active: (selectedElement as any).direction === 'auto' }"
-                  @click="updateSelected({ direction: 'auto' })"
-                >自动</button>
-              </div>
-            </div>
-            <div class="form-row">
-              <label>行高 {{ ((selectedElement as any).lineHeight ?? 1.5).toFixed(2) }}</label>
-              <input
-                type="range"
-                class="form-input"
-                min="1" max="3" step="0.1"
-                :value="(selectedElement as any).lineHeight"
-                @change="e => updateSelected({ lineHeight: Number((e.target as HTMLInputElement).value) })"
-              />
-            </div>
-            <div class="form-row">
-              <label>字间距 {{ (selectedElement as any).letterSpacing }}px</label>
-              <input
-                type="range"
-                class="form-input"
-                min="-5" max="30" step="1"
-                :value="(selectedElement as any).letterSpacing"
-                @change="e => updateSelected({ letterSpacing: Number((e.target as HTMLInputElement).value) })"
-              />
-            </div>
-
-            <div class="section-title">颜色与描边</div>
-            <div class="form-row two-col">
-              <div>
-                <label>文字色</label>
-                <input
-                  type="color"
-                  class="form-input color"
-                  :value="(selectedElement as any).color"
-                  @change="e => updateSelected({ color: (e.target as HTMLInputElement).value })"
-                />
-              </div>
-              <div>
-                <label>透明度 {{ Math.round(((selectedElement as any).opacity) * 100) }}%</label>
-                <input
-                  type="range"
-                  class="form-input"
-                  min="0" max="100"
-                  :value="Math.round(((selectedElement as any).opacity) * 100)"
-                  @change="e => updateSelected({ opacity: Number((e.target as HTMLInputElement).value) / 100 })"
-                />
-              </div>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>描边色</label>
-                <input
-                  type="color"
-                  class="form-input color"
-                  :value="(selectedElement as any).strokeColor || '#000000'"
-                  @change="e => updateSelected({ strokeColor: (e.target as HTMLInputElement).value })"
-                />
-              </div>
-              <div>
-                <label>描边宽度 {{ (selectedElement as any).strokeWidth }}px</label>
-                <input
-                  type="range"
-                  class="form-input"
-                  min="0" max="10" step="1"
-                  :value="(selectedElement as any).strokeWidth"
-                  @change="e => updateSelected({ strokeWidth: Number((e.target as HTMLInputElement).value) })"
-                />
-              </div>
-            </div>
-
-            <div class="section-title">阴影</div>
-            <div class="form-row two-col">
-              <div>
-                <label>阴影色</label>
-                <input
-                  type="color"
-                  class="form-input color"
-                  :value="(selectedElement as any).shadowColor || '#000000'"
-                  @change="e => updateSelected({ shadowColor: (e.target as HTMLInputElement).value })"
-                />
-              </div>
-              <div>
-                <label>模糊 {{ (selectedElement as any).shadowBlur }}px</label>
-                <input
-                  type="range"
-                  class="form-input"
-                  min="0" max="30" step="1"
-                  :value="(selectedElement as any).shadowBlur"
-                  @change="e => updateSelected({ shadowBlur: Number((e.target as HTMLInputElement).value) })"
-                />
-              </div>
-            </div>
-
-            <div class="section-title">旋转</div>
-            <div class="form-row">
-              <label>角度 {{ Math.round((selectedElement as any).rotation) }}°</label>
-              <input
-                type="range"
-                class="form-input"
-                min="-180" max="180"
-                :value="Math.round((selectedElement as any).rotation)"
-                @change="e => updateSelected({ rotation: Number((e.target as HTMLInputElement).value) })"
-              />
-            </div>
-            <div class="section-title">小程序编辑权限</div>
-            <div class="form-row">
-              <label class="toggle-label">
-                <span>允许用户编辑</span>
-                <label class="switch">
-                  <input
-                    type="checkbox"
-                    :checked="(selectedElement as any).editable !== false"
-                    @change="e => updateSelected({ editable: (e.target as HTMLInputElement).checked })"
-                  />
-                  <span class="slider"></span>
-                </label>
-              </label>
-            </div>
-            <div class="section-title">文字特效</div>
-            <div class="text-fx-grid">
-              <button class="text-fx-btn" @click="applyTextFx('gradient')" title="渐变填充">渐变</button>
-              <button class="text-fx-btn" @click="applyTextFx('longShadow')" title="长阴影">长阴影</button>
-              <button class="text-fx-btn" @click="applyTextFx('neon')" title="霓虹发光">霓虹</button>
-              <button class="text-fx-btn" @click="applyTextFx('outline')" title="空心描边">描边</button>
-              <button class="text-fx-btn" @click="applyTextFx('underline')" title="下划线">下划线</button>
-              <button class="text-fx-btn" @click="applyTextFx('clearFx')" title="清除特效">清除</button>
-            </div>
-            <div class="section-title">模板数据绑定</div>
-            <div class="form-row">
-              <label>数据字段</label>
-              <select
-                class="form-input"
-                :value="(selectedElement as any).dataKey || ''"
-                @change="e => updateSelected({ dataKey: (e.target as HTMLSelectElement).value || undefined })"
-              >
-                <option value="">无绑定</option>
-                <option v-for="k in TEMPLATE_DATA_KEYS" :key="k" :value="k">{{ k }}</option>
-              </select>
-            </div>
-          </template>
-
-          <!-- 图片元素属性 -->
-          <template v-else-if="selectedElement.type === 'image'">
-            <div class="section-title">图片</div>
-            <div class="form-row">
-              <label>替换图片</label>
-              <label class="upload-btn small">
-                点击上传
-                <input type="file" accept="image/*" style="display:none" @change="onImageReplaceFile" />
-              </label>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>透明度 {{ Math.round(((selectedElement as any).opacity) * 100) }}%</label>
-                <input
-                  type="range"
-                  class="form-input"
-                  min="0" max="100"
-                  :value="Math.round(((selectedElement as any).opacity) * 100)"
-                  @change="e => updateSelected({ opacity: Number((e.target as HTMLInputElement).value) / 100 })"
-                />
-              </div>
-              <div>
-                <label>旋转 {{ Math.round((selectedElement as any).rotation) }}°</label>
-                <input
-                  type="range"
-                  class="form-input"
-                  min="-180" max="180"
-                  :value="Math.round((selectedElement as any).rotation)"
-                  @change="e => updateSelected({ rotation: Number((e.target as HTMLInputElement).value) })"
-                />
-              </div>
-            </div>
-            <div class="section-title">填充模式</div>
-            <div class="form-row">
-              <label>填充</label>
-              <select
-                class="form-input"
-                :value="(selectedElement as any).scale"
-                @change="e => updateSelected({ scale: (e.target as HTMLSelectElement).value } as any)"
-              >
-                <option value="cover">cover</option>
-                <option value="contain">contain</option>
-                <option value="fill">fill</option>
-                <option value="none">none</option>
-              </select>
-            </div>
-            <div class="section-title">剪裁形状（标记用）</div>
-            <div class="btn-group">
-              <button
-                class="btn-seg"
-                :class="{ active: (selectedElement as any).mask === 'rect' }"
-                @click="updateSelected({ mask: 'rect' } as any)"
-              >矩形</button>
-              <button
-                class="btn-seg"
-                :class="{ active: (selectedElement as any).mask === 'rounded' }"
-                @click="updateSelected({ mask: 'rounded' } as any)"
-              >圆角</button>
-              <button
-                class="btn-seg"
-                :class="{ active: (selectedElement as any).mask === 'circle' }"
-                @click="updateSelected({ mask: 'circle' } as any)"
-              >圆形</button>
-              <button
-                class="btn-seg"
-                :class="{ active: (selectedElement as any).mask === 'heart' }"
-                @click="updateSelected({ mask: 'heart' } as any)"
-              >心</button>
-            </div>
-            <div class="section-title">圆角</div>
-            <div class="form-row">
-              <label>圆角 {{ (selectedElement as any).borderRadius || 0 }}px</label>
-              <input
-                type="range" class="form-input" min="0" max="100"
-                :value="(selectedElement as any).borderRadius || 0"
-                @change="e => updateSelected({ borderRadius: Number((e.target as HTMLInputElement).value) } as any)"
-              />
-            </div>
-            <div class="section-title">边框</div>
-            <div class="form-row two-col">
-              <div>
-                <label>粗细</label>
-                <input
-                  type="number" class="form-input" min="0" max="20"
-                  :value="(selectedElement as any).borderWidth || 0"
-                  @change="e => updateSelected({ borderWidth: Number((e.target as HTMLInputElement).value) } as any)"
-                />
-              </div>
-              <div>
-                <label>颜色</label>
-                <input
-                  type="color" class="form-input color-input"
-                  :value="(selectedElement as any).borderColor || '#ffffff'"
-                  @change="e => updateSelected({ borderColor: (e.target as HTMLInputElement).value } as any)"
-                />
-              </div>
-            </div>
-            <div class="section-title">滤镜</div>
-            <div class="filter-presets">
-              <button class="filter-preset-btn" @click="applyFilterPreset('none')">原图</button>
-              <button class="filter-preset-btn" @click="applyFilterPreset('vintage')">复古</button>
-              <button class="filter-preset-btn" @click="applyFilterPreset('cool')">冷色</button>
-              <button class="filter-preset-btn" @click="applyFilterPreset('warm')">暖色</button>
-              <button class="filter-preset-btn" @click="applyFilterPreset('bw')">黑白</button>
-              <button class="filter-preset-btn" @click="applyFilterPreset('soft')">柔光</button>
-            </div>
-            <div class="form-row">
-              <label>亮度 {{ (selectedElement as any).brightness ?? 100 }}%</label>
-              <input
-                type="range" class="form-input" min="0" max="200"
-                :value="(selectedElement as any).brightness ?? 100"
-                @change="e => updateSelected({ brightness: Number((e.target as HTMLInputElement).value) } as any)"
-              />
-            </div>
-            <div class="form-row">
-              <label>对比度 {{ (selectedElement as any).contrast ?? 0 }}</label>
-              <input
-                type="range" class="form-input" min="-100" max="100"
-                :value="(selectedElement as any).contrast ?? 0"
-                @change="e => updateSelected({ contrast: Number((e.target as HTMLInputElement).value) } as any)"
-              />
-            </div>
-            <div class="form-row">
-              <label>饱和度 {{ (selectedElement as any).saturate ?? 100 }}%</label>
-              <input
-                type="range" class="form-input" min="0" max="200"
-                :value="(selectedElement as any).saturate ?? 100"
-                @change="e => updateSelected({ saturate: Number((e.target as HTMLInputElement).value) } as any)"
-              />
-            </div>
-            <div class="form-row">
-              <label>模糊 {{ (selectedElement as any).blur ?? 0 }}px</label>
-              <input
-                type="range" class="form-input" min="0" max="20"
-                :value="(selectedElement as any).blur ?? 0"
-                @change="e => updateSelected({ blur: Number((e.target as HTMLInputElement).value) } as any)"
-              />
-            </div>
-            <div class="form-row">
-              <label>灰度 {{ (selectedElement as any).grayscale ?? 0 }}%</label>
-              <input
-                type="range" class="form-input" min="0" max="100"
-                :value="(selectedElement as any).grayscale ?? 0"
-                @change="e => updateSelected({ grayscale: Number((e.target as HTMLInputElement).value) } as any)"
-              />
-            </div>
-            <div class="section-title">对齐</div>
-            <div class="btn-group">
-              <button class="btn-seg" @click="alignLeft(selectedElement.id)" title="左对齐">←</button>
-              <button class="btn-seg" @click="alignCenter(selectedElement.id)" title="水平居中">⇄</button>
-              <button class="btn-seg" @click="alignRight(selectedElement.id)" title="右对齐">→</button>
-            </div>
-            <div class="btn-group">
-              <button class="btn-seg" @click="alignTop(selectedElement.id)" title="顶部对齐">↑</button>
-              <button class="btn-seg" @click="alignMiddle(selectedElement.id)" title="垂直居中">⇅</button>
-              <button class="btn-seg" @click="alignBottom(selectedElement.id)" title="底部对齐">↓</button>
-            </div>
-            <div class="section-title">小程序编辑权限</div>
-            <div class="form-row">
-              <label class="toggle-label">
-                <span>允许用户编辑</span>
-                <label class="switch">
-                  <input
-                    type="checkbox"
-                    :checked="(selectedElement as any).editable !== false"
-                    @change="e => updateSelected({ editable: (e.target as HTMLInputElement).checked })"
-                  />
-                  <span class="slider"></span>
-                </label>
-              </label>
-            </div>
-
-            <div class="section-title">模板数据绑定</div>
-            <div class="form-row">
-              <label>数据字段</label>
-              <select
-                class="form-input"
-                :value="(selectedElement as any).dataKey || ''"
-                @change="e => updateSelected({ dataKey: (e.target as HTMLSelectElement).value || undefined })"
-              >
-                <option value="">无绑定</option>
-                <option v-for="k in TEMPLATE_DATA_KEYS" :key="k" :value="k">{{ k }}</option>
-              </select>
-            </div>
-          </template>
-
-          <!-- 未知元素 -->
-          <template v-else>
-            <div class="empty-hint">不支持的元素类型</div>
-          </template>
-        </div>
-      </aside>
+      <RightPanel
+        :selectedElement="selectedElement"
+        :canvasSize="canvasSize"
+        :bgType="bgType"
+        :bgColor1="bgColor1"
+        :bgColor2="bgColor2"
+        :bgAngle="bgAngle"
+        :bgScale="bgScale"
+        :bgOpacity="bgOpacity"
+        :sizeLabel="sizeLabel"
+        :fontList="fontList"
+        @updateSelected="updateSelected"
+        @update:bgType="v => { bgType = v }"
+        @update:bgColor1="v => { bgColor1 = v }"
+        @update:bgColor2="v => { bgColor2 = v }"
+        @update:bgAngle="v => { bgAngle = v }"
+        @update:bgScale="v => { bgScale = v }"
+        @update:bgOpacity="v => { bgOpacity = v }"
+        @update:sizeLabel="v => { sizeLabel = v; onPresetChange() }"
+        @bgColorChange="onBgColorChange"
+        @bgImageChange="onBgImageChange"
+        @bgImageFile="onBgImageFile"
+        @imageReplaceFile="onImageReplaceFile"
+        @manualSize="onManualSize"
+        @fontUpload="onFontUpload"
+        @fontStyleChange="onFontStyleChange"
+        @applyTextFx="applyTextFx"
+        @applyFilterPreset="applyFilterPreset"
+        @alignLeft="alignLeft"
+        @alignCenter="alignCenter"
+        @alignRight="alignRight"
+        @alignTop="alignTop"
+        @alignMiddle="alignMiddle"
+        @alignBottom="alignBottom"
+      />
     </main>
 
     <!-- ============ 海报模板管理 ============ -->
@@ -889,6 +161,7 @@
       :getDraft="getDraft"
       :getCanvasEl="getCanvasEl"
       :pageMode="pageMode"
+      :getFlipPages="() => flipPages"
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
@@ -899,7 +172,6 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useCanvas } from './composables/useCanvas'
 import {
-  uploadImage,
   uploadImages,
   uploadFonts,
   fetchFonts,
@@ -907,22 +179,27 @@ import {
   fetchTemplates,
   fetchTemplate,
   deleteTemplate,
-  fetchVersion,
   initApi,
   createTemplate,
   updateTemplate,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
+import EditorToolbar from './components/EditorToolbar.vue'
+import LeftPanel from './components/LeftPanel.vue'
+import RightPanel from './components/RightPanel.vue'
+import CanvasArea from './components/CanvasArea.vue'
 import PosterManager from './views/PosterManager.vue'
-import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot, PageMode } from './types/canvas'
+import type { TextElement, ImageElement, CanvasSize, AnyCanvasElement, PageMode } from './types/canvas'
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
 import { CATEGORIES } from './types/template'
-import { ALL_MATERIALS, getMaterialCategories, getMaterialsByCategory } from './constants/materials'
-import { ALL_PRESETS, PRESET_CATEGORIES, getPresetsByCategory } from './constants/presets'
+import { getMaterialCategories, getMaterialsByCategory } from './constants/materials'
+import { serializeElement } from './utils/element-serializer'
+import { PRESET_CATEGORIES, getPresetsByCategory } from './constants/presets'
 import type { TemplatePreset } from './constants/presets'
-import { GRADIENT_CATEGORIES, GRADIENT_PRESETS, getGradientsByCategory } from './constants/gradients'
+import { GRADIENT_CATEGORIES, getGradientsByCategory } from './constants/gradients'
 import { COLOR_SCHEMES } from './constants/colorSchemes'
 import type { ColorScheme } from './constants/colorSchemes'
+import { BRAND_COLOR } from './constants/common'
 
 // 模板数据字段（用于 dataKey 绑定）
 const TEMPLATE_DATA_KEYS = [
@@ -1096,12 +373,23 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
 const appRootRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const canvasAreaRef = ref<InstanceType<typeof CanvasArea> | null>(null)
 
 // ============ 本地状态 ============
-const leftTab = ref<'material' | 'layers' | 'templates'>('material')
+const leftTab = ref<'material' | 'layers' | 'templates' | 'pages'>('material')
 const currentView = ref<'editor' | 'poster'>('editor')
 const sizeLabel = ref('375 × 667')
 const pageMode = ref<PageMode>('single')
+
+// 翻页模式状态
+const flipPages = ref<Array<{
+  id: string
+  name: string
+  pageType: string
+  background: any
+  elements: any[]
+}>>([])
+const currentFlipPageIndex = ref(0)
 
 // 背景 UI 状态
 const bgType = ref<'solid' | 'linear-gradient' | 'radial-gradient' | 'image'>('solid')
@@ -1275,6 +563,11 @@ function refreshPreview() {
 
 function getCanvasEl(): HTMLCanvasElement | null {
   return canvasRef.value || null
+}
+
+// 当 CanvasArea 组件通知 canvas ref 更新时
+function onCanvasRefUpdate(el: HTMLCanvasElement | null) {
+  canvasRef.value = el
 }
 
 async function loadTemplateList() {
@@ -1453,6 +746,13 @@ function getLuminance(hex: string): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255
 }
 
+// updateElementStyle（直接对某个元素应用 patch，不触发选中）
+function updateElementStyle(id: string, patch: any) {
+  const el = elements.value.find(e => e.id === id)
+  if (!el) return
+  Object.assign(el, patch)
+}
+
 // 滤镜预设
 const FILTER_PRESETS: Record<string, { brightness: number; contrast: number; saturate: number; blur: number; grayscale: number }> = {
   none: { brightness: 100, contrast: 0, saturate: 100, blur: 0, grayscale: 0 },
@@ -1555,7 +855,7 @@ async function saveToServer() {
       category: currentTemplateCategory.value || 'wedding',
       tags: [],
       cover: coverDataUrl,
-      primaryColor: '#e84a6e',
+      primaryColor: BRAND_COLOR,
       likes: 0,
       pageCount: 10,
       status: 'draft',
@@ -1574,44 +874,9 @@ async function saveToServer() {
       },
       canvasSize: cSize,
       background: draft?.background || { type: 'solid', color1: '#ffffff' },
-      elements: (draft?.elements || []).map((el: any) => ({
-        id: el.id,
-        type: el.type === 'sticker' ? 'image' : el.type,
-        text: el.content || el.src || '',
-        dataKey: el.dataKey,
-        label: el.name,
-        x: el.x - (el.width || 0) / 2,
-        y: el.y - (el.height || 0) / 2,
-        width: el.width || 0,
-        height: el.height || 0,
-        zIndex: el.zIndex ?? 0,
-        rotation: el.rotation ?? 0,
-        opacity: el.opacity ?? 1,
-        editable: el.editable !== false,
-        style: el.type === 'text' ? {
-          font: el.fontFamily,
-          color: el.color,
-          fontSize: el.fontSize != null ? Math.round(el.fontSize * 750 / cSize.width) : 28,
-          spacing: el.letterSpacing ?? 2,
-          lineHeight: el.lineHeight ?? 1.5,
-          fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
-          fontStyle: el.fontStyle ?? 'normal',
-          textAlign: el.textAlign || 'center',
-          direction: el.direction || 'auto',
-          strokeColor: el.strokeColor || 'transparent',
-          strokeWidth: el.strokeWidth ?? 0,
-          shadowColor: el.shadowColor || 'transparent',
-          shadowOffsetX: el.shadowOffsetX ?? 0,
-          shadowOffsetY: el.shadowOffsetY ?? 0,
-          shadowBlur: el.shadowBlur ?? 0,
-          textDecoration: el.textDecoration || 'none',
-        } : el.type === 'image' ? {
-          font: '', color: '', spacing: 0,
-          borderRadius: el.borderRadius ?? 0,
-          borderColor: el.borderColor || 'transparent',
-          borderWidth: el.borderWidth ?? 0,
-        } as any : undefined,
-      })),
+      elements: (draft?.elements || []).map((el: any) =>
+        serializeElement(el, { canvasWidth: cSize.width })
+      ),
     }
 
     let resultId: string
@@ -1644,13 +909,10 @@ function onExportPNG() {
   a.click()
 }
 
-function onTemplatePublished(data: { id: string; name: string; category: string; subtitle: string }) {
+function onTemplatePublished(templateId: string) {
   showPublishWizard.value = false
   loadTemplateList()
-  currentTemplateId.value = data.id
-  currentTemplateName.value = data.name
-  currentTemplateCategory.value = data.category
-  currentTemplateSubtitle.value = data.subtitle
+  currentTemplateId.value = templateId
 }
 
 // ============ 本地草稿自动保存 ============
@@ -1708,25 +970,18 @@ function triggerImageUpload() {
   fileInput.value?.click()
 }
 
-async function onImageFile(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+async function onImageFile(file: File) {
   try {
     const dataUrl = await fileToDataURL(file)
     await canvasAddImage(dataUrl)
     showToast('图片添加成功')
   } catch (err) {
     alert('图片上传失败：' + (err as Error).message)
-  } finally {
-    input.value = ''
   }
 }
 
-async function onImageReplaceFile(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file || !selectedId.value) return
+async function onImageReplaceFile(file: File) {
+  if (!selectedId.value) return
   try {
     const dataUrl = await fileToDataURL(file)
     const id = selectedId.value
@@ -1737,15 +992,10 @@ async function onImageReplaceFile(e: Event) {
     showToast('图片替换成功')
   } catch (err) {
     alert('图片上传失败：' + (err as Error).message)
-  } finally {
-    input.value = ''
   }
 }
 
-async function onBgImageFile(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+async function onBgImageFile(file: File) {
   try {
     const dataUrl = await fileToDataURL(file)
     bgType.value = 'image'
@@ -1753,8 +1003,6 @@ async function onBgImageFile(e: Event) {
     showToast('背景图设置成功')
   } catch (err) {
     alert('图片上传失败：' + (err as Error).message)
-  } finally {
-    input.value = ''
   }
 }
 
@@ -1826,6 +1074,15 @@ function onPageModeChange(mode: PageMode) {
     sizeLabel.value = '横屏 750 × 500'
     setSize({ width: 750, height: 500 })
   }
+  // 切换到翻页模式时，初始化页面列表
+  if (mode === 'flip') {
+    sizeLabel.value = '翻页 375 × 667'
+    setSize({ width: 375, height: 667 })
+    if (flipPages.value.length === 0) {
+      initFlipPages()
+    }
+    loadCurrentFlipPage()
+  }
 }
 
 // 页面模式切换时，画布 DOM 会重建（v-if），需销毁旧 Fabric 实例并在新 canvas 上重建
@@ -1834,29 +1091,227 @@ watch(pageMode, async () => {
   const draft = getDraft()
   dispose()
   init()
-  loadDraft(draft)
+  if (pageMode.value === 'flip') {
+    loadCurrentFlipPage()
+  } else {
+    loadDraft(draft)
+  }
 })
 
-function onManualSize(e: Event, side: 'width' | 'height') {
-  const value = Number((e.target as HTMLInputElement).value)
+// ============ 翻页模式方法 ============
+function initFlipPages() {
+  flipPages.value = [
+    { id: 'flip-p1', name: '封面', pageType: 'cover', background: { type: 'solid', color1: '#ffffff' }, elements: [] },
+    { id: 'flip-p2', name: '照片', pageType: 'photo', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
+    { id: 'flip-p3', name: '邀请', pageType: 'invitation', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
+    { id: 'flip-p4', name: '时间地点', pageType: 'info', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
+    { id: 'flip-p5', name: '照片', pageType: 'photo', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
+    { id: 'flip-p6', name: '倒计时', pageType: 'countdown', background: { type: 'linear-gradient', color1: '#fff3e0', color2: '#ffe0b2', angle: 180 }, elements: [] },
+    { id: 'flip-p7', name: '照片', pageType: 'photo', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
+    { id: 'flip-p8', name: '尾页', pageType: 'ending', background: { type: 'solid', color1: '#ffffff' }, elements: [] },
+  ]
+  currentFlipPageIndex.value = 0
+}
+
+function getFlipPageTypeName(type: string): string {
+  const map: Record<string, string> = {
+    cover: '封面', photo: '照片', invitation: '邀请', info: '时间地点',
+    countdown: '倒计时', map: '地图', rsvp: '回执', blessing: '祝福', ending: '尾页', custom: '自定义'
+  }
+  return map[type] || type
+}
+
+function selectFlipPage(idx: number) {
+  if (idx < 0 || idx >= flipPages.value.length) return
+  saveCurrentFlipPage()
+  currentFlipPageIndex.value = idx
+  loadCurrentFlipPage()
+}
+
+function prevFlipPage() {
+  if (currentFlipPageIndex.value > 0) {
+    selectFlipPage(currentFlipPageIndex.value - 1)
+  }
+}
+
+function nextFlipPage() {
+  if (currentFlipPageIndex.value < flipPages.value.length - 1) {
+    selectFlipPage(currentFlipPageIndex.value + 1)
+  }
+}
+
+function addFlipPage() {
+  const types = ['photo', 'invitation', 'info', 'countdown', 'custom']
+  const idx = flipPages.value.length % types.length
+  flipPages.value.push({
+    id: `flip-p${Date.now()}`,
+    name: `页面 ${flipPages.value.length + 1}`,
+    pageType: types[idx],
+    background: { type: 'solid', color1: '#faf6f3' },
+    elements: [],
+  })
+  selectFlipPage(flipPages.value.length - 1)
+}
+
+function deleteFlipPage(idx: number) {
+  if (flipPages.value.length <= 1) return
+  flipPages.value.splice(idx, 1)
+  if (currentFlipPageIndex.value >= flipPages.value.length) {
+    currentFlipPageIndex.value = flipPages.value.length - 1
+  }
+  loadCurrentFlipPage()
+}
+
+function moveFlipPageUp(idx: number) {
+  if (idx <= 0) return
+  const temp = flipPages.value[idx]
+  flipPages.value[idx] = flipPages.value[idx - 1]
+  flipPages.value[idx - 1] = temp
+  currentFlipPageIndex.value = idx - 1
+}
+
+function moveFlipPageDown(idx: number) {
+  if (idx >= flipPages.value.length - 1) return
+  const temp = flipPages.value[idx]
+  flipPages.value[idx] = flipPages.value[idx + 1]
+  flipPages.value[idx + 1] = temp
+  currentFlipPageIndex.value = idx + 1
+}
+
+function saveCurrentFlipPage() {
+  if (pageMode.value !== 'flip') return
+  const page = flipPages.value[currentFlipPageIndex.value]
+  if (page) {
+    page.background = { ...background.value }
+    page.elements = elements.value.map(el => {
+      const textEl = el as TextElement
+      const imgEl = el as ImageElement
+      return {
+        id: el.id,
+        type: el.type,
+        text: el.type === 'image' ? imgEl.src : textEl.content,
+        dataKey: (el as any).dataKey,
+        label: el.name || '元素',
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        zIndex: el.zIndex,
+        rotation: el.rotation,
+        opacity: el.opacity,
+        editable: el.editable !== false,
+        fontFamily: textEl.fontFamily,
+        fontSize: textEl.fontSize,
+        fontWeight: textEl.fontWeight,
+        fontStyle: textEl.fontStyle,
+        color: textEl.color,
+        textAlign: textEl.textAlign,
+        lineHeight: textEl.lineHeight,
+        letterSpacing: textEl.letterSpacing,
+        strokeColor: textEl.strokeColor,
+        strokeWidth: textEl.strokeWidth,
+        shadowColor: textEl.shadowColor,
+        shadowOffsetX: textEl.shadowOffsetX,
+        shadowOffsetY: textEl.shadowOffsetY,
+        shadowBlur: textEl.shadowBlur,
+        textDecoration: textEl.textDecoration,
+        direction: textEl.direction,
+        src: imgEl.src,
+        scale: imgEl.scale,
+        mask: imgEl.mask,
+        borderRadius: imgEl.borderRadius,
+        borderColor: imgEl.borderColor,
+        borderWidth: imgEl.borderWidth,
+        brightness: imgEl.brightness,
+        contrast: imgEl.contrast,
+        blur: imgEl.blur,
+        grayscale: imgEl.grayscale,
+        saturate: imgEl.saturate,
+      }
+    })
+  }
+}
+
+function loadCurrentFlipPage() {
+  if (pageMode.value !== 'flip') return
+  const page = flipPages.value[currentFlipPageIndex.value]
+  if (page) {
+    setBackground(page.background)
+    clearCanvas()
+    const cSize = canvasSize.value
+    const pxToRpx = 750 / cSize.width
+    page.elements.forEach(el => {
+      if (el.type === 'image') {
+        canvasAddImage(el.text || el.src, {
+          id: el.id,
+          x: el.x,
+          y: el.y,
+          width: el.width,
+          height: el.height,
+          rotation: el.rotation ?? 0,
+          opacity: el.opacity ?? 1,
+          zIndex: el.zIndex ?? 0,
+          src: el.text || el.src || '',
+          scale: el.scale || 'cover',
+          mask: el.mask || 'rect',
+          borderRadius: el.borderRadius || 0,
+          borderColor: el.borderColor || 'transparent',
+          borderWidth: el.borderWidth || 0,
+          brightness: el.brightness ?? 100,
+          contrast: el.contrast ?? 0,
+          blur: el.blur ?? 0,
+          grayscale: el.grayscale ?? 0,
+          saturate: el.saturate ?? 100,
+          dataKey: el.dataKey,
+          editable: el.editable !== false,
+        } as any)
+      } else {
+        const fontSize = el.fontSize != null ? Math.round(el.fontSize / pxToRpx) : 24
+        canvasAddText({
+          id: el.id,
+          x: el.x,
+          y: el.y,
+          width: el.width,
+          height: el.height,
+          rotation: el.rotation ?? 0,
+          opacity: el.opacity ?? 1,
+          zIndex: el.zIndex ?? 0,
+          content: el.text || '',
+          fontFamily: el.fontFamily || '思源宋体, serif',
+          fontSize: fontSize,
+          fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
+          fontStyle: el.fontStyle || 'normal',
+          color: el.color || '#333333',
+          textAlign: el.textAlign || 'center',
+          lineHeight: el.lineHeight || 1.5,
+          letterSpacing: el.letterSpacing || 2,
+          strokeColor: el.strokeColor || 'transparent',
+          strokeWidth: el.strokeWidth || 0,
+          shadowColor: el.shadowColor || 'transparent',
+          shadowOffsetX: el.shadowOffsetX || 0,
+          shadowOffsetY: el.shadowOffsetY || 0,
+          shadowBlur: el.shadowBlur || 0,
+          textDecoration: el.textDecoration || 'none',
+          direction: el.direction || 'auto',
+          dataKey: el.dataKey,
+          editable: el.editable !== false,
+        } as any)
+      }
+    })
+  }
+}
+
+function onManualSize(payload: { e: Event; side: 'width' | 'height' }) {
+  const value = Number((payload.e.target as HTMLInputElement).value)
   if (!value || value < 50) return
   const newSize: CanvasSize = {
-    width: side === 'width' ? value : canvasSize.value.width,
-    height: side === 'height' ? value : canvasSize.value.height,
+    width: payload.side === 'width' ? value : canvasSize.value.width,
+    height: payload.side === 'height' ? value : canvasSize.value.height,
   }
   setSize(newSize)
 }
 
 // 文字「加粗/斜体」映射
-function fontStyleLabel(el: TextElement): string {
-  const b = el.fontWeight === 'bold'
-  const i = el.fontStyle === 'italic'
-  if (b && i) return 'bold-italic'
-  if (b) return 'bold'
-  if (i) return 'italic'
-  return 'normal'
-}
-
 function onFontStyleChange(val: string) {
   const patch: Partial<TextElement> = {}
   if (val === 'bold') { patch.fontWeight = 'bold'; patch.fontStyle = 'normal' }
@@ -1969,75 +1424,6 @@ onMounted(async () => {
   outline: none;
 }
 
-/* ====== 顶部工具栏 ====== */
-.toolbar {
-  height: 52px;
-  background: #2b2f38;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  flex-shrink: 0;
-}
-
-.toolbar-left, .toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toolbar-right {
-  margin-left: auto;
-}
-
-.logo {
-  font-size: 14px;
-  font-weight: 600;
-  color: #ffd54f;
-  margin-right: 8px;
-}
-
-.toolbar-divider {
-  width: 1px;
-  height: 22px;
-  background: rgba(255,255,255,0.15);
-  margin: 0 4px;
-}
-
-.tb-btn {
-  padding: 6px 14px;
-  background: #3b4049;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.tb-btn:hover:not(:disabled) { background: #4a5160; }
-.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.tb-btn.active { background: #4a5160; border-color: #64b5f6; color: #64b5f6; }
-.tb-btn.primary { background: #1976d2; border-color: #1565c0; }
-.tb-btn.primary:hover:not(:disabled) { background: #1565c0; }
-.tb-btn.danger { background: #c62828; border-color: #b71c1c; }
-.tb-btn.danger:hover:not(:disabled) { background: #b71c1c; }
-.tb-btn.sm { padding: 6px 10px; font-size: 12px; min-width: 60px; }
-
-.tb-select {
-  padding: 6px 10px;
-  background: #3b4049;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.zoom-label { font-size: 12px; color: #bbb; }
-
 /* ====== 主工作区 ====== */
 .workspace {
   flex: 1;
@@ -2051,759 +1437,6 @@ onMounted(async () => {
   display: flex;
   min-height: 0;
   overflow: hidden;
-}
-
-.panel {
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 0 10px rgba(0,0,0,0.05);
-  flex-shrink: 0;
-}
-
-.panel-left { width: 260px; border-right: 1px solid #e5e7eb; }
-.panel-right { width: 320px; border-left: 1px solid #e5e7eb; }
-
-.panel-tabs {
-  display: flex;
-  border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 12px 16px;
-  background: transparent;
-  border: none;
-  font-size: 13px;
-  color: #666;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s;
-}
-
-.tab-btn:hover { background: #f9fafb; color: #333; }
-.tab-btn.active { color: #1976d2; border-bottom-color: #1976d2; font-weight: 600; }
-
-.panel-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.tpl-name-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eee;
-}
-.tpl-name-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #999;
-  white-space: nowrap;
-}
-.tpl-name-input {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 8px;
-  font-size: 13px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  outline: none;
-  transition: border-color 0.15s;
-}
-.tpl-name-input:focus {
-  border-color: #e84a6e;
-}
-
-.font-select-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.font-select-row .form-input {
-  flex: 1;
-}
-.font-upload-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: border-color 0.15s;
-}
-.font-upload-btn:hover {
-  border-color: #e84a6e;
-}
-
-.section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-  margin-top: 12px;
-}
-
-.section-title:first-child { margin-top: 0; }
-
-.section-divider {
-  height: 1px;
-  background: #eee;
-  margin: 16px -16px;
-}
-
-/* 素材 */
-.material-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.material-item {
-  padding: 14px 8px;
-  background: #f5f7fa;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-  text-align: center;
-}
-
-.material-item:hover {
-  background: #e3f2fd;
-  border-color: #90caf9;
-}
-
-.text-item { display: flex; align-items: center; justify-content: center; }
-.mi-label { font-size: 14px; font-weight: 600; color: #333; }
-.mi-label.small { font-size: 12px; color: #666; }
-
-/* 日期占位符预览 */
-.date-preview-inputs {
-  margin-bottom: 8px;
-}
-.date-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.date-input-row label {
-  font-size: 13px;
-  color: #666;
-  min-width: 40px;
-}
-.date-input {
-  flex: 1;
-  padding: 6px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.15s;
-}
-.date-input:focus {
-  border-color: #409eff;
-}
-
-.smart-field-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 4px;
-}
-.sf-icon { font-size: 20px; line-height: 1; }
-
-.color-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.color-chip {
-  aspect-ratio: 1;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-
-.color-chip:hover { transform: scale(1.1); border-color: #90caf9; }
-.color-chip.wide { grid-column: span 3; aspect-ratio: 2.5 / 1; }
-
-.upload-btn {
-  display: block;
-  width: 100%;
-  padding: 10px;
-  background: #f5f7fa;
-  border: 2px dashed #c0c4cc;
-  border-radius: 8px;
-  color: #666;
-  font-size: 12px;
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.15s;
-}
-
-.upload-btn:hover { background: #e3f2fd; border-color: #90caf9; color: #1976d2; }
-.upload-btn.small { padding: 8px; font-size: 12px; }
-
-.empty-hint {
-  padding: 40px 16px;
-  text-align: center;
-  color: #999;
-  font-size: 12px;
-  line-height: 1.8;
-}
-
-/* 图层 */
-.layer-row {
-  display: flex;
-  align-items: center;
-  padding: 8px 10px;
-  margin-bottom: 4px;
-  border-radius: 6px;
-  gap: 8px;
-  cursor: pointer;
-  transition: background 0.1s;
-  border: 1px solid transparent;
-}
-
-.layer-row:hover { background: #f5f7fa; }
-.layer-row.active { background: #e3f2fd; border-color: #90caf9; }
-
-.layer-icon {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #eee;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #555;
-}
-
-.layer-name {
-  flex: 1;
-  font-size: 13px;
-  color: #333;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.layer-btn {
-  padding: 2px 6px;
-  background: transparent;
-  border: none;
-  font-size: 13px;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.1s;
-}
-
-.layer-btn:hover { opacity: 1; }
-.layer-btn.off { opacity: 0.25; }
-.layer-btn.danger:hover { color: #c62828; }
-
-/* ====== 画布 ====== */
-.canvas-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: #eef1f6;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.canvas-scroll {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  position: relative;
-  /* 棋盘格背景，便于看到透明元素 */
-  background-image:
-    linear-gradient(45deg, #e0e4ea 25%, transparent 25%),
-    linear-gradient(-45deg, #e0e4ea 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #e0e4ea 75%),
-    linear-gradient(-45deg, transparent 75%, #e0e4ea 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, 10px 0;
-  background-color: #eef1f6;
-}
-
-.phone-frame {
-  position: relative;
-  background: #000;
-  border-radius: 40px;
-  padding: 24px 12px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-  transition: width 0.2s, height 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.phone-notch {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #000;
-  border-radius: 0 0 8px 8px;
-  z-index: 10;
-}
-
-.phone-home {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #333;
-  border-radius: 3px;
-  z-index: 10;
-}
-
-/* 长页面视口模式 */
-.viewport-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  position: relative;
-  background-image:
-    linear-gradient(45deg, #e0e4ea 25%, transparent 25%),
-    linear-gradient(-45deg, #e0e4ea 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #e0e4ea 75%),
-    linear-gradient(-45deg, transparent 75%, #e0e4ea 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, 10px 0;
-  background-color: #eef1f6;
-}
-
-.viewport-header {
-  font-size: 11px;
-  color: #999;
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
-}
-
-.viewport-scroll {
-  overflow-y: auto;
-  border: 2px solid #c0c4cc;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  background: #fff;
-}
-
-.viewport-scroll::-webkit-scrollbar { width: 6px; }
-.viewport-scroll::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 3px; }
-.viewport-scroll::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 3px; }
-
-.viewport-footer {
-  font-size: 11px;
-  color: #999;
-  margin-top: 8px;
-}
-
-/* 横屏卡片模式 */
-.card-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  position: relative;
-  background-image:
-    linear-gradient(45deg, #e0e4ea 25%, transparent 25%),
-    linear-gradient(-45deg, #e0e4ea 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #e0e4ea 75%),
-    linear-gradient(-45deg, transparent 75%, #e0e4ea 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, 10px 0;
-  background-color: #eef1f6;
-}
-
-.card-header {
-  font-size: 11px;
-  color: #999;
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
-}
-
-.card-viewport {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.card-frame {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
-  overflow: hidden;
-  transition: width 0.2s, height 0.2s;
-}
-
-.card-footer {
-  font-size: 11px;
-  color: #999;
-  margin-top: 8px;
-}
-
-.fabric-canvas {
-  background: #fff;
-  display: block;
-  /* 由外层容器设置实际尺寸 */
-}
-
-.canvas-footer {
-  padding: 10px 16px;
-  background: #fff;
-  border-top: 1px solid #e5e7eb;
-  font-size: 12px;
-  color: #666;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  flex-shrink: 0;
-}
-
-/* ====== 表单 ====== */
-.form-row {
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-row.two-col {
-  flex-direction: row;
-  gap: 8px;
-}
-
-.form-row.two-col > div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-
-label {
-  font-size: 11px;
-  color: #666;
-  font-weight: 500;
-}
-
-.form-input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #e0e4ea;
-  border-radius: 6px;
-  font-size: 13px;
-  background: #fff;
-  transition: border-color 0.15s;
-}
-
-.form-input:focus { outline: none; border-color: #1976d2; }
-
-.form-input.color {
-  height: 36px;
-  padding: 2px;
-  cursor: pointer;
-}
-
-.form-textarea {
-  width: 100%;
-  min-height: 72px;
-  padding: 8px 10px;
-  border: 1px solid #e0e4ea;
-  border-radius: 6px;
-  font-size: 13px;
-  resize: vertical;
-  font-family: inherit;
-}
-
-.form-textarea:focus { outline: none; border-color: #1976d2; }
-
-.btn-group {
-  display: flex;
-  gap: 4px;
-  background: #f5f7fa;
-  padding: 3px;
-  border-radius: 6px;
-}
-
-.btn-seg {
-  flex: 1;
-  padding: 6px 8px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-seg:hover { color: #1976d2; }
-.btn-seg.active { background: #fff; color: #1976d2; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600; }
-
-/* 开关 toggle */
-.toggle-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 6px 0;
-  cursor: pointer;
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 22px;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: #ccc;
-  transition: 0.3s;
-  border-radius: 22px;
-}
-
-.slider::before {
-  content: '';
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: #fff;
-  transition: 0.3s;
-  border-radius: 50%;
-}
-
-.switch input:checked + .slider { background: #1976d2; }
-.switch input:checked + .slider::before { transform: translateX(18px); }
-
-/* 滚动条样式（webkit） */
-.panel-body::-webkit-scrollbar,
-.canvas-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-
-.panel-body::-webkit-scrollbar-track,
-.canvas-scroll::-webkit-scrollbar-track { background: transparent; }
-
-.panel-body::-webkit-scrollbar-thumb,
-.canvas-scroll::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 3px; }
-
-.panel-body::-webkit-scrollbar-thumb:hover,
-.canvas-scroll::-webkit-scrollbar-thumb:hover { background: #9098a8; }
-
-/* ====== Phase 2: 素材库 ====== */
-.mat-category-scroll {
-  margin-bottom: 12px;
-  overflow-x: auto;
-  max-height: 44px;
-}
-
-.mat-cats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding-bottom: 4px;
-}
-
-.mat-cat-btn {
-  padding: 4px 10px;
-  background: #f0f2f5;
-  border: 1px solid #e0e4ea;
-  border-radius: 12px;
-  font-size: 11px;
-  color: #666;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.mat-cat-btn:hover { background: #e3f2fd; border-color: #90caf9; color: #1976d2; }
-.mat-cat-btn.active { background: #e3f2fd; border-color: #1976d2; color: #1976d2; font-weight: 600; }
-
-.mat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  max-height: 280px;
-  overflow-y: auto;
-}
-
-.mat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  background: #f8f9fb;
-  border: 1px solid #e8eaed;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-  user-select: none;
-}
-
-.mat-item:hover { background: #e3f2fd; border-color: #90caf9; transform: scale(1.05); }
-
-.mat-shape {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mat-shape :deep(svg) {
-  width: 100%;
-  height: 100%;
-}
-
-.mat-name { font-size: 9px; color: #888; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 100%; }
-
-/* ====== Phase 3: 模板 Tab ====== */
-.templates-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 12px 0;
-}
-
-.btn-new-template {
-  margin: 0 12px 12px;
-  padding: 10px;
-  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-  border: 1.5px dashed #90caf9;
-  border-radius: 8px;
-  color: #1565c0;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-new-template:hover { background: #e3f2fd; border-color: #1976d2; }
-
-.template-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid #f0f0f0;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.template-item:hover { background: #f5f7fa; }
-.template-item.active { background: #e3f2fd; }
-
-.tpl-thumb {
-  width: 44px;
-  height: 60px;
-  border-radius: 6px;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: #f0f0f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.tpl-thumb-img { width: 100%; height: 100%; object-fit: cover; }
-.tpl-thumb-placeholder { font-size: 24px; }
-
-.tpl-info { flex: 1; min-width: 0; cursor: pointer; }
-.tpl-name { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tpl-cat { font-size: 11px; color: #999; margin-top: 2px; }
-
-.tpl-actions { display: flex; gap: 2px; }
-
-.tpl-btn {
-  padding: 4px 6px;
-  background: transparent;
-  border: none;
-  font-size: 13px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.1s;
-}
-
-.tpl-btn:hover { background: #e8e8e8; }
-.tpl-btn.danger:hover { background: #ffebee; }
-
-/* 历史版本 */
-.history-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.1s;
-}
-
-.history-item:hover { background: #fff8e1; }
-
-.history-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #1976d2;
-  background: #e3f2fd;
-  padding: 2px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.history-desc { flex: 1; font-size: 12px; color: #555; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.history-time { font-size: 10px; color: #aaa; flex-shrink: 0; }
-
-/* ====== Phase 4: 工具栏发布按钮 ====== */
-.tb-btn.publish-btn {
-  background: linear-gradient(135deg, #e84a6e, #ff6b8a);
-  border-color: #e84a6e;
-  font-weight: 700;
-  padding: 6px 16px;
-}
-
-.tb-btn.publish-btn:hover { background: linear-gradient(135deg, #c0392b, #e84a6e); }
-
-/* 空提示小号 */
-.empty-hint.small {
-  padding: 16px;
-  font-size: 11px;
-  color: #bbb;
 }
 
 /* ====== 全局 Toast ====== */
@@ -2829,336 +1462,4 @@ label {
 
 .toast-fade-enter-active, .toast-fade-leave-active { transition: all 0.3s ease; }
 .toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-
-/* ====== 起始模板 ====== */
-.preset-cats {
-  display: flex;
-  gap: 6px;
-  padding: 0 12px 10px;
-}
-
-.preset-cat-btn {
-  padding: 5px 12px;
-  background: #f0f2f5;
-  border: 1px solid #e0e4ea;
-  border-radius: 14px;
-  font-size: 12px;
-  color: #666;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.preset-cat-btn:hover { background: #e3f2fd; border-color: #90caf9; color: #1976d2; }
-.preset-cat-btn.active { background: #e3f2fd; border-color: #1976d2; color: #1976d2; font-weight: 600; }
-
-.preset-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  padding: 0 12px 12px;
-}
-
-.preset-card {
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1.5px solid #e8eaed;
-  border-radius: 10px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.preset-card:hover {
-  border-color: #90caf9;
-  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.12);
-  transform: translateY(-2px);
-}
-
-.preset-thumb {
-  width: 100%;
-  height: 80px;
-  background-size: cover;
-  background-position: center;
-}
-
-.preset-name {
-  padding: 8px 10px 2px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #333;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.preset-desc {
-  padding: 0 10px 8px;
-  font-size: 10px;
-  color: #999;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ====== 渐变网格 ====== */
-.gradient-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.gradient-chip {
-  position: relative;
-  height: 44px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-  overflow: hidden;
-}
-
-.gradient-chip:hover {
-  transform: scale(1.03);
-  border-color: #90caf9;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.gradient-name {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 4px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
-  background: linear-gradient(transparent, rgba(0,0,0,0.3));
-  text-align: left;
-}
-
-/* ====== 文字样式预设 ====== */
-.text-preset-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 0 12px 12px;
-}
-
-.text-preset-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 4px;
-  background: #f8f9fb;
-  border: 1.5px solid #e8eaed;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.text-preset-btn:hover {
-  background: #e3f2fd;
-  border-color: #90caf9;
-  transform: scale(1.03);
-}
-
-.tp-sample {
-  font-size: 16px;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.tp-name {
-  font-size: 10px;
-  color: #888;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-/* ====== 配色方案 ====== */
-.color-scheme-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 0 12px 12px;
-}
-
-.color-scheme-btn {
-  position: relative;
-  height: 44px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-  overflow: hidden;
-}
-
-.color-scheme-btn:hover {
-  transform: scale(1.05);
-  border-color: #90caf9;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.cs-name {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 4px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-  background: linear-gradient(transparent, rgba(0,0,0,0.35));
-  text-align: left;
-}
-
-/* ====== 滤镜预设 ====== */
-.filter-presets {
-  display: flex;
-  gap: 6px;
-  padding: 0 12px 10px;
-  flex-wrap: wrap;
-}
-
-.filter-preset-btn {
-  padding: 4px 10px;
-  background: #f0f2f5;
-  border: 1px solid #e0e4ea;
-  border-radius: 12px;
-  font-size: 11px;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.filter-preset-btn:hover {
-  background: #e3f2fd;
-  border-color: #90caf9;
-  color: #1976d2;
-}
-
-/* ====== 文字特效 ====== */
-.text-fx-grid {
-  display: flex;
-  gap: 6px;
-  padding: 0 12px 10px;
-  flex-wrap: wrap;
-}
-
-.text-fx-btn {
-  padding: 5px 12px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  border: none;
-  border-radius: 14px;
-  font-size: 11px;
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-weight: 500;
-}
-
-.text-fx-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-}
-
-/* ====== 实时预览面板 ====== */
-.preview-toggle-btn {
-  margin-left: auto;
-  padding: 4px 12px;
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.preview-toggle-btn:hover { background: #1565c0; }
-
-.preview-panel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding: 20px;
-  background: #e3f2fd;
-  border-top: 1px solid #bbdefb;
-}
-
-.preview-phone-frame {
-  position: relative;
-  width: 180px;
-  height: 320px;
-  background: #1a1a1a;
-  border-radius: 24px;
-  padding: 12px 6px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.preview-phone-notch {
-  width: 32px;
-  height: 5px;
-  background: #333;
-  border-radius: 3px;
-  margin-bottom: 6px;
-}
-
-.preview-phone-screen {
-  flex: 1;
-  width: 100%;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.preview-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.preview-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: #999;
-}
-
-.preview-phone-home {
-  width: 40px;
-  height: 4px;
-  background: #555;
-  border-radius: 2px;
-  margin-top: 6px;
-}
-
-.preview-refresh-btn {
-  padding: 8px 16px;
-  background: #fff;
-  border: 1px solid #90caf9;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #1976d2;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.preview-refresh-btn:hover { background: #e3f2fd; }
 </style>

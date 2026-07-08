@@ -55,6 +55,32 @@ export interface EditableElement {
   editable: boolean
 }
 
+// 背景配置
+export interface TemplateBackground {
+  type: 'solid' | 'linear-gradient' | 'radial-gradient' | 'image'
+  color1: string
+  color2?: string
+  angle?: number
+  imageUrl?: string
+  imageScale?: 'contain' | 'cover' | 'fill' | 'none'
+  imageOpacity?: number
+}
+
+// 翻页模式 - 页面类型
+export type FlipPageType = 'cover' | 'photo' | 'invitation' | 'info' | 'countdown' | 'map' | 'rsvp' | 'blessing' | 'ending' | 'custom'
+
+// 翻页模式 - 单页定义
+export interface FlipPage {
+  id: string
+  name: string
+  pageType: FlipPageType
+  background: TemplateBackground
+  elements: EditableElement[]
+}
+
+// 模板类型
+export type TemplateType = 'canvas' | 'page' | 'flip'
+
 // 完整模板
 export interface TemplateItem {
   id: string
@@ -79,6 +105,8 @@ export interface TemplateItem {
   tags?: string[]
   createdAt?: string
   updatedAt?: string
+  templateType?: TemplateType
+  pages?: FlipPage[]
 }
 
 // 分类

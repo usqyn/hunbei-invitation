@@ -1,4 +1,4 @@
-import { API_BASE } from '@/config'
+import { API_BASE, APP_VERSION } from '@/config'
 
 let sessionId = ''
 
@@ -38,7 +38,7 @@ export function track(event: string, params?: Record<string, any>, immediate = t
     event,
     params: params ? JSON.stringify(params) : '{}',
     platform: getPlatform(),
-    version: '1.2.3',
+    version: APP_VERSION,
     session_id: getSessionId(),
     user_id: getUserId(),
     timestamp: Date.now(),

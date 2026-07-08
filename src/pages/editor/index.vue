@@ -16,6 +16,9 @@
     <view v-else-if="editorStore.templateType === 'page'" class="editor-body editor-body--page">
       <PageEditor />
     </view>
+    <view v-else-if="editorStore.templateType === 'flip'" class="editor-body editor-body--flip">
+      <FlipEditor />
+    </view>
     <view v-else class="editor-body" :class="{ 'editor-body--landscape': isLandscape }">
       <!-- 画布模式：全屏画布 + 浮动右侧面板 -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
@@ -117,7 +120,7 @@
           mode="bottom"
           @update:active-panel-tab="editorStore.activePanelTab = $event"
           @open-editor="onOpenEditor"
-          @select-material="onSelectMaterial"
+          @select-material="onMaterialSelect"
           @toggle-setting="toggleSetting"
         />
       </view>
@@ -196,7 +199,7 @@ import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
 import { useUserStore } from '@/stores/user'
 import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
-import { loadFontsForElements } from '@/stores/editor'
+import { loadFontsForElements } from '@/utils/font-loader'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
@@ -204,6 +207,7 @@ import { useGoBack } from '@/composables/useGoBack'
 import { exportInvitation, fetchRecommendProducts } from '@/api'
 import RightPanel from './components/RightPanel.vue'
 import PageEditor from './components/PageEditor.vue'
+import FlipEditor from './components/FlipEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import BasicInfoForm from './components/BasicInfoForm.vue'
 import QuickEditForm from './components/QuickEditForm.vue'
@@ -614,8 +618,8 @@ onMounted(() => {
     editorStore.loadTemplateById(options.templateId)
     track('edit_start', { template_id: options.templateId })
   } else {
-    editorStore.loadTemplateById(DEFAULT_TEMPLATE_ID)
-    track('edit_start', { template_id: DEFAULT_TEMPLATE_ID })
+    editorStore.restoreTemplate()
+    track('edit_start', { template_id: editorStore.currentTemplateId })
   }
 
   nextTick(() => {

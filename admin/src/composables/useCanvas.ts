@@ -38,8 +38,8 @@ export interface UseCanvasOptions {
 // 最大历史快照数
 const MAX_HISTORY = 50
 
-// 复制缓冲区
-let clipboard: AnyCanvasElement | null = null
+// RTL 字符检测正则
+const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 
 export function useCanvas(opts: UseCanvasOptions) {
   // 对外暴露的响应式状态
@@ -56,6 +56,9 @@ export function useCanvas(opts: UseCanvasOptions) {
   const history = ref<CanvasDraft[]>([])
   const historyIdx = ref(-1)
   let suppressHistory = false
+
+  // 复制缓冲区
+  const clipboard = ref<AnyCanvasElement | null>(null)
 
   // 网格与吸附
   const showGrid = ref(false)
@@ -138,7 +141,7 @@ export function useCanvas(opts: UseCanvasOptions) {
 
       // 与其他对象边缘对齐
       canvas.getObjects().forEach((obj: any) => {
-        if (obj === target || (obj as any).isGuide) return
+        if (obj === target || obj.isGuide) return
         const oLeft = obj.left
         const oTop = obj.top
         const oRight = obj.left + (obj.width * (obj.scaleX || 1))
@@ -201,7 +204,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       opts.onSelectionChange?.(null)
       return
     }
-    const id = (active as any).id as string | undefined
+    const id = active.id as string | undefined
     if (id) {
       selectedId.value = id
       const el = elements.value.find(e => e.id === id) || null
@@ -342,9 +345,8 @@ export function useCanvas(opts: UseCanvasOptions) {
       ...partial,
     }
 
-    const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
     const resolvedDirection = el.direction === 'auto'
-      ? (rtlChars.test(el.content) ? 'rtl' : 'ltr')
+      ? (RTL_REGEX.test(el.content) ? 'rtl' : 'ltr')
       : el.direction
 
     const text = new fabric.IText(el.content, {
@@ -372,8 +374,8 @@ export function useCanvas(opts: UseCanvasOptions) {
       lockMovementX: el.locked,
       lockMovementY: el.locked,
     })
-    ;(text as any).id = el.id
-    ;(text as any).elementType = 'text'
+    ;text.id = el.id
+    ;text.elementType = 'text'
 
     canvas.add(text)
     canvas.setActiveObject(text)
@@ -437,9 +439,9 @@ export function useCanvas(opts: UseCanvasOptions) {
           opacity: el.opacity,
           lockRotation: el.locked,
         })
-        ;(obj as any).id = el.id
-        ;(obj as any).elementType = 'image'
-        ;(obj as any).srcUrl = src
+        ;obj.id = el.id
+        ;obj.elementType = 'image'
+        ;obj.srcUrl = src
 
         canvas.add(obj)
         canvas.setActiveObject(obj)
@@ -503,9 +505,9 @@ export function useCanvas(opts: UseCanvasOptions) {
         opacity: el.opacity,
         lockRotation: el.locked,
       })
-      ;(img as any).id = el.id
-      ;(img as any).elementType = 'image'
-      ;(img as any).srcUrl = src
+      ;img.id = el.id
+      ;img.elementType = 'image'
+      ;img.srcUrl = src
 
       canvas.add(img)
       canvas.setActiveObject(img)
@@ -524,7 +526,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
     const active = canvas.getActiveObject()
     if (!active) return
-    const id = (active as any).id as string
+    const id = active.id as string
     canvas.remove(active)
     elements.value = elements.value.filter(e => e.id !== id)
     selectedId.value = null
@@ -534,7 +536,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function deleteElement(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (!obj) return
     canvas.remove(obj)
     elements.value = elements.value.filter(e => e.id !== id)
@@ -547,7 +549,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     const el = elements.value.find(e => e.id === id)
     if (!canvas || !el) return
     el.visible = !el.visible
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       obj.set('visible', el.visible)
       canvas.renderAll()
@@ -559,7 +561,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     const el = elements.value.find(e => e.id === id)
     if (!canvas || !el) return
     el.locked = !el.locked
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       obj.set({
         lockMovementX: el.locked,
@@ -578,7 +580,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function bringToFront(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       canvas.remove(obj)
       canvas.add(obj)
@@ -590,7 +592,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function sendToBack(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       canvas.remove(obj)
       canvas.insertAt(0, obj)
@@ -602,7 +604,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function bringForward(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       const objects = canvas.getObjects()
       const idx = objects.indexOf(obj)
@@ -618,7 +620,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function sendBackwards(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       const objects = canvas.getObjects()
       const idx = objects.indexOf(obj)
@@ -635,7 +637,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return
     canvas.getObjects().forEach((obj, index) => {
-      const el = elements.value.find(e => e.id === (obj as any).id)
+      const el = elements.value.find(e => e.id === obj.id)
       if (el) {
         el.zIndex = index
       }
@@ -647,13 +649,13 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!selectedId.value) return
     const el = elements.value.find(e => e.id === selectedId.value)
     if (!el) return
-    clipboard = JSON.parse(JSON.stringify(el))
+    clipboard.value = JSON.parse(JSON.stringify(el))
   }
 
   function pasteFromClipboard() {
-    if (!clipboard) return
+    if (!clipboard.value) return
 
-    const newEl: AnyCanvasElement = JSON.parse(JSON.stringify(clipboard))
+    const newEl: AnyCanvasElement = JSON.parse(JSON.stringify(clipboard.value))
     newEl.id = createId(newEl.type)
     newEl.x += 20
     newEl.y += 20
@@ -662,9 +664,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
 
     if (newEl.type === 'text') {
-      const rtlCharsPaste = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
       const resolvedDirectionPaste = newEl.direction === 'auto'
-        ? (rtlCharsPaste.test(newEl.content) ? 'rtl' : 'ltr')
+        ? (RTL_REGEX.test(newEl.content) ? 'rtl' : 'ltr')
         : (newEl.direction || 'ltr')
 
       const t = new fabric.IText(newEl.content, {
@@ -680,8 +681,8 @@ export function useCanvas(opts: UseCanvasOptions) {
         direction: resolvedDirectionPaste,
         lockRotation: newEl.locked, selectable: !newEl.locked,
       })
-      ;(t as any).id = newEl.id
-      ;(t as any).elementType = 'text'
+      ;t.id = newEl.id
+      ;t.elementType = 'text'
       canvas.add(t)
       canvas.setActiveObject(t)
       elements.value.push(newEl)
@@ -698,14 +699,16 @@ export function useCanvas(opts: UseCanvasOptions) {
           opacity: ie.opacity, angle: ie.rotation,
           lockRotation: ie.locked, selectable: !ie.locked,
         })
-        ;(img as any).id = ie.id
-        ;(img as any).elementType = 'image'
-        ;(img as any).srcUrl = ie.src
+        ;img.id = ie.id
+        ;img.elementType = 'image'
+        ;img.srcUrl = ie.src
         canvas.add(img)
         canvas.setActiveObject(img)
         elements.value.push(newEl)
         selectedId.value = newEl.id
         canvas.renderAll()
+      }).catch(() => {
+        // 粘贴图片加载失败时静默处理
       })
     }
 
@@ -716,7 +719,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function alignLeft(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       const boundingRect = obj.getBoundingRect()
       obj.set('left', boundingRect.width / 2)
@@ -728,7 +731,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function alignCenter(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       obj.set('left', canvasSize.value.width / 2)
       canvas.renderAll()
@@ -739,7 +742,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function alignRight(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       const boundingRect = obj.getBoundingRect()
       obj.set('left', canvasSize.value.width - boundingRect.width / 2)
@@ -751,7 +754,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function alignTop(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       const boundingRect = obj.getBoundingRect()
       obj.set('top', boundingRect.height / 2)
@@ -763,7 +766,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function alignMiddle(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       obj.set('top', canvasSize.value.height / 2)
       canvas.renderAll()
@@ -774,7 +777,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function alignBottom(id: string) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       const boundingRect = obj.getBoundingRect()
       obj.set('top', canvasSize.value.height - boundingRect.height / 2)
@@ -793,7 +796,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       opts.onSelectionChange?.(null)
       return
     }
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (obj) {
       canvas.setActiveObject(obj)
       canvas.renderAll()
@@ -809,7 +812,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     const el = elements.value.find(e => e.id === selectedId.value)
     if (!el) return
 
-    const obj = canvas.getObjects().find(o => (o as any).id === selectedId.value)
+    const obj = canvas.getObjects().find(o => o.id === selectedId.value)
     if (!obj) return
 
     // 更新我们自己的数据模型
@@ -837,9 +840,8 @@ export function useCanvas(opts: UseCanvasOptions) {
         } as any)
       }
 
-      const rtlCharsUpdate = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
       const resolvedDirectionUpdate = t.direction === 'auto'
-        ? (rtlCharsUpdate.test(t.content) ? 'rtl' : 'ltr')
+        ? (RTL_REGEX.test(t.content) ? 'rtl' : 'ltr')
         : t.direction
 
       textObj.set({
@@ -943,7 +945,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return
     canvas.getObjects().forEach(obj => {
-      const id = (obj as any).id as string
+      const id = obj.id as string
       const el = elements.value.find(e => e.id === id)
       if (!el || el.type !== 'text') return
       el.content = (obj as any).text ?? el.content
@@ -954,7 +956,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return
     canvas.getObjects().forEach(obj => {
-      const id = (obj as any).id as string
+      const id = obj.id as string
       const el = elements.value.find(e => e.id === id)
       if (!el) return
       const o = obj as any
@@ -997,7 +999,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         .replace(/\{year\}/g, dateValues.year ?? '')
         .replace(/\{month\}/g, dateValues.month ?? '')
         .replace(/\{day\}/g, dateValues.day ?? '')
-      const obj = canvas.getObjects().find(o => (o as any).id === el.id)
+      const obj = canvas.getObjects().find(o => o.id === el.id)
       if (obj) {
         ;(obj as fabric.IText).set('text', resolved)
       }
@@ -1029,10 +1031,9 @@ export function useCanvas(opts: UseCanvasOptions) {
     sorted.forEach(el => {
       // loadDraft 期望的坐标系与 Fabric 一致（中心原点）
       if (el.type === 'text') {
-        const rtlCharsDraft = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
         const et = el as TextElement
         const resolvedDirectionDraft = et.direction === 'auto'
-          ? (rtlCharsDraft.test(el.content) ? 'rtl' : 'ltr')
+          ? (RTL_REGEX.test(el.content) ? 'rtl' : 'ltr')
           : et.direction
 
         const t = new fabric.IText(el.content, {
@@ -1047,8 +1048,8 @@ export function useCanvas(opts: UseCanvasOptions) {
           direction: resolvedDirectionDraft,
           lockRotation: el.locked, selectable: !el.locked,
         })
-        ;(t as any).id = el.id
-        ;(t as any).elementType = 'text'
+        ;t.id = el.id
+        ;t.elementType = 'text'
         addTasks.push(() => canvas.add(t))
       } else if (el.type === 'image') {
         const ie = el as ImageElement
@@ -1063,11 +1064,13 @@ export function useCanvas(opts: UseCanvasOptions) {
               opacity: ie.opacity, angle: ie.rotation,
               lockRotation: ie.locked, selectable: !ie.locked,
             })
-            ;(img as any).id = ie.id
-            ;(img as any).elementType = 'image'
-            ;(img as any).srcUrl = ie.src
+            ;img.id = ie.id
+            ;img.elementType = 'image'
+            ;img.srcUrl = ie.src
             canvas.add(img)
             canvas.renderAll()
+          }).catch(() => {
+            // loadDraft 时图片加载失败不中断其他元素
           })
         })
       }
@@ -1199,7 +1202,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   function nudgeElement(id: string, dx: number, dy: number) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).id === id)
+    const obj = canvas.getObjects().find(o => o.id === id)
     if (!obj) return
     obj.set({
       left: (obj.left || 0) + dx,
@@ -1219,12 +1222,12 @@ export function useCanvas(opts: UseCanvasOptions) {
   function duplicateSelected() {
     const canvas = fabricCanvas.value
     if (!canvas || !selectedId.value) return
-    const obj = canvas.getObjects().find(o => (o as any).id === selectedId.value)
+    const obj = canvas.getObjects().find(o => o.id === selectedId.value)
     if (!obj) return
     obj.clone().then((cloned: any) => {
       cloned.set({ left: (cloned.left || 0) + 10, top: (cloned.top || 0) + 10 })
       cloned.id = createId(obj.type === 'i-text' ? 'text' : obj.type === 'image' ? 'image' : 'sticker')
-      ;(cloned as any).elementType = (obj as any).elementType || 'sticker'
+      ;cloned.elementType = obj.elementType || 'sticker'
       canvas.add(cloned)
       canvas.setActiveObject(cloned)
       canvas.renderAll()
@@ -1262,6 +1265,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     showGrid,
     snapToGrid,
     gridSize,
+    clipboard,
 
     // 操作
     init,

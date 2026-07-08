@@ -1,7 +1,5 @@
-import type { TemplateData, EditableElement, TemplateItem, PageSection } from '@/types'
+import type { TemplateData, EditableElement, TemplateItem, PageSection, FlipPage, TemplateBackground } from '@/types'
 import { DEFAULT_ELEMENT_STYLE } from './editor'
-
-export { DEFAULT_ELEMENT_STYLE }
 
 // ============ 【模板 1】婚礼 - 好久不见 ============
 const WEDDING_1_DATA: TemplateData = {
@@ -854,6 +852,140 @@ export const TEMPLATE_LIST: TemplateItem[] = [
     ] as PageSection[],
     primaryColor: '#ff6b8a',
     tags: ['page模式', '浪漫风'],
+  },
+  // ============ 【模板 - 翻页模式 1】时光与你 ============
+  {
+    id: 'wedding-flip-1',
+    name: '时光与你',
+    subtitle: '翻页请柬 · 8页',
+    category: 'wedding',
+    cover: '/static/images/templates/wedding-1.svg',
+    likes: 628000,
+    pageCount: 8,
+    templateType: 'flip',
+    data: {
+      coverImage: '/static/images/templates/wedding-1.svg',
+      coverTitle: '我们的婚礼',
+      coverSubtitle: 'Our Wedding',
+      photo1: '/static/images/templates/wedding-2.svg',
+      photo2: '/static/images/templates/wedding-3.svg',
+      photo3: '/static/images/templates/wedding-4.svg',
+      photo4: '/static/images/templates/wedding-5.svg',
+      photoTitle: '诚挚邀请',
+      photoSubtitle: 'Sincerely Invite',
+      footerText: '我们曾各自奔赴人海\n直到目光交汇的那一刻\n才懂归属感的意义\n诚邀生命中重要的你\n共同见证这场"双向奔赴"的圆满',
+      footerSubText: '',
+      inviter: '',
+      date: '2050年5月20日',
+      time: '12:00',
+      location: '婚贝大酒店',
+      address: '北京市朝阳区幸福路100号',
+    },
+    canvasSize: { width: 375, height: 667 },
+    pages: [
+      // P1 封面页
+      {
+        id: 'flip-p1',
+        name: '封面',
+        pageType: 'cover',
+        background: { type: 'image', color1: '#ffffff', imageUrl: '/static/images/templates/wedding-1.svg', imageScale: 'cover' } as TemplateBackground,
+        elements: [
+          { id: 'p1-t1', type: 'text', text: "We're married", label: '英文标题', x: 25, y: 10, width: 50, height: 8, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: 'Georgia, serif', color: '#ffffff', fontSize: 32, spacing: 4, lineHeight: 1.2, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p1-t2', type: 'text', text: '新郎 & 新娘', label: '新人姓名', dataKey: 'inviter', x: 20, y: 85, width: 60, height: 6, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#ffffff', fontSize: 28, spacing: 4, lineHeight: 1.5, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p1-t3', type: 'text', text: 'INVITATION', label: '装饰文字', x: 35, y: 92, width: 30, height: 3, zIndex: 2, rotation: 0, opacity: 0.8, editable: true, style: { font: 'Arial, sans-serif', color: '#ffffff', fontSize: 20, spacing: 6, lineHeight: 1.2, fontWeight: 'normal', textAlign: 'center' } },
+        ],
+      },
+      // P2 照片展示（2宫格）
+      {
+        id: 'flip-p2',
+        name: '照片·甜蜜',
+        pageType: 'photo',
+        background: { type: 'solid', color1: '#faf6f3' } as TemplateBackground,
+        elements: [
+          { id: 'p2-img1', type: 'image', text: '/static/images/templates/wedding-2.svg', label: '照片1', dataKey: 'photo1', x: 5, y: 5, width: 42.5, height: 42, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+          { id: 'p2-img2', type: 'image', text: '/static/images/templates/wedding-3.svg', label: '照片2', dataKey: 'photo2', x: 52.5, y: 5, width: 42.5, height: 42, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+          { id: 'p2-t1', type: 'text', text: 'Wedding Invitation', label: '装饰英文', x: 10, y: 50, width: 80, height: 6, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: 'Georgia, serif', color: '#d4a574', fontSize: 28, spacing: 3, lineHeight: 1.2, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p2-img3', type: 'image', text: '/static/images/templates/wedding-4.svg', label: '照片3', dataKey: 'photo3', x: 5, y: 58, width: 90, height: 37, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+        ],
+      },
+      // P3 邀请正文
+      {
+        id: 'flip-p3',
+        name: '邀请·正文',
+        pageType: 'invitation',
+        background: { type: 'solid', color1: '#faf6f3' } as TemplateBackground,
+        elements: [
+          { id: 'p3-t1', type: 'text', text: '诚挚邀请', label: '标题', x: 20, y: 15, width: 60, height: 6, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#333333', fontSize: 36, spacing: 6, lineHeight: 1.5, fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p3-t2', type: 'text', text: 'SINCERELY INVITE', label: '英文副标题', x: 20, y: 22, width: 60, height: 4, zIndex: 2, rotation: 0, opacity: 0.6, editable: true, style: { font: 'Arial, sans-serif', color: '#999999', fontSize: 22, spacing: 4, lineHeight: 1.2, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p3-t3', type: 'text', text: '我们曾各自奔赴人海\n直到目光交汇的那一刻\n才懂归属感的意义\n诚邀生命中重要的你\n共同见证这场"双向奔赴"的圆满', label: '邀请正文', x: 15, y: 35, width: 70, height: 35, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#555555', fontSize: 26, spacing: 2, lineHeight: 2, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p3-img1', type: 'image', text: '/static/images/templates/wedding-5.svg', label: '装饰图片', x: 25, y: 75, width: 50, height: 20, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+        ],
+      },
+      // P4 时间地点
+      {
+        id: 'flip-p4',
+        name: '时间·地点',
+        pageType: 'info',
+        background: { type: 'solid', color1: '#faf6f3' } as TemplateBackground,
+        elements: [
+          { id: 'p4-t1', type: 'text', text: '婚礼信息', label: '标题', x: 20, y: 12, width: 60, height: 5, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#333333', fontSize: 32, spacing: 6, lineHeight: 1.5, fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p4-t2', type: 'text', text: '2050年5月20日 星期二', label: '日期', dataKey: 'date', x: 15, y: 25, width: 70, height: 5, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#d4a574', fontSize: 30, spacing: 2, lineHeight: 1.5, fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p4-t3', type: 'text', text: '中午 12:00', label: '时间', dataKey: 'time', x: 15, y: 33, width: 70, height: 4, zIndex: 2, rotation: 0, opacity: 0.8, editable: true, style: { font: '思源宋体', color: '#666666', fontSize: 26, spacing: 2, lineHeight: 1.5, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p4-t4', type: 'text', text: '婚贝大酒店', label: '酒店名称', dataKey: 'location', x: 15, y: 45, width: 70, height: 4, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#333333', fontSize: 28, spacing: 2, lineHeight: 1.5, fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p4-t5', type: 'text', text: '北京市朝阳区幸福路100号', label: '详细地址', dataKey: 'address', x: 15, y: 52, width: 70, height: 4, zIndex: 2, rotation: 0, opacity: 0.7, editable: true, style: { font: '思源宋体', color: '#999999', fontSize: 24, spacing: 1, lineHeight: 1.5, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p4-img1', type: 'image', text: '/static/images/templates/wedding-2.svg', label: '装饰图', x: 10, y: 62, width: 80, height: 32, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+        ],
+      },
+      // P5 单张照片
+      {
+        id: 'flip-p5',
+        name: '照片·时光',
+        pageType: 'photo',
+        background: { type: 'image', color1: '#ffffff', imageUrl: '/static/images/templates/wedding-3.svg', imageScale: 'cover' } as TemplateBackground,
+        elements: [
+          { id: 'p5-t1', type: 'text', text: 'Wedding Invitation', label: '装饰文字', x: 15, y: 45, width: 70, height: 5, zIndex: 2, rotation: 0, opacity: 0.9, editable: true, style: { font: 'Georgia, serif', color: '#ffffff', fontSize: 32, spacing: 4, lineHeight: 1.2, fontWeight: 'normal', textAlign: 'center' } },
+        ],
+      },
+      // P6 倒计时
+      {
+        id: 'flip-p6',
+        name: '倒计时',
+        pageType: 'countdown',
+        background: { type: 'linear-gradient', color1: '#fff3e0', color2: '#ffe0b2', angle: 180 } as TemplateBackground,
+        elements: [
+          { id: 'p6-t1', type: 'text', text: '距离婚礼还有', label: '标题', x: 20, y: 25, width: 60, height: 5, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#d4a574', fontSize: 28, spacing: 4, lineHeight: 1.5, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p6-t2', type: 'text', text: '100', label: '天数', x: 20, y: 35, width: 60, height: 20, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: 'Arial, sans-serif', color: '#e84a6e', fontSize: 100, spacing: 0, lineHeight: 1, fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p6-t3', type: 'text', text: '天', label: '单位', x: 45, y: 58, width: 10, height: 4, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#666666', fontSize: 28, spacing: 0, lineHeight: 1.5, fontWeight: 'normal', textAlign: 'center' } },
+          { id: 'p6-t4', type: 'text', text: '期待与您共度这美好时刻', label: '副标题', x: 15, y: 70, width: 70, height: 4, zIndex: 2, rotation: 0, opacity: 0.7, editable: true, style: { font: '思源宋体', color: '#999999', fontSize: 24, spacing: 2, lineHeight: 1.5, fontWeight: 'normal', textAlign: 'center' } },
+        ],
+      },
+      // P7 4宫格照片
+      {
+        id: 'flip-p7',
+        name: '照片·回忆',
+        pageType: 'photo',
+        background: { type: 'solid', color1: '#faf6f3' } as TemplateBackground,
+        elements: [
+          { id: 'p7-img1', type: 'image', text: '/static/images/templates/wedding-1.svg', label: '照片1', dataKey: 'photo1', x: 5, y: 8, width: 42.5, height: 40, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+          { id: 'p7-img2', type: 'image', text: '/static/images/templates/wedding-2.svg', label: '照片2', dataKey: 'photo2', x: 52.5, y: 8, width: 42.5, height: 40, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+          { id: 'p7-img3', type: 'image', text: '/static/images/templates/wedding-4.svg', label: '照片3', dataKey: 'photo3', x: 5, y: 52, width: 42.5, height: 40, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+          { id: 'p7-img4', type: 'image', text: '/static/images/templates/wedding-5.svg', label: '照片4', dataKey: 'photo4', x: 52.5, y: 52, width: 42.5, height: 40, zIndex: 1, rotation: 0, opacity: 1, editable: true },
+        ],
+      },
+      // P8 尾页
+      {
+        id: 'flip-p8',
+        name: '尾页',
+        pageType: 'ending',
+        background: { type: 'image', color1: '#ffffff', imageUrl: '/static/images/templates/wedding-5.svg', imageScale: 'cover' } as TemplateBackground,
+        elements: [
+          { id: 'p8-t1', type: 'text', text: '感谢您的到来', label: '感谢语', x: 15, y: 40, width: 70, height: 8, zIndex: 2, rotation: 0, opacity: 1, editable: true, style: { font: '思源宋体', color: '#ffffff', fontSize: 36, spacing: 6, lineHeight: 1.5, fontWeight: 'bold', textAlign: 'center' } },
+          { id: 'p8-t2', type: 'text', text: 'Thank You', label: '英文感谢', x: 20, y: 52, width: 60, height: 5, zIndex: 2, rotation: 0, opacity: 0.9, editable: true, style: { font: 'Georgia, serif', color: '#ffffff', fontSize: 28, spacing: 4, lineHeight: 1.2, fontWeight: 'normal', textAlign: 'center' } },
+        ],
+      },
+    ] as FlipPage[],
+    primaryColor: '#d4a574',
+    tags: ['翻页模式', '简约风'],
   },
 ]
 

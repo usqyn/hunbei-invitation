@@ -11,6 +11,40 @@
     </view>
 
     <scroll-view class="preview-content" scroll-y>
+      <!-- Flip 翻页模式：左右滑动翻页 -->
+      <template v-if="editorStore.templateType === 'flip'">
+        <view class="flip-preview-wrap">
+          <swiper
+            class="flip-swiper"
+            :indicator-dots="true"
+            indicator-color="rgba(255,255,255,0.4)"
+            indicator-active-color="#ffffff"
+            :circular="false"
+            @change="onFlipPageChange"
+          >
+            <swiper-item v-for="(page, idx) in editorStore.flipPages" :key="page.id">
+              <view class="flip-page-card" :style="getFlipPageBgStyle(page)">
+                <view
+                  v-for="(el, eIdx) in page.elements"
+                  :key="eIdx"
+                  class="flip-page-element"
+                  :class="{ 'flip-text': el.type === 'text', 'flip-image': el.type === 'image' }"
+                  :style="getFlipElementStyle(el)"
+                >
+                  <image
+                    v-if="el.type === 'image'"
+                    class="flip-image-el"
+                    :src="el.text"
+                    mode="aspectFit"
+                    @error="onImageError"
+                  />
+                  <text v-else-if="el.type === 'text'" class="flip-text-el" :style="getFlipTextStyle(el)">{{ resolveText(el.text) }}</text>
+                </view>
+              </view>
+            </swiper-item>
+          </swiper>
+        </view>
+      </template>
       <!-- Page 模式：垂直滚动区块渲染 -->
       <template v-if="editorStore.templateType === 'page'">
         <view class="preview-card preview-card--page" :style="canvasBackgroundStyle">
@@ -187,7 +221,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
-import { loadFontsForElements } from '@/stores/editor'
+import { loadFontsForElements } from '@/utils/font-loader'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
@@ -362,6 +396,57 @@ const goToMall = () => {
 
 const goToProduct = (p: any) => {
   uni.navigateTo({ url: `/pages/mall/index?productId=${p.id}` })
+}
+
+// ============ Flip 翻页模式方法 ============
+function onFlipPageChange(e: any) {
+  editorStore.currentFlipPageIndex = e.detail.current
+}
+
+function getFlipPageBgStyle(page: any): Record<string, string> {
+  const bg = page.background
+  const style: Record<string, string> = {}
+  if (bg.type === 'solid') {
+    style.background = bg.color1
+  } else if (bg.type === 'linear-gradient') {
+    style.background = `linear-gradient(${bg.angle || 180}deg, ${bg.color1}, ${bg.color2 || bg.color1})`
+  } else if (bg.type === 'radial-gradient') {
+    style.background = `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})`
+  } else if (bg.type === 'image' && bg.imageUrl) {
+    style.backgroundImage = `url(${bg.imageUrl})`
+    style.backgroundSize = bg.imageScale || 'cover'
+    style.backgroundPosition = 'center'
+    style.backgroundRepeat = 'no-repeat'
+  }
+  return style
+}
+
+function getFlipElementStyle(el: any): Record<string, string> {
+  const cs = editorStore.canvasSize
+  return {
+    position: 'absolute',
+    left: el.x + '%',
+    top: el.y + '%',
+    width: el.width + '%',
+    height: el.height + '%',
+    transform: `rotate(${el.rotation || 0}deg)`,
+    opacity: el.opacity ?? 1,
+    zIndex: el.zIndex || 1,
+  }
+}
+
+function getFlipTextStyle(el: any): Record<string, string> {
+  const style = el.style || {}
+  const cs = editorStore.canvasSize
+  return {
+    fontFamily: style.font || 'sans-serif',
+    fontSize: (style.fontSize || 28) + 'rpx',
+    color: style.color || '#333333',
+    letterSpacing: (style.spacing || 0) + 'rpx',
+    lineHeight: style.lineHeight || 1.5,
+    fontWeight: style.fontWeight || 'normal',
+    textAlign: style.textAlign || 'center',
+  }
 }
 
 const onImageError = () => {
@@ -556,6 +641,46 @@ const onImageError = () => {
   font-size: 28rpx;
   color: #999;
   margin-left: 8rpx;
+}
+
+/* Flip 翻页模式 */
+.flip-preview-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.flip-swiper {
+  width: 100%;
+  height: 100vh;
+}
+
+.flip-page-card {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.flip-page-element {
+  position: absolute;
+  overflow: hidden;
+}
+
+.flip-image-el {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.flip-text-el {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 
 /* Flex 模式 */

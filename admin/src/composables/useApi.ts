@@ -11,6 +11,26 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// 响应拦截器：统一处理错误
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      const status = error.response.status
+      const msg = error.response.data?.error || error.response.data?.message || ''
+      console.error(`[API Error] ${status}: ${msg}`, error.config?.url)
+      if (status === 401) {
+        console.error('[API Error] Token expired or invalid, please re-login')
+      }
+    } else if (error.request) {
+      console.error('[API Error] No response received:', error.config?.url)
+    } else {
+      console.error('[API Error]', error.message)
+    }
+    return Promise.reject(error)
+  }
+)
+
 export { api }
 
 let adminToken = ''
@@ -91,7 +111,7 @@ export async function fetchVersion(): Promise<number> {
 export async function uploadImages(files: File[]): Promise<string[]> {
   const formData = new FormData()
   files.forEach(f => formData.append('images', f))
-  const res = await axios.post(`${API_BASE}/api/upload`, formData, {
+  const res = await api.post('/api/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000,
   })
@@ -116,7 +136,7 @@ export async function uploadFonts(files: File[]): Promise<Array<{ filename: stri
     const name = f.name.replace(/\.[^.]+$/, '')
     formData.append('names', name)
   })
-  const res = await axios.post(`${API_BASE}/api/fonts/upload`, formData, {
+  const res = await api.post('/api/fonts/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000,
   })
@@ -125,7 +145,7 @@ export async function uploadFonts(files: File[]): Promise<Array<{ filename: stri
 }
 
 export async function fetchFonts(): Promise<Array<{ filename: string; url: string; size: number }>> {
-  const res = await axios.get(`${API_BASE}/api/fonts`)
+  const res = await api.get('/api/fonts')
   if (!res.data.success) throw new Error(res.data.error)
   return res.data.data || []
 }

@@ -109,7 +109,7 @@ export interface HistorySnapshot {
   ts: number
 }
 
-export type PageMode = 'single' | 'long' | 'landscape'
+export type PageMode = 'single' | 'long' | 'landscape' | 'flip'
 
 // 预设尺寸（常见微信小程序尺寸）
 export const CANVAS_PRESETS: Array<{ label: string; width: number; height: number }> = [

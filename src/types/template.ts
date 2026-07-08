@@ -120,7 +120,7 @@ export interface TemplateCategory {
   templates: TemplateItem[]
 }
 
-export type TemplateType = 'canvas' | 'page'
+export type TemplateType = 'canvas' | 'page' | 'flip'
 
 export type PageSectionType = 'title' | 'date' | 'image' | 'text' | 'location' | 'rsvp' | 'map' | 'divider' | 'music' | 'countdown'
 
@@ -134,6 +134,18 @@ export interface PageSection {
   dataKey?: keyof TemplateData
   style?: ElementStyle
   editable?: boolean
+}
+
+// 翻页模式 - 页面类型
+export type FlipPageType = 'cover' | 'photo' | 'invitation' | 'info' | 'countdown' | 'map' | 'rsvp' | 'blessing' | 'ending' | 'custom'
+
+// 翻页模式 - 单页定义
+export interface FlipPage {
+  id: string
+  name: string
+  pageType: FlipPageType
+  background: TemplateBackground
+  elements: EditableElement[]
 }
 
 // 单个模板的完整配置
@@ -153,6 +165,8 @@ export interface TemplateItem {
   elements?: EditableElement[]
   // 页面区块配置（page 模式，垂直排列）
   sections?: PageSection[]
+  // 翻页模式 - 页面列表
+  pages?: FlipPage[]
   // 画布尺寸（canvas 模式）
   canvasSize?: { width: number; height: number }
   // 横屏/竖屏
@@ -165,10 +179,4 @@ export interface TemplateItem {
   tags?: string[]
   // 渲染图（admin 发布时生成的高清截图）
   renderedImage?: string
-}
-
-// 当前选中的模板状态
-export interface CurrentTemplate {
-  templateId: string
-  categoryId: string
 }

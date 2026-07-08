@@ -160,12 +160,32 @@ async function initDatabase() {
   try { db.run("ALTER TABLE templates ADD COLUMN is_premium INTEGER DEFAULT 0") } catch (_) {}
   // 已有模板全部标记为 published
   db.run("UPDATE templates SET status = 'published' WHERE status IS NULL OR status = ''")
+
+  // 创建索引
+  db.run("CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_templates_name ON templates(name)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_templates_templateType ON templates(category, name)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_favorites_phone ON favorites(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_footprints_phone ON footprints(phone)")
+
   saveDatabase()
 }
 
 function saveDatabase() {
   const data = db.export()
   fs.writeFileSync(DB_PATH, Buffer.from(data))
+}
+
+// 防抖保存：延迟 500ms，避免短时间内多次写操作重复保存文件
+let _saveTimer = null
+function saveDatabaseDebounced() {
+  if (_saveTimer) clearTimeout(_saveTimer)
+  _saveTimer = setTimeout(() => {
+    saveDatabase()
+    _saveTimer = null
+  }, 500)
 }
 
 function getVersion() {
@@ -177,8 +197,19 @@ function setVersion(v) {
   db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('version', ?)", [String(v)])
 }
 // ============ 中间件 ============
-app.use(cors())
-app.use(express.json({ limit: '50mb' }))
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
+  : ['http://localhost:5172', 'http://localhost:5173']
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || corsOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+}))
+app.use(express.json({ limit: '5mb' }))
 app.use((req, res, next) => {
   const auth = req.headers.authorization
   if (auth && auth.startsWith('Bearer ')) {
@@ -198,6 +229,18 @@ app.use('/uploads/poster', express.static(POSTER_UPLOADS_DIR))
 // ============ Poster routes ============
 const posterRouter = require('./routes/poster')
 app.use('/api/poster', posterRouter)
+
+// ============ 慢请求日志中间件（仅记录 >1s 的请求） ============
+app.use((req, res, next) => {
+  const start = Date.now()
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    if (duration > 1000) {
+      console.warn(`[${new Date().toISOString()}] ${req.method} ${req.url} ${res.statusCode} ${duration}ms (SLOW)`)
+    }
+  })
+  next()
+})
 
 // ============ 鉴权中间件 ============
 function requireAuth(req, res, next) {
@@ -251,7 +294,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.mp3', '.wav', '.ogg', '.aac', '.ttf', '.otf', '.woff', '.woff2']
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.aac', '.ttf', '.otf', '.woff', '.woff2']
     const ext = path.extname(file.originalname).toLowerCase()
     if (allowed.includes(ext)) {
       cb(null, true)
@@ -400,7 +443,7 @@ app.post('/api/user/login', rateLimit, (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?)`, [
         uuidv4(), 'wechat_user', '微信用户', '', 0, now, now,
       ])
-      saveDatabase()
+      saveDatabaseDebounced()
     }
     return res.json({ success: true, data: { token, nickname: '微信用户', phone: 'wechat_user' } })
   }
@@ -408,8 +451,10 @@ app.post('/api/user/login', rateLimit, (req, res) => {
   // 手机号+验证码登录
   if (phone) {
     if (!code) return res.status(400).json({ success: false, error: '请输入验证码' })
-    // 开发环境使用万能验证码 000000
-    if (code !== '000000') {
+    // 开发环境使用万能验证码（仅非 production 环境生效，通过 DEV_CODE 环境变量控制）
+    const isDev = process.env.NODE_ENV !== 'production'
+    const devCode = isDev ? (process.env.DEV_CODE || '000000') : null
+    if (!isDev || code !== devCode) {
       const stored = smsCodes[phone]
       if (!stored) return res.status(400).json({ success: false, error: '请先获取验证码' })
       if (Date.now() - stored.time > 300000) {
@@ -428,7 +473,7 @@ app.post('/api/user/login', rateLimit, (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?)`, [
         uuidv4(), phone, phone.substring(0, 3) + '****' + phone.substring(7), '', 0, now, now,
       ])
-      saveDatabase()
+      saveDatabaseDebounced()
     }
     return res.json({
       success: true,
@@ -460,10 +505,10 @@ app.post('/api/track', (req, res) => {
       platform || '',
       version || '',
     ])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -488,7 +533,7 @@ app.get('/api/user/info', (req, res) => {
       })
     }
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -511,16 +556,16 @@ app.get('/api/categories', (req, res) => {
 
     res.json({ success: true, data: cats })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
-// 获取全部模板
+// 获取全部模板（支持分页 ?page=1&limit=20&category=xxx&search=xxx）
 app.get('/api/templates', (req, res) => {
   try {
     let sql = "SELECT * FROM templates"
     const params = []
-    let conditions = []
+    const conditions = []
 
     // 默认只返回已发布的模板；admin 传 ?all=true 返回全部
     if (!req.query.all) {
@@ -538,11 +583,52 @@ app.get('/api/templates', (req, res) => {
       params.push(req.query.category)
     }
 
+    if (req.query.search) {
+      conditions.push("name LIKE ?")
+      params.push(`%${req.query.search}%`)
+    }
+
     if (conditions.length) {
       sql += " WHERE " + conditions.join(" AND ")
     }
     sql += " ORDER BY updatedAt DESC"
 
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    // 有分页参数时返回分页格式
+    if (page > 0 && limit > 0) {
+      // 查询总数
+      const countSql = sql.replace("SELECT *", "SELECT COUNT(*) as total")
+      const countResult = db.exec(countSql, params)
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const templates = result.length ? result[0].values.map(row => {
+        const cols = result[0].columns
+        const obj = {}
+        row.forEach((val, i) => {
+          if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background') {
+            try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+          } else {
+            obj[cols[i]] = val
+          }
+        })
+        return obj
+      }) : []
+
+      return res.json({
+        success: true,
+        data: templates,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    // 无分页参数时保持原有行为（返回全部）
     const result = db.exec(sql, params)
     const templates = result.length ? result[0].values.map(row => {
       const cols = result[0].columns
@@ -559,7 +645,7 @@ app.get('/api/templates', (req, res) => {
 
     res.json({ success: true, data: templates, total: templates.length })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -582,12 +668,12 @@ app.get('/api/templates/:id', (req, res) => {
     })
     res.json({ success: true, data: obj })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
 // 上传文件
-app.post('/api/upload', upload.array('images', 10), (req, res) => {
+app.post('/api/upload', requireAuth, upload.array('images', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
@@ -597,7 +683,7 @@ app.post('/api/upload', upload.array('images', 10), (req, res) => {
     }))
     res.json({ success: true, data: files })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -623,7 +709,7 @@ const fontUpload = multer({
   },
 })
 
-app.post('/api/fonts/upload', fontUpload.array('fonts', 10), (req, res) => {
+app.post('/api/fonts/upload', requireAuth, fontUpload.array('fonts', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
@@ -642,7 +728,7 @@ app.post('/api/fonts/upload', fontUpload.array('fonts', 10), (req, res) => {
     fs.writeFileSync(mapPath, JSON.stringify(fontMap, null, 2))
     res.json({ success: true, data: files })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -654,10 +740,10 @@ app.get('/api/fonts', (req, res) => {
     if (fs.existsSync(mapPath)) fontMap = JSON.parse(fs.readFileSync(mapPath, 'utf-8'))
     res.json({ success: true, data: fontMap })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
-app.post('/api/music/upload', upload.array('music', 10), (req, res) => {
+app.post('/api/music/upload', requireAuth, upload.array('music', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
@@ -669,10 +755,10 @@ app.post('/api/music/upload', upload.array('music', 10), (req, res) => {
       db.run("INSERT INTO music (name, tag, src, hot) VALUES (?, ?, ?, 0)",
         [f.originalName.replace(/\.[^.]+$/, ''), '本地上传', f.url])
     })
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, data: files })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -692,7 +778,7 @@ app.get('/api/music', (req, res) => {
     })) : []
     res.json({ success: true, data: list })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -742,7 +828,7 @@ app.post('/api/templates', requireAdmin, (req, res) => {
     const template = rowToObject(result)
     res.json({ success: true, data: template })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -791,13 +877,13 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
 
     db.run(`UPDATE templates SET ${fields.join(', ')} WHERE id = ?`, params)
     bumpVersion()
-    saveDatabase()
+    saveDatabaseDebounced()
 
     const result = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
     const template = rowToObject(result)
     res.json({ success: true, data: template })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -813,7 +899,7 @@ app.delete('/api/templates/:id', requireAdmin, (req, res) => {
     saveDatabase()
     res.json({ success: true, message: '删除成功' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -833,25 +919,57 @@ app.post('/api/orders', (req, res) => {
       id, req.user?.phone || '', JSON.stringify(items), totalAmount || '0',
       contactName || '', contactPhone || '', address || '', note || '', now, now,
     ])
-    saveDatabase()
+    saveDatabaseDebounced()
     const order = db.exec("SELECT * FROM orders WHERE id = ?", [id])
     res.json({ success: true, data: rowToObject(order) })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
-// 获取用户订单列表
+// 获取用户订单列表（支持分页 ?page=1&limit=20）
 app.get('/api/orders', (req, res) => {
   try {
     const phone = req.user?.phone
     let sql = "SELECT * FROM orders"
+    const conditions = []
     const params = []
     if (phone && phone !== 'wechat_user') {
-      sql += " WHERE phone = ?"
+      conditions.push("phone = ?")
       params.push(phone)
     }
-    sql += " ORDER BY createdAt DESC"
+
+    const whereClause = conditions.length ? " WHERE " + conditions.join(" AND ") : ""
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    // 有分页参数时返回分页格式
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM orders" + whereClause
+      const countResult = db.exec(countSql, params)
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = "SELECT * FROM orders" + whereClause + " ORDER BY createdAt DESC LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const orders = result.length ? result[0].values.map(row => {
+        const obj = rowToObject({ ...result, values: [row] })
+        if (typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
+        return obj
+      }) : []
+
+      return res.json({
+        success: true,
+        data: orders,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    // 无分页参数时保持原有行为（返回全部）
+    sql += whereClause + " ORDER BY createdAt DESC"
     const result = db.exec(sql, params)
     const orders = result.length ? result[0].values.map(row => {
       const obj = rowToObject({ ...result, values: [row] })
@@ -860,7 +978,7 @@ app.get('/api/orders', (req, res) => {
     }) : []
     res.json({ success: true, data: orders })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -878,14 +996,16 @@ app.put('/api/orders/:id/status', (req, res) => {
     }
     db.run("UPDATE orders SET status = ?, updatedAt = ? WHERE id = ?",
       [status, new Date().toISOString(), req.params.id])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, message: '状态已更新' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
 // ========== 推荐商品 ==========
+// 注意：/api/products 路由与 /api/templates 共享数据（均查询 templates 表），
+// 保留此路由是为了兼容可能依赖 /api/products 路径的前端代码。
 app.get('/api/products/recommend', (req, res) => {
   try {
     const category = req.query.category || ''
@@ -911,11 +1031,12 @@ app.get('/api/products/recommend', (req, res) => {
     }) : []
     res.json({ success: true, data: products })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
 // ========== 商品目录 ==========
+// 与 /api/templates 共享数据源（templates 表），此为面向前端商品展示的别名路由。
 app.get('/api/products', (req, res) => {
   try {
     let sql = "SELECT * FROM templates WHERE status = 'published'"
@@ -940,7 +1061,7 @@ app.get('/api/products', (req, res) => {
     }) : []
     res.json({ success: true, data: products, total: products.length })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -962,7 +1083,7 @@ app.get('/api/products/:id', (req, res) => {
     })
     res.json({ success: true, data: obj })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -982,7 +1103,7 @@ app.get('/api/vip/status', requireAuth, (req, res) => {
       res.json({ success: true, data: { isVip: false, expireAt: null, plan: null } })
     }
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -998,11 +1119,11 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     const expireAt = Date.now() + days * 24 * 60 * 60 * 1000
     db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
       [String(expireAt), plan, new Date().toISOString(), phone])
-    saveDatabase()
+    saveDatabaseDebounced()
     const orderId = uuidv4()
     res.json({ success: true, data: { orderId, prepayId: `prepay_${orderId}` } })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1033,7 +1154,7 @@ app.get('/api/templates/similar', (req, res) => {
     }) : []
     res.json({ success: true, data: templates })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1050,10 +1171,10 @@ app.post('/api/favorites', requireAuth, (req, res) => {
     }
     db.run("INSERT INTO favorites (phone, work_id, template_id, title, image, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
       [phone, workId, templateId || '', title || '', image || '', new Date().toISOString()])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, message: '收藏成功' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1062,10 +1183,10 @@ app.delete('/api/favorites/:workId', requireAuth, (req, res) => {
     const phone = req.user?.phone
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
     db.run("DELETE FROM favorites WHERE phone = ? AND work_id = ?", [phone, req.params.workId])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, message: '已取消收藏' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1082,7 +1203,7 @@ app.get('/api/favorites', requireAuth, (req, res) => {
     }) : []
     res.json({ success: true, data: favorites })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1099,7 +1220,7 @@ app.post('/api/export', (req, res) => {
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
     res.json({ success: true, data: { url: url || '/static/images/placeholder.png', expiresAt } })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1109,7 +1230,7 @@ app.post('/api/export/poster', (req, res) => {
     if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
     res.json({ success: true, data: { url: '/static/images/poster-placeholder.png' } })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1123,7 +1244,7 @@ app.post('/api/orders/:id/pay', (req, res) => {
     const prepayId = `prepay_${req.params.id}`
     res.json({ success: true, data: { prepayId } })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1141,7 +1262,7 @@ app.get('/api/footprints', requireAuth, (req, res) => {
     }) : []
     res.json({ success: true, data: footprints })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1159,17 +1280,17 @@ app.get('/api/notifications', requireAuth, (req, res) => {
     }) : []
     res.json({ success: true, data: notifications })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
 app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
   try {
     db.run("UPDATE notifications SET read = 1 WHERE id = ?", [req.params.id])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, message: '已标记已读' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1181,10 +1302,10 @@ app.post('/api/feedback', requireAuth, (req, res) => {
     if (!content) return res.status(400).json({ success: false, error: '请输入反馈内容' })
     db.run("INSERT INTO feedback (phone, content, contact, createdAt) VALUES (?, ?, ?, ?)",
       [phone, content, contact || '', new Date().toISOString()])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, message: '反馈已提交' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1208,7 +1329,7 @@ app.get('/api/works/recycle', requireAuth, (req, res) => {
     }) : []
     res.json({ success: true, data: items })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1221,10 +1342,10 @@ app.put('/api/works/:id/restore', requireAuth, (req, res) => {
       return res.status(404).json({ success: false, error: '记录不存在' })
     }
     db.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, message: '已恢复' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1233,10 +1354,10 @@ app.delete('/api/works/:id', requireAuth, (req, res) => {
     const phone = req.user?.phone
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
     db.run("DELETE FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true, message: '已永久删除' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1257,10 +1378,10 @@ app.post('/api/track/batch', (req, res) => {
         evt.platform || '', evt.version || '',
       ])
     })
-    saveDatabase()
+    saveDatabaseDebounced()
     res.json({ success: true })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
@@ -1273,7 +1394,7 @@ app.get('/api/version', (req, res) => {
 
 app.post('/api/version/refresh', (req, res) => {
   bumpVersion()
-  saveDatabase()
+  saveDatabaseDebounced()
   res.json({ success: true, version: getVersion() })
 })
 
@@ -1296,6 +1417,11 @@ function rowToObject(result) {
   return obj
 }
 
+// ============ 404 处理 ============
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: '接口不存在' })
+})
+
 // ============ 错误处理 ============
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -1313,7 +1439,7 @@ async function start() {
   await seedData()
   // Wait for poster database to be ready before serving requests
   await posterRouter.posterReady
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`\n🟢 婚贝 API 服务已启动`)
     console.log(`   本地地址: http://localhost:${PORT}`)
     console.log(`   数据库: ${DB_PATH}`)
@@ -1321,6 +1447,21 @@ async function start() {
     console.log(`   音乐目录: ${MUSIC_DIR}`)
     console.log(`   JWT 认证: 已启用 (公开路由除外)\n`)
   })
+
+  const shutdown = (signal) => {
+    console.log(`\n${signal} received, shutting down gracefully...`)
+    server.close(() => {
+      console.log('Server closed')
+      process.exit(0)
+    })
+    setTimeout(() => {
+      console.error('Forced shutdown after 10s')
+      process.exit(1)
+    }, 10000)
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 }
 
 start().catch(e => {

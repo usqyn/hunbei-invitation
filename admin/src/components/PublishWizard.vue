@@ -229,6 +229,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { CATEGORIES } from '../types/template'
 import { createTemplate, fetchVersion, API_BASE, uploadImages } from '../composables/useApi'
+import { serializeElement } from '../utils/element-serializer'
 
 const props = defineProps<{
   visible: boolean
@@ -237,6 +238,7 @@ const props = defineProps<{
   getDraft: () => any
   getCanvasEl: () => HTMLCanvasElement | null
   pageMode: string
+  getFlipPages?: () => any[]
 }>()
 
 const emit = defineEmits<{
@@ -396,7 +398,6 @@ async function generateCover() {
     coverPreview.value = dataUrl
   } catch (e) {
     console.error('generateCover error:', e)
-    alert('封面生成失败：' + (e as Error).message)
   } finally {
     generatingCover.value = false
   }
@@ -444,6 +445,9 @@ async function doPublish() {
 
     // 构建 payload
     const cSize = draft?.canvasSize || { width: 375, height: 667 }
+    const isFlipMode = props.pageMode === 'flip'
+    const flipPages = props.getFlipPages?.() || []
+
     const payload: any = {
       name: form.name,
       subtitle: form.subtitle,
@@ -452,13 +456,14 @@ async function doPublish() {
       cover: coverPreview.value || '',
       primaryColor: '#e84a6e',
       likes: form.likes,
-      pageCount: form.pageCount,
+      pageCount: isFlipMode ? flipPages.length : form.pageCount,
       status: 'published',
       isPaid: form.isPaid,
       price: form.isPaid ? form.price : 0,
       isPremium: form.isPremium,
       renderedImage: renderedImageUrl,
       orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
+      templateType: isFlipMode ? 'flip' : 'canvas',
       data: {
         coverImage: coverPreview.value || '',
         coverTitle: form.name,
@@ -476,70 +481,22 @@ async function doPublish() {
       },
       canvasSize: cSize,
       background: draft?.background || { type: 'solid', color1: '#ffffff' },
-      elements: (draft?.elements || []).map((el: any) => {
-        // Fabric.js originX/Y = 'center', so el.x/el.y are center coordinates
-        // Convert to top-left for mini-program rendering
-        const topLeftX = el.x - (el.width || 0) / 2
-        const topLeftY = el.y - (el.height || 0) / 2
+    }
 
-        // Convert px → rpx: rpx = px * (750 / canvasWidth)
-        const pxToRpx = 750 / cSize.width
-        const fontSize = el.fontSize != null ? Math.round(el.fontSize * pxToRpx) : undefined
-
-        const base: any = {
-          id: el.id,
-          type: el.type === 'sticker' ? 'image' : el.type,
-          text: el.content || el.src || '',
-          dataKey: el.dataKey,
-          label: el.name,
-          x: Math.round(topLeftX * 100) / 100,
-          y: Math.round(topLeftY * 100) / 100,
-          width: Math.round((el.width || 0) * 100) / 100,
-          height: Math.round((el.height || 0) * 100) / 100,
-          zIndex: el.zIndex ?? 0,
-          rotation: el.rotation ?? 0,
-          opacity: el.opacity ?? 1,
-          editable: el.editable !== false,
-        }
-
-        if (el.type === 'text') {
-          const content = el.content || ''
-          const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-          const detectedDirection = rtlChars.test(content) ? 'rtl' : 'ltr'
-          const direction = el.direction === 'auto' ? detectedDirection : (el.direction || 'ltr')
-          const textAlign = el.textAlign || (direction === 'rtl' ? 'right' : 'center')
-
-          base.style = {
-            font: el.fontFamily,
-            color: el.color,
-            fontSize: fontSize ?? 28,
-            spacing: Math.round((el.letterSpacing ?? 2) * pxToRpx),
-            lineHeight: el.lineHeight ?? 1.5,
-            fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
-            fontStyle: el.fontStyle ?? 'normal',
-            textAlign,
-            direction,
-            strokeColor: el.strokeColor || 'transparent',
-            strokeWidth: Math.round((el.strokeWidth ?? 0) * pxToRpx),
-            shadowColor: el.shadowColor || 'transparent',
-            shadowOffsetX: Math.round((el.shadowOffsetX ?? 0) * pxToRpx),
-            shadowOffsetY: Math.round((el.shadowOffsetY ?? 0) * pxToRpx),
-            shadowBlur: Math.round((el.shadowBlur ?? 0) * pxToRpx),
-            textDecoration: el.textDecoration || 'none',
-          }
-        } else if (el.type === 'image') {
-          base.style = {
-            font: '',
-            color: '',
-            spacing: 0,
-            borderRadius: Math.round((el.borderRadius ?? 0) * pxToRpx),
-            borderColor: el.borderColor || 'transparent',
-            borderWidth: Math.round((el.borderWidth ?? 0) * pxToRpx),
-          } as any
-        }
-
-        return base
-      }),
+    if (isFlipMode) {
+      payload.pages = flipPages.map(page => ({
+        id: page.id,
+        name: page.name,
+        pageType: page.pageType,
+        background: page.background,
+        elements: (page.elements || []).map((el: any) =>
+          serializeElement(el, { canvasWidth: cSize.width })
+        ),
+      }))
+    } else {
+      payload.elements = (draft?.elements || []).map((el: any) =>
+        serializeElement(el, { canvasWidth: cSize.width })
+      )
     }
 
     // Auto-assign dataKey for text elements whose content matches template data values
@@ -570,7 +527,7 @@ async function doPublish() {
     uploadProgress.value = 100
     publishSuccess.value = true
     publishDone.value = true
-    emit('published', { id: result.id, name: form.name, category: form.category, subtitle: form.subtitle })
+    emit('published', result.id)
     window.dispatchEvent(new CustomEvent('publish-success'))
   } catch (e: any) {
     publishSuccess.value = false

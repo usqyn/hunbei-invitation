@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
-import { reactive, ref } from 'vue'
+import { reactive, ref, computed } from 'vue'
 import { DEFAULT_TEMPLATE_DATA, DEFAULT_BASIC_INFO, DEFAULT_SETTINGS } from '@/constants/editor'
 import type { TemplateData, BasicInfo, TemplateSettings, Template } from '@/types'
 import { request } from '@/utils/request'
+import { useEditorStore } from './editor'
 
 const STORAGE_KEY = 'hunbei_template'
 
@@ -13,11 +14,17 @@ export const useTemplateStore = defineStore('template', () => {
   const templateList = ref<Template[]>([])
   const loading = ref(false)
   const selectedMusicId = ref<number | null>(null)
-  const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
   const orientation = ref<'portrait' | 'landscape'>('portrait')
 
+  /** canvasSize 由 editorStore 统一维护，此处作为代理访问 */
+  const canvasSize = computed(() => {
+    const editorStore = useEditorStore()
+    return editorStore.canvasSize
+  })
+
   function setCanvasSize(size: { width: number; height: number }) {
-    canvasSize.value = { ...size }
+    const editorStore = useEditorStore()
+    editorStore.canvasSize = { ...size }
     orientation.value = size.width > size.height ? 'landscape' : 'portrait'
   }
 
@@ -42,12 +49,13 @@ export const useTemplateStore = defineStore('template', () => {
 
   function persist() {
     try {
+      const editorStore = useEditorStore()
       uni.setStorageSync(STORAGE_KEY, {
         templateData: { ...templateData },
         basicInfo: { ...basicInfo },
         settings: { ...settings },
         selectedMusicId: selectedMusicId.value,
-        canvasSize: { ...canvasSize.value },
+        canvasSize: { ...editorStore.canvasSize },
         orientation: orientation.value,
       })
     } catch (e) { console.error('template persist failed', e) }
@@ -61,7 +69,11 @@ export const useTemplateStore = defineStore('template', () => {
         if (saved.basicInfo) Object.assign(basicInfo, saved.basicInfo)
         if (saved.settings) Object.assign(settings, saved.settings)
         if (saved.selectedMusicId) selectedMusicId.value = saved.selectedMusicId
-        if (saved.canvasSize) canvasSize.value = { ...saved.canvasSize }
+        if (saved.canvasSize) {
+          // 同步恢复的 canvasSize 到 editorStore
+          const editorStore = useEditorStore()
+          editorStore.canvasSize = { ...saved.canvasSize }
+        }
         if (saved.orientation) orientation.value = saved.orientation
       }
     } catch (e) { console.error('template restore failed', e) }
