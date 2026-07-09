@@ -1,6 +1,7 @@
 export interface PosterEditableArea {
   id: string
   type: 'text' | 'image'
+  label?: string
   x: number
   y: number
   width: number

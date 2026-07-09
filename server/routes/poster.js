@@ -40,6 +40,8 @@ async function initPosterDatabase() {
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     template_id TEXT DEFAULT '',
+    template_name TEXT DEFAULT '',
+    cover_url TEXT DEFAULT '',
     content TEXT DEFAULT '{}',
     poster_url TEXT DEFAULT '',
     created_at TEXT NOT NULL
@@ -528,13 +530,14 @@ router.post('/works', (req, res) => {
     if (!userId) {
       return res.status(401).json({ success: false, error: '缺少 X-User-Id 头' })
     }
-    const { template_id, content, poster_url } = req.body
+    const { template_id, template_name, cover_url, content, poster_url } = req.body
     const id = uuidv4()
     const now = new Date().toISOString()
 
-    posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, content, poster_url, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)`, [
+    posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
       id, userId, template_id || '',
+      template_name || '', cover_url || '',
       JSON.stringify(content || {}), poster_url || '', now,
     ])
     savePosterDatabase()
@@ -588,11 +591,13 @@ router.put('/works/:id', (req, res) => {
       return res.status(404).json({ success: false, error: '作品不存在' })
     }
 
-    const { template_id, content, poster_url } = req.body
+    const { template_id, template_name, cover_url, content, poster_url } = req.body
     const fields = []
     const params = []
 
     if (template_id !== undefined) { fields.push("template_id = ?"); params.push(template_id) }
+    if (template_name !== undefined) { fields.push("template_name = ?"); params.push(template_name) }
+    if (cover_url !== undefined) { fields.push("cover_url = ?"); params.push(cover_url) }
     if (content !== undefined) { fields.push("content = ?"); params.push(JSON.stringify(content)) }
     if (poster_url !== undefined) { fields.push("poster_url = ?"); params.push(poster_url) }
 
@@ -837,6 +842,16 @@ async function init() {
   })
 
   await initPosterDatabase()
+
+  // Migrate: add template_name, cover_url columns if they don't exist
+  try {
+    posterDb.run("ALTER TABLE poster_works ADD COLUMN template_name TEXT DEFAULT ''")
+  } catch (_) { /* column already exists */ }
+  try {
+    posterDb.run("ALTER TABLE poster_works ADD COLUMN cover_url TEXT DEFAULT ''")
+  } catch (_) { /* column already exists */ }
+  savePosterDatabase()
+
   seedPosterTemplates()
 }
 

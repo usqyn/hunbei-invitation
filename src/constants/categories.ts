@@ -26,14 +26,18 @@ export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 9, name: '乔迁', image: '/static/images/categories/housewarming.jpg', bgColor: '#fff7e6', categoryId: 'housewarming' },
 ]
 
-// 海报分类 - 对应 /api/poster/templates?category=xxx
+// 海报分类 - 与后端 poster_templates.category_id 一致
 export const POSTER_CATEGORIES: PosterCategory[] = [
   { id: 'all', name: '全部', icon: '/static/images/icons/document.svg' },
-  { id: 'business', name: '商务海报', icon: '/static/images/categories/business.jpg' },
-  { id: 'festival', name: '节日海报', icon: '/static/images/categories/festival-invitation.jpg' },
-  { id: 'promotion', name: '促销海报', icon: '/static/images/categories/ceremony.jpg' },
-  { id: 'recruitment', name: '招聘海报', icon: '/static/images/categories/graduation.jpg' },
-  { id: 'event', name: '活动海报', icon: '/static/images/categories/housewarming.jpg' },
+  { id: 'wedding', name: '婚礼', icon: '/static/images/categories/wedding.jpg' },
+  { id: 'engagement', name: '订婚', icon: '/static/images/categories/proposal.jpg' },
+  { id: 'baby', name: '宝宝', icon: '/static/images/categories/baby.jpg' },
+  { id: 'birthday', name: '生日', icon: '/static/images/categories/ceremony.jpg' },
+  { id: 'house', name: '乔迁', icon: '/static/images/categories/housewarming.jpg' },
+  { id: 'parents', name: '父母', icon: '/static/images/categories/graduation.jpg' },
+  { id: 'study', name: '升学', icon: '/static/images/categories/graduation.jpg' },
+  { id: 'poster', name: '活动海报', icon: '/static/images/categories/business.jpg' },
+  { id: 'creative', name: '创意', icon: '/static/images/categories/festival-invitation.jpg' },
 ]
 
 export const HOME_TABS = ['网红爆款', '新婚', '节日邀请', '限时免费']

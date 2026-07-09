@@ -114,7 +114,8 @@ const hotTools = ref([
   { id: 4, name: '朋友圈图片', icon: '📸', bgColor: '#e8f5e9' },
   { id: 5, name: '迎宾海报', icon: '🎨', bgColor: '#fce4ec' },
   { id: 6, name: '一键出片', icon: '📷', bgColor: '#f3e5f5' },
-  { id: 7, name: '收到的请柬', icon: '💌', bgColor: '#fff9c4' }
+  { id: 7, name: '我的海报', icon: '🖼️', bgColor: '#e3f2fd' },
+  { id: 8, name: '收到的请柬', icon: '💌', bgColor: '#fff9c4' }
 ])
 
 const menuItems = ref([
@@ -170,7 +171,9 @@ const handleToolClick = (tool: any) => {
   } else if (tool.name === '朋友圈图片') {
     uni.navigateTo({ url: '/pages/share/index' })
   } else if (tool.name === '迎宾海报') {
-    uni.navigateTo({ url: '/pages/share/index' })
+    uni.navigateTo({ url: '/pages/poster/index/index' })
+  } else if (tool.name === '我的海报') {
+    uni.navigateTo({ url: '/pages/poster/works/index' })
   } else if (tool.name === '一键出片') {
     uni.navigateTo({ url: '/pages/editor/index' })
   }

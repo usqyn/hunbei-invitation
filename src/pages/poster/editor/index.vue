@@ -24,7 +24,17 @@
 
     <!-- Canvas Preview Area -->
     <view class="canvas-area">
-      <scroll-view class="canvas-scroll" scroll-y>
+      <!-- Loading state -->
+      <view v-if="posterStore.templateLoading" class="loading-overlay">
+        <text class="loading-text">加载模板中...</text>
+      </view>
+      <!-- No template loaded -->
+      <view v-else-if="!posterStore.currentTemplate" class="empty-state">
+        <text class="empty-icon">📋</text>
+        <text class="empty-text">暂未加载模板</text>
+        <button class="empty-btn" @click="goToTemplates">去挑选模板</button>
+      </view>
+      <scroll-view v-else class="canvas-scroll" scroll-y>
         <view class="canvas-wrapper" :style="canvasWrapperStyle">
           <image
             v-if="posterStore.currentTemplate"
@@ -186,7 +196,6 @@
             <view class="form-item">
               <view class="image-action-row">
                 <button class="img-btn" size="mini" @click="onChooseImage">更换图片</button>
-                <button class="img-btn" size="mini" @click="onCropImage">裁剪图片</button>
               </view>
             </view>
             <view class="form-item">
@@ -374,6 +383,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { usePosterStore } from '@/stores/poster'
 import { useGoBack } from '@/composables/useGoBack'
 import { API_BASE } from '@/config'
+import { request } from '@/utils/request'
 import type { PosterEditableArea } from '@/types/poster'
 
 const posterStore = usePosterStore()
@@ -567,10 +577,6 @@ function onChooseImage() {
   // #endif
 }
 
-function onCropImage() {
-  showToast('裁剪功能开发中')
-}
-
 function onReset() {
   if (!selectedArea.value) return
   posterStore.resetArea(selectedArea.value.id)
@@ -592,11 +598,21 @@ function onRedo() {
 // ---- preview ----
 async function onPreview() {
   posterStore.showPreview = true
+  posterStore.previewImage = ''
   await nextTick()
-  const canvas = await getCanvasNode()
-  if (canvas) {
-    const tempPath = await posterStore.drawPoster(canvas)
-    posterStore.previewImage = tempPath
+  try {
+    const canvas = await getCanvasNode()
+    if (canvas) {
+      const tempPath = await posterStore.drawPoster(canvas)
+      posterStore.previewImage = tempPath || ''
+    }
+    if (!posterStore.previewImage) {
+      showToast('预览生成失败，请重试')
+    }
+  } catch (e) {
+    console.warn('preview failed:', e)
+    showToast('预览生成失败')
+    posterStore.showPreview = false
   }
 }
 
@@ -732,6 +748,10 @@ function onDeleteElement(idx: number) {
   })
 }
 
+function goToTemplates() {
+  uni.navigateTo({ url: '/pages/poster/index/index' })
+}
+
 // ---- template picker ----
 async function onSwitchTemplate(id: string) {
   await posterStore.switchTemplate(id)
@@ -758,20 +778,48 @@ function getCanvasNode(): Promise<any> {
 }
 
 // ---- lifecycle ----
-onMounted(() => {
+onMounted(async () => {
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
 
   const templateId = options.templateId || options.id
-  if (templateId) {
-    posterStore.loadTemplate(templateId)
+  const workId = options.workId
+
+  if (workId) {
+    // Load existing work: fetch work data → restore editable areas → load template for background
+    posterStore.setWorkId(workId)
+    try {
+      const workData = await request<{ template_id: string; template_name?: string; cover_url?: string; content: any }>({
+        url: `/api/poster/works/${workId}`,
+        hideLoading: true,
+      })
+      if (workData && workData.content && workData.content.editableAreas) {
+        // Load template first to get background
+        const templateIdToLoad = workData.template_id || templateId
+        if (templateIdToLoad) {
+          await posterStore.loadTemplate(templateIdToLoad)
+        }
+        // Then restore user's edits
+        posterStore.restoreFromWork(workData.content.editableAreas)
+        showToast('已加载作品')
+      } else if (templateId) {
+        await posterStore.loadTemplate(templateId)
+      }
+    } catch (e) {
+      console.warn('加载作品失败:', e)
+      if (templateId) {
+        await posterStore.loadTemplate(templateId)
+      }
+    }
+  } else if (templateId) {
+    await posterStore.loadTemplate(templateId)
   } else {
-    // try to load default template list
     posterStore.loadRelatedTemplates()
     posterStore.showTemplatePicker = true
   }
 
+  // Load related templates for picker (only once)
   posterStore.loadRelatedTemplates()
 })
 </script>
@@ -859,6 +907,46 @@ onMounted(() => {
   flex-direction: column;
   overflow: hidden;
   padding: 20rpx 0;
+}
+
+.loading-overlay {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.empty-btn {
+  padding: 16rpx 48rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  color: #fff;
+  font-size: 26rpx;
+  border-radius: 40rpx;
+  border: none;
 }
 
 .canvas-scroll {

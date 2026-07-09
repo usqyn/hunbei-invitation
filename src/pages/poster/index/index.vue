@@ -115,9 +115,12 @@ async function loadPosterTemplates() {
   loadError.value = false
 
   try {
-    const url = activeCategory.value === 'all'
-      ? '/api/poster/templates'
-      : `/api/poster/templates?category=${activeCategory.value}`
+    let url = '/api/poster/templates'
+    const params: string[] = []
+    if (activeCategory.value !== 'all') {
+      params.push(`category_id=${activeCategory.value}`)
+    }
+    if (params.length) url += '?' + params.join('&')
     const data = await request<PosterTemplate[]>({ url, hideLoading: true })
     if (data && Array.isArray(data)) {
       posterTemplates.value = data

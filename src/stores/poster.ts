@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { request } from '@/utils/request'
 import { API_BASE } from '@/config'
-import type { PosterTemplate, PosterEditableArea, PosterWork } from '@/types/poster'
+import type { PosterTemplate, PosterEditableArea } from '@/types/poster'
 
 const MAX_HISTORY = 30
 
@@ -19,6 +19,12 @@ export const COLOR_OPTIONS = [
   '#27ae60', '#1abc9c', '#3498db', '#9b59b6', '#c0392b', '#7f8c8d',
 ]
 
+interface StickerItem {
+  id: string
+  name: string
+  url: string
+}
+
 export const usePosterStore = defineStore('poster', () => {
   // ---- state ----
   const currentTemplate = ref<PosterTemplate | null>(null)
@@ -34,12 +40,15 @@ export const usePosterStore = defineStore('poster', () => {
   const previewImage = ref('')
   const showPreview = ref(false)
 
-  const stickers = ref<string[]>([])
+  const stickers = ref<StickerItem[]>([])
   const showStickerPanel = ref(false)
 
   const showTemplatePicker = ref(false)
   const showLayerPanel = ref(false)
   const relatedTemplates = ref<PosterTemplate[]>([])
+
+  const currentWorkId = ref<string | null>(null)
+  const templateLoading = ref(false)
 
   const fontOptions = FONT_OPTIONS
   const fontFamilies = FONT_OPTIONS.map(f => f.value)
@@ -48,6 +57,7 @@ export const usePosterStore = defineStore('poster', () => {
   // ---- helpers ----
   function resolveUrl(url: string): string {
     if (!url) return url
+    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('wxfile://')) return url
     if (url.startsWith('/uploads/')) return API_BASE + url
     return url
   }
@@ -62,14 +72,19 @@ export const usePosterStore = defineStore('poster', () => {
 
   // ---- actions ----
   async function loadTemplate(id: string) {
+    templateLoading.value = true
     try {
-      const data = await request<PosterTemplate>({ url: `/api/poster/templates/${id}` })
+      const data = await request<PosterTemplate>({ url: `/api/poster/templates/${id}`, hideLoading: true })
       if (data) {
         initEditor(data)
+        return true
       }
     } catch (e) {
       console.warn('loadTemplate failed:', e)
+    } finally {
+      templateLoading.value = false
     }
+    return false
   }
 
   function initEditor(template: PosterTemplate) {
@@ -79,23 +94,65 @@ export const usePosterStore = defineStore('poster', () => {
       height: template.config.height,
     }
     editableAreas.splice(0, editableAreas.length)
-    template.config.editableAreas.forEach(area => {
+    if (template.config.editableAreas && Array.isArray(template.config.editableAreas)) {
+      template.config.editableAreas.forEach(area => {
+        editableAreas.push({
+          ...area,
+          label: (area as any).label || '',
+          defaultImage: (area as any).defaultImage ? resolveUrl((area as any).defaultImage) : undefined,
+          _x: area.x,
+          _y: area.y,
+          _w: area.width,
+          _h: area.height,
+          _text: area.type === 'text' ? (area.defaultText || '') : undefined,
+          _src: area.type === 'image' ? ((area as any).defaultImage ? resolveUrl((area as any).defaultImage) : '') : undefined,
+          _fontSize: area.fontSize || 28,
+          _color: area.color || '#333333',
+          _align: (area as any).align || 'center',
+          _bold: area.bold || false,
+          _rotate: 0,
+          _scale: 1,
+          _fontFamily: 'sans-serif',
+        })
+      })
+    }
+    history.value = []
+    historyIndex.value = -1
+    pushHistory()
+  }
+
+  /** Restore editable areas from saved work content */
+  function restoreFromWork(areas: any[]) {
+    editableAreas.splice(0, editableAreas.length)
+    areas.forEach(a => {
       editableAreas.push({
-        ...area,
-        defaultImage: area.defaultImage ? resolveUrl(area.defaultImage) : undefined,
-        _x: area.x,
-        _y: area.y,
-        _w: area.width,
-        _h: area.height,
-        _text: area.type === 'text' ? (area.defaultText || '') : undefined,
-        _src: area.type === 'image' ? (area.defaultImage ? resolveUrl(area.defaultImage) : '') : undefined,
-        _fontSize: area.fontSize || 28,
-        _color: area.color || '#333333',
-        _align: area.align || 'center',
-        _bold: area.bold || false,
-        _rotate: 0,
-        _scale: 1,
-        _fontFamily: 'sans-serif',
+        id: a.id,
+        type: a.type,
+        label: a.label || '',
+        x: a._x ?? a.x,
+        y: a._y ?? a.y,
+        width: a._w ?? a.width,
+        height: a._h ?? a.height,
+        defaultText: a.defaultText,
+        defaultImage: a.defaultImage,
+        fontSize: a._fontSize,
+        color: a._color,
+        align: a._align,
+        bold: a._bold,
+        borderRadius: a.borderRadius,
+        _x: a._x,
+        _y: a._y,
+        _w: a._w,
+        _h: a._h,
+        _text: a._text,
+        _src: a._src,
+        _fontSize: a._fontSize || 28,
+        _color: a._color || '#333333',
+        _align: a._align || 'center',
+        _bold: a._bold || false,
+        _rotate: a._rotate || 0,
+        _scale: a._scale || 1,
+        _fontFamily: a._fontFamily || 'sans-serif',
       })
     })
     history.value = []
@@ -142,7 +199,6 @@ export const usePosterStore = defineStore('poster', () => {
   }
 
   function pushHistory() {
-    // truncate redo branch
     if (historyIndex.value < history.value.length - 1) {
       history.value = history.value.slice(0, historyIndex.value + 1)
     }
@@ -189,10 +245,10 @@ export const usePosterStore = defineStore('poster', () => {
     area._w = area.width
     area._h = area.height
     area._text = area.defaultText || ''
-    area._src = area.defaultImage ? resolveUrl(area.defaultImage) : ''
+    area._src = (area as any).defaultImage ? resolveUrl((area as any).defaultImage) : ''
     area._fontSize = area.fontSize || 28
     area._color = area.color || '#333333'
-    area._align = area.align || 'center'
+    area._align = (area as any).align || 'center'
     area._bold = area.bold || false
     area._rotate = 0
     area._scale = 1
@@ -211,7 +267,7 @@ export const usePosterStore = defineStore('poster', () => {
 
     // background
     const bgUrl = resolveUrl(tmpl.background_url)
-    await drawImageToCanvas(ctx, bgUrl, 0, 0, cw, ch)
+    await drawImageToCanvas(canvas, ctx, bgUrl, 0, 0, cw, ch)
 
     // editable areas
     for (const area of editableAreas) {
@@ -228,7 +284,7 @@ export const usePosterStore = defineStore('poster', () => {
 
       if (area.type === 'image' && area._src) {
         try {
-          await drawImageToCanvas(ctx, area._src, 0, 0, aw, ah, area.borderRadius)
+          await drawImageToCanvas(canvas, ctx, area._src, 0, 0, aw, ah, area.borderRadius)
         } catch (e) {
           console.warn('draw image area failed:', e)
         }
@@ -300,7 +356,9 @@ export const usePosterStore = defineStore('poster', () => {
     return lines
   }
 
+  /** Draw image to canvas — canvas param needed for createImage() */
   function drawImageToCanvas(
+    canvas: any,
     ctx: any,
     src: string,
     x: number,
@@ -313,22 +371,27 @@ export const usePosterStore = defineStore('poster', () => {
       if (!src) { resolve(); return }
       const img = canvas.createImage ? canvas.createImage() : new Image()
       img.onload = () => {
-        if (borderRadius && borderRadius > 0) {
-          ctx.save()
-          ctx.beginPath()
-          ctx.arc(x + borderRadius, y + borderRadius, borderRadius, Math.PI, Math.PI * 1.5)
-          ctx.lineTo(x + w - borderRadius, y)
-          ctx.arc(x + w - borderRadius, y + borderRadius, borderRadius, Math.PI * 1.5, 0)
-          ctx.lineTo(x + w, y + h - borderRadius)
-          ctx.arc(x + w - borderRadius, y + h - borderRadius, borderRadius, 0, Math.PI * 0.5)
-          ctx.lineTo(x + borderRadius, y + h)
-          ctx.arc(x + borderRadius, y + h - borderRadius, borderRadius, Math.PI * 0.5, Math.PI)
-          ctx.closePath()
-          ctx.clip()
-          ctx.drawImage(img, x, y, w, h)
-          ctx.restore()
-        } else {
-          ctx.drawImage(img, x, y, w, h)
+        try {
+          if (borderRadius && borderRadius > 0) {
+            ctx.save()
+            ctx.beginPath()
+            const r = borderRadius
+            ctx.moveTo(x + r, y)
+            ctx.lineTo(x + w - r, y)
+            ctx.arc(x + w - r, y + r, r, Math.PI * 1.5, 0)
+            ctx.lineTo(x + w, y + h - r)
+            ctx.arc(x + w - r, y + h - r, r, 0, Math.PI * 0.5)
+            ctx.lineTo(x + r, y + h)
+            ctx.arc(x + r, y + h - r, r, Math.PI * 0.5, Math.PI)
+            ctx.closePath()
+            ctx.clip()
+            ctx.drawImage(img, x, y, w, h)
+            ctx.restore()
+          } else {
+            ctx.drawImage(img, x, y, w, h)
+          }
+        } catch (e) {
+          console.warn('drawImageToCanvas error:', e)
         }
         resolve()
       }
@@ -340,37 +403,54 @@ export const usePosterStore = defineStore('poster', () => {
   async function saveWork(): Promise<string | null> {
     if (!currentTemplate.value) return null
     try {
-      const data = await request<{ id: string }>({
-        url: '/api/poster/works',
-        method: 'POST',
-        data: {
-          template_id: currentTemplate.value.id,
-          template_name: currentTemplate.value.name,
-          cover_url: currentTemplate.value.cover_url,
-          content: {
-            editableAreas: editableAreas.map(a => ({
-              id: a.id,
-              type: a.type,
-              label: a.label || '',
-              _x: a._x,
-              _y: a._y,
-              _w: a._w,
-              _h: a._h,
-              _text: a._text,
-              _src: a._src && !a._src.startsWith('http') ? a._src : a._src,
-              _fontSize: a._fontSize,
-              _color: a._color,
-              _align: a._align,
-              _bold: a._bold,
-              _rotate: a._rotate,
-              _scale: a._scale,
-              _fontFamily: a._fontFamily,
-            })),
-          },
+      const payload = {
+        template_id: currentTemplate.value.id,
+        template_name: currentTemplate.value.name,
+        cover_url: currentTemplate.value.cover_url,
+        content: {
+          editableAreas: editableAreas.map(a => ({
+            id: a.id,
+            type: a.type,
+            label: (a as any).label || '',
+            _x: a._x,
+            _y: a._y,
+            _w: a._w,
+            _h: a._h,
+            _text: a._text,
+            _src: a._src,
+            _fontSize: a._fontSize,
+            _color: a._color,
+            _align: a._align,
+            _bold: a._bold,
+            _rotate: a._rotate,
+            _scale: a._scale,
+            _fontFamily: a._fontFamily,
+          })),
         },
-      })
+      }
+
+      let data: { id: string } | null
+      if (currentWorkId.value) {
+        // Update existing work
+        data = await request<{ id: string }>({
+          url: `/api/poster/works/${currentWorkId.value}`,
+          method: 'PUT',
+          data: payload,
+        })
+      } else {
+        // Create new work
+        data = await request<{ id: string }>({
+          url: '/api/poster/works',
+          method: 'POST',
+          data: payload,
+        })
+        if (data?.id) {
+          currentWorkId.value = data.id
+        }
+      }
+
       uni.showToast({ title: '保存成功', icon: 'success' })
-      return data?.id || null
+      return data?.id || currentWorkId.value || null
     } catch (e) {
       console.warn('saveWork failed:', e)
       uni.showToast({ title: '保存失败', icon: 'none' })
@@ -379,10 +459,15 @@ export const usePosterStore = defineStore('poster', () => {
   }
 
   async function loadStickers() {
+    if (stickers.value.length > 0) return // already loaded
     try {
-      const data = await request<string[]>({ url: '/api/poster/stickers', hideLoading: true })
+      const data = await request<StickerItem[]>({ url: '/api/poster/stickers', hideLoading: true })
       if (data && Array.isArray(data)) {
-        stickers.value = data.map(s => resolveUrl(s))
+        stickers.value = data.map(s => ({
+          id: s.id || s.name || '',
+          name: s.name || s.id || '',
+          url: resolveUrl(s.url),
+        }))
       }
     } catch (e) {
       console.warn('loadStickers failed:', e)
@@ -390,21 +475,22 @@ export const usePosterStore = defineStore('poster', () => {
   }
 
   function insertSticker(src: string) {
-    // Insert as a new image area
     const id = `sticker_${Date.now()}`
+    const stickerSize = canvasSize.value.width * 0.2
     const newArea: PosterEditableArea = {
       id,
       type: 'image',
-      x: canvasSize.value.width / 2 - 50,
-      y: canvasSize.value.height / 2 - 50,
-      width: 100,
-      height: 100,
+      label: '贴纸',
+      x: canvasSize.value.width / 2 - stickerSize / 2,
+      y: canvasSize.value.height / 2 - stickerSize / 2,
+      width: stickerSize,
+      height: stickerSize,
       defaultImage: src,
       borderRadius: 0,
-      _x: canvasSize.value.width / 2 - 50,
-      _y: canvasSize.value.height / 2 - 50,
-      _w: 100,
-      _h: 100,
+      _x: canvasSize.value.width / 2 - stickerSize / 2,
+      _y: canvasSize.value.height / 2 - stickerSize / 2,
+      _w: stickerSize,
+      _h: stickerSize,
       _src: src,
       _rotate: 0,
       _scale: 1,
@@ -421,10 +507,11 @@ export const usePosterStore = defineStore('poster', () => {
 
   async function loadRelatedTemplates(categoryId?: string) {
     try {
-      const params = categoryId ? { category_id: categoryId } : {}
+      const params: Record<string, any> = { limit: 10 }
+      if (categoryId) params.category_id = categoryId
       const data = await request<PosterTemplate[]>({
         url: '/api/poster/templates',
-        data: { ...params, limit: 10 },
+        data: params,
         hideLoading: true,
       })
       if (data && Array.isArray(data)) {
@@ -462,6 +549,11 @@ export const usePosterStore = defineStore('poster', () => {
     pushHistory()
   }
 
+  /** Set current work ID (for edit existing work) */
+  function setWorkId(id: string | null) {
+    currentWorkId.value = id
+  }
+
   return {
     // state
     currentTemplate,
@@ -478,12 +570,15 @@ export const usePosterStore = defineStore('poster', () => {
     showTemplatePicker,
     showLayerPanel,
     relatedTemplates,
+    currentWorkId,
+    templateLoading,
     fontOptions,
     fontFamilies,
     colorOptions,
     // actions
     loadTemplate,
     initEditor,
+    restoreFromWork,
     selectArea,
     updateText,
     updateImage,
@@ -502,5 +597,6 @@ export const usePosterStore = defineStore('poster', () => {
     loadRelatedTemplates,
     moveLayer,
     deleteElement,
+    setWorkId,
   }
 })
