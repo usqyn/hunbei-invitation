@@ -225,6 +225,15 @@
                     </select>
                   </div>
                 </div>
+                <div class="pm-form-row" v-if="form.editableAreas[selectedAreaIdx].type === 'text'">
+                  <label>文字方向</label>
+                  <select v-model="form.editableAreas[selectedAreaIdx].direction" class="pm-input">
+                    <option value="">跟随系统</option>
+                    <option value="ltr">LTR (左到右)</option>
+                    <option value="rtl">RTL (右到左)</option>
+                    <option value="auto">自动检测</option>
+                  </select>
+                </div>
               </div>
               <div v-else class="pm-area-hint">点击画布上的区域进行编辑，或点击上方按钮添加新区域</div>
             </div>
@@ -262,6 +271,7 @@ interface EditableArea {
   color?: string
   align?: 'left' | 'center' | 'right'
   borderRadius?: number
+  direction?: 'ltr' | 'rtl' | 'auto'
 }
 
 interface PosterTemplateRaw {
@@ -345,6 +355,7 @@ function areaStyle(area: EditableArea): Record<string, string> {
     fontSize: area.fontSize ? `${Math.max(10, area.fontSize * 0.35)}px` : '12px',
     color: area.color || '#333',
     textAlign: area.align || 'center',
+    direction: area.direction || 'ltr',
   }
 }
 
@@ -415,6 +426,7 @@ function normalizeTemplate(raw: any): PosterTemplateRaw {
       color: a.color || '#333333',
       align: a.align || 'center',
       borderRadius: a.borderRadius || 0,
+      direction: a.direction || '',
     })),
     created_at: raw.created_at,
   }
@@ -456,6 +468,7 @@ async function saveTemplate() {
           color: a.color,
           align: a.align,
           borderRadius: a.borderRadius,
+          direction: a.direction,
         })),
       },
     }
@@ -523,7 +536,7 @@ function addArea(type: 'text' | 'image') {
     width: type === 'text' ? 350 : 300,
     height: type === 'text' ? 80 : 300,
     ...(type === 'text'
-      ? { defaultText: '示例文字', fontSize: 28, color: '#333333', align: 'center' as const }
+      ? { defaultText: '示例文字', fontSize: 28, color: '#333333', align: 'center', direction: '' }
       : { borderRadius: 8 }),
   }
   form.editableAreas.push(area)
