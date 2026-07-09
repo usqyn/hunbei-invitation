@@ -138,6 +138,12 @@
         "navigationBarTitleText": "海报编辑器",
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/poster/works/index",
+      "style": {
+        "navigationBarTitleText": "我的海报"
+      }
     }
   ],
   "globalStyle": {

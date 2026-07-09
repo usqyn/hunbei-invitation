@@ -38,6 +38,7 @@ export const usePosterStore = defineStore('poster', () => {
   const showStickerPanel = ref(false)
 
   const showTemplatePicker = ref(false)
+  const showLayerPanel = ref(false)
   const relatedTemplates = ref<PosterTemplate[]>([])
 
   const fontOptions = FONT_OPTIONS
@@ -348,8 +349,22 @@ export const usePosterStore = defineStore('poster', () => {
           cover_url: currentTemplate.value.cover_url,
           content: {
             editableAreas: editableAreas.map(a => ({
-              ...a,
+              id: a.id,
+              type: a.type,
+              label: a.label || '',
+              _x: a._x,
+              _y: a._y,
+              _w: a._w,
+              _h: a._h,
+              _text: a._text,
               _src: a._src && !a._src.startsWith('http') ? a._src : a._src,
+              _fontSize: a._fontSize,
+              _color: a._color,
+              _align: a._align,
+              _bold: a._bold,
+              _rotate: a._rotate,
+              _scale: a._scale,
+              _fontFamily: a._fontFamily,
             })),
           },
         },
@@ -420,6 +435,33 @@ export const usePosterStore = defineStore('poster', () => {
     }
   }
 
+  // ---- layer management ----
+  function moveLayer(idx: number, direction: string) {
+    if (idx < 0 || idx >= editableAreas.length) return
+    let newIdx = idx
+    switch (direction) {
+      case 'up': newIdx = idx - 1; break
+      case 'down': newIdx = idx + 1; break
+      case 'top': newIdx = 0; break
+      case 'bottom': newIdx = editableAreas.length - 1; break
+    }
+    if (newIdx === idx || newIdx < 0 || newIdx >= editableAreas.length) return
+
+    const item = editableAreas.splice(idx, 1)[0]
+    editableAreas.splice(newIdx, 0, item)
+    pushHistory()
+  }
+
+  function deleteElement(idx: number) {
+    if (idx < 0 || idx >= editableAreas.length) return
+    const areaId = editableAreas[idx].id
+    editableAreas.splice(idx, 1)
+    if (selectedAreaId.value === areaId) {
+      selectedAreaId.value = null
+    }
+    pushHistory()
+  }
+
   return {
     // state
     currentTemplate,
@@ -434,6 +476,7 @@ export const usePosterStore = defineStore('poster', () => {
     stickers,
     showStickerPanel,
     showTemplatePicker,
+    showLayerPanel,
     relatedTemplates,
     fontOptions,
     fontFamilies,
@@ -457,5 +500,7 @@ export const usePosterStore = defineStore('poster', () => {
     insertSticker,
     switchTemplate,
     loadRelatedTemplates,
+    moveLayer,
+    deleteElement,
   }
 })

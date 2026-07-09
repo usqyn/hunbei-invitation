@@ -143,3 +143,7 @@ export function updatePosterWork(id: string, data: { template_name?: string; cov
 export function getPosterStickers() {
   return request<string[]>({ url: '/api/poster/stickers' })
 }
+
+export function uploadPosterWorkImage(workId: string, imageBase64: string) {
+  return request<{ url: string }>({ url: `/api/poster/works/${workId}/upload`, method: 'POST', data: { image: imageBase64 } })
+}

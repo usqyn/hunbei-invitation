@@ -224,11 +224,47 @@
       </template>
     </view>
 
+    <!-- Layer Manager Overlay -->
+    <view v-if="posterStore.showLayerPanel" class="modal-overlay" @click="posterStore.showLayerPanel = false">
+      <view class="layer-modal" @click.stop>
+        <view class="layer-modal-header">
+          <text class="layer-modal-title">图层管理</text>
+          <text class="layer-modal-close" @click="posterStore.showLayerPanel = false">✕</text>
+        </view>
+        <scroll-view class="layer-modal-body" scroll-y>
+          <view v-if="posterStore.editableAreas.length === 0" class="layer-empty">
+            <text class="layer-empty-text">暂无元素</text>
+          </view>
+          <view
+            v-for="(area, idx) in posterStore.editableAreas"
+            :key="area.id"
+            class="layer-item"
+            :class="{ 'layer-item--active': posterStore.selectedAreaId === area.id }"
+            @click="posterStore.selectArea(area.id)"
+          >
+            <text class="layer-item-icon">{{ area.type === 'text' ? 'T' : '🖼' }}</text>
+            <text class="layer-item-name">{{ area.type === 'text' ? (area._text || '文字') : '图片' }}</text>
+            <view class="layer-item-actions">
+              <text class="layer-action" @click.stop="onLayerMove(idx, 'up')" v-if="idx > 0">↑</text>
+              <text class="layer-action" @click.stop="onLayerMove(idx, 'down')" v-if="idx < posterStore.editableAreas.length - 1">↓</text>
+              <text class="layer-action" @click.stop="onLayerMove(idx, 'top')" v-if="idx > 0">⏫</text>
+              <text class="layer-action" @click.stop="onLayerMove(idx, 'bottom')" v-if="idx < posterStore.editableAreas.length - 1">⏬</text>
+              <text class="layer-action layer-action--danger" @click.stop="onDeleteElement(idx)">✕</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+
     <!-- Bottom Action Bar -->
     <view class="action-bar">
       <view class="action-bar-item" @click="onOpenSticker">
         <text class="action-bar-icon">🎨</text>
         <text class="action-bar-label">素材</text>
+      </view>
+      <view class="action-bar-item" @click="posterStore.showLayerPanel = true">
+        <text class="action-bar-icon">📑</text>
+        <text class="action-bar-label">图层</text>
       </view>
       <view class="action-bar-item" @click="onSave">
         <text class="action-bar-icon">💾</text>
@@ -670,6 +706,30 @@ function onInsertSticker(src: string) {
   posterStore.insertSticker(src)
   posterStore.showStickerPanel = false
   showToast('已添加素材')
+}
+
+// ---- layer management ----
+function onLayerMove(idx: number, direction: string) {
+  posterStore.moveLayer(idx, direction)
+  showToast('图层已调整')
+}
+
+function onDeleteElement(idx: number) {
+  const area = posterStore.editableAreas[idx]
+  if (!area) return
+  uni.showModal({
+    title: '确认删除',
+    content: `确定删除此${area.type === 'text' ? '文字' : '图片'}元素吗？`,
+    confirmText: '删除',
+    cancelText: '取消',
+    confirmColor: '#e84a6e',
+    success: (res) => {
+      if (res.confirm) {
+        posterStore.deleteElement(idx)
+        showToast('已删除')
+      }
+    },
+  })
 }
 
 // ---- template picker ----
@@ -1439,5 +1499,118 @@ onMounted(() => {
 .toast-text {
   font-size: 28rpx;
   color: #fff;
+}
+
+/* Layer Modal */
+.layer-modal {
+  width: 90%;
+  max-width: 680rpx;
+  max-height: 70vh;
+  background: #fff;
+  border-radius: 24rpx;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.layer-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 30rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.layer-modal-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.layer-modal-close {
+  font-size: 36rpx;
+  color: #999;
+  padding: 8rpx 16rpx;
+}
+
+.layer-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 10rpx 0;
+  max-height: 55vh;
+}
+
+.layer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200rpx;
+}
+
+.layer-empty-text {
+  font-size: 28rpx;
+  color: #999;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 30rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+  gap: 16rpx;
+  transition: background 0.15s;
+}
+
+.layer-item:active {
+  background: #f5f5f5;
+}
+
+.layer-item--active {
+  background: #fdf0f3;
+}
+
+.layer-item-icon {
+  font-size: 32rpx;
+  width: 48rpx;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.layer-item-name {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-item-actions {
+  display: flex;
+  gap: 4rpx;
+  flex-shrink: 0;
+}
+
+.layer-action {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #666;
+  background: #f0f0f0;
+  border-radius: 8rpx;
+}
+
+.layer-action:active {
+  background: #e0e0e0;
+}
+
+.layer-action--danger {
+  color: #e84a6e;
+  background: #fff0f0;
+  font-size: 28rpx;
 }
 </style>
