@@ -190,6 +190,15 @@ app.use((req, res, next) => {
 })
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
+// ============ Poster uploads static serving ============
+const POSTER_UPLOADS_DIR = path.join(__dirname, 'uploads', 'poster')
+if (!fs.existsSync(POSTER_UPLOADS_DIR)) fs.mkdirSync(POSTER_UPLOADS_DIR, { recursive: true })
+app.use('/uploads/poster', express.static(POSTER_UPLOADS_DIR))
+
+// ============ Poster routes ============
+const posterRouter = require('./routes/poster')
+app.use('/api/poster', posterRouter)
+
 // ============ 鉴权中间件 ============
 function requireAuth(req, res, next) {
   if (!req.user || !req.user.phone) {
@@ -1302,6 +1311,8 @@ app.use((err, req, res, next) => {
 async function start() {
   await initDatabase()
   await seedData()
+  // Wait for poster database to be ready before serving requests
+  await posterRouter.posterReady
   app.listen(PORT, () => {
     console.log(`\n🟢 婚贝 API 服务已启动`)
     console.log(`   本地地址: http://localhost:${PORT}`)

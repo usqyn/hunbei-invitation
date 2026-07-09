@@ -15,6 +15,12 @@
         <span class="logo">🎨 婚贝模板制作</span>
         <span class="toolbar-divider"></span>
 
+        <!-- 顶部页面切换 -->
+        <button class="tb-btn" :class="{ active: currentView === 'editor' }" @click="currentView = 'editor'">✏️ 模板编辑</button>
+        <button class="tb-btn" :class="{ active: currentView === 'poster' }" @click="currentView = 'poster'">🖼 海报模板</button>
+
+        <span class="toolbar-divider"></span>
+
         <button class="tb-btn" :disabled="!canUndo" @click="undo" title="撤销 (Ctrl+Z)">
           ↶ 撤销
         </button>
@@ -60,7 +66,7 @@
     </header>
 
     <!-- ============ 主工作区 ============ -->
-    <main class="workspace">
+    <main v-if="currentView === 'editor'" class="workspace">
       <!-- 左侧面板 -->
       <aside class="panel panel-left">
         <div class="panel-tabs">
@@ -870,6 +876,11 @@
       </aside>
     </main>
 
+    <!-- ============ 海报模板管理 ============ -->
+    <main v-else class="poster-view-wrap">
+      <PosterManager />
+    </main>
+
     <!-- 发布向导 -->
     <PublishWizard
       :visible="showPublishWizard"
@@ -902,6 +913,7 @@ import {
   updateTemplate,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
+import PosterManager from './views/PosterManager.vue'
 import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot, PageMode } from './types/canvas'
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
 import { CATEGORIES } from './types/template'
@@ -1087,6 +1099,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 // ============ 本地状态 ============
 const leftTab = ref<'material' | 'layers' | 'templates'>('material')
+const currentView = ref<'editor' | 'poster'>('editor')
 const sizeLabel = ref('375 × 667')
 const pageMode = ref<PageMode>('single')
 
@@ -2027,6 +2040,13 @@ onMounted(async () => {
 
 /* ====== 主工作区 ====== */
 .workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.poster-view-wrap {
   flex: 1;
   display: flex;
   min-height: 0;

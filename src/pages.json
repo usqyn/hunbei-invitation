@@ -125,6 +125,19 @@
       "style": {
         "navigationBarTitleText": "用户协议"
       }
+    },
+    {
+      "path": "pages/poster/index/index",
+      "style": {
+        "navigationBarTitleText": "海报模板"
+      }
+    },
+    {
+      "path": "pages/poster/editor/index",
+      "style": {
+        "navigationBarTitleText": "海报编辑器",
+        "navigationStyle": "custom"
+      }
     }
   ],
   "globalStyle": {

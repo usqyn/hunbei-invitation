@@ -8,6 +8,12 @@ export interface HomeCategory {
   categoryId: string   // 对应模板系统的分类ID(wedding/birthday/baby/graduation/festival/business)
 }
 
+export interface PosterCategory {
+  id: string
+  name: string
+  icon: string
+}
+
 export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 1, name: '新婚', image: '/static/images/categories/wedding.jpg', bgColor: '#ffe4e8', categoryId: 'wedding' },
   { id: 2, name: '求婚', image: '/static/images/categories/proposal.jpg', bgColor: '#f0e6ff', categoryId: 'proposal' },
@@ -18,6 +24,16 @@ export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 7, name: '升学宴', image: '/static/images/categories/graduation.jpg', bgColor: '#fff3e0', categoryId: 'graduation' },
   { id: 8, name: '节日请柬', image: '/static/images/categories/festival-invitation.jpg', bgColor: '#fef3e2', categoryId: 'festival-invitation' },
   { id: 9, name: '乔迁', image: '/static/images/categories/housewarming.jpg', bgColor: '#fff7e6', categoryId: 'housewarming' },
+]
+
+// 海报分类 - 对应 /api/poster/templates?category=xxx
+export const POSTER_CATEGORIES: PosterCategory[] = [
+  { id: 'all', name: '全部', icon: '/static/images/icons/document.svg' },
+  { id: 'business', name: '商务海报', icon: '/static/images/categories/business.jpg' },
+  { id: 'festival', name: '节日海报', icon: '/static/images/categories/festival-invitation.jpg' },
+  { id: 'promotion', name: '促销海报', icon: '/static/images/categories/ceremony.jpg' },
+  { id: 'recruitment', name: '招聘海报', icon: '/static/images/categories/graduation.jpg' },
+  { id: 'event', name: '活动海报', icon: '/static/images/categories/housewarming.jpg' },
 ]
 
 export const HOME_TABS = ['网红爆款', '新婚', '节日邀请', '限时免费']

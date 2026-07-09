@@ -128,6 +128,32 @@
       </scroll-view>
     </view>
 
+    <!-- 海报模板区 -->
+    <view class="section" v-if="posterTemplates.length > 0">
+      <view class="section-header">
+        <text class="section-title">海报模板</text>
+        <view class="section-more" @click="goToPosterPage">
+          <text class="more-text">查看全部 ›</text>
+        </view>
+      </view>
+      <scroll-view class="card-scroll" scroll-x>
+        <view class="card-list">
+          <view
+            v-for="poster in posterTemplates"
+            :key="poster.id"
+            class="scroll-card poster-card"
+            @click="handlePosterClick(poster)"
+          >
+            <image class="card-image poster-card-image" lazy-load :src="poster.cover_url" mode="aspectFill" @error="onImageError" />
+            <view class="card-info">
+              <text class="card-title">{{ poster.name }}</text>
+              <text class="card-sub">{{ poster.category_name }}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
     <!-- 全部分类区 - 展示所有分类的模板数 -->
     <view class="section">
       <view class="section-header">
@@ -171,6 +197,7 @@ import { useUserStore } from '@/stores/user'
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
 const paidTemplates = ref<any[]>([])
+const posterTemplates = ref<any[]>([])
 const userStore = useUserStore()
 
 const categories = HOME_CATEGORIES
@@ -259,6 +286,32 @@ async function loadPaidTemplates() {
   }
 }
 
+// 加载热门海报模板
+async function loadPosterTemplates() {
+  try {
+    const data = await request<any[]>({ url: '/api/poster/templates/hot', hideLoading: true })
+    if (Array.isArray(data)) {
+      posterTemplates.value = data.slice(0, 6)
+    }
+  } catch (e) {
+    console.warn('加载海报模板失败:', e)
+  }
+}
+
+// 点击海报模板卡片 - 跳转到海报编辑器
+function handlePosterClick(poster: any) {
+  uni.navigateTo({
+    url: `/pages/poster/editor/index?id=${poster.id}`,
+  })
+}
+
+// 跳转到海报模板列表页
+function goToPosterPage() {
+  uni.navigateTo({
+    url: '/pages/poster/index/index',
+  })
+}
+
 // 点击付费模板卡片
 function handlePaidCardClick(card: any) {
   if (userStore.isVip()) {
@@ -305,6 +358,7 @@ function goToMall() {
 
 onMounted(() => {
   loadPaidTemplates()
+  loadPosterTemplates()
 })
 </script>
 
@@ -653,5 +707,10 @@ onMounted(() => {
 .card-sub {
   font-size: 22rpx;
   color: #999999;
+}
+
+/* 海报模板卡片 */
+.poster-card-image {
+  height: 420rpx;
 }
 </style>
