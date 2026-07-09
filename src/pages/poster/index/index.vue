@@ -173,7 +173,7 @@ function onBack() {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: #f5f6fa;
   display: flex;
   flex-direction: column;
 }
@@ -273,13 +273,14 @@ function onBack() {
   width: calc(50% - 15rpx);
   margin-bottom: 30rpx;
   background: #ffffff;
-  border-radius: 20rpx;
+  border-radius: 18rpx;
   overflow: hidden;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+  box-shadow: 0 3rpx 16rpx rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
   position: relative;
-  &:active { opacity: 0.9; }
+  transition: transform 0.2s;
+  &:active { transform: scale(0.97); }
   &:nth-child(odd) { margin-right: 30rpx; }
 }
 

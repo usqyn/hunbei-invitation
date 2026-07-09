@@ -265,7 +265,7 @@ onMounted(() => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: #f5f6fa;
   display: flex;
   flex-direction: column;
 }
@@ -384,9 +384,11 @@ onMounted(() => {
   width: calc(50% - 12rpx);
   margin-bottom: 24rpx;
   background: #fff;
-  border-radius: 16rpx;
+  border-radius: 18rpx;
   overflow: hidden;
-  box-shadow: 0 2rpx 16rpx rgba(0,0,0,0.06);
+  box-shadow: 0 3rpx 16rpx rgba(0,0,0,0.06);
+  transition: transform 0.2s;
+  &:active { transform: scale(0.97); }
 
   &:nth-child(odd) { margin-right: 24rpx; }
 }
@@ -488,7 +490,9 @@ onMounted(() => {
 .preview-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 1000;
   display: flex;
   align-items: center;

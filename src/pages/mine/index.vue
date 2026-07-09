@@ -208,7 +208,7 @@ const handleLogout = () => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: #f5f6fa;
   padding-bottom: 120rpx;
 }
 

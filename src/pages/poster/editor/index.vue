@@ -1,57 +1,61 @@
 <template>
   <view class="poster-editor">
-    <!-- Top Toolbar -->
+    <!-- ===== 顶部工具栏 ===== -->
     <view class="toolbar">
-      <view class="toolbar-back" @click="goBack">
+      <view class="toolbar-left" @click="goBack">
         <text class="back-icon">‹</text>
+        <text>返回</text>
       </view>
       <text class="toolbar-title">{{ templateName }}</text>
-      <view class="toolbar-actions">
-        <text
-          class="action-btn"
-          :class="{ 'action-btn--disabled': !canUndo }"
+      <view class="toolbar-right">
+        <view
+          class="toolbar-action"
+          :class="{ 'toolbar-action--disabled': !canUndo }"
           @click="onUndo"
-        >↶</text>
-        <text
-          class="action-btn"
-          :class="{ 'action-btn--disabled': !canRedo }"
+        >↩</view>
+        <view
+          class="toolbar-action"
+          :class="{ 'toolbar-action--disabled': !canRedo }"
           @click="onRedo"
-        >↷</text>
-        <text class="action-btn action-btn--text" @click="showTemplatePicker = true">换模板</text>
-        <text class="action-btn action-btn--text" @click="onPreview">预览</text>
+        >↪</view>
+        <view class="toolbar-btn tpl-btn" @click="posterStore.showTemplatePicker = true">换模板</view>
+        <view class="toolbar-btn preview-btn" @click="onPreview">预览</view>
       </view>
     </view>
 
-    <!-- Canvas Preview Area -->
+    <!-- ===== 画布区域 ===== -->
     <view class="canvas-area">
-      <!-- Loading state -->
-      <view v-if="posterStore.templateLoading" class="loading-overlay">
-        <text class="loading-text">加载模板中...</text>
+      <!-- 加载中 -->
+      <view v-if="posterStore.templateLoading" class="loading-state">
+        <text class="loading-text">⏳ 加载模板中...</text>
       </view>
-      <!-- No template loaded -->
+      <!-- 无模板 -->
       <view v-else-if="!posterStore.currentTemplate" class="empty-state">
         <text class="empty-icon">📋</text>
         <text class="empty-text">暂未加载模板</text>
         <button class="empty-btn" @click="goToTemplates">去挑选模板</button>
       </view>
-      <scroll-view v-else class="canvas-scroll" scroll-y>
+      <!-- 画布 -->
+      <scroll-view v-else class="canvas-scroll" scroll-y enhanced show-scrollbar="{{false}}">
         <view class="canvas-wrapper" :style="canvasWrapperStyle">
           <image
             v-if="posterStore.currentTemplate"
             class="canvas-bg"
             :src="resolvedBgUrl"
-            mode="aspectFit"
+            mode="aspectFill"
           />
+          <!-- 可编辑区域 -->
           <view
             v-for="area in posterStore.editableAreas"
             :key="area.id"
             class="edit-area"
             :class="{
               'edit-area--active': posterStore.selectedAreaId === area.id,
+              'edit-area--image': area.type === 'image',
               'edit-area--text': area.type === 'text',
             }"
             :style="getAreaStyle(area)"
-            @click="onAreaClick(area)"
+            @click.stop="onAreaClick(area)"
           >
             <image
               v-if="area.type === 'image' && area._src"
@@ -66,57 +70,62 @@
               :style="getTextStyle(area)"
             >{{ area._text }}</text>
             <view v-else-if="area.type === 'image'" class="area-placeholder">
-              <text class="placeholder-icon">🖼</text>
-              <text class="placeholder-label">点击上传</text>
+              <text class="placeholder-icon">📷</text>
+              <text class="placeholder-label">点击换图</text>
             </view>
+            <!-- 选中手柄 -->
+            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--tl"></view>
+            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--tr"></view>
+            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--bl"></view>
+            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--br"></view>
           </view>
         </view>
       </scroll-view>
     </view>
 
-    <!-- Hint when no area selected -->
-    <view v-if="!posterStore.selectedAreaId" class="hint-bar">
-      <text class="hint-text">点击模板上的文字或图片区域进行编辑</text>
+    <!-- ===== 编辑面板：无选中 ===== -->
+    <view v-if="!posterStore.selectedAreaId" class="edit-panel edit-panel--hint">
+      <text class="hint-icon">👆</text>
+      <text class="hint-title">点击海报上的文字或图片区域进行编辑</text>
+      <text class="hint-sub">选中后可修改内容、样式和位置</text>
     </view>
 
-    <!-- Bottom Edit Panel (slides up when area selected) -->
-    <view
-      v-if="selectedArea"
-      class="edit-panel"
-      :class="{ 'edit-panel--show': !!posterStore.selectedAreaId }"
-    >
-      <!-- Text area controls -->
-      <template v-if="selectedArea.type === 'text'">
-        <view class="panel-header">
-          <text class="panel-title">编辑文字</text>
-          <text class="panel-close" @click="posterStore.selectArea(null)">✕</text>
-        </view>
-        <scroll-view class="panel-scroll" scroll-y>
-          <view class="panel-content">
-            <view class="form-item">
-              <text class="form-label">文字内容</text>
-              <textarea
-                class="form-textarea"
-                v-model="selectedArea._text"
-                placeholder="请输入文字"
-                auto-height
-                @input="onTextInput"
-              />
-            </view>
-            <view class="form-item">
-              <text class="form-label">字号 {{ selectedArea._fontSize }}px</text>
-              <slider
-                :value="selectedArea._fontSize"
-                :min="12"
-                :max="80"
-                :step="1"
-                activeColor="#e84a6e"
-                @change="onFontSizeChange"
-              />
-            </view>
-            <view class="form-item">
-              <text class="form-label">颜色</text>
-              <view class="color-row">
+    <!-- ===== 编辑面板：文字 ===== -->
+    <view v-if="selectedArea && selectedArea.type === 'text'" class="edit-panel">
+      <view class="panel-header">
+        <text class="panel-title">编辑文字</text>
+        <view class="panel-close" @click="posterStore.selectArea(null)">✕</view>
+      </view>
+      <scroll-view class="panel-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+        <view class="panel-content">
+          <!-- 文字内容 -->
+          <view class="form-item">
+            <textarea
+              class="form-textarea"
+              v-model="selectedArea._text"
+              placeholder="输入文字内容"
+              auto-height
+              @input="onTextInput"
+            />
+          </view>
+          <!-- 字号 -->
+          <view class="form-row">
+            <text class="form-label">字号</text>
+            <slider
+              :value="selectedArea._fontSize"
+              :min="12" :max="80" :step="1"
+              activeColor="#e84a6e" backgroundColor="#e8e8e8"
+              block-size="18" block-color="#fff"
+              style="flex:1;margin:0 20rpx;"
+              @change="onFontSizeChange"
+            />
+            <text class="form-value">{{ selectedArea._fontSize }}</text>
+          </view>
+          <!-- 颜色 -->
+          <view class="form-row">
+            <text class="form-label">颜色</text>
+            <scroll-view class="color-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+              <view class="color-list">
                 <view
                   v-for="color in posterStore.colorOptions"
                   :key="color"
@@ -126,36 +135,41 @@
                   @click="onColorChange(color)"
                 />
               </view>
-            </view>
-            <view class="form-item">
-              <text class="form-label">对齐</text>
-              <view class="align-row">
-                <view
-                  v-for="align in alignOptions"
-                  :key="align.value"
-                  class="align-btn"
-                  :class="{ 'align-btn--active': selectedArea._align === align.value }"
-                  @click="onAlignChange(align.value)"
-                >
-                  <text class="align-icon">{{ align.icon }}</text>
-                </view>
+            </scroll-view>
+          </view>
+          <!-- 对齐 -->
+          <view class="form-row">
+            <text class="form-label">对齐</text>
+            <view class="align-row">
+              <view
+                v-for="align in alignOptions"
+                :key="align.value"
+                class="align-btn"
+                :class="{ 'align-btn--active': selectedArea._align === align.value }"
+                @click="onAlignChange(align.value)"
+              >
+                <text class="align-icon">{{ align.icon }}</text>
               </view>
             </view>
-            <view class="form-item">
-              <text class="form-label">加粗</text>
-              <view class="toggle-row">
-                <view
-                  class="toggle-btn"
-                  :class="{ 'toggle-btn--active': selectedArea._bold }"
-                  @click="onBoldChange"
-                >
-                  <text class="toggle-text">B</text>
-                </view>
+          </view>
+          <!-- 加粗 -->
+          <view class="form-row">
+            <text class="form-label">加粗</text>
+            <view class="toggle-row">
+              <view
+                class="toggle-btn"
+                :class="{ 'toggle-btn--active': selectedArea._bold }"
+                @click="onBoldChange"
+              >
+                <text class="toggle-text">B</text>
               </view>
             </view>
-            <view class="form-item">
-              <text class="form-label">字体</text>
-              <view class="font-row">
+          </view>
+          <!-- 字体 -->
+          <view class="form-row">
+            <text class="form-label">字体</text>
+            <scroll-view class="font-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+              <view class="font-list">
                 <view
                   v-for="font in posterStore.fontOptions"
                   :key="font.value"
@@ -163,84 +177,169 @@
                   :class="{ 'font-btn--active': selectedArea._fontFamily === font.value }"
                   @click="onFontChange(font.value)"
                 >
-                  <text class="font-text" :style="{ fontFamily: font.value }">{{ font.label }}</text>
+                  <text class="font-text">{{ font.label }}</text>
                 </view>
               </view>
-            </view>
-            <view class="form-item">
-              <text class="form-label">旋转 {{ selectedArea._rotate }}°</text>
-              <slider
-                :value="selectedArea._rotate"
-                :min="-180"
-                :max="180"
-                :step="1"
-                activeColor="#e84a6e"
-                @change="onRotateChange"
-              />
-            </view>
-            <view class="form-item">
-              <button class="reset-btn" size="mini" @click="onReset">重置</button>
-            </view>
+            </scroll-view>
           </view>
-        </scroll-view>
-      </template>
-
-      <!-- Image area controls -->
-      <template v-else-if="selectedArea.type === 'image'">
-        <view class="panel-header">
-          <text class="panel-title">编辑图片</text>
-          <text class="panel-close" @click="posterStore.selectArea(null)">✕</text>
+          <!-- 旋转 -->
+          <view class="form-row">
+            <text class="form-label">旋转</text>
+            <slider
+              :value="selectedArea._rotate"
+              :min="-180" :max="180" :step="1"
+              activeColor="#e84a6e" backgroundColor="#e8e8e8"
+              block-size="18" block-color="#fff"
+              style="flex:1;margin:0 20rpx;"
+              @change="onRotateChange"
+            />
+            <text class="form-value">{{ selectedArea._rotate }}°</text>
+          </view>
+          <!-- 重置 -->
+          <view class="form-item">
+            <button class="reset-btn" @click="onReset">恢复默认</button>
+          </view>
         </view>
-        <scroll-view class="panel-scroll" scroll-y>
-          <view class="panel-content">
-            <view class="form-item">
-              <view class="image-action-row">
-                <button class="img-btn" size="mini" @click="onChooseImage">更换图片</button>
-              </view>
-            </view>
-            <view class="form-item">
-              <text class="form-label">旋转 {{ selectedArea._rotate }}°</text>
-              <slider
-                :value="selectedArea._rotate"
-                :min="-180"
-                :max="180"
-                :step="1"
-                activeColor="#e84a6e"
-                @change="onRotateChange"
-              />
-            </view>
-            <view class="form-item">
-              <text class="form-label">缩放 {{ Math.round((selectedArea._scale || 1) * 100) }}%</text>
-              <view class="scale-row">
-                <button class="scale-btn" size="mini" @click="onScaleChange(-0.1)">−</button>
-                <slider
-                  class="scale-slider"
-                  :value="Math.round((selectedArea._scale || 1) * 100)"
-                  :min="50"
-                  :max="200"
-                  :step="5"
-                  activeColor="#e84a6e"
-                  @change="onScaleSliderChange"
-                />
-                <button class="scale-btn" size="mini" @click="onScaleChange(0.1)">+</button>
-              </view>
-            </view>
-            <view class="form-item">
-              <button class="reset-btn" size="mini" @click="onReset">重置</button>
-            </view>
-          </view>
-        </scroll-view>
-      </template>
+      </scroll-view>
     </view>
 
-    <!-- Layer Manager Overlay -->
-    <view v-if="posterStore.showLayerPanel" class="modal-overlay" @click="posterStore.showLayerPanel = false">
-      <view class="layer-modal" @click.stop>
-        <view class="layer-modal-header">
-          <text class="layer-modal-title">图层管理</text>
-          <text class="layer-modal-close" @click="posterStore.showLayerPanel = false">✕</text>
+    <!-- ===== 编辑面板：图片 ===== -->
+    <view v-if="selectedArea && selectedArea.type === 'image'" class="edit-panel">
+      <view class="panel-header">
+        <text class="panel-title">编辑图片</text>
+        <view class="panel-close" @click="posterStore.selectArea(null)">✕</view>
+      </view>
+      <scroll-view class="panel-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+        <view class="panel-content">
+          <view class="form-item">
+            <view class="image-action-row">
+              <button class="img-btn" @click="onChooseImage">更换图片</button>
+            </view>
+          </view>
+          <!-- 旋转 -->
+          <view class="form-row">
+            <text class="form-label">旋转</text>
+            <slider
+              :value="selectedArea._rotate"
+              :min="-180" :max="180" :step="1"
+              activeColor="#e84a6e" backgroundColor="#e8e8e8"
+              block-size="18" block-color="#fff"
+              style="flex:1;margin:0 20rpx;"
+              @change="onRotateChange"
+            />
+            <text class="form-value">{{ selectedArea._rotate }}°</text>
+          </view>
+          <!-- 缩放 -->
+          <view class="form-row">
+            <text class="form-label">缩放</text>
+            <view class="scale-row">
+              <view class="scale-btn" @click="onScaleChange(-0.1)">−</view>
+              <slider
+                class="scale-slider"
+                :value="Math.round((selectedArea._scale || 1) * 100)"
+                :min="50" :max="200" :step="5"
+                activeColor="#e84a6e" backgroundColor="#e8e8e8"
+                block-size="18" block-color="#fff"
+                @change="onScaleSliderChange"
+              />
+              <view class="scale-btn" @click="onScaleChange(0.1)">+</view>
+            </view>
+          </view>
+          <!-- 重置 -->
+          <view class="form-item">
+            <button class="reset-btn" @click="onReset">恢复默认</button>
+          </view>
         </view>
-        <scroll-view class="layer-modal-body" scroll-y>
+      </scroll-view>
+    </view>
+
+    <!-- ===== 底部操作栏 ===== -->
+    <view class="action-bar">
+      <view class="action-bar-item action-bar-item--outline" @click="onOpenSticker">
+        <text>🎨 素材</text>
+      </view>
+      <view class="action-bar-item action-bar-item--outline" @click="posterStore.showLayerPanel = true">
+        <text>📑 图层</text>
+      </view>
+      <view class="action-bar-item action-bar-item--outline" @click="onSave">
+        <text>💾 保存</text>
+      </view>
+      <view class="action-bar-item action-bar-item--primary" @click="onExport">
+        <text>📤 导出海报</text>
+      </view>
+    </view>
+
+    <!-- ===== 隐藏 Canvas ===== -->
+    <canvas
+      type="2d"
+      id="posterCanvas"
+      canvas-id="posterCanvas"
+      class="hidden-canvas"
+      :style="{ width: canvasSize.width + 'px', height: canvasSize.height + 'px' }"
+    />
+
+    <!-- ===== 预览弹窗 ===== -->
+    <view v-if="posterStore.showPreview" class="modal-overlay" @click="posterStore.showPreview = false">
+      <view class="preview-modal" @click.stop>
+        <view class="preview-modal-header">
+          <text>海报预览</text>
+          <view class="preview-modal-close" @click="posterStore.showPreview = false">✕</view>
+        </view>
+        <scroll-view class="preview-modal-body" scroll-y>
+          <image
+            v-if="posterStore.previewImage"
+            class="preview-image"
+            :src="posterStore.previewImage"
+            mode="widthFix"
+          />
+          <view v-else class="preview-empty">
+            <view class="spinner"></view>
+            <text>正在生成海报...</text>
+          </view>
+        </scroll-view>
+        <view class="preview-modal-footer" v-if="posterStore.previewImage">
+          <button class="preview-btn preview-btn--album" @click="onSaveToAlbum">保存到相册</button>
+          <button class="preview-btn preview-btn--share" @click="onShare">分享给好友</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===== 模板切换弹窗 ===== -->
+    <view v-if="posterStore.showTemplatePicker" class="modal-overlay modal-overlay--bottom" @click="posterStore.showTemplatePicker = false">
+      <view class="bottom-sheet" @click.stop>
+        <view class="bottom-sheet-header">
+          <text>选择模板</text>
+          <view class="bottom-sheet-close" @click="posterStore.showTemplatePicker = false">✕</view>
+        </view>
+        <scroll-view class="bottom-sheet-body" scroll-y enhanced show-scrollbar="{{false}}">
+          <view class="picker-grid">
+            <view
+              v-for="tpl in posterStore.relatedTemplates"
+              :key="tpl.id"
+              class="picker-card"
+              :class="{ 'picker-card--active': posterStore.currentTemplate?.id === tpl.id }"
+              @click="onSwitchTemplate(tpl.id)"
+            >
+              <image class="picker-card-img" :src="resolveUrl(tpl.cover_url)" mode="aspectFill" />
+              <text class="picker-card-name">{{ tpl.name }}</text>
+              <view v-if="tpl.is_vip" class="picker-card-vip">VIP</view>
+            </view>
+          </view>
+          <view v-if="posterStore.relatedTemplates.length === 0" class="picker-empty">
+            <text>暂无更多模板</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+
+    <!-- ===== 图层管理弹窗 ===== -->
+    <view v-if="posterStore.showLayerPanel" class="modal-overlay modal-overlay--bottom" @click="posterStore.showLayerPanel = false">
+      <view class="bottom-sheet" @click.stop>
+        <view class="bottom-sheet-header">
+          <text>图层管理</text>
+          <view class="bottom-sheet-close" @click="posterStore.showLayerPanel = false">✕</view>
+        </view>
+        <scroll-view class="bottom-sheet-body" scroll-y enhanced show-scrollbar="{{false}}">
           <view v-if="posterStore.editableAreas.length === 0" class="layer-empty">
             <text class="layer-empty-text">暂无元素</text>
           </view>
@@ -265,96 +364,15 @@
       </view>
     </view>
 
-    <!-- Bottom Action Bar -->
-    <view class="action-bar">
-      <view class="action-bar-item" @click="onOpenSticker">
-        <text class="action-bar-icon">🎨</text>
-        <text class="action-bar-label">素材</text>
-      </view>
-      <view class="action-bar-item" @click="posterStore.showLayerPanel = true">
-        <text class="action-bar-icon">📑</text>
-        <text class="action-bar-label">图层</text>
-      </view>
-      <view class="action-bar-item" @click="onSave">
-        <text class="action-bar-icon">💾</text>
-        <text class="action-bar-label">保存</text>
-      </view>
-      <view class="action-bar-item" @click="onExport">
-        <text class="action-bar-icon">📤</text>
-        <text class="action-bar-label">导出</text>
-      </view>
-    </view>
-
-    <!-- Hidden Canvas for export -->
-    <canvas
-      type="2d"
-      id="posterCanvas"
-      canvas-id="posterCanvas"
-      class="hidden-canvas"
-      :style="{ width: canvasSize.width + 'px', height: canvasSize.height + 'px' }"
-    />
-
-    <!-- Preview Overlay Modal -->
-    <view v-if="posterStore.showPreview" class="modal-overlay" @click="posterStore.showPreview = false">
-      <view class="preview-modal" @click.stop>
-        <view class="preview-modal-header">
-          <text class="preview-modal-title">预览效果</text>
-          <text class="preview-modal-close" @click="posterStore.showPreview = false">✕</text>
+    <!-- ===== 素材面板 ===== -->
+    <view v-if="posterStore.showStickerPanel" class="modal-overlay modal-overlay--bottom" @click="posterStore.showStickerPanel = false">
+      <view class="bottom-sheet" @click.stop>
+        <view class="bottom-sheet-header">
+          <text>素材库</text>
+          <view class="bottom-sheet-close" @click="posterStore.showStickerPanel = false">✕</view>
         </view>
-        <scroll-view class="preview-modal-body" scroll-y>
-          <image
-            v-if="posterStore.previewImage"
-            class="preview-image"
-            :src="posterStore.previewImage"
-            mode="widthFix"
-          />
-          <view v-else class="preview-empty">
-            <text class="preview-empty-text">生成预览中...</text>
-          </view>
-        </scroll-view>
-        <view class="preview-modal-footer">
-          <button class="preview-btn preview-btn--album" @click="onSaveToAlbum">保存到相册</button>
-          <button class="preview-btn preview-btn--share" @click="onShare">分享</button>
-        </view>
-      </view>
-    </view>
-
-    <!-- Template Picker Overlay Modal -->
-    <view v-if="posterStore.showTemplatePicker" class="modal-overlay" @click="posterStore.showTemplatePicker = false">
-      <view class="picker-modal" @click.stop>
-        <view class="picker-modal-header">
-          <text class="picker-modal-title">选择模板</text>
-          <text class="picker-modal-close" @click="posterStore.showTemplatePicker = false">✕</text>
-        </view>
-        <scroll-view class="picker-modal-body" scroll-y>
-          <view class="picker-grid">
-            <view
-              v-for="tpl in posterStore.relatedTemplates"
-              :key="tpl.id"
-              class="picker-card"
-              @click="onSwitchTemplate(tpl.id)"
-            >
-              <image class="picker-card-img" :src="resolveUrl(tpl.cover_url)" mode="aspectFill" />
-              <text class="picker-card-name">{{ tpl.name }}</text>
-              <view v-if="tpl.is_vip" class="picker-card-vip">VIP</view>
-            </view>
-          </view>
-          <view v-if="posterStore.relatedTemplates.length === 0" class="picker-empty">
-            <text class="picker-empty-text">暂无更多模板</text>
-          </view>
-        </scroll-view>
-      </view>
-    </view>
-
-    <!-- Sticker Panel Overlay Modal -->
-    <view v-if="posterStore.showStickerPanel" class="modal-overlay" @click="posterStore.showStickerPanel = false">
-      <view class="sticker-modal" @click.stop>
-        <view class="sticker-modal-header">
-          <text class="sticker-modal-title">素材库</text>
-          <text class="sticker-modal-close" @click="posterStore.showStickerPanel = false">✕</text>
-        </view>
-        <scroll-view class="sticker-modal-body" scroll-y>
-          <view class="sticker-grid">
+        <scroll-view class="bottom-sheet-body" scroll-y enhanced show-scrollbar="{{false}}">
+          <view class="sticker-grid" v-if="posterStore.stickers.length > 0">
             <view
               v-for="(sticker, idx) in posterStore.stickers"
               :key="idx"
@@ -364,16 +382,17 @@
               <image class="sticker-img" :src="sticker" mode="aspectFit" />
             </view>
           </view>
-          <view v-if="posterStore.stickers.length === 0" class="sticker-empty">
+          <view v-else class="sticker-empty">
+            <text class="sticker-empty-icon">🎨</text>
             <text class="sticker-empty-text">暂无素材</text>
           </view>
         </scroll-view>
       </view>
     </view>
 
-    <!-- Toast -->
-    <view v-if="toastVisible" class="toast">
-      <text class="toast-text">{{ toastMsg }}</text>
+    <!-- ===== Toast ===== -->
+    <view v-if="toastVisible" class="toast" :class="{ 'toast--show': toastVisible }">
+      <text>{{ toastMsg }}</text>
     </view>
   </view>
 </template>
@@ -787,7 +806,6 @@ onMounted(async () => {
   const workId = options.workId
 
   if (workId) {
-    // Load existing work: fetch work data → restore editable areas → load template for background
     posterStore.setWorkId(workId)
     try {
       const workData = await request<{ template_id: string; template_name?: string; cover_url?: string; content: any }>({
@@ -795,12 +813,10 @@ onMounted(async () => {
         hideLoading: true,
       })
       if (workData && workData.content && workData.content.editableAreas) {
-        // Load template first to get background
         const templateIdToLoad = workData.template_id || templateId
         if (templateIdToLoad) {
           await posterStore.loadTemplate(templateIdToLoad)
         }
-        // Then restore user's edits
         posterStore.restoreFromWork(workData.content.editableAreas)
         showToast('已加载作品')
       } else if (templateId) {
@@ -819,106 +835,134 @@ onMounted(async () => {
     posterStore.showTemplatePicker = true
   }
 
-  // Load related templates for picker (only once)
   posterStore.loadRelatedTemplates()
 })
 </script>
 
 <style lang="scss" scoped>
+/* ================================================================
+   海报编辑器 v3 — hunbei-invitation
+   主题色: #e84a6e (粉红)
+   ================================================================ */
+
 .poster-editor {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(180deg, #0f0f23 0%, #1a1a2e 40%, #16213e 100%);
   overflow: hidden;
 }
 
-/* Toolbar */
+/* ==================== 工具栏 ==================== */
 .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
+  padding: 0 20rpx;
+  height: 96rpx;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
+  background: rgba(15, 15, 35, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1rpx solid rgba(255,255,255,0.06);
+  z-index: 100;
 }
 
-.toolbar-back {
-  width: 60rpx;
-  height: 60rpx;
+.toolbar-left {
   display: flex;
   align-items: center;
-  justify-content: center;
+  font-size: 28rpx;
+  color: #fff;
+  gap: 2rpx;
+  padding: 10rpx 16rpx 10rpx 6rpx;
+  border-radius: 30rpx;
+  background: rgba(255,255,255,0.06);
 }
+.toolbar-left:active { background: rgba(255,255,255,0.14); }
 
 .back-icon {
-  font-size: 48rpx;
+  font-size: 40rpx;
+  line-height: 1;
+  margin-top: -2rpx;
   color: #fff;
   font-weight: 300;
 }
 
 .toolbar-title {
-  font-size: 32rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: #fff;
-  flex: 1;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 300rpx;
+  opacity: 0.9;
+  letter-spacing: 1rpx;
 }
 
-.toolbar-actions {
+.toolbar-right {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 10rpx;
 }
 
-.action-btn {
-  font-size: 36rpx;
+.toolbar-action {
+  width: 52rpx;
+  height: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
   color: #fff;
-  padding: 8rpx 12rpx;
-  border-radius: 8rpx;
-  transition: opacity 0.2s;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  transition: all 0.2s;
 }
-
-.action-btn--text {
-  font-size: 26rpx;
-  padding: 10rpx 20rpx;
-  background: rgba(232, 74, 110, 0.2);
-  border: 1rpx solid rgba(232, 74, 110, 0.4);
-  color: #ff6b8a;
+.toolbar-action:active {
+  background: rgba(255,255,255,0.18);
+  transform: scale(0.92);
 }
-
-.action-btn--disabled {
-  opacity: 0.3;
+.toolbar-action--disabled {
+  opacity: 0.25;
   pointer-events: none;
 }
 
-/* Canvas Area */
+.toolbar-btn {
+  padding: 10rpx 22rpx;
+  border-radius: 24rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.toolbar-btn.tpl-btn {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+}
+.toolbar-btn.preview-btn {
+  background: linear-gradient(135deg, #e84a6e, #ff6b8a);
+  color: #fff;
+  box-shadow: 0 4rpx 12rpx rgba(232,74,110,0.3);
+}
+.toolbar-btn:active { transform: scale(0.94); opacity: 0.85; }
+
+/* ==================== 画布区 ==================== */
 .canvas-area {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 20rpx 0;
+  padding: 30rpx 20rpx;
 }
 
-.loading-overlay {
+.loading-state {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 20rpx;
 }
-
 .loading-text {
   font-size: 28rpx;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255,255,255,0.6);
 }
 
 .empty-state {
@@ -929,24 +973,16 @@ onMounted(async () => {
   justify-content: center;
   gap: 20rpx;
 }
-
-.empty-icon {
-  font-size: 80rpx;
-  opacity: 0.5;
-}
-
-.empty-text {
-  font-size: 28rpx;
-  color: rgba(255, 255, 255, 0.5);
-}
-
+.empty-icon { font-size: 80rpx; opacity: 0.5; }
+.empty-text { font-size: 28rpx; color: rgba(255,255,255,0.5); }
 .empty-btn {
-  padding: 16rpx 48rpx;
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  padding: 18rpx 52rpx;
+  background: linear-gradient(135deg, #e84a6e, #ff6b8a);
   color: #fff;
   font-size: 26rpx;
   border-radius: 40rpx;
   border: none;
+  box-shadow: 0 6rpx 18rpx rgba(232,74,110,0.3);
 }
 
 .canvas-scroll {
@@ -970,6 +1006,7 @@ onMounted(async () => {
   display: block;
 }
 
+/* ---- 可编辑区域 ---- */
 .edit-area {
   position: absolute;
   z-index: 10;
@@ -977,24 +1014,33 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: outline 0.15s;
+  box-sizing: border-box;
+  transition: box-shadow 0.2s;
 }
-
-.edit-area--active {
-  outline: 3rpx solid #e84a6e;
-  outline-offset: -3rpx;
-  background: rgba(232, 74, 110, 0.05);
+.edit-area--image {
+  border: 2rpx solid rgba(255,255,255,0.2);
+  border-radius: 6rpx;
 }
-
 .edit-area--text {
-  cursor: text;
+  border: 2rpx solid rgba(255,255,255,0.12);
+  border-radius: 6rpx;
+}
+.edit-area--active.edit-area--image {
+  border-color: rgba(232,74,110,0.6);
+}
+.edit-area--active.edit-area--text {
+  border-color: rgba(232,74,110,0.5);
+}
+.edit-area--active {
+  background: rgba(232,74,110,0.06) !important;
+  z-index: 20;
 }
 
 .area-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .area-text {
@@ -1014,129 +1060,176 @@ onMounted(async () => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background: rgba(255, 255, 255, 0.15);
-  border: 2rpx dashed rgba(255, 255, 255, 0.4);
-  border-radius: 8rpx;
+  background: rgba(0,0,0,0.2);
+  backdrop-filter: blur(4px);
   gap: 6rpx;
 }
+.placeholder-icon { font-size: 40rpx; }
+.placeholder-label { font-size: 20rpx; color: rgba(255,255,255,0.7); }
 
-.placeholder-icon {
-  font-size: 40rpx;
-  opacity: 0.6;
+/* ---- 选中手柄 ---- */
+.area-handle {
+  position: absolute;
+  width: 16rpx;
+  height: 16rpx;
+  background: #fff;
+  border: 2rpx solid #e84a6e;
+  border-radius: 50%;
+  z-index: 25;
+  box-shadow: 0 2rpx 6rpx rgba(0,0,0,0.25);
+  animation: handlePulse 2s ease-in-out infinite;
+}
+.area-handle--tl { top: -8rpx; left: -8rpx; }
+.area-handle--tr { top: -8rpx; right: -8rpx; }
+.area-handle--bl { bottom: -8rpx; left: -8rpx; }
+.area-handle--br { bottom: -8rpx; right: -8rpx; }
+
+@keyframes handlePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232,74,110,0.4); }
+  50% { box-shadow: 0 0 0 8rpx rgba(232,74,110,0); }
 }
 
-.placeholder-label {
-  font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* Hint Bar */
-.hint-bar {
-  flex-shrink: 0;
-  padding: 16rpx 24rpx;
-  background: rgba(255, 255, 255, 0.05);
-  text-align: center;
-}
-
-.hint-text {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-/* Edit Panel */
+/* ==================== 编辑面板 ==================== */
 .edit-panel {
   flex-shrink: 0;
-  max-height: 500rpx;
+  max-height: 440rpx;
   background: #fff;
-  border-radius: 24rpx 24rpx 0 0;
-  box-shadow: 0 -4rpx 30rpx rgba(0, 0, 0, 0.15);
+  border-radius: 28rpx 28rpx 0 0;
+  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: max-height 0.3s ease;
 }
+
+.edit-panel--hint {
+  text-align: center;
+  padding: 48rpx 40rpx;
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), #fff);
+}
+.hint-icon { font-size: 56rpx; display: block; margin-bottom: 12rpx; }
+.hint-title { color: #555; font-size: 26rpx; display: block; font-weight: 500; }
+.hint-sub { color: #aaa; font-size: 22rpx; margin-top: 6rpx; display: block; }
 
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx 30rpx;
+  padding: 20rpx 28rpx;
   border-bottom: 1rpx solid #f0f0f0;
   flex-shrink: 0;
 }
-
 .panel-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #333;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1a1a2e;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
 }
-
+.panel-title::before {
+  content: '';
+  width: 6rpx;
+  height: 24rpx;
+  background: linear-gradient(180deg, #e84a6e, #1a1a2e);
+  border-radius: 3rpx;
+}
 .panel-close {
-  font-size: 36rpx;
+  width: 44rpx;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
   color: #999;
-  padding: 8rpx 16rpx;
+  border-radius: 50%;
+  background: #f5f5f5;
 }
 
 .panel-scroll {
   flex: 1;
   min-height: 0;
-  max-height: 420rpx;
+  max-height: 360rpx;
 }
 
 .panel-content {
-  padding: 20rpx 30rpx 30rpx;
+  padding: 16rpx 28rpx 28rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 4rpx;
 }
 
 .form-item {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  padding: 14rpx 0;
+  border-top: 1rpx solid #f4f4f4;
 }
 
 .form-label {
+  width: 80rpx;
   font-size: 26rpx;
-  color: #666;
+  color: #888;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.form-value {
+  width: 60rpx;
+  text-align: right;
+  font-size: 26rpx;
+  color: #333;
+  flex-shrink: 0;
   font-weight: 500;
 }
 
 .form-textarea {
   width: 100%;
   min-height: 100rpx;
-  padding: 16rpx 20rpx;
-  border: 1rpx solid #e0e0e0;
-  border-radius: 12rpx;
+  padding: 18rpx 22rpx;
+  border: 2rpx solid #eee;
+  border-radius: 14rpx;
   font-size: 28rpx;
   color: #333;
   background: #fafafa;
 }
 
-.color-row {
-  display: flex;
-  flex-wrap: wrap;
+/* ---- 颜色 ---- */
+.color-scroll {
+  flex: 1;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+.color-list {
+  display: inline-flex;
   gap: 16rpx;
+  padding: 4rpx 0;
 }
-
 .color-dot {
-  width: 56rpx;
-  height: 56rpx;
+  width: 48rpx;
+  height: 48rpx;
   border-radius: 50%;
-  border: 4rpx solid transparent;
-  transition: border-color 0.15s, transform 0.15s;
+  border: 3rpx solid transparent;
+  box-shadow: 0 3rpx 8rpx rgba(0,0,0,0.12);
+  flex-shrink: 0;
+  transition: all 0.2s;
 }
-
 .color-dot--active {
-  border-color: #e84a6e;
-  transform: scale(1.1);
+  border-color: #1a1a2e;
+  transform: scale(1.18);
+  box-shadow: 0 4rpx 14rpx rgba(0,0,0,0.2);
 }
 
+/* ---- 对齐 ---- */
 .align-row {
   display: flex;
-  gap: 16rpx;
+  gap: 8rpx;
+  flex: 1;
 }
-
 .align-btn {
   width: 72rpx;
   height: 72rpx;
@@ -1146,24 +1239,19 @@ onMounted(async () => {
   background: #f5f5f5;
   border-radius: 12rpx;
   border: 2rpx solid transparent;
-  transition: border-color 0.15s, background 0.15s;
+  transition: all 0.2s;
 }
-
 .align-btn--active {
   border-color: #e84a6e;
   background: #fdf0f3;
 }
+.align-icon { font-size: 32rpx; color: #666; }
 
-.align-icon {
-  font-size: 32rpx;
-  color: #666;
-}
-
+/* ---- 加粗 ---- */
 .toggle-row {
   display: flex;
-  gap: 16rpx;
+  flex: 1;
 }
-
 .toggle-btn {
   width: 72rpx;
   height: 72rpx;
@@ -1173,124 +1261,139 @@ onMounted(async () => {
   background: #f5f5f5;
   border-radius: 12rpx;
   border: 2rpx solid transparent;
-  transition: border-color 0.15s, background 0.15s;
+  transition: all 0.2s;
 }
-
 .toggle-btn--active {
   border-color: #e84a6e;
   background: #fdf0f3;
 }
+.toggle-text { font-size: 32rpx; font-weight: bold; color: #666; }
+.toggle-btn--active .toggle-text { color: #e84a6e; }
 
-.toggle-text {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #666;
+/* ---- 字体 ---- */
+.font-scroll {
+  flex: 1;
+  white-space: nowrap;
+  overflow-x: auto;
 }
-
-.toggle-btn--active .toggle-text {
-  color: #e84a6e;
-}
-
-.font-row {
-  display: flex;
-  flex-wrap: wrap;
+.font-list {
+  display: inline-flex;
   gap: 12rpx;
+  padding: 4rpx 0;
 }
-
 .font-btn {
-  padding: 12rpx 24rpx;
+  padding: 10rpx 22rpx;
   background: #f5f5f5;
-  border-radius: 12rpx;
+  border-radius: 10rpx;
   border: 2rpx solid transparent;
-  transition: border-color 0.15s, background 0.15s;
+  transition: all 0.2s;
 }
-
 .font-btn--active {
   border-color: #e84a6e;
   background: #fdf0f3;
 }
+.font-text { font-size: 24rpx; color: #666; white-space: nowrap; }
+.font-btn--active .font-text { color: #e84a6e; }
 
-.font-text {
-  font-size: 26rpx;
-  color: #666;
-}
-
-.font-btn--active .font-text {
-  color: #e84a6e;
-}
-
+/* ---- 图片按钮 ---- */
 .image-action-row {
   display: flex;
-  gap: 20rpx;
+  gap: 16rpx;
 }
-
 .img-btn {
   flex: 1;
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%) !important;
+  background: linear-gradient(135deg, #e84a6e, #ff6b8a) !important;
   color: #fff !important;
   font-size: 26rpx !important;
-  border-radius: 12rpx !important;
+  border-radius: 14rpx !important;
+  padding: 20rpx !important;
+  box-shadow: 0 4rpx 12rpx rgba(232,74,110,0.25);
 }
+.img-btn:active { transform: scale(0.96); opacity: 0.9; }
 
+/* ---- 缩放 ---- */
 .scale-row {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 12rpx;
+  flex: 1;
 }
-
 .scale-btn {
-  width: 72rpx;
-  height: 72rpx;
+  width: 56rpx;
+  height: 56rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #f5f5f5;
-  border-radius: 12rpx;
-  font-size: 36rpx;
-  color: #666;
+  border: 2rpx solid #e8e8e8;
+  border-radius: 50%;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
   flex-shrink: 0;
+  transition: all 0.15s;
 }
-
-.scale-slider {
-  flex: 1;
+.scale-btn:active {
+  background: #e84a6e;
+  color: #fff;
+  border-color: #e84a6e;
 }
+.scale-slider { flex: 1; }
 
+/* ---- 重置 ---- */
 .reset-btn {
   width: 100%;
-  background: #f5f5f5 !important;
-  color: #666 !important;
+  padding: 16rpx;
+  background: #fff !important;
+  color: #e84a6e !important;
+  border: 2rpx solid rgba(232,74,110,0.25) !important;
   font-size: 26rpx !important;
-  border-radius: 12rpx !important;
+  border-radius: 14rpx !important;
 }
+.reset-btn:active { background: #fef5f5 !important; }
 
-/* Action Bar */
+/* ==================== 底部操作栏 ==================== */
 .action-bar {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-around;
-  padding: 16rpx 30rpx;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
+  gap: 14rpx;
+  padding: 20rpx 28rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1rpx solid rgba(0,0,0,0.04);
 }
 
 .action-bar-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6rpx;
+  padding: 22rpx 0;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  font-weight: 500;
+  text-align: center;
+  transition: all 0.2s;
 }
+.action-bar-item:active { transform: scale(0.96); }
 
-.action-bar-icon {
-  font-size: 40rpx;
+.action-bar-item--outline {
+  flex: 0.8;
+  background: #fff;
+  color: #555;
+  border: 2rpx solid #e8e8e8;
 }
+.action-bar-item--outline:active { background: #f5f5f5; }
 
-.action-bar-label {
-  font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.7);
+.action-bar-item--primary {
+  flex: 1.4;
+  background: linear-gradient(135deg, #e84a6e, #ff6b8a);
+  color: #fff;
+  box-shadow: 0 6rpx 18rpx rgba(232,74,110,0.35);
+  font-weight: 700;
+  letter-spacing: 2rpx;
 }
+.action-bar-item--primary:active { box-shadow: 0 3rpx 10rpx rgba(232,74,110,0.25); }
 
-/* Hidden Canvas */
+/* ==================== 隐藏 Canvas ==================== */
 .hidden-canvas {
   position: fixed;
   left: -9999px;
@@ -1299,169 +1402,180 @@ onMounted(async () => {
   pointer-events: none;
 }
 
-/* Modal Overlay */
+/* ==================== 弹窗遮罩 ==================== */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.modal-overlay--bottom {
+  align-items: flex-end;
+}
 
-/* Preview Modal */
+/* ---- 底部弹出 ---- */
+.bottom-sheet {
+  width: 100%;
+  max-height: 68vh;
+  background: #fff;
+  border-radius: 28rpx 28rpx 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 -8rpx 30rpx rgba(0,0,0,0.15);
+}
+.bottom-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 30rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1a1a2e;
+  border-bottom: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
+}
+.bottom-sheet-close {
+  width: 44rpx;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: #999;
+  border-radius: 50%;
+  background: #f5f5f5;
+}
+.bottom-sheet-body {
+  flex: 1;
+  min-height: 0;
+  padding: 20rpx;
+}
+
+/* ---- 预览弹窗 ---- */
 .preview-modal {
-  width: 90%;
-  max-width: 680rpx;
-  max-height: 85vh;
+  width: 88%;
+  max-height: 88vh;
   background: #fff;
   border-radius: 24rpx;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: 0 20rpx 60rpx rgba(0,0,0,0.4);
 }
-
 .preview-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx 30rpx;
+  padding: 26rpx 30rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1a1a2e;
   border-bottom: 1rpx solid #f0f0f0;
   flex-shrink: 0;
 }
-
-.preview-modal-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
-
 .preview-modal-close {
-  font-size: 36rpx;
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
   color: #999;
-  padding: 8rpx 16rpx;
+  border-radius: 50%;
+  background: #f5f5f5;
 }
-
 .preview-modal-body {
   flex: 1;
   min-height: 0;
   padding: 20rpx;
 }
-
 .preview-image {
   width: 100%;
   border-radius: 12rpx;
 }
-
 .preview-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 400rpx;
-}
-
-.preview-empty-text {
-  font-size: 28rpx;
+  gap: 20rpx;
   color: #999;
+  font-size: 28rpx;
 }
+.spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 4rpx solid #eee;
+  border-top-color: #e84a6e;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .preview-modal-footer {
   display: flex;
-  gap: 20rpx;
-  padding: 20rpx 30rpx;
+  gap: 16rpx;
+  padding: 26rpx 30rpx;
   border-top: 1rpx solid #f0f0f0;
   flex-shrink: 0;
 }
-
 .preview-btn {
   flex: 1;
   font-size: 28rpx !important;
-  border-radius: 12rpx !important;
+  border-radius: 14rpx !important;
+  padding: 22rpx !important;
 }
-
 .preview-btn--album {
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%) !important;
+  background: linear-gradient(135deg, #e84a6e, #ff6b8a) !important;
   color: #fff !important;
-}
-
-.preview-btn--share {
-  background: #f5f5f5 !important;
-  color: #333 !important;
-}
-
-/* Template Picker Modal */
-.picker-modal {
-  width: 92%;
-  max-width: 700rpx;
-  max-height: 80vh;
-  background: #fff;
-  border-radius: 24rpx;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.picker-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 30rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-  flex-shrink: 0;
-}
-
-.picker-modal-title {
-  font-size: 32rpx;
+  box-shadow: 0 4rpx 14rpx rgba(232,74,110,0.3);
   font-weight: 600;
-  color: #333;
+}
+.preview-btn--share {
+  background: #fff !important;
+  color: #1a1a2e !important;
+  border: 2rpx solid #e8e8e8;
+  font-weight: 500;
 }
 
-.picker-modal-close {
-  font-size: 36rpx;
-  color: #999;
-  padding: 8rpx 16rpx;
-}
-
-.picker-modal-body {
-  flex: 1;
-  min-height: 0;
-  padding: 20rpx;
-}
-
+/* ---- 模板选择 ---- */
 .picker-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 20rpx;
+  gap: 16rpx;
 }
-
 .picker-card {
-  width: calc(50% - 10rpx);
-  position: relative;
-  border-radius: 12rpx;
+  width: calc(50% - 8rpx);
+  border-radius: 14rpx;
   overflow: hidden;
-  background: #f5f5f5;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.06);
+  position: relative;
+  transition: all 0.2s;
 }
-
-.picker-card-img {
-  width: 100%;
-  height: 300rpx;
-}
-
+.picker-card:active { transform: scale(0.97); }
+.picker-card--active { outline: 3rpx solid #e84a6e; outline-offset: -3rpx; }
+.picker-card-img { width: 100%; height: 220rpx; display: block; object-fit: cover; }
 .picker-card-name {
   display: block;
-  padding: 12rpx;
+  padding: 12rpx 14rpx;
   font-size: 24rpx;
+  font-weight: 600;
   color: #333;
-  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  background: #fff;
 }
-
 .picker-card-vip {
   position: absolute;
   top: 8rpx;
@@ -1473,198 +1587,76 @@ onMounted(async () => {
   border-radius: 8rpx;
   font-weight: 600;
 }
-
 .picker-empty {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 300rpx;
-}
-
-.picker-empty-text {
+  color: #999;
   font-size: 28rpx;
-  color: #999;
 }
 
-/* Sticker Modal */
-.sticker-modal {
-  width: 92%;
-  max-width: 700rpx;
-  max-height: 70vh;
-  background: #fff;
-  border-radius: 24rpx;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.sticker-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 30rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-  flex-shrink: 0;
-}
-
-.sticker-modal-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.sticker-modal-close {
-  font-size: 36rpx;
-  color: #999;
-  padding: 8rpx 16rpx;
-}
-
-.sticker-modal-body {
-  flex: 1;
-  min-height: 0;
-  padding: 20rpx;
-}
-
+/* ---- 素材 ---- */
 .sticker-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 16rpx;
 }
-
 .sticker-item {
   width: calc(25% - 12rpx);
   aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f9f9f9;
-  border-radius: 12rpx;
+  background: #fafafa;
+  border-radius: 14rpx;
   border: 2rpx solid transparent;
-  transition: border-color 0.15s;
+  transition: all 0.2s;
 }
-
 .sticker-item:active {
+  background: #fdf0f3;
   border-color: #e84a6e;
+  transform: scale(0.95);
 }
-
-.sticker-img {
-  width: 80%;
-  height: 80%;
-}
-
+.sticker-img { width: 75%; height: 75%; }
 .sticker-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 300rpx;
+  gap: 12rpx;
 }
+.sticker-empty-icon { font-size: 64rpx; }
+.sticker-empty-text { font-size: 28rpx; color: #bbb; }
 
-.sticker-empty-text {
-  font-size: 28rpx;
-  color: #999;
-}
-
-/* Toast */
-.toast {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.8);
-  color: #fff;
-  padding: 20rpx 40rpx;
-  border-radius: 12rpx;
-  z-index: 9999;
-  pointer-events: none;
-  animation: toast-fade 0.3s ease;
-}
-
-@keyframes toast-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.toast-text {
-  font-size: 28rpx;
-  color: #fff;
-}
-
-/* Layer Modal */
-.layer-modal {
-  width: 90%;
-  max-width: 680rpx;
-  max-height: 70vh;
-  background: #fff;
-  border-radius: 24rpx;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.layer-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 30rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-  flex-shrink: 0;
-}
-
-.layer-modal-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.layer-modal-close {
-  font-size: 36rpx;
-  color: #999;
-  padding: 8rpx 16rpx;
-}
-
-.layer-modal-body {
-  flex: 1;
-  min-height: 0;
-  padding: 10rpx 0;
-  max-height: 55vh;
-}
-
+/* ---- 图层 ---- */
 .layer-empty {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 200rpx;
 }
-
-.layer-empty-text {
-  font-size: 28rpx;
-  color: #999;
-}
+.layer-empty-text { font-size: 28rpx; color: #bbb; }
 
 .layer-item {
   display: flex;
   align-items: center;
-  padding: 20rpx 30rpx;
+  padding: 20rpx 24rpx;
   border-bottom: 1rpx solid #f5f5f5;
   gap: 16rpx;
   transition: background 0.15s;
+  border-radius: 10rpx;
+  margin-bottom: 4rpx;
 }
-
-.layer-item:active {
-  background: #f5f5f5;
-}
-
-.layer-item--active {
-  background: #fdf0f3;
-}
-
+.layer-item:active { background: #f5f5f5; }
+.layer-item--active { background: #fdf0f3; }
 .layer-item-icon {
   font-size: 32rpx;
   width: 48rpx;
   text-align: center;
   flex-shrink: 0;
 }
-
 .layer-item-name {
   flex: 1;
   font-size: 28rpx;
@@ -1673,13 +1665,11 @@ onMounted(async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .layer-item-actions {
   display: flex;
   gap: 4rpx;
   flex-shrink: 0;
 }
-
 .layer-action {
   width: 48rpx;
   height: 48rpx;
@@ -1690,15 +1680,35 @@ onMounted(async () => {
   color: #666;
   background: #f0f0f0;
   border-radius: 8rpx;
+  transition: background 0.15s;
 }
-
-.layer-action:active {
-  background: #e0e0e0;
-}
-
+.layer-action:active { background: #e0e0e0; }
 .layer-action--danger {
   color: #e84a6e;
   background: #fff0f0;
   font-size: 28rpx;
+}
+
+/* ==================== Toast ==================== */
+.toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  background: rgba(0,0,0,0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 20rpx 44rpx;
+  border-radius: 34rpx;
+  font-size: 26rpx;
+  z-index: 9999;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+}
+.toast--show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 </style>

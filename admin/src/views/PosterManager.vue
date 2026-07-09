@@ -689,7 +689,7 @@ onMounted(async () => {
 .pm-card-cover {
   position: relative;
   height: 240px;
-  background: #f5f5f5;
+  background: #f5f6fa;
   cursor: pointer;
   overflow: hidden;
   display: flex;
@@ -839,7 +839,7 @@ onMounted(async () => {
 .pm-canvas {
   position: relative;
   width: 300px; height: 533px;
-  background: #f5f5f5;
+  background: #f5f6fa;
   border: 2px dashed #d0d0d0;
   border-radius: 10px;
   overflow: hidden;
