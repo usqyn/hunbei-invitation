@@ -524,12 +524,12 @@ async function doPublish() {
         background: page.background,
         elements: (page.elements || []).map((el: any) =>
           serializeElement(el, { canvasWidth: cSize.width })
-        ),
+        ).filter(Boolean),
       }))
     } else {
       payload.elements = (draft?.elements || []).map((el: any) =>
         serializeElement(el, { canvasWidth: cSize.width })
-      )
+      ).filter(Boolean)
     }
 
     // Auto-assign dataKey for text elements whose content matches template data values

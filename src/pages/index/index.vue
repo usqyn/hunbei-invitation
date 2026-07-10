@@ -368,14 +368,20 @@ onMounted(() => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 120rpx;
+  background: #f2f2f7;
+  padding-bottom: 140rpx;
 }
 
 /* 顶部轮播图 */
 .banner-swiper {
   width: 100%;
   height: 360rpx;
+  border-bottom-left-radius: 32rpx;
+  border-bottom-right-radius: 32rpx;
+  box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.12);
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
 }
 
 .banner-image {
@@ -383,20 +389,29 @@ onMounted(() => {
   height: 100%;
 }
 
-/* 搜索栏 */
+/* 搜索栏 - 毛玻璃浮动 */
 .search-bar {
   padding: 24rpx;
-  background: #ffffff;
+  margin: -56rpx 24rpx 0;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border-radius: 28rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.08);
+  position: relative;
+  z-index: 2;
+  border: 1rpx solid rgba(255, 255, 255, 0.6);
 }
 
 .search-input {
   width: 100%;
   height: 80rpx;
-  background: #f5f5f5;
+  background: rgba(245, 245, 245, 0.8);
   border-radius: 40rpx;
   padding: 0 32rpx;
   font-size: 28rpx;
   box-sizing: border-box;
+  transition: all 0.25s ease;
 }
 
 /* 分类网格 */
@@ -404,9 +419,11 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 24rpx;
-  padding: 24rpx;
+  padding: 32rpx 24rpx;
   background: #ffffff;
-  margin-top: 16rpx;
+  margin: 24rpx 24rpx 0;
+  border-radius: 28rpx;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
 }
 
 .category-item {
@@ -414,17 +431,28 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 12rpx;
-  padding: 16rpx 0;
+  padding: 12rpx 0;
+  transition: transform 0.2s ease;
+
+  &:active {
+    transform: scale(0.92);
+  }
 }
 
 .category-icon {
   width: 100rpx;
   height: 100rpx;
-  border-radius: 24rpx;
+  border-radius: 28rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.category-item:active .category-icon {
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.12);
 }
 
 .icon-image {
@@ -435,7 +463,7 @@ onMounted(() => {
 .icon-image-full {
   width: 100rpx;
   height: 100rpx;
-  border-radius: 24rpx;
+  border-radius: 28rpx;
 }
 
 .category-name {
@@ -449,17 +477,37 @@ onMounted(() => {
   padding: 24rpx;
   display: flex;
   gap: 24rpx;
-  margin-top: 16rpx;
+  margin-top: 24rpx;
 }
 
 .feature-card {
   flex: 1;
-  border-radius: 20rpx;
-  padding: 24rpx;
+  border-radius: 28rpx;
+  padding: 28rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 180rpx;
+  box-shadow: 0 10rpx 28rpx rgba(0, 0, 0, 0.14), 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+  }
+
+  &:active {
+    transform: scale(0.96);
+    box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.16), 0 1rpx 4rpx rgba(0, 0, 0, 0.1);
+  }
 }
 
 .invitation-card {
@@ -475,15 +523,18 @@ onMounted(() => {
   flex-direction: column;
   gap: 8rpx;
   flex: 1;
+  position: relative;
+  z-index: 1;
 }
 
 .feature-badge {
-  background: rgba(255, 255, 255, 0.3);
-  padding: 6rpx 16rpx;
+  background: rgba(255, 255, 255, 0.28);
+  padding: 6rpx 18rpx;
   border-radius: 20rpx;
   font-size: 18rpx;
   color: #ffffff;
   align-self: flex-start;
+  border: 1rpx solid rgba(255, 255, 255, 0.4);
 }
 
 .feature-title {
@@ -494,20 +545,24 @@ onMounted(() => {
 
 .feature-desc {
   font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .feature-icon-image {
   width: 56rpx;
   height: 56rpx;
   margin-left: 16rpx;
+  position: relative;
+  z-index: 1;
 }
 
 /* 通用Section */
 .section {
-  margin-top: 16rpx;
+  margin: 24rpx 24rpx 0;
   background: #ffffff;
-  padding: 24rpx;
+  padding: 28rpx 24rpx;
+  border-radius: 28rpx;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
 }
 
 .section-header {
@@ -519,16 +574,21 @@ onMounted(() => {
 
 .section-title {
   font-size: 32rpx;
-  font-weight: 600;
-  color: #333333;
+  font-weight: 700;
+  color: #1c1c1e;
 }
 
 .section-more {
+  transition: opacity 0.2s ease;
+
+  &:active {
+    opacity: 0.6;
+  }
 }
 
 .more-text {
   font-size: 24rpx;
-  color: #999999;
+  color: #8e8e93;
 }
 
 .section-tabs {
@@ -538,22 +598,24 @@ onMounted(() => {
 
 .tab-item {
   font-size: 26rpx;
-  color: #999999;
+  color: #8e8e93;
+  transition: color 0.2s ease;
 
   &.active {
     color: #e84a6e;
-    font-weight: 500;
+    font-weight: 600;
     position: relative;
 
     &::after {
       content: '';
       position: absolute;
-      bottom: -8rpx;
-      left: 0;
-      right: 0;
-      height: 4rpx;
-      background: #e84a6e;
-      border-radius: 2rpx;
+      bottom: -10rpx;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 36rpx;
+      height: 6rpx;
+      background: linear-gradient(90deg, #ff6b8a 0%, #e84a6e 100%);
+      border-radius: 3rpx;
     }
   }
 }
@@ -566,15 +628,22 @@ onMounted(() => {
 .card-list {
   display: inline-flex;
   gap: 20rpx;
+  padding: 4rpx;
 }
 
 .scroll-card {
   width: 280rpx;
-  border-radius: 16rpx;
+  border-radius: 24rpx;
   overflow: hidden;
   background: #ffffff;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.08), 0 2rpx 6rpx rgba(0, 0, 0, 0.04);
   display: inline-block;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:active {
+    transform: scale(0.96);
+    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1), 0 1rpx 3rpx rgba(0, 0, 0, 0.06);
+  }
 }
 
 .card-image {
@@ -583,20 +652,20 @@ onMounted(() => {
 }
 
 .card-info {
-  padding: 16rpx;
+  padding: 18rpx;
 }
 
 .card-title {
   font-size: 26rpx;
-  color: #333333;
-  font-weight: 500;
+  color: #1c1c1e;
+  font-weight: 600;
   display: block;
   margin-bottom: 8rpx;
 }
 
 .card-date {
   font-size: 22rpx;
-  color: #999999;
+  color: #8e8e93;
 }
 
 /* 分类模板数量网格 */
@@ -607,13 +676,20 @@ onMounted(() => {
 }
 
 .count-card {
-  background: #f8f9fa;
-  border-radius: 16rpx;
-  padding: 28rpx;
+  background: linear-gradient(145deg, #ffffff 0%, #f7f7fa 100%);
+  border-radius: 24rpx;
+  padding: 32rpx 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:active {
+    transform: translateY(-4rpx) scale(0.98);
+    box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+  }
 }
 
 .count-icon-image {
@@ -623,13 +699,13 @@ onMounted(() => {
 
 .count-name {
   font-size: 28rpx;
-  color: #333333;
-  font-weight: 600;
+  color: #1c1c1e;
+  font-weight: 700;
 }
 
 .count-num {
   font-size: 22rpx;
-  color: #999999;
+  color: #8e8e93;
 }
 
 /* VIP入口 */
@@ -637,16 +713,38 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx 32rpx;
-  margin: 16rpx 24rpx 0;
-  background: linear-gradient(135deg, #ffd700 0%, #ffb700 100%);
-  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  margin: 24rpx 24rpx 0;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 60%, #ff9f00 100%);
+  border-radius: 24rpx;
+  box-shadow: 0 10rpx 28rpx rgba(255, 183, 0, 0.3), 0 2rpx 8rpx rgba(255, 159, 0, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 200rpx;
+    height: 200rpx;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 70%);
+    pointer-events: none;
+  }
+
+  &:active {
+    transform: scale(0.97);
+    box-shadow: 0 6rpx 16rpx rgba(255, 183, 0, 0.32), 0 1rpx 4rpx rgba(255, 159, 0, 0.2);
+  }
 }
 
 .vip-icon {
   font-size: 32rpx;
   color: #fff;
   margin-right: 12rpx;
+  position: relative;
+  z-index: 1;
 }
 
 .vip-text {
@@ -654,11 +752,16 @@ onMounted(() => {
   font-size: 28rpx;
   color: #fff;
   font-weight: 600;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1rpx 2rpx rgba(180, 120, 0, 0.3);
 }
 
 .vip-arrow {
   font-size: 28rpx;
   color: #fff;
+  position: relative;
+  z-index: 1;
 }
 
 /* 商城入口 */
@@ -666,16 +769,38 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx 32rpx;
-  margin: 16rpx 24rpx 0;
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  margin: 24rpx 24rpx 0;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 60%, #ff8fb1 100%);
+  border-radius: 24rpx;
+  box-shadow: 0 10rpx 28rpx rgba(232, 74, 110, 0.3), 0 2rpx 8rpx rgba(255, 107, 138, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 200rpx;
+    height: 200rpx;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+    pointer-events: none;
+  }
+
+  &:active {
+    transform: scale(0.97);
+    box-shadow: 0 6rpx 16rpx rgba(232, 74, 110, 0.32), 0 1rpx 4rpx rgba(255, 107, 138, 0.2);
+  }
 }
 
 .mall-entry-icon {
   font-size: 32rpx;
   color: #fff;
   margin-right: 12rpx;
+  position: relative;
+  z-index: 1;
 }
 
 .mall-entry-text {
@@ -683,11 +808,16 @@ onMounted(() => {
   font-size: 28rpx;
   color: #fff;
   font-weight: 600;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1rpx 2rpx rgba(180, 40, 70, 0.3);
 }
 
 .mall-entry-arrow {
   font-size: 28rpx;
   color: #fff;
+  position: relative;
+  z-index: 1;
 }
 
 /* 付费模板卡片 */
@@ -697,19 +827,20 @@ onMounted(() => {
 
 .paid-badge {
   position: absolute;
-  top: 12rpx;
-  right: 12rpx;
+  top: 16rpx;
+  right: 16rpx;
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
   color: #ffffff;
   font-size: 22rpx;
   font-weight: 600;
-  padding: 6rpx 16rpx;
+  padding: 6rpx 18rpx;
   border-radius: 20rpx;
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
 }
 
 .card-sub {
   font-size: 22rpx;
-  color: #999999;
+  color: #8e8e93;
 }
 
 /* 海报模板卡片 */

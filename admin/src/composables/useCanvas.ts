@@ -1063,10 +1063,11 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return
     canvas.getObjects().forEach(obj => {
+      const o = obj as any
+      if (o.isGuide || o.isGrid) return
       const id = obj.id as string
       const el = elements.value.find(e => e.id === id)
       if (!el) return
-      const o = obj as any
       const scaleX = Math.abs(obj.scaleX || 1)
       const scaleY = Math.abs(obj.scaleY || 1)
       el.x = (o.left ?? 0)
@@ -1085,10 +1086,12 @@ export function useCanvas(opts: UseCanvasOptions) {
   // ---- 历史栈 ----
   function getDraft(): CanvasDraft {
     syncFromFabricToModel()
+    const validTypes = ['text', 'image', 'sticker']
+    const validElements = elements.value.filter(el => validTypes.includes(el.type))
     return {
       canvasSize: { ...canvasSize.value },
       background: { ...background.value },
-      elements: JSON.parse(JSON.stringify(elements.value)),
+      elements: JSON.parse(JSON.stringify(validElements)),
       orientation: canvasSize.value.width > canvasSize.value.height ? 'landscape' : 'portrait',
     }
   }
@@ -1164,6 +1167,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         ;t.id = el.id
         ;t.elementType = 'text'
         addTasks.push(() => canvas.add(t))
+        elements.value.push(el)
       } else if (el.type === 'image') {
         const ie = el as ImageElement
         addTasks.push(() => {
@@ -1189,8 +1193,10 @@ export function useCanvas(opts: UseCanvasOptions) {
           })
           imagePromises.push(p)
         })
+        elements.value.push(el)
+      } else if (el.type === 'sticker') {
+        elements.value.push(el)
       }
-      elements.value.push(el)
     })
 
     addTasks.forEach(fn => fn())

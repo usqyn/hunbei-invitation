@@ -604,7 +604,7 @@ const onImageError = () => {
 <style lang="scss" scoped>
 .preview-page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: #f2f2f7;
   display: flex;
   flex-direction: column;
 }
@@ -614,20 +614,32 @@ const onImageError = () => {
   align-items: center;
   justify-content: space-between;
   padding: 24rpx 32rpx;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 .header-back {
   min-width: 60rpx;
+  height: 60rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.header-back:active {
+  transform: scale(0.88);
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .back-icon {
   font-size: 56rpx;
-  color: #333;
+  color: #1a1a2e;
   font-weight: 300;
   line-height: 1;
 }
@@ -635,21 +647,30 @@ const onImageError = () => {
 .header-title {
   font-size: 28rpx;
   font-weight: 600;
-  color: #333;
+  color: #1a1a2e;
   text-align: center;
   flex: 1;
+  letter-spacing: 1rpx;
 }
 
 .header-action {
   min-width: 60rpx;
+  height: 60rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.header-action:active {
+  transform: scale(0.88);
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .action-icon {
   font-size: 36rpx;
-  color: #666;
+  color: #6e6e80;
 }
 
 .preview-content {
@@ -697,34 +718,34 @@ const onImageError = () => {
   position: relative;
   margin-bottom: 30rpx;
   padding: 16rpx;
-  border-radius: 12rpx;
+  border-radius: 20rpx;
 }
 
 .preview-page-section--title .section-title {
   font-size: 40rpx;
   font-weight: 700;
   text-align: center;
-  color: #333;
+  color: #1a1a2e;
   line-height: 1.5;
 }
 
 .preview-page-section--date .section-date {
   font-size: 28rpx;
   text-align: center;
-  color: #999;
+  color: #6e6e80;
   margin-top: 10rpx;
 }
 
 .preview-page-section--image .section-image {
   width: 100%;
   aspect-ratio: 3 / 4;
-  border-radius: 12rpx;
-  background: #f5f5f5;
+  border-radius: 20rpx;
+  background: #f2f2f7;
 }
 
 .preview-page-section--text .section-text {
   font-size: 28rpx;
-  color: #666;
+  color: #6e6e80;
   line-height: 1.8;
   text-align: center;
 }
@@ -742,7 +763,7 @@ const onImageError = () => {
 
 .preview-page-section--location .location-text {
   font-size: 28rpx;
-  color: #666;
+  color: #6e6e80;
 }
 
 .preview-page-section--divider .divider-line {
@@ -762,7 +783,7 @@ const onImageError = () => {
 
 .preview-page-section--divider .divider-text {
   font-size: 24rpx;
-  color: #999;
+  color: #6e6e80;
   letter-spacing: 4rpx;
 }
 
@@ -774,7 +795,7 @@ const onImageError = () => {
 .preview-page-section--countdown .countdown-label {
   display: block;
   font-size: 24rpx;
-  color: #999;
+  color: #6e6e80;
   margin-bottom: 10rpx;
 }
 
@@ -786,7 +807,7 @@ const onImageError = () => {
 
 .preview-page-section--countdown .countdown-unit {
   font-size: 28rpx;
-  color: #999;
+  color: #6e6e80;
   margin-left: 8rpx;
 }
 
@@ -801,12 +822,33 @@ const onImageError = () => {
   height: 100vh;
 }
 
+/* 翻页指示器精致样式：圆点 -> 激活时变为椭圆胶囊 */
+.flip-swiper :deep(.uni-swiper-dot),
+.flip-swiper :deep(.wx-swiper-dot) {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  margin: 0 8rpx;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.55;
+}
+
+.flip-swiper :deep(.uni-swiper-dot-active),
+.flip-swiper :deep(.wx-swiper-dots-active) {
+  width: 36rpx;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: #ffffff;
+  opacity: 1;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.25);
+}
+
 .flip-page-card {
   position: relative;
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: #f5f5f5;
+  background: #f2f2f7;
 }
 
 .flip-page-element {
@@ -839,7 +881,7 @@ const onImageError = () => {
 }
 
 .preview-image-section {
-  border-radius: 12rpx;
+  border-radius: 20rpx;
   overflow: hidden;
 }
 
@@ -847,13 +889,13 @@ const onImageError = () => {
   width: 100%;
   min-height: 400rpx;
   aspect-ratio: 3 / 4;
-  background: #f5f5f5;
+  background: #f2f2f7;
 }
 
 .preview-text-section {
   padding: 20rpx;
   background: #fff;
-  border-radius: 12rpx;
+  border-radius: 20rpx;
   text-align: center;
   min-height: 80rpx;
   display: flex;
@@ -863,7 +905,7 @@ const onImageError = () => {
 
 .preview-section-text {
   font-size: 30rpx;
-  color: #333;
+  color: #1a1a2e;
   line-height: 1.6;
 }
 
@@ -879,17 +921,23 @@ const onImageError = () => {
 .similar-bar-text {
   font-size: 28rpx;
   font-weight: 600;
-  color: #333;
+  color: #1a1a2e;
 }
 
 .similar-list {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: 24rpx;
 }
 
 .similar-item {
   width: 100%;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.similar-item:active {
+  transform: scale(0.97);
+  opacity: 0.92;
 }
 
 .similar-image-wrap {
@@ -898,7 +946,8 @@ const onImageError = () => {
   border-radius: 20rpx;
   overflow: hidden;
   position: relative;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10rpx 36rpx rgba(0, 0, 0, 0.12), 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 
 .similar-image {
@@ -919,14 +968,14 @@ const onImageError = () => {
 
 .similar-title {
   font-size: 40rpx;
-  color: #333;
+  color: #1a1a2e;
   font-weight: bold;
   font-family: STKaiti, KaiTi, serif;
 }
 
 .similar-sub {
   font-size: 18rpx;
-  color: #666;
+  color: #6e6e80;
   letter-spacing: 2rpx;
 }
 
@@ -938,6 +987,8 @@ const onImageError = () => {
   align-items: center;
   gap: 8rpx;
   background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10rpx);
+  -webkit-backdrop-filter: blur(10rpx);
   padding: 8rpx 16rpx;
   border-radius: 20rpx;
 }
@@ -952,8 +1003,10 @@ const onImageError = () => {
 .preview-footer {
   padding: 20rpx 32rpx;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  background: #fff;
-  box-shadow: 0 -2rpx 16rpx rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
 }
 
@@ -965,7 +1018,13 @@ const onImageError = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.3);
+  box-shadow: 0 10rpx 28rpx rgba(232, 74, 110, 0.35), 0 2rpx 8rpx rgba(232, 74, 110, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.create-button:active {
+  transform: scale(0.97);
+  box-shadow: 0 4rpx 16rpx rgba(232, 74, 110, 0.3);
 }
 
 .button-text {
@@ -978,22 +1037,23 @@ const onImageError = () => {
 /* 导出效果对比 */
 .watermark-compare {
   margin: 24rpx 32rpx;
-  padding: 24rpx;
+  padding: 28rpx;
   background: #fff;
   border-radius: 20rpx;
+  box-shadow: 0 6rpx 28rpx rgba(0, 0, 0, 0.05);
 }
 
 .compare-title {
   font-size: 30rpx;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 20rpx;
+  color: #1a1a2e;
+  margin-bottom: 24rpx;
 }
 
 .compare-row {
   display: flex;
   gap: 20rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 24rpx;
 }
 
 .compare-col {
@@ -1002,32 +1062,34 @@ const onImageError = () => {
   flex-direction: column;
   align-items: center;
   gap: 12rpx;
-  padding: 16rpx;
-  background: #f8f8f8;
-  border-radius: 16rpx;
+  padding: 20rpx 16rpx;
+  background: #f2f2f7;
+  border-radius: 20rpx;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .compare-highlight {
-  background: #fff8f0;
-  border: 2rpx solid #ffb347;
+  background: linear-gradient(135deg, #fff8f0 0%, #fff0e0 100%);
+  border: 2rpx solid rgba(255, 179, 71, 0.4);
+  box-shadow: 0 6rpx 20rpx rgba(255, 179, 71, 0.18);
 }
 
 .compare-label {
   font-size: 26rpx;
   font-weight: 600;
-  color: #333;
+  color: #1a1a2e;
 }
 
 .compare-img {
   width: 100%;
   height: 200rpx;
-  border-radius: 12rpx;
-  background: #eee;
+  border-radius: 16rpx;
+  background: #e8e8ed;
 }
 
 .compare-desc {
   font-size: 22rpx;
-  color: #999;
+  color: #6e6e80;
 }
 
 .compare-action {
@@ -1048,6 +1110,13 @@ const onImageError = () => {
   justify-content: center;
   border: none;
   line-height: 1;
+  box-shadow: 0 6rpx 18rpx rgba(232, 74, 110, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+  box-shadow: 0 2rpx 8rpx rgba(232, 74, 110, 0.25);
 }
 
 .btn-primary::after {
@@ -1057,8 +1126,8 @@ const onImageError = () => {
 .btn-secondary {
   flex: 1;
   height: 80rpx;
-  background: #f5f5f5;
-  color: #666;
+  background: #f2f2f7;
+  color: #6e6e80;
   border-radius: 40rpx;
   font-size: 28rpx;
   font-weight: 600;
@@ -1067,6 +1136,12 @@ const onImageError = () => {
   justify-content: center;
   border: none;
   line-height: 1;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.btn-secondary:active {
+  transform: scale(0.97);
+  background: #e8e8ed;
 }
 
 .btn-secondary::after {
@@ -1076,9 +1151,10 @@ const onImageError = () => {
 /* 商城推荐 */
 .shop-recommend-preview {
   margin: 24rpx 32rpx;
-  padding: 24rpx;
+  padding: 28rpx;
   background: #fff;
   border-radius: 20rpx;
+  box-shadow: 0 6rpx 28rpx rgba(0, 0, 0, 0.05);
 }
 
 .shop-rec-header {
@@ -1091,12 +1167,17 @@ const onImageError = () => {
 .shop-rec-title {
   font-size: 30rpx;
   font-weight: 600;
-  color: #333;
+  color: #1a1a2e;
 }
 
 .shop-rec-more {
   font-size: 24rpx;
-  color: #999;
+  color: #6e6e80;
+  transition: opacity 0.2s ease;
+}
+
+.shop-rec-more:active {
+  opacity: 0.6;
 }
 
 .shop-rec-scroll {
@@ -1113,18 +1194,23 @@ const onImageError = () => {
   display: inline-flex;
   flex-direction: column;
   gap: 8rpx;
+  transition: transform 0.2s ease;
+}
+
+.shop-rec-card:active {
+  transform: scale(0.96);
 }
 
 .shop-rec-img {
   width: 200rpx;
   height: 200rpx;
-  border-radius: 16rpx;
-  background: #f5f5f5;
+  border-radius: 20rpx;
+  background: #f2f2f7;
 }
 
 .shop-rec-name {
   font-size: 24rpx;
-  color: #333;
+  color: #1a1a2e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1136,19 +1222,50 @@ const onImageError = () => {
   font-weight: 700;
 }
 
-/* VIP 提示条 */
+/* VIP 提示条：精致金色渐变 + 光泽扫过动画 */
 .vip-bar {
   padding: 20rpx 32rpx;
-  background: linear-gradient(135deg, #ffd700 0%, #ffb700 100%);
+  background: linear-gradient(135deg, #ffe5a0 0%, #ffd700 30%, #f5b800 70%, #e6a800 100%);
+  background-size: 200% 200%;
   display: flex;
   align-items: center;
   gap: 12rpx;
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 6rpx 24rpx rgba(255, 183, 0, 0.28);
+  animation: vipGradient 3s ease-in-out infinite;
+}
+
+@keyframes vipGradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* 光泽扫过动画 */
+.vip-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: vipGloss 3.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes vipGloss {
+  0% { left: -60%; }
+  60%, 100% { left: 100%; }
 }
 
 .vip-bar .vip-icon {
   font-size: 32rpx;
   color: #fff;
+  text-shadow: 0 2rpx 4rpx rgba(180, 130, 0, 0.4);
+  position: relative;
+  z-index: 1;
 }
 
 .vip-bar .vip-text {
@@ -1156,15 +1273,26 @@ const onImageError = () => {
   font-size: 26rpx;
   color: #fff;
   font-weight: 500;
+  text-shadow: 0 2rpx 4rpx rgba(180, 130, 0, 0.3);
+  position: relative;
+  z-index: 1;
 }
 
 .vip-bar .vip-btn {
   font-size: 26rpx;
-  color: #fff;
+  color: #b8860b;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.85);
   padding: 8rpx 20rpx;
   border-radius: 24rpx;
+  position: relative;
+  z-index: 1;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.vip-bar:active .vip-btn {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 /* 预览缩放 */
@@ -1178,6 +1306,7 @@ const onImageError = () => {
   width: 100%;
 }
 
+/* 缩放控制：毛玻璃效果 */
 .zoom-controls {
   position: fixed;
   right: 24rpx;
@@ -1187,29 +1316,34 @@ const onImageError = () => {
   align-items: center;
   gap: 12rpx;
   z-index: 50;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
   border-radius: 40rpx;
   padding: 16rpx 12rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.12);
+  box-shadow: 0 10rpx 36rpx rgba(0, 0, 0, 0.12), 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  border: 1rpx solid rgba(255, 255, 255, 0.6);
 }
 
 .zoom-btn {
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: #f5f5f5;
+  background: rgba(242, 242, 247, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.2s ease, background-color 0.2s ease;
 }
 
 .zoom-btn:active {
-  background: #ffe4e8;
+  transform: scale(0.88);
+  background: rgba(232, 74, 110, 0.12);
 }
 
 .zoom-btn-text {
   font-size: 40rpx;
-  color: #333;
+  color: #1a1a2e;
   font-weight: 600;
   line-height: 1;
 }
@@ -1220,11 +1354,7 @@ const onImageError = () => {
 
 .zoom-level {
   font-size: 20rpx;
-  color: #999;
-}
-
-/* 相似模板点击反馈 */
-.similar-item:active {
-  opacity: 0.85;
+  color: #6e6e80;
+  font-weight: 500;
 }
 </style>

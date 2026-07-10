@@ -1,110 +1,229 @@
 @use './fonts' as *;
 
+/* ============================================================
+ * 全局设计令牌 (Design Tokens)
+ * 参考现代 UI 趋势：Glassmorphism / Soft UI / Micro-interactions
+ * ============================================================ */
 page {
+  /* ---- 品牌色系 ---- */
   --color-primary: #e84a6e;
-  --color-primary-gradient: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  --color-primary-dark: #d63e5f;
   --color-primary-light: #ffe4e8;
-  --color-text-primary: #333333;
-  --color-text-secondary: #999999;
-  --color-bg-page: #f5f5f5;
-  --color-bg-white: #ffffff;
-  --color-border: #eeeeee;
-  --color-white: #ffffff;
-  --color-bg-input: #f5f5f5;
-  --color-tab-active: #e84a6e;
+  --color-primary-gradient: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  --color-primary-gradient-soft: linear-gradient(135deg, rgba(232, 74, 110, 0.08) 0%, rgba(255, 107, 138, 0.04) 100%);
+
+  /* ---- 金色 / VIP ---- */
+  --color-gold: #f5a623;
+  --color-gold-gradient: linear-gradient(135deg, #f5d76e 0%, #f5a623 50%, #e89316 100%);
+  --color-gold-light: rgba(245, 166, 35, 0.12);
+
+  /* ---- 文字色阶 ---- */
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #6e6e80;
+  --color-text-tertiary: #a0a0b0;
+  --color-text-placeholder: #c0c0d0;
+  --color-text-inverse: #ffffff;
+  --color-text-danger: #ef4444;
+  --color-text-success: #22c55e;
+
+  /* ---- 背景色阶 ---- */
+  --color-bg-page: #f2f2f7;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f5f5fa;
+  --color-bg-hover: #f0f0f5;
+  --color-bg-overlay: rgba(0, 0, 0, 0.5);
+
+  /* ---- 边框色阶 ---- */
+  --color-border: #ececf0;
+  --color-border-light: #f5f5fa;
+  --color-border-dark: #d0d0d8;
+
+  /* ---- 圆角体系 ---- */
+  --radius-xs: 8rpx;
   --radius-sm: 12rpx;
   --radius-md: 16rpx;
   --radius-lg: 20rpx;
   --radius-xl: 24rpx;
-  --shadow-card: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
-  --shadow-light: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+  --radius-2xl: 32rpx;
+  --radius-full: 9999rpx;
+
+  /* ---- 阴影体系 (多层叠加更自然) ---- */
+  --shadow-xs: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 8rpx 32rpx rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12rpx 40rpx rgba(0, 0, 0, 0.12);
+  --shadow-primary: 0 8rpx 24rpx rgba(232, 74, 110, 0.25);
+  --shadow-primary-lg: 0 12rpx 32rpx rgba(232, 74, 110, 0.35);
+  --shadow-gold: 0 8rpx 24rpx rgba(245, 166, 35, 0.3);
+
+  /* ---- 毛玻璃 ---- */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(20rpx);
+
+  /* ---- 间距体系 ---- */
+  --space-xs: 8rpx;
+  --space-sm: 16rpx;
+  --space-md: 24rpx;
+  --space-lg: 32rpx;
+  --space-xl: 48rpx;
+
+  /* ---- 字号体系 ---- */
+  --font-size-xs: 20rpx;
+  --font-size-sm: 24rpx;
+  --font-size-base: 28rpx;
+  --font-size-md: 30rpx;
+  --font-size-lg: 32rpx;
+  --font-size-xl: 36rpx;
+  --font-size-2xl: 44rpx;
+
+  /* ---- 动画 ---- */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
   background-color: var(--color-bg-page);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--color-text-primary);
 }
 
-.container {
-  padding: 0 24rpx;
-}
+/* ============================================================
+ * 工具类
+ * ============================================================ */
 
-.flex {
-  display: flex;
-}
+/* ---- 布局 ---- */
+.container { padding: 0 var(--space-md); }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.text-center { text-align: center; }
 
-.flex-col {
-  flex-direction: column;
-}
+/* ---- 文字 ---- */
+.text-gray { color: var(--color-text-secondary); }
+.text-red { color: var(--color-primary); }
+.text-white { color: var(--color-text-inverse); }
 
-.items-center {
-  align-items: center;
-}
+/* ---- 间距 ---- */
+.mt-20 { margin-top: 20rpx; }
+.mt-30 { margin-top: 30rpx; }
+.mb-20 { margin-bottom: 20rpx; }
 
-.justify-center {
-  justify-content: center;
-}
+/* ---- 圆角 ---- */
+.rounded-lg { border-radius: var(--radius-sm); }
+.rounded-xl { border-radius: var(--radius-lg); }
+.rounded-full { border-radius: var(--radius-full); }
 
-.justify-between {
-  justify-content: space-between;
-}
+/* ---- 背景 ---- */
+.bg-white { background-color: var(--color-bg-card); }
 
-.text-center {
-  text-align: center;
-}
+/* ============================================================
+ * 组件样式
+ * ============================================================ */
 
-.text-gray {
-  color: var(--color-text-secondary);
-}
-
-.text-red {
-  color: var(--color-primary);
-}
-
-.bg-white {
-  background-color: var(--color-bg-white);
-}
-
-.mt-20 {
-  margin-top: 20rpx;
-}
-
-.mt-30 {
-  margin-top: 30rpx;
-}
-
-.mb-20 {
-  margin-bottom: 20rpx;
-}
-
-.rounded-lg {
-  border-radius: var(--radius-sm);
-}
-
-.rounded-xl {
-  border-radius: var(--radius-lg);
-}
-
+/* ---- 主按钮 ---- */
 .btn-primary {
   background: var(--color-primary-gradient);
-  color: #ffffff;
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 40rpx;
+  border-radius: var(--radius-full);
   padding: 24rpx 48rpx;
-  font-size: 28rpx;
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  box-shadow: var(--shadow-primary);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .btn-primary:active {
-  opacity: 0.8;
+  transform: scale(0.96);
+  box-shadow: var(--shadow-primary-lg);
 }
 
+/* ---- 卡片 ---- */
 .card {
-  background: var(--color-bg-white);
+  background: var(--color-bg-card);
   border-radius: var(--radius-lg);
-  padding: 32rpx;
-  margin-bottom: 24rpx;
-  box-shadow: var(--shadow-light);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  box-shadow: var(--shadow-sm);
 }
 
+/* ---- 毛玻璃效果 ---- */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+}
+
+/* ---- 安全区 ---- */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* ---- 渐变文字 ---- */
+.gradient-text {
+  background: var(--color-primary-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* ---- 骨架屏 ---- */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f5 25%, #e8e8f0 50%, #f0f0f5 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---- 淡入动画 ---- */
+.fade-in {
+  animation: fadeInUp 0.4s var(--transition-normal) both;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- 弹性入场 ---- */
+.bounce-in {
+  animation: bounceIn 0.4s var(--transition-bounce) both;
+}
+
+@keyframes bounceIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

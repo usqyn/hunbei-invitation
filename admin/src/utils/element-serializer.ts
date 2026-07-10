@@ -30,7 +30,11 @@ interface SerializeOptions {
 /**
  * 序列化单个画布元素为服务端格式。
  */
-export function serializeElement(el: any, options?: SerializeOptions): SerializedElement {
+export function serializeElement(el: any, options?: SerializeOptions): SerializedElement | null {
+  const validTypes = ['text', 'image', 'sticker']
+  if (!el || !validTypes.includes(el.type)) {
+    return null
+  }
   const topLeftX = el.x - (el.width || 0) / 2
   const topLeftY = el.y - (el.height || 0) / 2
   const pxToRpx = options?.canvasWidth ? 750 / options.canvasWidth : 1

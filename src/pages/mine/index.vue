@@ -212,13 +212,20 @@ const handleLogout = () => {
   padding-bottom: 120rpx;
 }
 
+/* 顶部 mesh gradient：多色径向渐变叠加 */
 .header-bg {
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  height: 320rpx;
+  height: 380rpx;
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 138, 190, 0.92) 0%, transparent 42%),
+    radial-gradient(circle at 82% 12%, rgba(173, 122, 255, 0.55) 0%, transparent 48%),
+    radial-gradient(circle at 72% 82%, rgba(255, 178, 120, 0.6) 0%, transparent 52%),
+    radial-gradient(circle at 22% 88%, rgba(255, 110, 140, 0.7) 0%, transparent 52%),
+    linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
 }
 
 .user-section {
@@ -227,28 +234,48 @@ const handleLogout = () => {
   z-index: 1;
 }
 
+/* 用户卡片：毛玻璃效果 */
 .user-card {
-  background: #ffffff;
-  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20rpx) saturate(180%);
+  -webkit-backdrop-filter: blur(20rpx) saturate(180%);
+  border: 1rpx solid rgba(255, 255, 255, 0.6);
+  border-radius: 28rpx;
   padding: 32rpx;
-  margin-top: 120rpx;
+  margin-top: 140rpx;
   display: flex;
   align-items: center;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.12);
 }
 
+/* 头像：渐变边框（外层渐变背景 + 内层留间距） */
 .avatar {
-  width: 120rpx;
-  height: 120rpx;
-  background: linear-gradient(135deg, #ffe4e8 0%, #ffcdd2 100%);
+  box-sizing: border-box;
+  width: 128rpx;
+  height: 128rpx;
+  padding: 4rpx;
   border-radius: 50%;
+  background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 30%, #a18cd1 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-right: 24rpx;
+  box-shadow: 0 8rpx 20rpx rgba(232, 74, 110, 0.25);
+  transition: transform 0.3s ease;
+
+  &:active {
+    transform: scale(0.94);
+  }
 }
 
 .avatar-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fff5f7 0%, #ffe4e8 100%);
   font-size: 56rpx;
 }
 
@@ -259,14 +286,14 @@ const handleLogout = () => {
 .user-name {
   font-size: 32rpx;
   font-weight: 600;
-  color: #333333;
+  color: #1a1a2e;
   display: block;
   margin-bottom: 8rpx;
 }
 
 .user-desc {
   font-size: 24rpx;
-  color: #999999;
+  color: #6e6e80;
 }
 
 .user-actions {
@@ -276,19 +303,72 @@ const handleLogout = () => {
 
 .action-icon {
   font-size: 40rpx;
+  transition: transform 0.25s ease;
+
+  &:active {
+    transform: scale(0.88);
+  }
 }
 
+/* VIP 卡片：精致金色渐变 + 内部高光 + 光泽扫过动画 */
 .vip-card {
+  position: relative;
   margin: 24rpx;
-  background: linear-gradient(135deg, #ffd93d 0%, #ff9500 100%);
-  border-radius: 16rpx;
-  padding: 24rpx;
+  padding: 28rpx 24rpx;
+  border-radius: 20rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fce38a 0%, #f5af19 45%, #f12711 100%);
+  box-shadow: 0 12rpx 32rpx rgba(241, 39, 17, 0.28);
+  transition: transform 0.3s ease;
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  /* 内部顶部高光 */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 55%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+  }
+
+  /* 光泽扫过动画 */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%);
+    transform: skewX(-20deg);
+    animation: vipShimmer 3.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+}
+
+@keyframes vipShimmer {
+  0% {
+    left: -60%;
+  }
+
+  60%,
+  100% {
+    left: 120%;
+  }
 }
 
 .vip-content {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 16rpx;
@@ -311,106 +391,154 @@ const handleLogout = () => {
 
 .vip-desc {
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .vip-btn {
+  position: relative;
+  z-index: 1;
   background: #ffffff;
   padding: 12rpx 24rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   font-size: 24rpx;
   color: #e84a6e;
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.12);
+  transition: transform 0.25s ease;
+
+  &:active {
+    transform: scale(0.94);
+  }
 }
 
 .quick-actions {
   background: #ffffff;
   margin: 0 24rpx;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
   display: flex;
   justify-content: space-around;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
 }
 
 .quick-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  transition: transform 0.2s ease;
+
+  &:active {
+    transform: scale(0.92);
+  }
 }
 
+/* 快捷操作图标：柔和阴影 + :active 微缩放 */
 .quick-icon {
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: 16rpx;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 24rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 12rpx;
-  font-size: 32rpx;
+  font-size: 36rpx;
+  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.08);
 }
 
 .quick-name {
   font-size: 24rpx;
-  color: #666666;
+  color: #6e6e80;
 }
 
 .tools-section {
   background: #ffffff;
   margin: 24rpx;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
 }
 
 .section-title {
   font-size: 28rpx;
   font-weight: 600;
-  color: #333333;
+  color: #1a1a2e;
   margin-bottom: 24rpx;
 }
 
 .tools-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 24rpx;
+  gap: 28rpx 24rpx;
 }
 
 .tool-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  transition: transform 0.2s ease;
+
+  &:active {
+    transform: translateY(-4rpx) scale(0.96);
+  }
 }
 
+/* 工具图标：背景渐变叠加（高光） + 悬浮阴影 */
 .tool-icon {
-  width: 88rpx;
-  height: 88rpx;
-  border-radius: 16rpx;
+  position: relative;
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 24rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12rpx;
-  font-size: 36rpx;
+  margin-bottom: 14rpx;
+  font-size: 40rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.08);
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.05) 100%);
+    pointer-events: none;
+  }
+
+  text {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 .tool-name {
   font-size: 24rpx;
-  color: #666666;
+  color: #6e6e80;
 }
 
 .menu-section {
   background: #ffffff;
   margin: 0 24rpx;
-  border-radius: 16rpx;
+  border-radius: 20rpx;
   overflow: hidden;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
 }
 
 .menu-item {
   display: flex;
   align-items: center;
-  padding: 28rpx 24rpx;
-  border-bottom: 2rpx solid #f5f5f5;
+  padding: 32rpx 28rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+  transition: background 0.2s ease;
 
   &:last-child {
     border-bottom: none;
+  }
+
+  &:active {
+    background: rgba(0, 0, 0, 0.03);
   }
 }
 
@@ -422,28 +550,38 @@ const handleLogout = () => {
 .menu-name {
   flex: 1;
   font-size: 28rpx;
-  color: #333333;
+  color: #1a1a2e;
+  font-weight: 500;
 }
 
 .menu-arrow {
-  font-size: 32rpx;
-  color: #cccccc;
+  font-size: 36rpx;
+  color: #c8c8d0;
+  transition: transform 0.2s ease;
 }
 
 .logout-section {
   padding: 24rpx;
 }
 
+/* 退出按钮：:active 反馈 */
 .logout-btn {
   width: 100%;
-  height: 88rpx;
-  line-height: 88rpx;
+  height: 92rpx;
+  line-height: 92rpx;
   text-align: center;
-  background: #fff;
-  border-radius: 16rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
   font-size: 28rpx;
   color: #ef4444;
   font-weight: 500;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.98);
+    background: #fef2f2;
+  }
 }
 
 .footer {
@@ -453,6 +591,6 @@ const handleLogout = () => {
 
 .copyright {
   font-size: 22rpx;
-  color: #cccccc;
+  color: #b8b8c4;
 }
 </style>
