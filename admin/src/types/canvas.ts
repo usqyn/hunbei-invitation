@@ -135,6 +135,8 @@ export const CANVAS_PRESETS: Array<{ label: string; width: number; height: numbe
   { label: '横屏 750 × 500', width: 750, height: 500 },
   { label: '横屏 900 × 600', width: 900, height: 600 },
   { label: '横屏 800 × 480', width: 800, height: 480 },
+  // 自定义尺寸
+  { label: '自定义', width: 375, height: 667 },
 ]
 
 // 默认画布配置

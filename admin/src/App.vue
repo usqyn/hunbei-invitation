@@ -1796,7 +1796,7 @@ function onBgImageChange() {
 // 画布尺寸
 function onPresetChange() {
   const preset = CANVAS_PRESETS.find(p => p.label === sizeLabel.value)
-  if (preset) {
+  if (preset && sizeLabel.value !== '自定义') {
     setSize({ width: preset.width, height: preset.height })
     if (sizeLabel.value.startsWith('横屏')) {
       pageMode.value = 'landscape'
@@ -1844,6 +1844,7 @@ function onManualSize(e: Event, side: 'width' | 'height') {
     width: side === 'width' ? value : canvasSize.value.width,
     height: side === 'height' ? value : canvasSize.value.height,
   }
+  sizeLabel.value = '自定义'
   setSize(newSize)
 }
 
