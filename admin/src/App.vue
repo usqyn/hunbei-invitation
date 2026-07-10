@@ -1,5 +1,8 @@
 <template>
   <div class="app" @keydown="onKeyDown" tabindex="0" ref="appRootRef">
+    <!-- 图片替换隐藏文件选择器（双击图片触发） -->
+    <input ref="replaceFileInput" type="file" accept="image/*" style="display:none" @change="onReplaceFileChange" />
+
     <!-- 全局 Toast 通知 -->
     <Teleport to="body">
       <transition name="toast-fade">
@@ -19,6 +22,8 @@
       :pageMode="pageMode"
       :zoom="zoom"
       :showGrid="showGrid"
+      :isSaving="isSaving"
+      :lastAutoSaveTime="lastSaveTime"
       @changeView="v => currentView = v"
       @undo="undo"
       @redo="redo"
@@ -80,6 +85,7 @@
         @sendBackwards="sendBackwards"
         @bringToFront="bringToFront"
         @sendToBack="sendToBack"
+        @reorderElements="reorderElements"
         @deleteElement="deleteElement"
         @createNewFromCanvas="createNewFromCanvas"
         @loadPreset="loadPreset"
@@ -94,12 +100,15 @@
         @removeFlipPage="removeFlipPage"
         @moveFlipPageUp="moveFlipPageUp"
         @moveFlipPageDown="moveFlipPageDown"
+        @moveFlipPage="moveFlipPage"
+        @duplicateFlipPage="duplicateFlipPage"
         @renameFlipPage="renameFlipPage"
         @updateBasicInfo="onUpdateBasicInfo"
         @syncBasicInfo="onSyncBasicInfo"
       />
 
       <!-- 中间画布 -->
+      <div class="canvas-wrap" @contextmenu.prevent="onCanvasContextMenu">
       <CanvasArea
         ref="canvasAreaRef"
         :pageMode="pageMode"
@@ -121,6 +130,48 @@
         @selectFlipPage="selectFlipPage"
         @update:canvasRef="onCanvasRefUpdate"
       />
+      </div>
+
+      <!-- 画布右键上下文菜单 -->
+      <Teleport to="body">
+        <ul
+          v-if="ctxMenu.visible"
+          class="ctx-menu"
+          :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+          @click.stop
+        >
+          <li class="ctx-item" :class="{ disabled: !selectedId }" @click="ctxCopy">
+            <span class="ctx-icon">⧉</span> 复制
+            <span class="ctx-key">Ctrl+C</span>
+          </li>
+          <li class="ctx-item" @click="ctxPaste">
+            <span class="ctx-icon">📋</span> 粘贴
+            <span class="ctx-key">Ctrl+V</span>
+          </li>
+          <li class="ctx-item" :class="{ disabled: !selectedId }" @click="ctxDuplicate">
+            <span class="ctx-icon">⎘</span> 复制副本
+            <span class="ctx-key">Ctrl+D</span>
+          </li>
+          <li class="ctx-sep"></li>
+          <li class="ctx-item" :class="{ disabled: !selectedId }" @click="ctxBringFront">
+            <span class="ctx-icon">⬆</span> 置于顶层
+          </li>
+          <li class="ctx-item" :class="{ disabled: !selectedId }" @click="ctxSendBack">
+            <span class="ctx-icon">⬇</span> 置于底层
+          </li>
+          <li class="ctx-item" :class="{ disabled: !selectedId }" @click="ctxBringForward">
+            <span class="ctx-icon">↑</span> 上移一层
+          </li>
+          <li class="ctx-item" :class="{ disabled: !selectedId }" @click="ctxSendBackward">
+            <span class="ctx-icon">↓</span> 下移一层
+          </li>
+          <li class="ctx-sep"></li>
+          <li class="ctx-item danger" :class="{ disabled: !selectedId }" @click="ctxDelete">
+            <span class="ctx-icon">🗑</span> 删除
+            <span class="ctx-key">Del</span>
+          </li>
+        </ul>
+      </Teleport>
 
       <!-- 右侧属性面板 -->
       <RightPanel
@@ -183,7 +234,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useCanvas } from './composables/useCanvas'
 import { useFlipPages } from './composables/useFlipPages'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
@@ -347,6 +398,7 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
 const appRootRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const replaceFileInput = ref<HTMLInputElement | null>(null)
 const canvasAreaRef = ref<InstanceType<typeof CanvasArea> | null>(null)
 
 // ============ 本地状态 ============
@@ -392,6 +444,7 @@ const {
   sendToBack,
   bringForward,
   sendBackwards,
+  reorderElements,
   copySelected,
   pasteFromClipboard,
   alignLeft,
@@ -424,6 +477,14 @@ const {
     if (bg.imageScale) bgScale.value = bg.imageScale
     if (bg.imageOpacity !== undefined) bgOpacity.value = bg.imageOpacity * 100
   },
+  onImageReplace: (obj: any) => {
+    // 双击图片 → 选中该图片并触发文件选择器替换
+    const id = obj.id as string | undefined
+    if (id) {
+      selectElement(id)
+    }
+    replaceFileInput.value?.click()
+  },
 })
 
 // 图层：按 zIndex 降序显示（最上层排第一）
@@ -443,7 +504,9 @@ const {
   removeFlipPage,
   moveFlipPageUp,
   moveFlipPageDown,
+  moveFlipPage,
   renameFlipPage,
+  duplicateFlipPage,
 } = useFlipPages({
   pageMode,
   background,
@@ -509,7 +572,7 @@ function loadFullDraft(draft: any) {
   }
 }
 
-const { saveDraftToLocal, restoreDraftFromLocal, startAutoSave, getDraftInfo, isDraftRecent, discardDraft } = useAutoSave({
+const { saveDraftToLocal, restoreDraftFromLocal, startAutoSave, getDraftInfo, isDraftRecent, discardDraft, lastSaveTime } = useAutoSave({
   getDraft: getFullDraft,
   loadDraft: loadFullDraft,
 })
@@ -594,6 +657,8 @@ const currentTemplatePrice = ref(3)
 const currentTemplateIsPremium = ref(false)
 const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
+// 保存到服务器的 loading 状态
+const isSaving = ref(false)
 
 // 起始模板
 const activePresetCat = ref('scene')
@@ -617,6 +682,79 @@ function getCanvasEl(): HTMLCanvasElement | null {
 function onCanvasRefUpdate(el: HTMLCanvasElement | null) {
   canvasRef.value = el
 }
+
+// ============ 画布右键上下文菜单 ============
+const ctxMenu = reactive({ visible: false, x: 0, y: 0 })
+
+function onCanvasContextMenu(e: MouseEvent) {
+  ctxMenu.visible = true
+  // 防止菜单超出视口右下边界
+  const maxX = window.innerWidth - 200
+  const maxY = window.innerHeight - 320
+  ctxMenu.x = Math.min(e.clientX, maxX)
+  ctxMenu.y = Math.min(e.clientY, maxY)
+}
+
+function closeCtxMenu() {
+  ctxMenu.visible = false
+}
+
+function ctxCopy() {
+  if (!selectedId.value) return
+  copySelected()
+  closeCtxMenu()
+}
+function ctxPaste() {
+  pasteFromClipboard()
+  closeCtxMenu()
+}
+function ctxDuplicate() {
+  if (!selectedId.value) return
+  duplicateSelected()
+  closeCtxMenu()
+}
+function ctxBringFront() {
+  if (!selectedId.value) return
+  bringToFront()
+  closeCtxMenu()
+}
+function ctxSendBack() {
+  if (!selectedId.value) return
+  sendToBack()
+  closeCtxMenu()
+}
+function ctxBringForward() {
+  if (!selectedId.value) return
+  bringForward()
+  closeCtxMenu()
+}
+function ctxSendBackward() {
+  if (!selectedId.value) return
+  sendBackwards()
+  closeCtxMenu()
+}
+function ctxDelete() {
+  if (!selectedId.value) return
+  deleteSelected()
+  closeCtxMenu()
+}
+
+// 点击空白处或按 ESC 关闭右键菜单
+function onCtxMenuGlobalClick() {
+  if (ctxMenu.visible) ctxMenu.visible = false
+}
+function onCtxMenuEsc(e: KeyboardEvent) {
+  if (e.key === 'Escape' && ctxMenu.visible) ctxMenu.visible = false
+}
+
+onMounted(() => {
+  window.addEventListener('click', onCtxMenuGlobalClick)
+  window.addEventListener('keydown', onCtxMenuEsc)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('click', onCtxMenuGlobalClick)
+  window.removeEventListener('keydown', onCtxMenuEsc)
+})
 
 async function loadTemplateList() {
   loadingTemplates.value = true
@@ -970,6 +1108,7 @@ async function generateRenderedImage(): Promise<string> {
 }
 
 async function saveToServer() {
+  isSaving.value = true
   try {
     saveCurrentFlipPage()
     const draft = getDraft()
@@ -1060,10 +1199,23 @@ async function saveToServer() {
       currentTemplateName.value = result.name || name
     }
 
+    // 保存成功后，记录历史版本
+    historyVersions.value.unshift({
+      description: `保存于 ${new Date().toLocaleString()}`,
+      ts: Date.now(),
+      draft: getFullDraft()
+    })
+    // 限制最多 20 条
+    if (historyVersions.value.length > 20) {
+      historyVersions.value = historyVersions.value.slice(0, 20)
+    }
+
     showToast('保存成功 ✅')
     loadTemplateList()
   } catch (e: any) {
     showToast('保存失败：' + (e?.response?.data?.error || e?.message || '未知错误'), 'error')
+  } finally {
+    isSaving.value = false
   }
 }
 
@@ -1133,6 +1285,16 @@ async function onImageReplaceFile(file: File) {
   } catch (err) {
     alert('图片上传失败：' + (err as Error).message)
   }
+}
+
+// 双击图片替换：文件选择器回调
+function onReplaceFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    onImageReplaceFile(file)
+  }
+  input.value = ''
 }
 
 async function onBgImageFile(file: File) {
@@ -1307,6 +1469,74 @@ onMounted(async () => {
   display: flex;
   min-height: 0;
   overflow: hidden;
+}
+
+.canvas-wrap {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+
+/* ====== 画布右键上下文菜单 ====== */
+.ctx-menu {
+  position: fixed;
+  z-index: 10001;
+  min-width: 180px;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+  user-select: none;
+  animation: ctxMenuIn 0.12s ease-out;
+}
+@keyframes ctxMenuIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  color: #333;
+  transition: background 0.1s;
+}
+.ctx-item:hover {
+  background: #f0f6ff;
+  color: #1976d2;
+}
+.ctx-item.disabled {
+  color: #c0c4cc;
+  cursor: not-allowed;
+}
+.ctx-item.disabled:hover {
+  background: transparent;
+  color: #c0c4cc;
+}
+.ctx-item.danger:hover {
+  background: #fff0f0;
+  color: #e53935;
+}
+.ctx-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+}
+.ctx-key {
+  margin-left: auto;
+  font-size: 11px;
+  color: #bbb;
+}
+.ctx-sep {
+  height: 1px;
+  margin: 4px 10px;
+  background: #f0f0f0;
 }
 
 .poster-view-wrap {

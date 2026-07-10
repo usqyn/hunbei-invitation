@@ -52,6 +52,19 @@
     </div>
 
     <!-- ============ 模板网格 ============ -->
+    <div class="pm-sort-bar">
+      <span class="pm-sort-label">排序：</span>
+      <select v-model="sortBy" class="pm-filter-select">
+        <option value="created">按创建时间</option>
+        <option value="updated">按修改时间</option>
+        <option value="name">按名称</option>
+      </select>
+      <button class="pm-btn sm" @click="toggleSortOrder" :title="sortOrder === 'asc' ? '当前升序，点击切换为降序' : '当前降序，点击切换为升序'">
+        {{ sortOrder === 'asc' ? '↑ 升序' : '↓ 降序' }}
+      </button>
+      <span class="pm-sort-count">共 {{ filteredTemplates.length }} 个模板</span>
+    </div>
+
     <div v-if="loading" class="pm-empty">加载中...</div>
     <div v-else-if="filteredTemplates.length === 0" class="pm-empty">
       {{ searchQuery || filterCategory ? '没有匹配的模板' : '暂无模板，点击「新建模板」创建' }}
@@ -79,6 +92,7 @@
           <div class="pm-card-cat">{{ getCategoryName(tpl.category_id) }}</div>
           <div class="pm-card-actions">
             <button class="pm-btn sm" @click="openEditModal(tpl)">✎ 编辑</button>
+            <button class="pm-btn sm" @click="exportTemplateJson(tpl)" title="导出为 JSON 文件">⬇ 导出</button>
             <button class="pm-btn sm danger" @click="onDeleteTemplate(tpl)">🗑 删除</button>
           </div>
         </div>
@@ -152,9 +166,23 @@
                 </div>
               </div>
 
+              <!-- 画布工具栏：撤销/重做 + 缩放 -->
+              <div class="pm-canvas-toolbar">
+                <div class="pm-toolbar-group">
+                  <button class="pm-btn sm" :disabled="!canUndoPoster" @click="undoPoster" title="撤销">↶ 撤销</button>
+                  <button class="pm-btn sm" :disabled="!canRedoPoster" @click="redoPoster" title="重做">↷ 重做</button>
+                </div>
+                <div class="pm-toolbar-group">
+                  <button class="pm-btn sm" @click="zoomCanvas(-0.1)" title="缩小">−</button>
+                  <span class="pm-zoom-label">{{ Math.round(canvasZoom * 100) }}%</span>
+                  <button class="pm-btn sm" @click="zoomCanvas(0.1)" title="放大">+</button>
+                  <button class="pm-btn sm" @click="resetCanvasZoom" title="重置缩放">重置</button>
+                </div>
+              </div>
+
               <!-- 画布预览 -->
-              <div class="pm-canvas-wrap">
-                <div class="pm-canvas" ref="canvasWrapRef">
+              <div class="pm-canvas-scroll" :style="{ height: (533 * canvasZoom) + 'px' }">
+                <div class="pm-canvas" ref="canvasWrapRef" :style="{ transform: `scale(${canvasZoom})`, transformOrigin: 'top center' }">
                   <img
                     v-if="form.background_url"
                     :src="resolveUrl(form.background_url)"
@@ -168,9 +196,29 @@
                     :class="{ selected: selectedAreaIdx === idx, text: area.type === 'text', image: area.type === 'image' }"
                     :style="areaStyle(area)"
                     @mousedown.stop="startDragArea($event, idx)"
+                    @dblclick.stop="startEditText(idx)"
                   >
+                    <!-- 图片区域默认图片预览 -->
+                    <img
+                      v-if="area.type === 'image' && area.defaultImage"
+                      :src="resolveUrl(area.defaultImage)"
+                      class="pm-area-img"
+                      alt="default"
+                    />
                     <span class="pm-area-label">{{ area.type === 'text' ? 'T' : '🖼' }}</span>
-                    <span class="pm-area-content" v-if="area.type === 'text'">{{ area.defaultText || area.label }}</span>
+                    <!-- 文字内容：非编辑态显示 -->
+                    <span class="pm-area-content" v-if="area.type === 'text' && editingAreaIdx !== idx">{{ area.defaultText || area.label }}</span>
+                    <!-- 文字内容：编辑态显示 input 覆盖在区域上 -->
+                    <input
+                      v-if="area.type === 'text' && editingAreaIdx === idx"
+                      v-model="form.editableAreas[idx].defaultText"
+                      class="pm-area-edit-input"
+                      @blur="finishEditText"
+                      @keyup.enter="finishEditText"
+                      @mousedown.stop
+                      @click.stop
+                      @dblclick.stop
+                    />
                     <button class="pm-area-del" @click.stop="removeArea(idx)">×</button>
                     <!-- 8方向 resize 手柄（仅选中时显示） -->
                     <template v-if="selectedAreaIdx === idx">
@@ -187,9 +235,20 @@
                 </div>
               </div>
 
+              <!-- 图片区域默认图片上传隐藏 input -->
+              <input ref="areaImgFileInput" type="file" accept="image/*" style="display:none" @change="onAreaImgFileChange" />
+
               <!-- 选中区域的属性面板 -->
               <div v-if="selectedAreaIdx !== null && form.editableAreas[selectedAreaIdx]" class="pm-area-props">
                 <div class="pm-section-title">区域属性 — {{ form.editableAreas[selectedAreaIdx].type === 'text' ? '文字' : '图片' }}</div>
+
+                <!-- 区域操作：复制 / 上移 / 下移 -->
+                <div class="pm-area-action-bar">
+                  <button class="pm-btn sm" @click="duplicateArea(selectedAreaIdx)" title="复制此区域">📋 复制区域</button>
+                  <button class="pm-btn sm" @click="moveAreaUp(selectedAreaIdx)" :disabled="selectedAreaIdx === 0" title="上移层级">⬆ 上移</button>
+                  <button class="pm-btn sm" @click="moveAreaDown(selectedAreaIdx)" :disabled="selectedAreaIdx === form.editableAreas.length - 1" title="下移层级">⬇ 下移</button>
+                </div>
+
                 <div class="pm-form-row">
                   <label>标签 / 名称</label>
                   <input v-model="form.editableAreas[selectedAreaIdx].label" class="pm-input" placeholder="如：邀请人姓名" />
@@ -197,6 +256,14 @@
                 <div class="pm-form-row" v-if="form.editableAreas[selectedAreaIdx].type === 'text'">
                   <label>默认文字</label>
                   <input v-model="form.editableAreas[selectedAreaIdx].defaultText" class="pm-input" placeholder="默认显示文字" />
+                </div>
+                <!-- 图片区域：默认图片 URL + 上传 -->
+                <div class="pm-form-row" v-if="form.editableAreas[selectedAreaIdx].type === 'image'">
+                  <label>默认图片 URL</label>
+                  <input v-model="form.editableAreas[selectedAreaIdx].defaultImage" class="pm-input" placeholder="https://… 或点击上传" />
+                </div>
+                <div class="pm-form-row" v-if="form.editableAreas[selectedAreaIdx].type === 'image'">
+                  <button class="pm-btn sm" @click="triggerAreaImageUpload">📷 上传默认图片</button>
                 </div>
                 <div class="pm-form-row two-col">
                   <div>
@@ -264,7 +331,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
-import { api, API_BASE, initApi } from '../composables/useApi'
+import { api, API_BASE, initApi, uploadImages } from '../composables/useApi'
 import { CATEGORIES } from '../types/template'
 
 // ============ 类型定义 ============
@@ -273,6 +340,7 @@ interface EditableArea {
   type: 'text' | 'image'
   label: string
   defaultText?: string
+  defaultImage?: string   // 图片区域默认图片 URL
   x: number        // 像素坐标
   y: number
   width: number    // 像素尺寸
@@ -296,6 +364,7 @@ interface PosterTemplateRaw {
   config?: { width: number; height: number; editableAreas: EditableArea[] }
   editableAreas: EditableArea[]  // 本地编辑用
   created_at?: string
+  updated_at?: string
 }
 
 // ============ 状态 ============
@@ -307,7 +376,29 @@ const filterCategory = ref('')
 const showModal = ref(false)
 const editingId = ref<string | null>(null)
 const selectedAreaIdx = ref<number | null>(null)
+const editingAreaIdx = ref<number | null>(null)  // 正在画布上直接编辑文字的区域索引
 const canvasWrapRef = ref<HTMLElement | null>(null)
+const areaImgFileInput = ref<HTMLInputElement | null>(null)
+
+// 模板列表排序
+const sortBy = ref<'created' | 'updated' | 'name'>('created')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+
+// 画布缩放（CSS transform: scale）
+const canvasZoom = ref(1)
+
+// 撤销 / 重做历史栈
+interface PosterSnapshot {
+  name: string
+  category_id: string
+  cover_url: string
+  background_url: string
+  is_free: boolean
+  is_vip: boolean
+  editableAreas: EditableArea[]
+}
+const historyStack = ref<PosterSnapshot[]>([])
+const redoStack = ref<PosterSnapshot[]>([])
 
 const categories = CATEGORIES
 
@@ -341,8 +432,93 @@ const filteredTemplates = computed(() => {
     const q = searchQuery.value.trim().toLowerCase()
     list = list.filter(t => t.name.toLowerCase().includes(q))
   }
+  // 排序
+  const dir = sortOrder.value === 'asc' ? 1 : -1
+  list = [...list].sort((a, b) => {
+    if (sortBy.value === 'name') {
+      return (a.name || '').localeCompare(b.name || '', 'zh') * dir
+    }
+    // created / updated，缺失字段回退到对方或 0
+    const ta = new Date(
+      (sortBy.value === 'updated' ? (a.updated_at || a.created_at) : a.created_at) || 0
+    ).getTime()
+    const tb = new Date(
+      (sortBy.value === 'updated' ? (b.updated_at || b.created_at) : b.created_at) || 0
+    ).getTime()
+    return (ta - tb) * dir
+  })
   return list
 })
+
+// 撤销 / 重做可用性
+const canUndoPoster = computed(() => historyStack.value.length > 0)
+const canRedoPoster = computed(() => redoStack.value.length > 0)
+
+function snapshotForm(): PosterSnapshot {
+  return {
+    name: form.name,
+    category_id: form.category_id,
+    cover_url: form.cover_url,
+    background_url: form.background_url,
+    is_free: form.is_free,
+    is_vip: form.is_vip,
+    editableAreas: JSON.parse(JSON.stringify(form.editableAreas)),
+  }
+}
+
+function restoreSnapshot(s: PosterSnapshot) {
+  form.name = s.name
+  form.category_id = s.category_id
+  form.cover_url = s.cover_url
+  form.background_url = s.background_url
+  form.is_free = s.is_free
+  form.is_vip = s.is_vip
+  form.editableAreas = JSON.parse(JSON.stringify(s.editableAreas))
+}
+
+// 在每次区域操作前调用：记录当前状态用于撤销
+function pushPosterHistory() {
+  historyStack.value.push(snapshotForm())
+  if (historyStack.value.length > 50) historyStack.value.shift()
+  // 新操作清空 redo 栈
+  redoStack.value = []
+}
+
+function undoPoster() {
+  if (historyStack.value.length === 0) return
+  // 当前状态入 redo 栈
+  redoStack.value.push(snapshotForm())
+  const prev = historyStack.value.pop()!
+  restoreSnapshot(prev)
+  // 修正选中索引
+  if (selectedAreaIdx.value !== null && selectedAreaIdx.value >= form.editableAreas.length) {
+    selectedAreaIdx.value = form.editableAreas.length > 0 ? form.editableAreas.length - 1 : null
+  }
+}
+
+function redoPoster() {
+  if (redoStack.value.length === 0) return
+  historyStack.value.push(snapshotForm())
+  const next = redoStack.value.pop()!
+  restoreSnapshot(next)
+  if (selectedAreaIdx.value !== null && selectedAreaIdx.value >= form.editableAreas.length) {
+    selectedAreaIdx.value = form.editableAreas.length > 0 ? form.editableAreas.length - 1 : null
+  }
+}
+
+// 画布缩放控件
+function zoomCanvas(delta: number) {
+  const next = Math.round((canvasZoom.value + delta) * 100) / 100
+  canvasZoom.value = Math.min(2, Math.max(0.5, next))
+}
+function resetCanvasZoom() {
+  canvasZoom.value = 1
+}
+
+// 排序方向切换
+function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+}
 
 // ============ 工具函数 ============
 function resolveUrl(url: string): string {
@@ -438,6 +614,7 @@ function normalizeTemplate(raw: any): PosterTemplateRaw {
       type: a.type || 'text',
       label: a.label || '',
       defaultText: a.defaultText || '',
+      defaultImage: a.defaultImage || '',
       x: a.x ?? 0,
       y: a.y ?? 0,
       width: a.width ?? 200,
@@ -449,6 +626,7 @@ function normalizeTemplate(raw: any): PosterTemplateRaw {
       direction: a.direction || '',
     })),
     created_at: raw.created_at,
+    updated_at: raw.updated_at || raw.updatedAt || raw.modified_at,
   }
 }
 
@@ -480,6 +658,7 @@ async function saveTemplate() {
           type: a.type,
           label: a.label,
           defaultText: a.defaultText,
+          defaultImage: a.defaultImage,
           x: a.x,
           y: a.y,
           width: a.width,
@@ -524,11 +703,43 @@ async function onDeleteTemplate(tpl: PosterTemplateRaw) {
   }
 }
 
+// 导出模板配置为 JSON 文件下载
+function exportTemplateJson(tpl: PosterTemplateRaw) {
+  const exportData = {
+    id: tpl.id,
+    name: tpl.name,
+    category_id: tpl.category_id,
+    category_name: getCategoryName(tpl.category_id),
+    cover_url: tpl.cover_url,
+    background_url: tpl.background_url,
+    is_free: tpl.is_free,
+    is_vip: tpl.is_vip,
+    is_active: tpl.is_active,
+    config: tpl.config || { width: 750, height: 1334, editableAreas: tpl.editableAreas },
+    editableAreas: tpl.editableAreas,
+    exported_at: new Date().toISOString(),
+  }
+  const json = JSON.stringify(exportData, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const safeName = (tpl.name || 'template').replace(/[\\/:*?"<>|]/g, '_')
+  a.download = `poster-template-${safeName}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // ============ 弹窗操作 ============
 function openCreateModal() {
   Object.assign(form, defaultForm())
   editingId.value = null
   selectedAreaIdx.value = null
+  historyStack.value = []
+  redoStack.value = []
+  canvasZoom.value = 1
   showModal.value = true
 }
 
@@ -536,6 +747,9 @@ function openEditModal(tpl: PosterTemplateRaw) {
   Object.assign(form, JSON.parse(JSON.stringify(tpl)))
   editingId.value = tpl.id || null
   selectedAreaIdx.value = null
+  historyStack.value = []
+  redoStack.value = []
+  canvasZoom.value = 1
   showModal.value = true
 }
 
@@ -547,6 +761,7 @@ function closeModal() {
 
 // ============ 可编辑区域操作 ============
 function addArea(type: 'text' | 'image') {
+  pushPosterHistory()
   const area: EditableArea = {
     id: `area_${Date.now()}`,
     type,
@@ -564,6 +779,7 @@ function addArea(type: 'text' | 'image') {
 }
 
 function removeArea(idx: number) {
+  pushPosterHistory()
   form.editableAreas.splice(idx, 1)
   if (selectedAreaIdx.value === idx) {
     selectedAreaIdx.value = null
@@ -572,11 +788,77 @@ function removeArea(idx: number) {
   }
 }
 
+// ============ 区域复制（深拷贝，y 偏移 20px）============
+function duplicateArea(idx: number) {
+  if (idx < 0 || idx >= form.editableAreas.length) return
+  pushPosterHistory()
+  const source = form.editableAreas[idx]
+  const dup: EditableArea = JSON.parse(JSON.stringify(source))
+  dup.id = `area_${Date.now()}`
+  dup.y = source.y + 20
+  form.editableAreas.splice(idx + 1, 0, dup)
+  selectedAreaIdx.value = idx + 1
+}
+
+// ============ 区域层级调整（上移 / 下移）============
+function moveAreaUp(idx: number) {
+  if (idx <= 0) return
+  pushPosterHistory()
+  const arr = form.editableAreas
+  ;[arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]]
+  selectedAreaIdx.value = idx - 1
+}
+
+function moveAreaDown(idx: number) {
+  if (idx >= form.editableAreas.length - 1) return
+  pushPosterHistory()
+  const arr = form.editableAreas
+  ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
+  selectedAreaIdx.value = idx + 1
+}
+
+// ============ 画布文字直接编辑 ============
+function startEditText(idx: number) {
+  const area = form.editableAreas[idx]
+  if (!area || area.type !== 'text') return
+  pushPosterHistory()
+  editingAreaIdx.value = idx
+  selectedAreaIdx.value = idx
+}
+
+function finishEditText() {
+  editingAreaIdx.value = null
+}
+
+// ============ 图片区域默认图片 ============
+function triggerAreaImageUpload() {
+  areaImgFileInput.value?.click()
+}
+
+async function onAreaImgFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (selectedAreaIdx.value === null) return
+  try {
+    const urls = await uploadImages([file])
+    const url = urls[0] || ''
+    if (url) {
+      form.editableAreas[selectedAreaIdx.value].defaultImage = url
+    }
+  } catch (err: any) {
+    alert('图片上传失败：' + (err?.message || err))
+  } finally {
+    input.value = ''
+  }
+}
+
 // 拖拽区域
 let dragState: { idx: number; startX: number; startY: number; origX: number; origY: number } | null = null
 
 function startDragArea(e: MouseEvent, idx: number) {
   selectedAreaIdx.value = idx
+  pushPosterHistory()
   const area = form.editableAreas[idx]
   dragState = {
     idx,
@@ -622,6 +904,7 @@ function startResize(e: MouseEvent, idx: number, dir: ResizeDir) {
   e.preventDefault()
   e.stopPropagation()
   selectedAreaIdx.value = idx
+  pushPosterHistory()
   const area = form.editableAreas[idx]
   resizeState = {
     idx,
@@ -847,6 +1130,17 @@ onMounted(async () => {
 /* 空状态 */
 .pm-empty { padding: 60px 24px; text-align: center; color: #999; font-size: 14px; }
 
+/* 模板列表排序栏 */
+.pm-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  flex-wrap: wrap;
+}
+.pm-sort-label { font-size: 13px; color: #666; font-weight: 600; }
+.pm-sort-count { font-size: 12px; color: #999; margin-left: auto; }
+
 /* ============ 弹窗 ============ */
 .pm-modal-overlay {
   position: fixed;
@@ -943,6 +1237,32 @@ onMounted(async () => {
 .pm-area-add-btns { display: flex; gap: 6px; }
 
 .pm-canvas-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
+
+/* 画布工具栏（撤销/重做 + 缩放） */
+.pm-canvas-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.pm-toolbar-group { display: flex; align-items: center; gap: 6px; }
+.pm-zoom-label {
+  font-size: 12px;
+  color: #666;
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 画布滚动容器（缩放时预留高度，避免遮挡下方属性面板） */
+.pm-canvas-scroll {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+  overflow: auto;
+}
 .pm-canvas {
   position: relative;
   width: 300px; height: 533px;
@@ -951,6 +1271,7 @@ onMounted(async () => {
   border-radius: 10px;
   overflow: hidden;
   user-select: none;
+  flex-shrink: 0;
 }
 .pm-canvas-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
@@ -1008,4 +1329,36 @@ onMounted(async () => {
 
 .pm-area-props { background: #f8f9fb; border: 1px solid #e8eaed; border-radius: 10px; padding: 16px; }
 .pm-area-hint { text-align: center; padding: 20px; color: #999; font-size: 13px; background: #f8f9fb; border-radius: 10px; }
+
+/* 区域操作栏（复制 / 上移 / 下移） */
+.pm-area-action-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.pm-area-action-bar .pm-btn.sm { flex: 1; min-width: 80px; }
+
+/* 画布文字直接编辑 input 覆盖层 */
+.pm-area-edit-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: rgba(255, 255, 255, 0.95);
+  font-size: inherit;
+  color: #333;
+  text-align: center;
+  outline: 2px solid #e84a6e;
+  border-radius: 2px;
+  padding: 2px 4px;
+  z-index: 5;
+}
+
+/* 图片区域默认图片预览 */
+.pm-area-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  border-radius: 2px;
+}
 </style>

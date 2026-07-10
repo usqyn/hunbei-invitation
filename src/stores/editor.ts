@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useTemplateStore } from './template'
 import { DEFAULT_ELEMENT_STYLE, MATERIAL_LIST } from '@/constants/editor'
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { resolveUrl } from '@/utils/url'
-import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage } from '@/types'
+import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData } from '@/types'
 import { request } from '@/utils/request'
 import { getStorage, setStorage } from '@/utils/storage'
 
@@ -46,6 +46,66 @@ export const useEditorStore = defineStore('editor', () => {
   // 翻页模式 - 页面列表
   const flipPages = reactive<FlipPage[]>([])
   const currentFlipPageIndex = ref(0)
+
+  // ============ 撤销/重做 ============
+  // 基于快照的索引式历史：每次 pushHistory 记录变更后的状态
+  const history = ref<any[]>([])
+  const historyIndex = ref(-1)
+  const MAX_HISTORY = 30
+
+  function snapshotCurrent(): any {
+    return {
+      elements: JSON.parse(JSON.stringify(editableElements)),
+      pageSections: JSON.parse(JSON.stringify(pageSections)),
+      flipPages: JSON.parse(JSON.stringify(flipPages)),
+    }
+  }
+
+  function pushHistory() {
+    // 截断 redo 分支
+    if (historyIndex.value < history.value.length - 1) {
+      history.value = history.value.slice(0, historyIndex.value + 1)
+    }
+    history.value.push(snapshotCurrent())
+    historyIndex.value = history.value.length - 1
+    if (history.value.length > MAX_HISTORY) {
+      history.value.shift()
+      historyIndex.value = history.value.length - 1
+    }
+  }
+
+  function resetHistory() {
+    history.value = []
+    historyIndex.value = -1
+  }
+
+  function restoreSnapshot(snap: any) {
+    if (snap && Array.isArray(snap.elements)) {
+      editableElements.splice(0, editableElements.length, ...snap.elements)
+    }
+    if (snap && Array.isArray(snap.pageSections)) {
+      pageSections.splice(0, pageSections.length, ...snap.pageSections)
+    }
+    if (snap && Array.isArray(snap.flipPages)) {
+      flipPages.splice(0, flipPages.length, ...snap.flipPages)
+    }
+    selectedElement.value = null
+  }
+
+  function undo() {
+    if (historyIndex.value <= 0) return
+    historyIndex.value--
+    restoreSnapshot(history.value[historyIndex.value])
+  }
+
+  function redo() {
+    if (historyIndex.value >= history.value.length - 1) return
+    historyIndex.value++
+    restoreSnapshot(history.value[historyIndex.value])
+  }
+
+  const canUndo = computed(() => historyIndex.value > 0)
+  const canRedo = computed(() => historyIndex.value < history.value.length - 1)
 
   // 素材库
   const materialList = MATERIAL_LIST
@@ -219,6 +279,10 @@ export const useEditorStore = defineStore('editor', () => {
 
     // 重置选中的音乐
     templateStore.setSelectedMusic(null)
+
+    // 重置撤销/重做历史，记录模板初始状态作为基线
+    resetHistory()
+    pushHistory()
   }
 
   function syncCurrentFromElement(idx: number) {
@@ -297,12 +361,42 @@ export const useEditorStore = defineStore('editor', () => {
           templateStore.selectedMusicId = savedData.selectedMusicId
         }
         currentTemplateId.value = templateId
+        // 重置历史，以恢复的状态为基线
+        resetHistory()
+        pushHistory()
         return true
       }
     } catch (e) {
       console.warn('restoreTemplate data failed, falling back to loadTemplateById:', e)
     }
     loadTemplateById(templateId)
+  }
+
+  /** 从已保存的作品数据恢复编辑状态（编辑已有作品时调用） */
+  function restoreFromWorkData(data: WorkEditorData) {
+    if (!data) return
+    if (data.templateType) templateType.value = data.templateType
+    if (data.elements && Array.isArray(data.elements)) {
+      editableElements.splice(0, editableElements.length, ...JSON.parse(JSON.stringify(data.elements)))
+    }
+    if (data.pageSections && Array.isArray(data.pageSections)) {
+      pageSections.splice(0, pageSections.length, ...JSON.parse(JSON.stringify(data.pageSections)))
+    }
+    if (data.flipPages && Array.isArray(data.flipPages)) {
+      flipPages.splice(0, flipPages.length, ...JSON.parse(JSON.stringify(data.flipPages)))
+    }
+    if (data.canvasSize) canvasSize.value = { ...data.canvasSize }
+    if (data.background) background.value = { ...data.background }
+    const templateStore = useTemplateStore()
+    if (data.templateData) Object.assign(templateStore.templateData, data.templateData)
+    if (data.basicInfo) Object.assign(templateStore.basicInfo, data.basicInfo)
+    if (data.settings) Object.assign(templateStore.settings, data.settings)
+    // 作品编辑后渲染图需重新生成
+    renderedImage.value = ''
+    selectedElement.value = null
+    // 重置历史，以当前作品状态为基线
+    resetHistory()
+    pushHistory()
   }
 
   function openEditor(idx: number) {
@@ -355,6 +449,7 @@ export const useEditorStore = defineStore('editor', () => {
       }
     }
     showTextEditor.value = false
+    pushHistory()
   }
 
   function closeBasicInfoEditor() {
@@ -429,6 +524,7 @@ export const useEditorStore = defineStore('editor', () => {
     Object.entries(fieldMap).forEach(([key, value]) => {
       syncFieldToAllModes(key, value)
     })
+    pushHistory()
   }
 
   /** 选择素材并应用到选中的图片元素（合并原 selectMaterial + applyImageToElement）
@@ -457,6 +553,7 @@ export const useEditorStore = defineStore('editor', () => {
       const templateStore = useTemplateStore()
       templateStore.updateField(el.dataKey, imageUrl)
     }
+    pushHistory()
     selectedElement.value = null
     activePanelTab.value = 'edit'
     uni.showToast({ title: '图片已替换', icon: 'success' })
@@ -497,9 +594,11 @@ export const useEditorStore = defineStore('editor', () => {
     editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
     templateType, pageSections, activeSectionId,
     flipPages, currentFlipPageIndex,
-    loadTemplateById, restoreTemplate, openEditor, openSectionTextEditor, closeTextEditor, confirmTextEdit,
+    history, historyIndex, canUndo, canRedo,
+    loadTemplateById, restoreTemplate, restoreFromWorkData, openEditor, openSectionTextEditor, closeTextEditor, confirmTextEdit,
     closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField, syncBasicInfoToElements,
     selectMaterial, applyImageToElement: selectMaterial, setCurrentWorkId,
     updatePageSection, updatePageSectionText, updatePageSectionImage,
+    pushHistory, undo, redo,
   }
 })

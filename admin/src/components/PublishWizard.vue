@@ -291,6 +291,10 @@ const uploadProgressText = ref('')
 
 const canNext = computed(() => {
   if (currentStep.value === 0) return form.name.trim().length > 0 && form.category
+  // 校验步骤：若有 error 级别的校验项，则阻止进入下一步
+  if (currentStep.value === 1) {
+    return !validationResults.value.some(v => v.level === 'error')
+  }
   return true
 })
 
@@ -347,6 +351,31 @@ function toggleTag(tag: string) {
   else form.tags.splice(idx, 1)
 }
 
+// 自动修正：空文字块 —— 为画布中所有空文字元素填充默认文字
+function fixEmptyTexts() {
+  const fCanvas = props.getFabricCanvas?.()
+  if (!fCanvas || !fCanvas.getObjects) {
+    runValidation()
+    return
+  }
+  let fixed = 0
+  const objs = fCanvas.getObjects() as any[]
+  objs.forEach((obj: any) => {
+    const isText = obj.elementType === 'text' || obj.type === 'i-text' || obj.type === 'textbox'
+    if (!isText) return
+    const text = (obj.text || '').toString().trim()
+    if (!text) {
+      obj.set('text', '请输入文字')
+      fixed++
+    }
+  })
+  if (fixed > 0) {
+    fCanvas.renderAll && fCanvas.renderAll()
+  }
+  // 重新校验（getDraft 会同步 fabric → 数据模型，使修正后的内容反映到校验结果）
+  runValidation()
+}
+
 function runValidation() {
   const results: typeof validationResults.value = []
 
@@ -382,6 +411,7 @@ function runValidation() {
       key: 'emptyText',
       message: `检测到 ${emptyTexts.length} 个空文字块，建议填充内容`,
       level: 'warn',
+      fix: fixEmptyTexts,
     })
   } else {
     results.push({ key: 'emptyText', message: '无空文字块', level: 'ok' })

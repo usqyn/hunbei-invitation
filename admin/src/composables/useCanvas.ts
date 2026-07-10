@@ -33,6 +33,8 @@ export interface UseCanvasOptions {
   initialSize?: CanvasSize
   onSelectionChange?: (el: AnyCanvasElement | null) => void
   onBackgroundChange?: (bg: CanvasBackground) => void
+  /** 双击图片元素时触发，用于通知外部弹出文件选择器替换图片 */
+  onImageReplace?: (obj: any) => void
 }
 
 // 最大历史快照数
@@ -186,6 +188,14 @@ export function useCanvas(opts: UseCanvasOptions) {
     // mouse:up 兜底清理参考线，防止 object:modified 未触发时残留
     canvas.on('mouse:up', () => {
       clearGuideLines()
+    })
+
+    // 双击图片元素 → 触发图片替换（通知外部弹出文件选择器）
+    canvas.on('mouse:dblclick', (opt: any) => {
+      const obj = opt.target
+      if (obj && obj.type === 'image') {
+        opts.onImageReplace?.(obj)
+      }
     })
 
     // 初始化背景
@@ -644,6 +654,25 @@ export function useCanvas(opts: UseCanvasOptions) {
         el.zIndex = index
       }
     })
+  }
+
+  // ---- 图层拖拽排序：将 fromId 元素移动到 toId 元素所在的位置 ----
+  function reorderElements(fromId: string, toId: string) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    if (fromId === toId) return
+    const fromObj = canvas.getObjects().find(o => o.id === fromId)
+    const toObj = canvas.getObjects().find(o => o.id === toId)
+    if (!fromObj || !toObj) return
+
+    // 先移除被拖拽元素，再根据目标元素当前位置插入
+    canvas.remove(fromObj)
+    const toIdx = canvas.getObjects().indexOf(toObj)
+    // 插入到目标元素所在位置（将其置于目标元素紧后方，即图层列表中目标元素的下方）
+    canvas.insertAt(toIdx, fromObj)
+    updateZIndexFromFabric()
+    canvas.renderAll()
+    pushHistory('reorder layers')
   }
 
   // ---- 复制/粘贴 ----
@@ -1370,6 +1399,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     sendToBack,
     bringForward,
     sendBackwards,
+    reorderElements,
     copySelected,
     pasteFromClipboard,
     alignLeft,

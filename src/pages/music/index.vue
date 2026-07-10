@@ -22,6 +22,24 @@
       </view>
     </view>
 
+    <!-- 搜索框 -->
+    <view class="music-search-bar">
+      <view class="music-search-wrap">
+        <text class="music-search-icon">🔍</text>
+        <input
+          class="music-search-input"
+          type="text"
+          v-model="searchKeyword"
+          placeholder="搜索音乐名称"
+          placeholder-style="color:#bbbbbb"
+          confirm-type="search"
+        />
+        <view v-if="searchKeyword" class="music-search-clear" @click="searchKeyword = ''">
+          <text class="music-clear-icon">×</text>
+        </view>
+      </view>
+    </view>
+
     <scroll-view class="music-list" scroll-y @scrolltolower="loadMore">
       <view
         v-for="(song, idx) in filteredMusicList"
@@ -75,6 +93,7 @@ const templateStore = useTemplateStore()
 
 const PAGE_SIZE = 20
 const currentTag = ref('全部')
+const searchKeyword = ref('')
 const musicList = ref<Music[]>([])
 const loading = ref(false)
 const currentPage = ref(1)
@@ -91,8 +110,16 @@ const selectedMusicId = computed(() => templateStore.selectedMusicId)
 let audio: UniApp.InnerAudioContext | null = null
 
 const filteredMusicList = computed(() => {
-  if (currentTag.value === '全部') return musicList.value
-  return musicList.value.filter(s => s.tag === currentTag.value)
+  let list = musicList.value
+  if (currentTag.value !== '全部') {
+    list = list.filter(s => s.tag === currentTag.value)
+  }
+  // 按关键词本地搜索过滤
+  if (searchKeyword.value) {
+    const kw = searchKeyword.value.toLowerCase()
+    list = list.filter(s => s.name && s.name.toLowerCase().includes(kw))
+  }
+  return list
 })
 
 const currentSong = computed(() => {
@@ -362,6 +389,51 @@ onUnmounted(() => {
 .tag-text {
   font-size: 26rpx;
   color: #666;
+}
+
+/* 搜索框 */
+.music-search-bar {
+  padding: 16rpx 32rpx 20rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.music-search-wrap {
+  display: flex;
+  align-items: center;
+  background: #f5f5f5;
+  border-radius: 40rpx;
+  padding: 12rpx 24rpx;
+}
+
+.music-search-icon {
+  font-size: 28rpx;
+  color: #999;
+  margin-right: 12rpx;
+}
+
+.music-search-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+  height: 44rpx;
+  line-height: 44rpx;
+}
+
+.music-search-clear {
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8rpx;
+}
+
+.music-clear-icon {
+  font-size: 36rpx;
+  color: #bbb;
+  line-height: 1;
 }
 
 .music-list {

@@ -15,6 +15,24 @@
       </view>
     </view>
 
+    <view class="address-section">
+      <view class="section-title">收货地址</view>
+      <view class="address-form">
+        <view class="addr-row">
+          <text class="addr-label">姓名</text>
+          <input class="addr-input" v-model="address.name" placeholder="请输入收货人姓名" maxlength="20" />
+        </view>
+        <view class="addr-row">
+          <text class="addr-label">手机号</text>
+          <input class="addr-input" v-model="address.phone" type="number" placeholder="请输入手机号" maxlength="11" />
+        </view>
+        <view class="addr-row addr-row--top">
+          <text class="addr-label">详细地址</text>
+          <textarea class="addr-textarea" v-model="address.detail" placeholder="请输入省市区及详细收货地址" maxlength="200" />
+        </view>
+      </view>
+    </view>
+
     <view class="remark-section">
       <view class="section-title">订单备注</view>
       <textarea class="remark-input" placeholder="选填，请输入备注信息" v-model="remark" />
@@ -61,6 +79,43 @@ interface OrderItem {
 
 const orderItems = ref<OrderItem[]>([])
 const remark = ref('')
+
+// 收货地址
+const address = ref({ name: '', phone: '', detail: '' })
+
+// 加载已保存的收货地址（复用上次填写）
+function loadSavedAddress() {
+  try {
+    const saved = uni.getStorageSync('mall_shipping_address')
+    if (saved && saved.name) {
+      address.value = { name: saved.name || '', phone: saved.phone || '', detail: saved.detail || '' }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// 保存收货地址到本地（下次复用）
+function saveAddress() {
+  try {
+    uni.setStorageSync('mall_shipping_address', { ...address.value })
+  } catch (e) { /* ignore */ }
+}
+
+// 校验收货地址
+function validateAddress(): boolean {
+  if (!address.value.name.trim()) {
+    uni.showToast({ title: '请填写收货人姓名', icon: 'none' })
+    return false
+  }
+  if (!/^1\d{10}$/.test(address.value.phone)) {
+    uni.showToast({ title: '请填写正确的手机号', icon: 'none' })
+    return false
+  }
+  if (address.value.detail.trim().length < 5) {
+    uni.showToast({ title: '请填写完整收货地址', icon: 'none' })
+    return false
+  }
+  return true
+}
 const discount = ref(0)
 
 const goodsTotal = computed(() => {
@@ -94,6 +149,8 @@ const submitOrder = async () => {
     uni.showToast({ title: '订单商品为空', icon: 'none' })
     return
   }
+  // 校验收货地址
+  if (!validateAddress()) return
 
   try {
     uni.showLoading({ title: '提交中...' })
@@ -104,10 +161,14 @@ const submitOrder = async () => {
       orderNo,
       items: orderItems.value,
       remark: remark.value,
+      shippingAddress: { ...address.value },
       totalAmount: orderTotal.value,
       status: 'pending',
       createTime: new Date().toISOString()
     }
+
+    // 保存收货地址供下次复用
+    saveAddress()
 
     const savedOrders = uni.getStorageSync('mall_orders') || []
     savedOrders.unshift(order)
@@ -144,6 +205,7 @@ const submitOrder = async () => {
 
 onShow(() => {
   loadOrderItems()
+  loadSavedAddress()
 })
 </script>
 
@@ -234,6 +296,46 @@ onShow(() => {
   background: #F5F5F5;
   border-radius: 12rpx;
   box-sizing: border-box;
+}
+
+.address-section {
+  background: #fff;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+}
+
+.address-form {
+  margin-top: 10rpx;
+}
+
+.addr-row {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.addr-row:last-child { border-bottom: none; }
+.addr-row--top { align-items: flex-start; }
+
+.addr-label {
+  width: 160rpx;
+  font-size: 28rpx;
+  color: #333;
+  flex-shrink: 0;
+}
+
+.addr-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+}
+
+.addr-textarea {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+  min-height: 80rpx;
 }
 
 .price-section {

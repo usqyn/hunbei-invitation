@@ -82,6 +82,22 @@ export const useWorksStore = defineStore('works', () => {
     }
   }
 
+  /** 重命名作品（同步更新 works / drafts / favorites 本地数据） */
+  function renameWork(id: string, newName: string) {
+    const name = (newName || '').trim()
+    if (!name) return
+    const update = (arr: Work[]) => {
+      const idx = arr.findIndex(w => w.id === id)
+      if (idx !== -1) {
+        arr[idx] = { ...arr[idx], title: name }
+      }
+    }
+    update(works.value)
+    update(drafts.value)
+    update(favorites.value)
+    persist()
+  }
+
   async function deleteWork(id: string) {
     const userStore = useUserStore()
     if (userStore.isLoggedIn) {
@@ -161,7 +177,7 @@ export const useWorksStore = defineStore('works', () => {
 
   return {
     works, drafts, favorites, loading,
-    addWork, updateWork, deleteWork, addDraft,
+    addWork, updateWork, renameWork, deleteWork, addDraft,
     toggleFavorite, isFavorite, saveAsWork, loadAll,
     syncFavoritesFromServer,
   }

@@ -40,8 +40,20 @@
                   'rendered-overlay-element--no-click': el.editable === false
                 }"
                 :style="getOverlayElementStyle(el)"
-                @click="el.editable === false ? null : onOpenEditor(idx)"
-              />
+                @touchstart="el.editable === false ? null : onElementTouchStart(idx, $event)"
+                @touchmove.stop.prevent="onElementTouchMove"
+                @touchend="onElementTouchEnd"
+                @click="el.editable === false ? null : onElementTap(idx)"
+              >
+                <!-- 缩放手柄（选中时显示） -->
+                <view
+                  v-if="editorStore.selectedElement === idx && el.editable !== false"
+                  class="resize-handle"
+                  @touchstart.stop="onResizeHandleTouchStart"
+                  @touchmove.stop.prevent="onResizeHandleTouchMove"
+                  @touchend.stop="onResizeHandleTouchEnd"
+                ></view>
+              </view>
             </view>
           </template>
           <!-- 无 renderedImage：回退到百分比定位渲染 -->
@@ -57,7 +69,10 @@
                   'canvas-element--no-interact': el.editable === false
                 }"
                 :style="getCanvasElementStyle(el)"
-                @click="el.editable === false ? null : onOpenEditor(idx)"
+                @touchstart="el.editable === false ? null : onElementTouchStart(idx, $event)"
+                @touchmove.stop.prevent="onElementTouchMove"
+                @touchend="onElementTouchEnd"
+                @click="el.editable === false ? null : onElementTap(idx)"
               >
                 <image
                   v-if="el.type === 'image'"
@@ -71,6 +86,14 @@
                   class="canvas-text"
                   :style="getTextStyle(el)"
                 >{{ resolveText(el.text) }}</text>
+                <!-- 缩放手柄（选中时显示） -->
+                <view
+                  v-if="editorStore.selectedElement === idx && el.editable !== false"
+                  class="resize-handle"
+                  @touchstart.stop="onResizeHandleTouchStart"
+                  @touchmove.stop.prevent="onResizeHandleTouchMove"
+                  @touchend.stop="onResizeHandleTouchEnd"
+                ></view>
               </view>
             </view>
           </template>
@@ -128,6 +151,22 @@
 
     <!-- Footer Toolbar -->
     <view class="editor-footer">
+      <view
+        class="footer-item"
+        :class="{ 'footer-item--disabled': !editorStore.canUndo }"
+        @click="handleUndo"
+      >
+        <text class="footer-icon">↩</text>
+        <text class="footer-label">撤销</text>
+      </view>
+      <view
+        class="footer-item"
+        :class="{ 'footer-item--disabled': !editorStore.canRedo }"
+        @click="handleRedo"
+      >
+        <text class="footer-icon">↪</text>
+        <text class="footer-label">重做</text>
+      </view>
       <view class="footer-item" @click="handleMusic">
         <text class="footer-icon">🎵</text>
         <text class="footer-label">音乐</text>
@@ -292,9 +331,181 @@ function onMaterialSelect(material: Material) {
   renderedImageStale.value = true
 }
 
-// 智能字段更新后标记过期
+// 智能字段更新后标记过期（输入时防抖记录历史）
+let smartEditTimer: any = null
 function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
+  renderedImageStale.value = true
+  if (smartEditTimer) clearTimeout(smartEditTimer)
+  smartEditTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    smartEditTimer = null
+  }, 800)
+}
+
+// ============ 元素拖拽 / 缩放（touch 事件） ============
+// 画布实际显示尺寸（用于将屏幕像素位移换算为画布坐标）
+const canvasDisplayRect = ref({ width: 0, height: 0 })
+
+function updateCanvasDisplayRect() {
+  const query = uni.createSelectorQuery()
+  query
+    .select('.rendered-image-container, .preview-card--canvas')
+    .boundingClientRect((rect: any) => {
+      if (rect && rect.width > 0) {
+        canvasDisplayRect.value = { width: rect.width, height: rect.height }
+      }
+    })
+    .exec()
+}
+
+interface DragState {
+  type: 'move' | 'scale'
+  elementIdx: number
+  startTouchX: number
+  startTouchY: number
+  startX: number
+  startY: number
+  startWidth: number
+  startHeight: number
+  moved: boolean
+}
+const dragState = ref<DragState | null>(null)
+const DRAG_THRESHOLD = 5 // 触发拖动的位移阈值（屏幕像素）
+
+// 点击/轻触元素：打开编辑器（仅当未发生拖动时）
+function onElementTap(idx: number) {
+  if (dragState.value && dragState.value.moved) return
+  onOpenEditor(idx)
+}
+
+// 元素触摸开始：记录起点
+function onElementTouchStart(idx: number, e: any) {
+  const el = editorStore.editableElements[idx]
+  if (!el || el.editable === false) return
+  if (el.x == null || el.y == null) return
+  editorStore.selectedElement = idx
+  updateCanvasDisplayRect()
+  const touch = e.touches ? e.touches[0] : e
+  dragState.value = {
+    type: 'move',
+    elementIdx: idx,
+    startTouchX: touch.clientX,
+    startTouchY: touch.clientY,
+    startX: el.x,
+    startY: el.y,
+    startWidth: el.width || 0,
+    startHeight: el.height || 0,
+    moved: false,
+  }
+}
+
+// 元素触摸移动：更新 x/y
+function onElementTouchMove(e: any) {
+  const ds = dragState.value
+  if (!ds || ds.type !== 'move') return
+  const touch = e.touches ? e.touches[0] : e
+  const dx = touch.clientX - ds.startTouchX
+  const dy = touch.clientY - ds.startTouchY
+  if (!ds.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
+  // 注意：不在拖动过程中切换渲染模式（renderedImageStale），
+  // 否则会卸载当前触摸目标、中断 touchmove 事件流。
+  // 渲染图模式下选中元素会显示描边，可直观看到位置变化。
+  ds.moved = true
+  // 屏幕像素 -> 画布坐标
+  const rect = canvasDisplayRect.value
+  const scaleX = rect.width ? editorStore.canvasSize.width / rect.width : 1
+  const scaleY = rect.height ? editorStore.canvasSize.height / rect.height : 1
+  const el = editorStore.editableElements[ds.elementIdx]
+  if (!el) return
+  const cw = editorStore.canvasSize.width
+  const ch = editorStore.canvasSize.height
+  const elW = el.width || 0
+  const elH = el.height || 0
+  let newX = ds.startX + dx * scaleX
+  let newY = ds.startY + dy * scaleY
+  // 限制在画布范围内
+  newX = Math.max(0, Math.min(cw - elW, newX))
+  newY = Math.max(0, Math.min(ch - elH, newY))
+  el.x = newX
+  el.y = newY
+}
+
+// 元素触摸结束
+function onElementTouchEnd() {
+  const ds = dragState.value
+  if (ds && ds.moved) {
+    editorStore.pushHistory()
+    // 拖动结束后标记渲染图过期，下次会重新生成
+    renderedImageStale.value = true
+  }
+  dragState.value = null
+}
+
+// 缩放手柄：触摸开始
+function onResizeHandleTouchStart(e: any) {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el) return
+  updateCanvasDisplayRect()
+  const touch = e.touches ? e.touches[0] : e
+  dragState.value = {
+    type: 'scale',
+    elementIdx: editorStore.selectedElement,
+    startTouchX: touch.clientX,
+    startTouchY: touch.clientY,
+    startX: el.x || 0,
+    startY: el.y || 0,
+    startWidth: el.width || 0,
+    startHeight: el.height || 0,
+    moved: false,
+  }
+}
+
+// 缩放手柄：触摸移动
+function onResizeHandleTouchMove(e: any) {
+  const ds = dragState.value
+  if (!ds || ds.type !== 'scale') return
+  const touch = e.touches ? e.touches[0] : e
+  const dx = touch.clientX - ds.startTouchX
+  const dy = touch.clientY - ds.startTouchY
+  const rect = canvasDisplayRect.value
+  const scale = rect.width ? editorStore.canvasSize.width / rect.width : 1
+  const deltaCanvas = Math.max(dx, dy) * scale
+  const el = editorStore.editableElements[ds.elementIdx]
+  if (!el) return
+  const aspect = ds.startHeight && ds.startWidth ? ds.startHeight / ds.startWidth : 1
+  const newWidth = Math.max(20, ds.startWidth + deltaCanvas)
+  const newHeight = Math.max(20, newWidth * aspect)
+  // 限制不超出画布
+  const cw = editorStore.canvasSize.width
+  const ch = editorStore.canvasSize.height
+  el.width = Math.min(newWidth, cw - (el.x || 0))
+  el.height = Math.min(newHeight, ch - (el.y || 0))
+  ds.moved = true
+}
+
+// 缩放手柄：触摸结束
+function onResizeHandleTouchEnd() {
+  const ds = dragState.value
+  if (ds && ds.type === 'scale' && ds.moved) {
+    editorStore.pushHistory()
+    renderedImageStale.value = true
+  }
+  dragState.value = null
+}
+
+// 撤销 / 重做
+function handleUndo() {
+  if (!editorStore.canUndo) return
+  editorStore.undo()
+  renderedImageStale.value = true
+}
+
+function handleRedo() {
+  if (!editorStore.canRedo) return
+  editorStore.redo()
+  renderedImageStale.value = true
 }
 
 const editProgress = ref(0)
@@ -465,11 +676,31 @@ function handleMusic() {
 
 function handleSettings() {
   uni.showActionSheet({
-    itemList: ['礼物功能', '礼金功能', '点赞功能', '相册功能'],
+    itemList: ['礼物功能', '礼金功能', '点赞功能', '相册功能', '更换模板'],
     success: (res: any) => {
       const keys = ['giftAlbum', 'moneyGift', 'like', 'album']
-      const key = keys[res.tapIndex]
-      if (key) toggleSetting(key)
+      if (res.tapIndex < keys.length) {
+        const key = keys[res.tapIndex]
+        if (key) toggleSetting(key)
+      } else if (res.tapIndex === 4) {
+        handleChangeTemplate()
+      }
+    },
+  })
+}
+
+// 更换模板：提示当前编辑可能丢失后跳转到模板列表
+function handleChangeTemplate() {
+  uni.showModal({
+    title: '更换模板',
+    content: '切换模板可能会丢失当前编辑内容，确定要继续吗？',
+    confirmText: '继续',
+    confirmColor: '#e84a6e',
+    success: (res) => {
+      if (res.confirm) {
+        track('editor_change_template', {})
+        uni.navigateTo({ url: '/pages/template/index?from=editor' })
+      }
     },
   })
 }
@@ -634,19 +865,55 @@ function handleLocation() {
   })
 }
 
-onMounted(() => {
+// 查找作品：优先从 store，回退到本地存储
+function findWork(workId: string): Work | undefined {
+  const fromStore = worksStore.works.find(w => w.id === workId) || worksStore.drafts.find(w => w.id === workId)
+  if (fromStore) return fromStore
+  try {
+    const saved = uni.getStorageSync('hunbei_works')
+    if (saved) {
+      const all = [...(saved.works || []), ...(saved.drafts || [])]
+      return all.find((w: Work) => w.id === workId)
+    }
+  } catch (e) { /* ignore */ }
+  return undefined
+}
+
+onMounted(async () => {
   editStartTime.value = Date.now()
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
 
-  const templateId = options.templateId || options.id
-  if (templateId) {
-    editorStore.loadTemplateById(templateId)
-    track('edit_start', { template_id: templateId })
+  const workId = options.workId
+  if (workId) {
+    // 编辑已有作品：用 work.id 加载，而非把 work.id 当作 templateId
+    const work = findWork(workId)
+    if (work) {
+      editorStore.setCurrentWorkId(work.id)
+      const templateId = work.templateType || options.templateId || options.id
+      if (templateId) {
+        await editorStore.loadTemplateById(templateId)
+      }
+      // 用已保存的作品数据恢复编辑状态
+      if (work.data) {
+        editorStore.restoreFromWorkData(work.data)
+      }
+      track('edit_start', { template_id: templateId, work_id: workId })
+    } else {
+      // 作品未找到，回退到模板恢复
+      editorStore.restoreTemplate()
+      track('edit_start', { template_id: editorStore.currentTemplateId })
+    }
   } else {
-    editorStore.restoreTemplate()
-    track('edit_start', { template_id: editorStore.currentTemplateId })
+    const templateId = options.templateId || options.id
+    if (templateId) {
+      await editorStore.loadTemplateById(templateId)
+      track('edit_start', { template_id: templateId })
+    } else {
+      editorStore.restoreTemplate()
+      track('edit_start', { template_id: editorStore.currentTemplateId })
+    }
   }
 
   nextTick(() => {
@@ -881,6 +1148,24 @@ watch(() => editorStore.editableElements, () => {
 .active-element {
   outline: 4rpx solid #e84a6e;
   outline-offset: -4rpx;
+}
+
+/* 缩放手柄（元素右下角） */
+.resize-handle {
+  position: absolute;
+  right: -14rpx;
+  bottom: -14rpx;
+  width: 28rpx;
+  height: 28rpx;
+  background: #fff;
+  border: 4rpx solid #e84a6e;
+  border-radius: 50%;
+  z-index: 30;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+}
+
+.footer-item--disabled {
+  opacity: 0.35;
 }
 
 /* Sidebar Area - 右侧浮动编辑面板 */

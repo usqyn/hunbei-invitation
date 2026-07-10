@@ -54,6 +54,9 @@
               'edit-area--text': area.type === 'text',
             }"
             :style="getAreaStyle(area)"
+            @touchstart="onAreaTouchStart(area, $event)"
+            @touchmove.stop.prevent="onAreaTouchMove"
+            @touchend="onAreaTouchEnd"
             @click.stop="onAreaClick(area)"
           >
             <image
@@ -77,7 +80,12 @@
               <view class="area-handle area-handle--tl"></view>
               <view class="area-handle area-handle--tr"></view>
               <view class="area-handle area-handle--bl"></view>
-              <view class="area-handle area-handle--br"></view>
+              <view
+                class="area-handle area-handle--br area-handle--resize"
+                @touchstart.stop="onResizeHandleTouchStart"
+                @touchmove.stop.prevent="onResizeHandleTouchMove"
+                @touchend.stop="onResizeHandleTouchEnd"
+              ></view>
             </template>
           </view>
         </view>
@@ -257,8 +265,14 @@
 
     <!-- ===== 底部操作栏 ===== -->
     <view class="action-bar">
+      <view class="action-bar-item action-bar-item--outline" @click="onAddText">
+        <text>📝 文字</text>
+      </view>
       <view class="action-bar-item action-bar-item--outline" @click="onOpenSticker">
         <text>🎨 素材</text>
+      </view>
+      <view class="action-bar-item action-bar-item--outline" @click="onOpenBackground">
+        <text>🖼 背景</text>
       </view>
       <view class="action-bar-item action-bar-item--outline" @click="posterStore.showLayerPanel = true">
         <text>📑 图层</text>
@@ -267,7 +281,7 @@
         <text>💾 保存</text>
       </view>
       <view class="action-bar-item action-bar-item--primary" @click="onExport">
-        <text>📤 导出海报</text>
+        <text>📤 导出</text>
       </view>
     </view>
 
@@ -392,6 +406,37 @@
       </view>
     </view>
 
+    <!-- ===== 背景选择面板 ===== -->
+    <view v-if="showBackgroundPanel" class="modal-overlay modal-overlay--bottom" @click="showBackgroundPanel = false">
+      <view class="bottom-sheet" @click.stop>
+        <view class="bottom-sheet-header">
+          <text>选择背景</text>
+          <view class="bottom-sheet-close" @click="showBackgroundPanel = false">✕</view>
+        </view>
+        <scroll-view class="bottom-sheet-body" scroll-y enhanced :show-scrollbar="false">
+          <view class="bg-section-title">预设背景</view>
+          <view class="bg-grid">
+            <view
+              v-for="(bg, idx) in presetBackgrounds"
+              :key="idx"
+              class="bg-item"
+              :class="{ 'bg-item--active': currentBgUrl === bg }"
+              @click="onSelectPresetBg(bg)"
+            >
+              <image class="bg-item-img" :src="resolveUrl(bg)" mode="aspectFill" />
+            </view>
+          </view>
+
+          <view class="bg-section-title">自定义上传</view>
+          <view class="bg-upload" @click="onUploadBackground">
+            <text class="bg-upload-icon">＋</text>
+            <text class="bg-upload-text">从相册选择背景</text>
+          </view>
+          <view class="bg-tip">提示：更换背景后可继续编辑文字与图片</view>
+        </scroll-view>
+      </view>
+    </view>
+
     <!-- ===== Toast ===== -->
     <view v-if="toastVisible" class="toast" :class="{ 'toast--show': toastVisible }">
       <text>{{ toastMsg }}</text>
@@ -499,6 +544,128 @@ function getTextStyle(area: PosterEditableAreaRuntime): Record<string, string> {
 
 function onAreaClick(area: PosterEditableAreaRuntime) {
   posterStore.selectArea(area.id)
+}
+
+// ---- 添加文字 ----
+function onAddText() {
+  posterStore.addText()
+  showToast('已添加文字')
+}
+
+// ============ 元素拖拽 / 缩放（touch 事件） ============
+const canvasWrapperRect = ref({ width: 0, height: 0 })
+
+interface PosterDragState {
+  type: 'move' | 'scale'
+  areaId: string
+  startTouchX: number
+  startTouchY: number
+  startX: number
+  startY: number
+  startWidth: number
+  startHeight: number
+  moved: boolean
+}
+const posterDragState = ref<PosterDragState | null>(null)
+const POSTER_DRAG_THRESHOLD = 5
+
+function updateCanvasWrapperRect() {
+  const query = uni.createSelectorQuery()
+  query
+    .select('.canvas-wrapper')
+    .boundingClientRect((rect: any) => {
+      if (rect && rect.width > 0) {
+        canvasWrapperRect.value = { width: rect.width, height: rect.height }
+      }
+    })
+    .exec()
+}
+
+function onAreaTouchStart(area: PosterEditableAreaRuntime, e: any) {
+  posterStore.selectArea(area.id)
+  updateCanvasWrapperRect()
+  const touch = e.touches ? e.touches[0] : e
+  posterDragState.value = {
+    type: 'move',
+    areaId: area.id,
+    startTouchX: touch.clientX,
+    startTouchY: touch.clientY,
+    startX: area._x ?? area.x,
+    startY: area._y ?? area.y,
+    startWidth: area._w ?? area.width,
+    startHeight: area._h ?? area.height,
+    moved: false,
+  }
+}
+
+function onAreaTouchMove(e: any) {
+  const ds = posterDragState.value
+  if (!ds || ds.type !== 'move') return
+  const touch = e.touches ? e.touches[0] : e
+  const dx = touch.clientX - ds.startTouchX
+  const dy = touch.clientY - ds.startTouchY
+  if (!ds.moved && Math.abs(dx) + Math.abs(dy) < POSTER_DRAG_THRESHOLD) return
+  ds.moved = true
+  const rect = canvasWrapperRect.value
+  const scaleX = rect.width ? posterStore.canvasSize.width / rect.width : 1
+  const scaleY = rect.height ? posterStore.canvasSize.height / rect.height : 1
+  const newX = ds.startX + dx * scaleX
+  const newY = ds.startY + dy * scaleY
+  posterStore.updateStyle(ds.areaId, 'x', Math.round(newX))
+  posterStore.updateStyle(ds.areaId, 'y', Math.round(newY))
+}
+
+function onAreaTouchEnd() {
+  const ds = posterDragState.value
+  if (ds && ds.moved) {
+    posterStore.pushHistory()
+  }
+  posterDragState.value = null
+}
+
+// 缩放手柄（右下角）
+function onResizeHandleTouchStart(e: any) {
+  if (!posterStore.selectedAreaId) return
+  const area = posterStore.editableAreas.find(a => a.id === posterStore.selectedAreaId)
+  if (!area) return
+  updateCanvasWrapperRect()
+  const touch = e.touches ? e.touches[0] : e
+  posterDragState.value = {
+    type: 'scale',
+    areaId: area.id,
+    startTouchX: touch.clientX,
+    startTouchY: touch.clientY,
+    startX: area._x ?? area.x,
+    startY: area._y ?? area.y,
+    startWidth: area._w ?? area.width,
+    startHeight: area._h ?? area.height,
+    moved: false,
+  }
+}
+
+function onResizeHandleTouchMove(e: any) {
+  const ds = posterDragState.value
+  if (!ds || ds.type !== 'scale') return
+  const touch = e.touches ? e.touches[0] : e
+  const dx = touch.clientX - ds.startTouchX
+  const dy = touch.clientY - ds.startTouchY
+  const rect = canvasWrapperRect.value
+  const scale = rect.width ? posterStore.canvasSize.width / rect.width : 1
+  const deltaCanvas = Math.max(dx, dy) * scale
+  const aspect = ds.startHeight && ds.startWidth ? ds.startHeight / ds.startWidth : 1
+  const newWidth = Math.max(20, ds.startWidth + deltaCanvas)
+  const newHeight = Math.max(20, newWidth * aspect)
+  posterStore.updateStyle(ds.areaId, 'w', Math.round(newWidth))
+  posterStore.updateStyle(ds.areaId, 'h', Math.round(newHeight))
+  ds.moved = true
+}
+
+function onResizeHandleTouchEnd() {
+  const ds = posterDragState.value
+  if (ds && ds.type === 'scale' && ds.moved) {
+    posterStore.pushHistory()
+  }
+  posterDragState.value = null
 }
 
 // ---- text editing ----
@@ -648,7 +815,22 @@ async function onPreview() {
 
 // ---- export ----
 async function onExport() {
-  uni.showLoading({ title: '导出中...' })
+  // 质量选择：普通 / 高清
+  let scale = 1
+  try {
+    const tapRes: any = await new Promise((resolve, reject) => {
+      uni.showActionSheet({
+        itemList: ['普通画质', '高清画质（2倍分辨率）'],
+        success: resolve,
+        fail: reject,
+      })
+    })
+    scale = tapRes.tapIndex === 1 ? 2 : 1
+  } catch {
+    // 用户取消选择
+    return
+  }
+  uni.showLoading({ title: scale > 1 ? '高清导出中...' : '导出中...' })
   try {
     const canvas = await getCanvasNode()
     if (!canvas) {
@@ -656,7 +838,7 @@ async function onExport() {
       showToast('导出失败')
       return
     }
-    const tempPath = await posterStore.drawPoster(canvas)
+    const tempPath = await posterStore.drawPoster(canvas, scale)
     if (tempPath) {
       // #ifdef MP-WEIXIN
       uni.saveImageToPhotosAlbum({
@@ -780,6 +962,69 @@ function onDeleteElement(idx: number) {
 
 function goToTemplates() {
   uni.navigateTo({ url: '/pages/poster/index/index' })
+}
+
+// ---- background panel ----
+const showBackgroundPanel = ref(false)
+
+const presetBackgrounds = [
+  '/uploads/poster/templates/wedding_1.jpg',
+  '/uploads/poster/templates/wedding_2.jpg',
+  '/uploads/poster/templates/wedding_3.jpg',
+  '/uploads/poster/templates/wedding_4.jpg',
+  '/uploads/poster/templates/wedding_5.jpg',
+  '/uploads/poster/templates/baby_1.jpg',
+  '/uploads/poster/templates/baby_2.jpg',
+  '/uploads/poster/templates/birthday_1.jpg',
+  '/uploads/poster/templates/birthday_2.jpg',
+  '/uploads/poster/templates/creative_1.jpg',
+  '/uploads/poster/templates/creative_2.jpg',
+  '/uploads/poster/templates/default.jpg',
+]
+
+const currentBgUrl = computed(() => posterStore.currentTemplate?.background_url || '')
+
+function onOpenBackground() {
+  showBackgroundPanel.value = true
+}
+
+function onSelectPresetBg(url: string) {
+  posterStore.setBackground(url)
+  showBackgroundPanel.value = false
+  showToast('背景已更换')
+}
+
+function onUploadBackground() {
+  // #ifdef MP-WEIXIN
+  uni.chooseMedia({
+    count: 1,
+    mediaType: ['image'],
+    sourceType: ['album', 'camera'],
+    success: (res: any) => {
+      if (res.tempFiles && res.tempFiles.length > 0) {
+        posterStore.setBackground(res.tempFiles[0].tempFilePath)
+        showBackgroundPanel.value = false
+        showToast('背景已更换')
+      }
+    },
+    fail: () => showToast('选择图片失败'),
+  })
+  // #endif
+  // #ifndef MP-WEIXIN
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res: any) => {
+      if (res.tempFilePaths && res.tempFilePaths.length > 0) {
+        posterStore.setBackground(res.tempFilePaths[0])
+        showBackgroundPanel.value = false
+        showToast('背景已更换')
+      }
+    },
+    fail: () => showToast('选择图片失败'),
+  })
+  // #endif
 }
 
 // ---- template picker ----
@@ -1120,6 +1365,13 @@ onUnmounted(() => {
 .area-handle--tr { top: -8rpx; right: -8rpx; }
 .area-handle--bl { bottom: -8rpx; left: -8rpx; }
 .area-handle--br { bottom: -8rpx; right: -8rpx; }
+.area-handle--resize {
+  width: 28rpx;
+  height: 28rpx;
+  background: #e84a6e;
+  border-color: #fff;
+  z-index: 30;
+}
 
 @keyframes handlePulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(232,74,110,0.4); }
@@ -1393,9 +1645,9 @@ onUnmounted(() => {
 .action-bar {
   flex-shrink: 0;
   display: flex;
-  gap: 14rpx;
-  padding: 20rpx 28rpx;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  gap: 10rpx;
+  padding: 16rpx 20rpx;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
   background: rgba(255,255,255,0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -1403,9 +1655,9 @@ onUnmounted(() => {
 }
 
 .action-bar-item {
-  padding: 22rpx 0;
+  padding: 18rpx 0;
   border-radius: 16rpx;
-  font-size: 26rpx;
+  font-size: 24rpx;
   font-weight: 500;
   text-align: center;
   transition: all 0.2s;
@@ -1413,7 +1665,7 @@ onUnmounted(() => {
 .action-bar-item:active { transform: scale(0.96); }
 
 .action-bar-item--outline {
-  flex: 0.8;
+  flex: 1;
   background: #fff;
   color: #555;
   border: 2rpx solid #e8e8e8;
@@ -1421,7 +1673,7 @@ onUnmounted(() => {
 .action-bar-item--outline:active { background: #f5f5f5; }
 
 .action-bar-item--primary {
-  flex: 1.4;
+  flex: 1.3;
   background: linear-gradient(135deg, #e84a6e, #ff6b8a);
   color: #fff;
   box-shadow: 0 6rpx 18rpx rgba(232,74,110,0.35);
@@ -1666,6 +1918,66 @@ onUnmounted(() => {
 }
 .sticker-empty-icon { font-size: 64rpx; }
 .sticker-empty-text { font-size: 28rpx; color: #bbb; }
+
+/* ---- 背景选择 ---- */
+.bg-section-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #333;
+  margin: 12rpx 4rpx 16rpx;
+}
+.bg-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+.bg-item {
+  width: calc(33.333% - 11rpx);
+  aspect-ratio: 3 / 4;
+  border-radius: 14rpx;
+  overflow: hidden;
+  border: 3rpx solid transparent;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.08);
+  transition: all 0.2s;
+}
+.bg-item:active { transform: scale(0.96); }
+.bg-item--active {
+  border-color: #e84a6e;
+  box-shadow: 0 4rpx 14rpx rgba(232,74,110,0.3);
+}
+.bg-item-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.bg-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  padding: 40rpx 0;
+  border: 2rpx dashed #ccc;
+  border-radius: 16rpx;
+  background: #fafafa;
+}
+.bg-upload:active { background: #f0f0f0; }
+.bg-upload-icon {
+  font-size: 56rpx;
+  color: #bbb;
+  line-height: 1;
+}
+.bg-upload-text {
+  font-size: 26rpx;
+  color: #888;
+}
+.bg-tip {
+  margin-top: 20rpx;
+  font-size: 22rpx;
+  color: #bbb;
+  text-align: center;
+}
 
 /* ---- 图层 ---- */
 .layer-empty {

@@ -9,6 +9,24 @@
       <view class="header-right"></view>
     </view>
 
+    <!-- 搜索栏 -->
+    <view class="search-bar">
+      <view class="search-input-wrap">
+        <text class="search-icon">🔍</text>
+        <input
+          class="search-input"
+          type="text"
+          v-model="searchKeyword"
+          placeholder="搜索模板名称、分类或标签"
+          placeholder-style="color:#bbbbbb"
+          confirm-type="search"
+        />
+        <view v-if="searchKeyword" class="search-clear" @click="searchKeyword = ''">
+          <text class="clear-icon">×</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 分类标签栏（横向滚动）-->
     <scroll-view class="category-scroll" scroll-x enable-flex>
       <view class="category-list">
@@ -378,6 +396,50 @@ function onBack() {
 }
 
 .header-right { width: 80rpx; }
+
+/* 搜索栏 */
+.search-bar {
+  padding: 16rpx 30rpx;
+  background: #ffffff;
+  border-bottom: 2rpx solid #f0f0f0;
+}
+
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  background: #f5f5f5;
+  border-radius: 40rpx;
+  padding: 12rpx 24rpx;
+}
+
+.search-icon {
+  font-size: 28rpx;
+  color: #999;
+  margin-right: 12rpx;
+}
+
+.search-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+  height: 44rpx;
+  line-height: 44rpx;
+}
+
+.search-clear {
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8rpx;
+}
+
+.clear-icon {
+  font-size: 36rpx;
+  color: #bbb;
+  line-height: 1;
+}
 
 /* 分类标签栏 */
 .category-scroll {

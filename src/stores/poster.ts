@@ -245,19 +245,25 @@ export const usePosterStore = defineStore('poster', () => {
     area._fontFamily = 'sans-serif'
   }
 
-  async function drawPoster(canvas: any): Promise<string> {
+  async function drawPoster(canvas: any, scale: number = 1): Promise<string> {
     if (!currentTemplate.value) return ''
     const tmpl = currentTemplate.value
-    const cw = canvasSize.value.width
-    const ch = canvasSize.value.height
+    // 逻辑画布尺寸（用于绘制坐标）
+    const W = canvasSize.value.width
+    const H = canvasSize.value.height
+    // 实际像素尺寸（高清导出时按比例放大）
+    const cw = Math.round(W * scale)
+    const ch = Math.round(H * scale)
 
     const ctx = canvas.getContext('2d')
     canvas.width = cw
     canvas.height = ch
+    // 放大绘制上下文，后续坐标沿用逻辑尺寸 W/H
+    if (scale !== 1) ctx.scale(scale, scale)
 
     // background
     const bgUrl = resolveUrl(tmpl.background_url)
-    await drawImageToCanvas(canvas, ctx, bgUrl, 0, 0, cw, ch)
+    await drawImageToCanvas(canvas, ctx, bgUrl, 0, 0, W, H)
 
     // editable areas
     for (const area of editableAreas.value) {
@@ -491,6 +497,37 @@ export const usePosterStore = defineStore('poster', () => {
     pushHistory()
   }
 
+  /** 添加一个新文字元素 */
+  function addText() {
+    const id = uniqueId('text_')
+    const cw = canvasSize.value.width
+    const ch = canvasSize.value.height
+    const newArea: PosterEditableAreaRuntime = {
+      id,
+      type: 'text',
+      label: '文字',
+      x: cw / 2 - 100,
+      y: ch / 2 - 24,
+      width: 200,
+      height: 48,
+      _x: cw / 2 - 100,
+      _y: ch / 2 - 24,
+      _w: 200,
+      _h: 48,
+      _text: '点击编辑文字',
+      _fontSize: 28,
+      _color: '#333333',
+      _align: 'center',
+      _bold: false,
+      _rotate: 0,
+      _scale: 1,
+      _fontFamily: 'sans-serif',
+    }
+    editableAreas.value.push(newArea)
+    selectedAreaId.value = id
+    pushHistory()
+  }
+
   async function switchTemplate(id: string) {
     showTemplatePicker.value = false
     await loadTemplate(id)
@@ -545,6 +582,19 @@ export const usePosterStore = defineStore('poster', () => {
     currentWorkId.value = id
   }
 
+  /** 自定义背景图，记录用户选择的背景 URL */
+  const customBackground = ref('')
+
+  /** 更换海报背景图（预设或自定义上传的 URL） */
+  function setBackground(url: string) {
+    if (!url) return
+    if (currentTemplate.value) {
+      currentTemplate.value.background_url = url
+    }
+    customBackground.value = url
+    pushHistory()
+  }
+
   return {
     // state
     currentTemplate,
@@ -584,10 +634,13 @@ export const usePosterStore = defineStore('poster', () => {
     saveWork,
     loadStickers,
     insertSticker,
+    addText,
     switchTemplate,
     loadRelatedTemplates,
     moveLayer,
     deleteElement,
     setWorkId,
+    customBackground,
+    setBackground,
   }
 })

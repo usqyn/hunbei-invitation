@@ -27,8 +27,11 @@
           <input type="color" class="form-input color" :value="bgColor2" @input="$emit('update:bgColor2', ($event.target as HTMLInputElement).value)" @change="$emit('bgColorChange')" />
         </div>
         <div class="form-row" v-if="bgType === 'linear-gradient'">
-          <label>角度 {{ bgAngle }}°</label>
-          <input type="range" class="form-input" min="0" max="180" :value="bgAngle" @input="$emit('update:bgAngle', Number(($event.target as HTMLInputElement).value))" @change="$emit('bgColorChange')" />
+          <label>角度</label>
+          <div class="range-row">
+            <input type="range" class="form-input" min="0" max="180" :value="bgAngle" @input="$emit('update:bgAngle', Number(($event.target as HTMLInputElement).value))" @change="$emit('bgColorChange')" />
+            <input type="number" class="range-number" min="0" max="180" :value="bgAngle" @change="$emit('update:bgAngle', Number(($event.target as HTMLInputElement).value)); $emit('bgColorChange')" />
+          </div>
         </div>
 
         <div class="form-row" v-if="bgType === 'image'">
@@ -49,8 +52,11 @@
         </div>
 
         <div class="form-row" v-if="bgType === 'image'">
-          <label>透明度 {{ bgOpacity }}%</label>
-          <input type="range" class="form-input" min="0" max="100" :value="bgOpacity" @input="$emit('update:bgOpacity', Number(($event.target as HTMLInputElement).value))" @change="$emit('bgImageChange')" />
+          <label>透明度</label>
+          <div class="range-row">
+            <input type="range" class="form-input" min="0" max="100" :value="bgOpacity" @input="$emit('update:bgOpacity', Number(($event.target as HTMLInputElement).value))" @change="$emit('bgImageChange')" />
+            <input type="number" class="range-number" min="0" max="100" :value="bgOpacity" @change="$emit('update:bgOpacity', Number(($event.target as HTMLInputElement).value)); $emit('bgImageChange')" />
+          </div>
         </div>
 
         <div class="section-divider"></div>
@@ -167,24 +173,42 @@
           </div>
         </div>
         <div class="form-row">
-          <label>行高 {{ (selectedElement.lineHeight ?? 1.5).toFixed(2) }}</label>
-          <input
-            type="range"
-            class="form-input"
-            min="1" max="3" step="0.1"
-            :value="selectedElement.lineHeight"
-            @change="$emit('updateSelected', { lineHeight: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>行高</label>
+          <div class="range-row">
+            <input
+              type="range"
+              class="form-input"
+              min="1" max="3" step="0.1"
+              :value="selectedElement.lineHeight"
+              @change="$emit('updateSelected', { lineHeight: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number"
+              class="range-number"
+              min="1" max="3" step="0.1"
+              :value="selectedElement.lineHeight ?? 1.5"
+              @change="$emit('updateSelected', { lineHeight: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
         <div class="form-row">
-          <label>字间距 {{ selectedElement.letterSpacing }}px</label>
-          <input
-            type="range"
-            class="form-input"
-            min="-5" max="30" step="1"
-            :value="selectedElement.letterSpacing"
-            @change="$emit('updateSelected', { letterSpacing: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>字间距</label>
+          <div class="range-row">
+            <input
+              type="range"
+              class="form-input"
+              min="-5" max="30" step="1"
+              :value="selectedElement.letterSpacing"
+              @change="$emit('updateSelected', { letterSpacing: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number"
+              class="range-number"
+              min="-5" max="30" step="1"
+              :value="selectedElement.letterSpacing ?? 0"
+              @change="$emit('updateSelected', { letterSpacing: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
 
         <div class="section-title">颜色与描边</div>
@@ -199,14 +223,23 @@
             />
           </div>
           <div>
-            <label>透明度 {{ Math.round((selectedElement.opacity) * 100) }}%</label>
-            <input
-              type="range"
-              class="form-input"
-              min="0" max="100"
-              :value="Math.round((selectedElement.opacity) * 100)"
-              @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
-            />
+            <label>透明度</label>
+            <div class="range-row">
+              <input
+                type="range"
+                class="form-input"
+                min="0" max="100"
+                :value="Math.round((selectedElement.opacity) * 100)"
+                @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
+              />
+              <input
+                type="number"
+                class="range-number"
+                min="0" max="100"
+                :value="Math.round((selectedElement.opacity ?? 1) * 100)"
+                @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
+              />
+            </div>
           </div>
         </div>
         <div class="form-row two-col">
@@ -220,14 +253,23 @@
             />
           </div>
           <div>
-            <label>描边宽度 {{ selectedElement.strokeWidth }}px</label>
-            <input
-              type="range"
-              class="form-input"
-              min="0" max="10" step="1"
-              :value="selectedElement.strokeWidth"
-              @change="$emit('updateSelected', { strokeWidth: Number(($event.target as HTMLInputElement).value) })"
-            />
+            <label>描边宽度</label>
+            <div class="range-row">
+              <input
+                type="range"
+                class="form-input"
+                min="0" max="10" step="1"
+                :value="selectedElement.strokeWidth"
+                @change="$emit('updateSelected', { strokeWidth: Number(($event.target as HTMLInputElement).value) })"
+              />
+              <input
+                type="number"
+                class="range-number"
+                min="0" max="10" step="1"
+                :value="selectedElement.strokeWidth ?? 0"
+                @change="$emit('updateSelected', { strokeWidth: Number(($event.target as HTMLInputElement).value) })"
+              />
+            </div>
           </div>
         </div>
 
@@ -243,27 +285,56 @@
             />
           </div>
           <div>
-            <label>模糊 {{ selectedElement.shadowBlur }}px</label>
-            <input
-              type="range"
-              class="form-input"
-              min="0" max="30" step="1"
-              :value="selectedElement.shadowBlur"
-              @change="$emit('updateSelected', { shadowBlur: Number(($event.target as HTMLInputElement).value) })"
-            />
+            <label>模糊</label>
+            <div class="range-row">
+              <input
+                type="range"
+                class="form-input"
+                min="0" max="30" step="1"
+                :value="selectedElement.shadowBlur"
+                @change="$emit('updateSelected', { shadowBlur: Number(($event.target as HTMLInputElement).value) })"
+              />
+              <input
+                type="number"
+                class="range-number"
+                min="0" max="30" step="1"
+                :value="selectedElement.shadowBlur ?? 0"
+                @change="$emit('updateSelected', { shadowBlur: Number(($event.target as HTMLInputElement).value) })"
+              />
+            </div>
           </div>
         </div>
 
         <div class="section-title">旋转</div>
         <div class="form-row">
-          <label>角度 {{ Math.round(selectedElement.rotation) }}°</label>
-          <input
-            type="range"
-            class="form-input"
-            min="-180" max="180"
-            :value="Math.round(selectedElement.rotation)"
-            @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>角度</label>
+          <div class="range-row">
+            <input
+              type="range"
+              class="form-input"
+              min="-180" max="180"
+              :value="Math.round(selectedElement.rotation)"
+              @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number"
+              class="range-number"
+              min="-180" max="180"
+              :value="Math.round(selectedElement.rotation ?? 0)"
+              @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
+        </div>
+        <div class="section-title">画布对齐</div>
+        <div class="btn-group">
+          <button class="btn-seg" @click="$emit('alignLeft', selectedElement.id)" title="左对齐">←</button>
+          <button class="btn-seg" @click="$emit('alignCenter', selectedElement.id)" title="水平居中">⇄</button>
+          <button class="btn-seg" @click="$emit('alignRight', selectedElement.id)" title="右对齐">→</button>
+        </div>
+        <div class="btn-group">
+          <button class="btn-seg" @click="$emit('alignTop', selectedElement.id)" title="顶部对齐">↑</button>
+          <button class="btn-seg" @click="$emit('alignMiddle', selectedElement.id)" title="垂直居中">⇅</button>
+          <button class="btn-seg" @click="$emit('alignBottom', selectedElement.id)" title="底部对齐">↓</button>
         </div>
         <div class="section-title">小程序编辑权限</div>
         <div class="form-row">
@@ -314,24 +385,42 @@
         </div>
         <div class="form-row two-col">
           <div>
-            <label>透明度 {{ Math.round((selectedElement.opacity) * 100) }}%</label>
-            <input
-              type="range"
-              class="form-input"
-              min="0" max="100"
-              :value="Math.round((selectedElement.opacity) * 100)"
-              @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
-            />
+            <label>透明度</label>
+            <div class="range-row">
+              <input
+                type="range"
+                class="form-input"
+                min="0" max="100"
+                :value="Math.round((selectedElement.opacity) * 100)"
+                @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
+              />
+              <input
+                type="number"
+                class="range-number"
+                min="0" max="100"
+                :value="Math.round((selectedElement.opacity ?? 1) * 100)"
+                @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
+              />
+            </div>
           </div>
           <div>
-            <label>旋转 {{ Math.round(selectedElement.rotation) }}°</label>
-            <input
-              type="range"
-              class="form-input"
-              min="-180" max="180"
-              :value="Math.round(selectedElement.rotation)"
-              @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
-            />
+            <label>旋转</label>
+            <div class="range-row">
+              <input
+                type="range"
+                class="form-input"
+                min="-180" max="180"
+                :value="Math.round(selectedElement.rotation)"
+                @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
+              />
+              <input
+                type="number"
+                class="range-number"
+                min="-180" max="180"
+                :value="Math.round(selectedElement.rotation ?? 0)"
+                @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
+              />
+            </div>
           </div>
         </div>
         <div class="section-title">填充模式</div>
@@ -373,12 +462,19 @@
         </div>
         <div class="section-title">圆角</div>
         <div class="form-row">
-          <label>圆角 {{ selectedElement.borderRadius || 0 }}px</label>
-          <input
-            type="range" class="form-input" min="0" max="100"
-            :value="selectedElement.borderRadius || 0"
-            @change="$emit('updateSelected', { borderRadius: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>圆角</label>
+          <div class="range-row">
+            <input
+              type="range" class="form-input" min="0" max="100"
+              :value="selectedElement.borderRadius || 0"
+              @change="$emit('updateSelected', { borderRadius: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number" class="range-number" min="0" max="100"
+              :value="selectedElement.borderRadius || 0"
+              @change="$emit('updateSelected', { borderRadius: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
         <div class="section-title">边框</div>
         <div class="form-row two-col">
@@ -409,44 +505,79 @@
           <button class="filter-preset-btn" @click="$emit('applyFilterPreset', 'soft')">柔光</button>
         </div>
         <div class="form-row">
-          <label>亮度 {{ selectedElement.brightness ?? 100 }}%</label>
-          <input
-            type="range" class="form-input" min="0" max="200"
-            :value="selectedElement.brightness ?? 100"
-            @change="$emit('updateSelected', { brightness: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>亮度</label>
+          <div class="range-row">
+            <input
+              type="range" class="form-input" min="0" max="200"
+              :value="selectedElement.brightness ?? 100"
+              @change="$emit('updateSelected', { brightness: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number" class="range-number" min="0" max="200"
+              :value="selectedElement.brightness ?? 100"
+              @change="$emit('updateSelected', { brightness: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
         <div class="form-row">
-          <label>对比度 {{ selectedElement.contrast ?? 0 }}</label>
-          <input
-            type="range" class="form-input" min="-100" max="100"
-            :value="selectedElement.contrast ?? 0"
-            @change="$emit('updateSelected', { contrast: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>对比度</label>
+          <div class="range-row">
+            <input
+              type="range" class="form-input" min="-100" max="100"
+              :value="selectedElement.contrast ?? 0"
+              @change="$emit('updateSelected', { contrast: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number" class="range-number" min="-100" max="100"
+              :value="selectedElement.contrast ?? 0"
+              @change="$emit('updateSelected', { contrast: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
         <div class="form-row">
-          <label>饱和度 {{ selectedElement.saturate ?? 100 }}%</label>
-          <input
-            type="range" class="form-input" min="0" max="200"
-            :value="selectedElement.saturate ?? 100"
-            @change="$emit('updateSelected', { saturate: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>饱和度</label>
+          <div class="range-row">
+            <input
+              type="range" class="form-input" min="0" max="200"
+              :value="selectedElement.saturate ?? 100"
+              @change="$emit('updateSelected', { saturate: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number" class="range-number" min="0" max="200"
+              :value="selectedElement.saturate ?? 100"
+              @change="$emit('updateSelected', { saturate: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
         <div class="form-row">
-          <label>模糊 {{ selectedElement.blur ?? 0 }}px</label>
-          <input
-            type="range" class="form-input" min="0" max="20"
-            :value="selectedElement.blur ?? 0"
-            @change="$emit('updateSelected', { blur: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>模糊</label>
+          <div class="range-row">
+            <input
+              type="range" class="form-input" min="0" max="20"
+              :value="selectedElement.blur ?? 0"
+              @change="$emit('updateSelected', { blur: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number" class="range-number" min="0" max="20"
+              :value="selectedElement.blur ?? 0"
+              @change="$emit('updateSelected', { blur: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
         <div class="form-row">
-          <label>灰度 {{ selectedElement.grayscale ?? 0 }}%</label>
-          <input
-            type="range" class="form-input" min="0" max="100"
-            :value="selectedElement.grayscale ?? 0"
-            @change="$emit('updateSelected', { grayscale: Number(($event.target as HTMLInputElement).value) })"
-          />
+          <label>灰度</label>
+          <div class="range-row">
+            <input
+              type="range" class="form-input" min="0" max="100"
+              :value="selectedElement.grayscale ?? 0"
+              @change="$emit('updateSelected', { grayscale: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <input
+              type="number" class="range-number" min="0" max="100"
+              :value="selectedElement.grayscale ?? 0"
+              @change="$emit('updateSelected', { grayscale: Number(($event.target as HTMLInputElement).value) })"
+            />
+          </div>
         </div>
         <div class="section-title">对齐</div>
         <div class="btn-group">
@@ -673,6 +804,30 @@ label {
 }
 
 .form-input:focus { outline: none; border-color: #1976d2; }
+
+/* 滑块 + 数值输入框组合 */
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.range-row > input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+.range-number {
+  width: 56px;
+  flex-shrink: 0;
+  padding: 4px 6px;
+  border: 1px solid #e0e4ea;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.range-number:focus { border-color: #1976d2; }
 
 .form-input.color {
   height: 36px;

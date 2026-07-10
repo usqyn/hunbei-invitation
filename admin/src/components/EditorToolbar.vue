@@ -49,7 +49,10 @@
       <span class="toolbar-divider"></span>
       <button class="tb-btn danger" @click="$emit('deleteSelected')" title="删除选中 (Del)">🗑 删除</button>
       <span class="toolbar-divider"></span>
-      <button class="tb-btn" @click="$emit('save')" title="保存到服务器 (Ctrl+S)">💾 保存</button>
+      <span v-if="autoSaveLabel" class="auto-save-indicator" :title="autoSaveTitle">🕒 {{ autoSaveLabel }}</span>
+      <button class="tb-btn" :disabled="isSaving" @click="$emit('save')" :title="isSaving ? '保存中…' : '保存到服务器 (Ctrl+S)'">
+        {{ isSaving ? '💾 保存中…' : '💾 保存' }}
+      </button>
       <button class="tb-btn publish-btn" @click="$emit('publish')" title="发布模板">🚀 发布</button>
       <button class="tb-btn" @click="$emit('export')" title="导出 PNG">📥 导出</button>
     </div>
@@ -57,11 +60,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { CANVAS_PRESETS } from '../types/canvas'
 import type { PageMode } from '../types/canvas'
 
-defineProps<{
+const props = defineProps<{
   currentView: 'editor' | 'poster'
   canUndo: boolean
   canRedo: boolean
@@ -69,6 +72,8 @@ defineProps<{
   pageMode: PageMode
   zoom: number
   showGrid: boolean
+  isSaving: boolean
+  lastAutoSaveTime: number
 }>()
 
 const emit = defineEmits<{
@@ -91,6 +96,22 @@ const emit = defineEmits<{
 }>()
 
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// 自动保存时间格式化：显示「已自动保存 HH:MM」
+const autoSaveLabel = computed(() => {
+  const ts = props.lastAutoSaveTime
+  if (!ts) return ''
+  const d = new Date(ts)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `已自动保存 ${hh}:${mm}`
+})
+
+const autoSaveTitle = computed(() => {
+  const ts = props.lastAutoSaveTime
+  if (!ts) return ''
+  return `上次自动保存：${new Date(ts).toLocaleString()}`
+})
 
 function onImageFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -171,6 +192,14 @@ function onImageFile(e: Event) {
 }
 
 .zoom-label { font-size: 12px; color: #bbb; }
+
+/* 自动保存指示 */
+.auto-save-indicator {
+  font-size: 11px;
+  color: #9ccc65;
+  white-space: nowrap;
+  padding: 0 4px;
+}
 
 /* 发布按钮 */
 .tb-btn.publish-btn {

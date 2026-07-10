@@ -20,7 +20,7 @@
         </view>
         <view class="menu-item">
           <text class="menu-name">版本号</text>
-          <text class="menu-value">v1.0.0</text>
+          <text class="menu-value">v{{ APP_VERSION }}</text>
         </view>
       </view>
 
@@ -28,15 +28,49 @@
         <view class="logout-btn" @click="handleLogout">退出登录</view>
       </view>
     </view>
+
+    <!-- 关于我们 弹窗 -->
+    <view v-if="showAbout" class="about-mask" @click="showAbout = false">
+      <view class="about-modal" @click.stop>
+        <view class="about-header">
+          <text class="about-title">关于我们</text>
+          <view class="about-close" @click="showAbout = false">
+            <text class="about-close-icon">×</text>
+          </view>
+        </view>
+        <scroll-view class="about-body" scroll-y>
+          <view class="about-logo">
+            <text class="about-logo-text">婚贝</text>
+          </view>
+          <text class="about-version">版本 v{{ APP_VERSION }}</text>
+          <view class="about-section">
+            <text class="about-section-title">团队介绍</text>
+            <text class="about-text">婚贝是一款专注于婚礼场景的创意工具小程序，致力于为新人提供精美的电子请柬、海报制作与一站式婚礼互动功能。我们希望通过简单的操作，让每对新人都能轻松制作出属于自己的婚礼记忆。</text>
+          </view>
+          <view class="about-section">
+            <text class="about-section-title">联系我们</text>
+            <text class="about-text">官方邮箱：support@hunbei.com</text>
+            <text class="about-text">官方微信：hunbei_official</text>
+          </view>
+          <view class="about-section">
+            <text class="about-section-title">特别说明</text>
+            <text class="about-text">本小程序所有模板素材版权归原作者所有，未经授权请勿用于商业用途。</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { useUserStore } from '@/stores/user'
+import { APP_VERSION } from '@/config'
 
 const goBack = useGoBack()
 const userStore = useUserStore()
+const showAbout = ref(false)
 
 const handleClearCache = () => {
   uni.showModal({
@@ -55,7 +89,7 @@ const handleClearCache = () => {
 }
 
 const handleAbout = () => {
-  uni.showToast({ title: '关于我们', icon: 'none' })
+  showAbout.value = true
 }
 
 const handleLogout = () => {
@@ -164,5 +198,108 @@ const handleLogout = () => {
   font-size: 28rpx;
   color: #ffffff;
   font-weight: 500;
+}
+
+/* 关于我们 弹窗 */
+.about-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 60rpx 48rpx;
+}
+
+.about-modal {
+  width: 100%;
+  max-height: 80vh;
+  background: #ffffff;
+  border-radius: 24rpx;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.about-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 32rpx;
+  border-bottom: 2rpx solid #f0f0f0;
+}
+
+.about-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333333;
+}
+
+.about-close {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-close-icon {
+  font-size: 44rpx;
+  color: #999999;
+  line-height: 1;
+}
+
+.about-body {
+  padding: 32rpx;
+  max-height: 65vh;
+}
+
+.about-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 28rpx;
+  margin: 0 auto 20rpx;
+  background: linear-gradient(135deg, #e84a6e, #ff6b8a);
+}
+
+.about-logo-text {
+  font-size: 44rpx;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.about-version {
+  display: block;
+  text-align: center;
+  font-size: 24rpx;
+  color: #999999;
+  margin-bottom: 32rpx;
+}
+
+.about-section {
+  margin-bottom: 28rpx;
+}
+
+.about-section-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333333;
+  margin-bottom: 12rpx;
+}
+
+.about-text {
+  display: block;
+  font-size: 26rpx;
+  color: #666666;
+  line-height: 1.7;
+  margin-bottom: 8rpx;
 }
 </style>

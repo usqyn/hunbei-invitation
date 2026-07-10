@@ -55,7 +55,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { fetchOrders } from '@/api'
+import { fetchOrders, payOrder as requestPayOrder } from '@/api'
 
 interface Order {
   orderNo: string
@@ -63,6 +63,8 @@ interface Order {
   totalAmount: string
   status: string
   createTime: string
+  shippingAddress?: { name: string; phone: string; detail: string }
+  remark?: string
 }
 
 const statusMap: Record<string, string> = {
@@ -111,32 +113,110 @@ const switchStatus = (status: string) => {
   activeStatus.value = status
 }
 
-const payOrder = (order: Order) => {
-  uni.showModal({
-    title: '提示',
-    content: `确认支付 ¥${order.totalAmount}？`,
-    success: (res) => {
-      if (res.confirm) {
-        const allOrders = uni.getStorageSync('mall_orders') || []
-        const idx = allOrders.findIndex((o: Order) => o.orderNo === order.orderNo)
-        if (idx === -1) {
-          uni.showToast({ title: '订单数据异常', icon: 'none' })
-          return
-        }
-        allOrders[idx].status = 'paid'
-        uni.setStorageSync('mall_orders', allOrders)
-        // 同步本地 reactive 状态
-        order.status = 'paid'
-        uni.redirectTo({ url: `/pages/mall/pay-result?orderNo=${order.orderNo}&amount=${order.totalAmount}&status=success` })
-      }
-    }
+const payOrder = async (order: Order) => {
+  const confirm = await new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '确认支付',
+      content: `确认支付 ¥${order.totalAmount}？`,
+      success: (res) => resolve(res.confirm),
+    })
   })
+  if (!confirm) return
+
+  uni.showLoading({ title: '支付处理中...' })
+  let paid = false
+  let cancelled = false
+
+  // 1. 尝试通过后端获取支付参数
+  let payParams: any = null
+  try {
+    payParams = await requestPayOrder(order.orderNo)
+  } catch (e) {
+    payParams = null
+  }
+
+  // 2. 仅当后端返回完整支付参数时，才调用真实微信支付
+  if (payParams && payParams.paySign) {
+    // #ifdef MP-WEIXIN
+    try {
+      await new Promise<void>((resolve, reject) => {
+        uni.requestPayment({
+          provider: 'wxpay',
+          timeStamp: payParams.timeStamp || String(Math.floor(Date.now() / 1000)),
+          nonceStr: payParams.nonceStr || payParams.prepayId,
+          package: payParams.package || `prepay_id=${payParams.prepayId}`,
+          signType: payParams.signType || 'MD5',
+          paySign: payParams.paySign,
+          success: () => { paid = true; resolve() },
+          fail: (err: any) => {
+            if (err && /cancel/i.test(err.errMsg || '')) cancelled = true
+            reject(err)
+          },
+        } as any)
+      })
+    } catch (e) {
+      // 真实支付失败或取消，下面进入模拟支付
+    }
+    // #endif
+    // #ifndef MP-WEIXIN
+    // 非微信小程序环境无法调起 wxpay，进入模拟支付
+    // #endif
+  }
+
+  uni.hideLoading()
+
+  if (cancelled) {
+    uni.showToast({ title: '支付已取消', icon: 'none' })
+    return
+  }
+
+  // 3. 真实支付未完成 -> 回退到模拟支付（明确提示）
+  if (!paid) {
+    const simConfirm = await new Promise<boolean>((resolve) => {
+      uni.showModal({
+        title: '模拟支付',
+        content: '当前为测试环境，无法发起真实微信支付。\n点击「模拟支付」将模拟完成支付，订单状态会被标记为已付款。',
+        confirmText: '模拟支付',
+        cancelText: '取消',
+        success: (res) => resolve(res.confirm),
+      })
+    })
+    if (!simConfirm) return
+    uni.showLoading({ title: '支付中...' })
+    await new Promise<void>((resolve) => setTimeout(resolve, 600))
+    uni.hideLoading()
+    paid = true
+  }
+
+  // 4. 更新订单状态为已付款
+  try {
+    const allOrders = uni.getStorageSync('mall_orders') || []
+    const idx = allOrders.findIndex((o: Order) => o.orderNo === order.orderNo)
+    if (idx !== -1) {
+      allOrders[idx].status = 'paid'
+      uni.setStorageSync('mall_orders', allOrders)
+    }
+  } catch (e) { /* ignore */ }
+  // 同步本地 reactive 状态
+  order.status = 'paid'
+  uni.showToast({ title: '支付成功', icon: 'success' })
+  setTimeout(() => {
+    uni.redirectTo({ url: `/pages/mall/pay-result?orderNo=${order.orderNo}&amount=${order.totalAmount}&status=success` })
+  }, 500)
 }
 
 const viewDetail = (order: Order) => {
+  let content = `订单号: ${order.orderNo}\n金额: ¥${order.totalAmount}\n状态: ${statusMap[order.status] || order.status}`
+  if (order.shippingAddress && order.shippingAddress.name) {
+    const a = order.shippingAddress
+    content += `\n收货人: ${a.name} ${a.phone}\n收货地址: ${a.detail}`
+  }
+  if (order.remark) {
+    content += `\n备注: ${order.remark}`
+  }
   uni.showModal({
     title: '订单详情',
-    content: `订单号: ${order.orderNo}\n金额: ¥${order.totalAmount}\n状态: ${statusMap[order.status] || order.status}`,
+    content,
     showCancel: false
   })
 }

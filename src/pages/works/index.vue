@@ -36,6 +36,9 @@
             <view class="action-btn primary" @click.stop="handleShare(work)">
               <text>分享</text>
             </view>
+            <view class="action-btn more" @click.stop="handleMoreMenu(work)">
+              <text>更多</text>
+            </view>
           </view>
         </view>
 
@@ -96,6 +99,9 @@
             <view class="action-btn primary" @click.stop="handleShare(fav)">
               <text>分享</text>
             </view>
+            <view class="action-btn danger" @click.stop="handleRemoveFavorite(fav)">
+              <text>取消收藏</text>
+            </view>
           </view>
         </view>
       </view>
@@ -146,7 +152,7 @@ const handleWorkClick = (work: any) => {
 }
 
 const handleDraftClick = (draft: any) => {
-  uni.navigateTo({ url: `/pages/editor/index?templateId=${draft.id}` })
+  uni.navigateTo({ url: `/pages/editor/index?workId=${draft.id}` })
 }
 
 const handlePreview = (work: any) => {
@@ -154,14 +160,11 @@ const handlePreview = (work: any) => {
 }
 
 const handleShare = (work: any) => {
-  uni.setClipboardData({
-    data: `https://www.hunbei.com/invitation/${work.id}`,
-    success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
-  })
+  uni.navigateTo({ url: `/pages/share/index?templateId=${work.id}` })
 }
 
 const handleEdit = (draft: any) => {
-  uni.navigateTo({ url: `/pages/editor/index?templateId=${draft.id}` })
+  uni.navigateTo({ url: `/pages/editor/index?workId=${draft.id}` })
 }
 
 const handleDelete = (draft: any) => {
@@ -172,6 +175,65 @@ const handleDelete = (draft: any) => {
       if (res.confirm) {
         worksStore.deleteWork(draft.id)
         uni.showToast({ title: '已删除', icon: 'success' })
+      }
+    },
+  })
+}
+
+// 全部 tab：更多操作（重命名 / 删除）
+const handleMoreMenu = (work: any) => {
+  uni.showActionSheet({
+    itemList: ['重命名', '删除'],
+    success: (res) => {
+      if (res.tapIndex === 0) {
+        handleRename(work)
+      } else if (res.tapIndex === 1) {
+        handleDeleteWork(work)
+      }
+    },
+  })
+}
+
+// 重命名作品
+const handleRename = (work: any) => {
+  uni.showModal({
+    title: '重命名',
+    editable: true,
+    placeholderText: '请输入新的作品名称',
+    content: work.title,
+    success: (res) => {
+      if (res.confirm && res.content) {
+        worksStore.renameWork(work.id, res.content)
+        uni.showToast({ title: '已重命名', icon: 'success' })
+      }
+    },
+  })
+}
+
+// 删除作品（全部 tab）
+const handleDeleteWork = (work: any) => {
+  uni.showModal({
+    title: '确认删除',
+    content: '确定要删除这个作品吗？删除后不可恢复。',
+    confirmColor: '#ef4444',
+    success: (res) => {
+      if (res.confirm) {
+        worksStore.deleteWork(work.id)
+        uni.showToast({ title: '已删除', icon: 'success' })
+      }
+    },
+  })
+}
+
+// 取消收藏（收藏 tab）
+const handleRemoveFavorite = (fav: any) => {
+  uni.showModal({
+    title: '取消收藏',
+    content: '确定要取消收藏这个作品吗？',
+    success: (res) => {
+      if (res.confirm) {
+        worksStore.toggleFavorite(fav.id)
+        uni.showToast({ title: '已取消收藏', icon: 'success' })
       }
     },
   })
@@ -319,6 +381,11 @@ const onImageError = () => {
   &.danger {
     background: #fef2f2;
     color: #ef4444;
+  }
+
+  &.more {
+    background: #f0f0f0;
+    color: #666666;
   }
 }
 

@@ -45,6 +45,7 @@
           </swiper>
         </view>
       </template>
+      <view v-else class="preview-zoom-wrap" :style="zoomStyle" @touchstart="onZoomTouchStart" @touchmove="onZoomTouchMove" @touchend="onZoomTouchEnd">
       <!-- Page 模式：垂直滚动区块渲染 -->
       <template v-if="editorStore.templateType === 'page'">
         <view class="preview-card preview-card--page" :style="canvasBackgroundStyle">
@@ -140,6 +141,8 @@
           </view>
         </view>
       </template>
+      </view>
+      <view class="zoom-spacer" :style="{ height: spacerHeight + 'px' }"></view>
 
       <!-- 相似推荐 -->
       <view class="similar-section">
@@ -147,7 +150,7 @@
           <text class="similar-bar-text">相似推荐</text>
         </view>
         <view class="similar-list">
-          <view class="similar-item" v-for="(item, idx) in similarTemplates" :key="idx">
+          <view class="similar-item" v-for="(item, idx) in similarTemplates" :key="idx" @click="onSimilarClick(item)">
             <view class="similar-image-wrap">
               <image class="similar-image" :src="item.image" mode="aspectFill" @error="onImageError"></image>
               <view class="similar-overlay">
@@ -202,6 +205,20 @@
       </view>
     </scroll-view>
 
+    <!-- 缩放控制 -->
+    <view class="zoom-controls" v-if="isZoomable">
+      <view class="zoom-btn" @click="zoomIn">
+        <text class="zoom-btn-text">+</text>
+      </view>
+      <text class="zoom-level">{{ Math.round(previewScale * 100) }}%</text>
+      <view class="zoom-btn" @click="zoomOut">
+        <text class="zoom-btn-text">−</text>
+      </view>
+      <view class="zoom-btn zoom-reset" @click="zoomReset" v-if="previewScale !== 1">
+        <text class="zoom-btn-text">1:1</text>
+      </view>
+    </view>
+
     <view class="vip-bar" v-if="!userStore.isVip()" @click="goToVip">
       <text class="vip-icon">&#9733;</text>
       <text class="vip-text">开通VIP，本次请柬免费导出 + 全模板解锁 + 商城9折</text>
@@ -218,6 +235,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { onShareAppMessage } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
@@ -313,6 +331,7 @@ onMounted(() => {
   track('preview_view', { template_id: templateId.value })
   nextTick(() => {
     setTimeout(() => updateCardSize(), 100)
+    setTimeout(() => measureZoomHeight(), 150)
   })
   loadSimilarTemplates()
   loadRecommendProducts()
@@ -323,8 +342,14 @@ watch(() => editorStore.templateLoading, (loading) => {
     loadFontsForElements(editorStore.editableElements as any)
     nextTick(() => {
       setTimeout(() => updateCardSize(), 100)
+      setTimeout(() => measureZoomHeight(), 150)
     })
   }
+})
+
+watch(() => editorStore.currentTemplateId, () => {
+  previewScale.value = 1
+  nextTick(() => setTimeout(() => measureZoomHeight(), 150))
 })
 
 watch(() => editorStore.editableElements.length, () => {
@@ -349,10 +374,118 @@ const goBack = useGoBack()
 
 const handleShare = () => {
   track('click_share', { channel: 'wechat' })
-  uni.setClipboardData({
-    data: 'https://www.hunbei.com/invitation/preview',
-    success: () => uni.showToast({ title: '链接已复制', icon: 'success' }),
-  })
+  const templateId = editorStore.currentTemplateId
+  if (templateId) {
+    uni.navigateTo({ url: `/pages/share/index?templateId=${templateId}` })
+  } else {
+    uni.navigateTo({ url: '/pages/share/index' })
+  }
+}
+
+// 微信分享：支持右上角"..."菜单与转发按钮，使用真实的预览路径
+onShareAppMessage(() => {
+  const templateId = editorStore.currentTemplateId || ''
+  const workId = editorStore.currentWorkId || ''
+  let path = '/pages/preview/index'
+  const params: string[] = []
+  if (templateId) params.push(`templateId=${templateId}`)
+  if (workId) params.push(`workId=${workId}`)
+  if (params.length) path += '?' + params.join('&')
+  const info = templateStore.basicInfo
+  const groom = info.groomName || ''
+  const bride = info.brideName || ''
+  const title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : '婚贝请柬'
+  return {
+    title,
+    path,
+    imageUrl: templateStore.templateData.coverImage || '',
+  }
+})
+
+// 相似模板点击：跳转到对应模板预览页
+function onSimilarClick(item: any) {
+  const id = item?.id || item?.templateId
+  if (!id) return
+  track('preview_similar_click', { template_id: String(id) })
+  uni.redirectTo({ url: `/pages/preview/index?templateId=${id}` })
+}
+
+// ============ 预览缩放（pinch 手势 + +/- 按钮） ============
+const previewScale = ref(1)
+const cardNaturalHeight = ref(0)
+const MIN_SCALE = 1
+const MAX_SCALE = 3
+
+const isZoomable = computed(() => editorStore.templateType !== 'flip')
+
+const zoomStyle = computed(() => ({
+  transform: `scale(${previewScale.value})`,
+  transformOrigin: 'top center',
+}))
+
+const spacerHeight = computed(() => {
+  if (previewScale.value <= 1 || !cardNaturalHeight.value) return 0
+  return Math.max(0, (previewScale.value - 1) * cardNaturalHeight.value)
+})
+
+function setScale(val: number) {
+  previewScale.value = Math.max(MIN_SCALE, Math.min(MAX_SCALE, Number(val.toFixed(2))))
+}
+
+function zoomIn() {
+  setScale(previewScale.value + 0.2)
+}
+
+function zoomOut() {
+  setScale(previewScale.value - 0.2)
+}
+
+function zoomReset() {
+  previewScale.value = 1
+}
+
+function getTouchDistance(t1: any, t2: any): number {
+  const dx = t1.clientX - t2.clientX
+  const dy = t1.clientY - t2.clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+let pinchStartDist = 0
+let pinchStartScale = 1
+
+function onZoomTouchStart(e: any) {
+  if (e.touches && e.touches.length === 2) {
+    pinchStartDist = getTouchDistance(e.touches[0], e.touches[1])
+    pinchStartScale = previewScale.value
+  }
+}
+
+function onZoomTouchMove(e: any) {
+  if (!e.touches || e.touches.length !== 2 || !pinchStartDist) return
+  const dist = getTouchDistance(e.touches[0], e.touches[1])
+  if (!dist) return
+  const ratio = dist / pinchStartDist
+  setScale(pinchStartScale * ratio)
+}
+
+function onZoomTouchEnd(e: any) {
+  const remaining = e.touches ? e.touches.length : 0
+  if (remaining < 2) {
+    pinchStartDist = 0
+  }
+}
+
+function measureZoomHeight() {
+  if (previewScale.value !== 1) return
+  const query = uni.createSelectorQuery()
+  query
+    .select('.preview-zoom-wrap')
+    .boundingClientRect((rect: any) => {
+      if (rect && rect.height > 0) {
+        cardNaturalHeight.value = rect.height
+      }
+    })
+    .exec()
 }
 
 const isFavorited = computed(() => {
@@ -1032,5 +1165,66 @@ const onImageError = () => {
   background: rgba(255, 255, 255, 0.25);
   padding: 8rpx 20rpx;
   border-radius: 24rpx;
+}
+
+/* 预览缩放 */
+.preview-zoom-wrap {
+  width: 100%;
+  transform-origin: top center;
+  will-change: transform;
+}
+
+.zoom-spacer {
+  width: 100%;
+}
+
+.zoom-controls {
+  position: fixed;
+  right: 24rpx;
+  bottom: 220rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 40rpx;
+  padding: 16rpx 12rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.12);
+}
+
+.zoom-btn {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-btn:active {
+  background: #ffe4e8;
+}
+
+.zoom-btn-text {
+  font-size: 40rpx;
+  color: #333;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.zoom-reset .zoom-btn-text {
+  font-size: 22rpx;
+}
+
+.zoom-level {
+  font-size: 20rpx;
+  color: #999;
+}
+
+/* 相似模板点击反馈 */
+.similar-item:active {
+  opacity: 0.85;
 }
 </style>

@@ -3,7 +3,9 @@
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 // ============ 应用版本 ============
-export const APP_VERSION = '1.2.3'
+// 从 package.json 读取版本号，避免硬编码导致版本不一致
+import pkg from '../../package.json'
+export const APP_VERSION = pkg.version
 
 // ============ 首页配置 ============
 export const HOME_CONFIG = {

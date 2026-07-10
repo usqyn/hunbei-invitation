@@ -287,7 +287,23 @@ async function onSharePoster() {
 }
 
 function onCopyLink() {
-  const link = `https://www.hunbei.com/invitation/${editorStore.currentWorkId}`
+  const templateId = editorStore.currentTemplateId || ''
+  const workId = editorStore.currentWorkId || ''
+  const params: string[] = []
+  if (templateId) params.push(`templateId=${templateId}`)
+  if (workId) params.push(`workId=${workId}`)
+  const query = params.length ? '?' + params.join('&') : ''
+  const previewPath = '/pages/preview/index' + query
+  // 优先使用当前 H5 站点真实地址，无法获取时回退到默认域名
+  let link = 'https://h5.hunbei.com/#' + previewPath
+  try {
+    const w = (typeof window !== 'undefined' ? window : null) as any
+    if (w && w.location && w.location.origin) {
+      link = w.location.origin + '/#' + previewPath
+    }
+  } catch (e) {
+    // 非浏览器环境保持默认域名
+  }
   uni.setClipboardData({
     data: link,
     success: () => {

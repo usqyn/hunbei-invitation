@@ -253,6 +253,43 @@ export function useFlipPages(options: UseFlipPagesOptions) {
     flipPages.value[idx].name = name
   }
 
+  // 拖拽排序：将 fromIdx 的页面移动到 toIdx 位置
+  function moveFlipPage(fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return
+    if (fromIdx < 0 || fromIdx >= flipPages.value.length) return
+    if (toIdx < 0 || toIdx >= flipPages.value.length) return
+    saveCurrentFlipPage()
+    const [moved] = flipPages.value.splice(fromIdx, 1)
+    flipPages.value.splice(toIdx, 0, moved)
+    // 同步当前选中页索引，确保仍指向同一逻辑页面
+    const cur = currentFlipPageIndex.value
+    if (cur === fromIdx) {
+      currentFlipPageIndex.value = toIdx
+    } else if (fromIdx < cur && toIdx >= cur) {
+      currentFlipPageIndex.value = cur - 1
+    } else if (fromIdx > cur && toIdx <= cur) {
+      currentFlipPageIndex.value = cur + 1
+    }
+    loadCurrentFlipPage()
+  }
+
+  // 复制指定页面（深拷贝所有元素和背景），插入到 idx+1 位置
+  function duplicateFlipPage(idx: number) {
+    if (idx < 0 || idx >= flipPages.value.length) return
+    saveCurrentFlipPage()
+    const source = flipPages.value[idx]
+    const dup: FlipPageItem = {
+      id: createId('flip'),
+      name: `${source.name} 副本`,
+      pageType: source.pageType,
+      background: JSON.parse(JSON.stringify(source.background)),
+      elements: JSON.parse(JSON.stringify(source.elements)),
+    }
+    flipPages.value.splice(idx + 1, 0, dup)
+    currentFlipPageIndex.value = idx + 1
+    loadCurrentFlipPage()
+  }
+
   return {
     flipPages,
     currentFlipPageIndex,
@@ -266,6 +303,8 @@ export function useFlipPages(options: UseFlipPagesOptions) {
     removeFlipPage,
     moveFlipPageUp,
     moveFlipPageDown,
+    moveFlipPage,
     renameFlipPage,
+    duplicateFlipPage,
   }
 }

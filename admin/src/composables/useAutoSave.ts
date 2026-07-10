@@ -10,12 +10,15 @@ export function useAutoSave(options: UseAutoSaveOptions) {
   const AUTO_SAVE_INTERVAL = 30_000
 
   const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
+  // 上次自动保存的时间戳（毫秒），0 表示尚未保存过
+  const lastSaveTime = ref<number>(0)
 
   function saveDraftToLocal() {
     try {
       const draft = options.getDraft()
       draft._savedAt = Date.now()
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+      lastSaveTime.value = draft._savedAt
     } catch (_) {}
   }
 
@@ -41,6 +44,8 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     const info = getDraftInfo()
     if (!info) return false
     options.loadDraft(info.draft)
+    // 恢复草稿时同步上次保存时间
+    lastSaveTime.value = info.savedAt
     return true
   }
 
@@ -69,6 +74,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
   return {
     autoSaveTimer,
+    lastSaveTime,
     saveDraftToLocal,
     restoreDraftFromLocal,
     startAutoSave,

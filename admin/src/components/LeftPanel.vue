@@ -150,10 +150,34 @@
         <div v-for="mat in filteredMaterials" :key="mat.id" class="mat-item" draggable="true" @dragstart="onMaterialDragStart($event, mat)" @click="onMaterialClick(mat)" :title="mat.name">
           <div v-if="mat.type === 'shape'" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
           <div v-else-if="mat.svg" class="mat-shape" v-html="sanitizeSvg(mat.svg)" :style="{ color: mat.color || '#333' }"></div>
+          <button class="mat-preview-btn" :title="`预览「${mat.name}」`" @click.stop="openMaterialPreview(mat)">🔍</button>
           <div class="mat-name">{{ mat.name }}</div>
         </div>
       </div>
     </div>
+
+    <!-- 素材大图预览弹窗 -->
+    <Teleport to="body">
+      <div v-if="previewMaterial" class="mat-preview-overlay" @click="previewMaterial = null">
+        <div class="mat-preview-modal" @click.stop>
+          <div class="mat-preview-header">
+            <span class="mat-preview-title">{{ previewMaterial.name }}</span>
+            <button class="mat-preview-close" @click="previewMaterial = null">×</button>
+          </div>
+          <div class="mat-preview-body">
+            <div
+              class="mat-preview-svg"
+              v-html="previewMaterial.type === 'shape' ? previewMaterial.svg : sanitizeSvg(previewMaterial.svg || '')"
+              :style="{ color: previewMaterial.color || '#333' }"
+            ></div>
+          </div>
+          <div class="mat-preview-footer">
+            <span class="mat-preview-cat">{{ previewMaterial.category }}</span>
+            <button class="mat-preview-add" @click="onMaterialClick(previewMaterial); previewMaterial = null">添加到画布</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- 图层 Tab -->
     <div v-if="leftTab === 'layers'" class="panel-body">
@@ -162,7 +186,18 @@
         <input class="tpl-name-input" :value="currentTemplateName" placeholder="输入模板名称…" @blur="$emit('update:currentTemplateName', ($event.target as HTMLInputElement).value)" />
       </div>
       <div v-if="layers.length === 0" class="empty-hint">画布暂无元素<br/>点击「添加文字/图片」开始</div>
-      <div v-for="el in layers" :key="el.id" class="layer-row" :class="{ active: selectedId === el.id }">
+      <div
+        v-for="el in layers"
+        :key="el.id"
+        class="layer-row"
+        :class="{ active: selectedId === el.id, dragging: dragLayerId === el.id, 'drag-over': dragOverLayerId === el.id && dragLayerId !== el.id }"
+        draggable="true"
+        @dragstart="onLayerDragStart($event, el.id)"
+        @dragover.prevent="onLayerDragOver(el.id)"
+        @drop.prevent="onLayerDrop(el.id)"
+        @dragend="onLayerDragEnd"
+      >
+        <span class="layer-drag-handle" title="拖拽排序">⠿</span>
         <span class="layer-icon" @click="$emit('selectElement', el.id)">{{ el.type === 'text' ? 'T' : el.type === 'image' ? '🖼' : '✦' }}</span>
         <span class="layer-name" @click="$emit('selectElement', el.id)">{{ el.name }}</span>
         <button class="layer-btn" :class="{ off: !el.visible }" @click="$emit('toggleVisibility', el.id)" :title="el.visible ? '隐藏' : '显示'">👁</button>
@@ -179,9 +214,20 @@
     <div v-if="leftTab === 'pages'" class="panel-body pages-body">
       <button class="btn-new-page" @click="$emit('addFlipPage')">+ 新增页面</button>
       <div class="section-title">页面列表</div>
-      <div v-for="(page, idx) in flipPages" :key="page.id" class="page-row" :class="{ active: currentFlipPageIndex === idx }" @click="$emit('selectFlipPage', idx)">
+      <div
+        v-for="(page, idx) in flipPages"
+        :key="page.id"
+        class="page-row"
+        :class="{ active: currentFlipPageIndex === idx, dragging: dragIdx === idx, 'drag-over': dragOverIdx === idx && dragIdx !== idx }"
+        draggable="true"
+        @click="$emit('selectFlipPage', idx)"
+        @dragstart="onPageDragStart($event, idx)"
+        @dragover.prevent="onPageDragOver(idx)"
+        @drop.prevent="onPageDrop(idx)"
+        @dragend="onPageDragEnd"
+      >
         <span class="page-index">{{ idx + 1 }}</span>
-        <input 
+        <input
           v-if="editingPageIdx === idx"
           v-model="editingPageName"
           class="page-name-input"
@@ -194,6 +240,7 @@
         <div class="page-actions">
           <button class="page-btn" @click="$emit('moveFlipPageUp', idx)" :disabled="idx === 0" title="上移">⬆</button>
           <button class="page-btn" @click="$emit('moveFlipPageDown', idx)" :disabled="idx === flipPages.length - 1" title="下移">⬇</button>
+          <button class="page-btn" @click="$emit('duplicateFlipPage', idx)" title="复制此页">📋</button>
           <button class="page-btn" @click="startRename(idx, page.name)" title="重命名">✏️</button>
           <button class="page-btn danger" @click="onDeletePage(idx)" :disabled="flipPages.length <= 1" title="删除">🗑</button>
         </div>
@@ -320,6 +367,7 @@ const emit = defineEmits<{
   'sendBackwards': [id: string]
   'bringToFront': [id: string]
   'sendToBack': [id: string]
+  'reorderElements': [fromId: string, toId: string]
   'deleteElement': [id: string]
   'update:currentTemplateName': [value: string]
   'createNewFromCanvas': []
@@ -335,7 +383,9 @@ const emit = defineEmits<{
   'removeFlipPage': [idx: number]
   'moveFlipPageUp': [idx: number]
   'moveFlipPageDown': [idx: number]
+  'moveFlipPage': [fromIdx: number, toIdx: number]
   'renameFlipPage': [idx: number, name: string]
+  'duplicateFlipPage': [idx: number]
   'updateBasicInfo': [key: string, value: string]
   'syncBasicInfo': []
 }>()
@@ -343,6 +393,66 @@ const emit = defineEmits<{
 const editingPageIdx = ref(-1)
 const editingPageName = ref('')
 const pageNameInput = ref<HTMLInputElement | null>(null)
+
+// 素材大图预览
+const previewMaterial = ref<any>(null)
+function openMaterialPreview(mat: any) {
+  previewMaterial.value = mat
+}
+
+// 翻页拖拽排序状态
+const dragIdx = ref(-1)
+const dragOverIdx = ref(-1)
+
+// 图层拖拽排序状态
+const dragLayerId = ref<string | null>(null)
+const dragOverLayerId = ref<string | null>(null)
+
+function onLayerDragStart(e: DragEvent, id: string) {
+  dragLayerId.value = id
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+}
+function onLayerDragOver(id: string) {
+  dragOverLayerId.value = id
+}
+function onLayerDrop(id: string) {
+  const from = dragLayerId.value
+  if (from && from !== id) {
+    emit('reorderElements', from, id)
+  }
+  dragLayerId.value = null
+  dragOverLayerId.value = null
+}
+function onLayerDragEnd() {
+  dragLayerId.value = null
+  dragOverLayerId.value = null
+}
+
+function onPageDragStart(e: DragEvent, idx: number) {
+  dragIdx.value = idx
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(idx))
+  }
+}
+function onPageDragOver(idx: number) {
+  dragOverIdx.value = idx
+}
+function onPageDrop(idx: number) {
+  const from = dragIdx.value
+  if (from !== -1 && from !== idx) {
+    emit('moveFlipPage', from, idx)
+  }
+  dragIdx.value = -1
+  dragOverIdx.value = -1
+}
+function onPageDragEnd() {
+  dragIdx.value = -1
+  dragOverIdx.value = -1
+}
 
 function startRename(idx: number, name: string) {
   editingPageIdx.value = idx
@@ -598,6 +708,20 @@ function onBgImageFile(e: Event) {
 
 .layer-row:hover { background: #f5f7fa; }
 .layer-row.active { background: #e3f2fd; border-color: #90caf9; }
+.layer-row.dragging { opacity: 0.4; }
+.layer-row.drag-over { border-top: 2px solid #e84a6e; }
+
+.layer-drag-handle {
+  cursor: grab;
+  color: #bbb;
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+.layer-drag-handle:active { cursor: grabbing; }
+.layer-row:hover .layer-drag-handle { color: #888; }
 
 .layer-icon {
   width: 24px;
@@ -673,6 +797,7 @@ function onBgImageFile(e: Event) {
 }
 
 .mat-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -687,6 +812,115 @@ function onBgImageFile(e: Event) {
 }
 
 .mat-item:hover { background: #e3f2fd; border-color: #90caf9; transform: scale(1.05); }
+
+.mat-preview-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mat-item:hover .mat-preview-btn { opacity: 1; }
+.mat-preview-btn:hover { background: #1976d2; color: #fff; }
+
+/* 素材大图预览弹窗 */
+.mat-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.mat-preview-modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 320px;
+  max-width: 90vw;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.mat-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #eee;
+}
+.mat-preview-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #333;
+}
+.mat-preview-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mat-preview-close:hover { background: #e0e0e0; }
+.mat-preview-body {
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafbfc;
+  min-height: 200px;
+}
+.mat-preview-svg {
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mat-preview-svg :deep(svg) {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+.mat-preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-top: 1px solid #f0f0f0;
+}
+.mat-preview-cat {
+  font-size: 12px;
+  color: #999;
+}
+.mat-preview-add {
+  padding: 7px 18px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.mat-preview-add:hover { background: #1565c0; }
 
 .mat-shape {
   width: 36px;
@@ -1082,6 +1316,8 @@ function onBgImageFile(e: Event) {
 
 .page-row:hover { background: #f5f7fa; }
 .page-row.active { background: #e3f2fd; }
+.page-row.dragging { opacity: 0.4; }
+.page-row.drag-over { border-top: 2px solid #e84a6e; }
 
 .page-index {
   width: 24px;
