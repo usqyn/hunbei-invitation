@@ -12,6 +12,7 @@ const STORAGE_KEY_TEMPLATE_DATA = 'hunbei_current_template_data'
 
 export const useEditorStore = defineStore('editor', () => {
   const showTextEditor = ref(false)
+  const showSectionTextEditor = ref(false)
   const showBasicInfoEditor = ref(false)
   const selectedElement = ref<number | null>(null)
   const editingText = ref('')
@@ -398,11 +399,16 @@ export const useEditorStore = defineStore('editor', () => {
     selectedElement.value = null
     activeSectionId.value = sectionId
     editingText.value = sec.text || ''
-    showTextEditor.value = true
+    showSectionTextEditor.value = true
   }
 
   function closeTextEditor() {
     showTextEditor.value = false
+  }
+
+  function closeSectionTextEditor() {
+    showSectionTextEditor.value = false
+    activeSectionId.value = null
   }
 
   function confirmTextEdit() {
@@ -426,6 +432,8 @@ export const useEditorStore = defineStore('editor', () => {
       }
     }
     showTextEditor.value = false
+    showSectionTextEditor.value = false
+    activeSectionId.value = null
     pushHistory()
   }
 
@@ -556,14 +564,14 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   return {
-    showTextEditor, showBasicInfoEditor,
+    showTextEditor, showSectionTextEditor, showBasicInfoEditor,
     selectedElement, editingText,
     editableElements, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
     templateType, pageSections, activeSectionId,
     flipPages, currentFlipPageIndex,
     history, historyIndex, canUndo, canRedo,
-    loadTemplateById, restoreTemplate, restoreFromWorkData, openSectionTextEditor, closeTextEditor, confirmTextEdit,
-    closeBasicInfoEditor, syncSmartField, syncBasicInfoToElements,
+    loadTemplateById, restoreTemplate, restoreFromWorkData, openSectionTextEditor, closeTextEditor, closeSectionTextEditor, confirmTextEdit,
+    closeBasicInfoEditor, syncSmartField, syncBasicInfoToElements, syncFieldToAllModes,
     selectMaterial, applyImageToElement: selectMaterial, setCurrentWorkId,
     updatePageSection, updatePageSectionText, updatePageSectionImage,
     pushHistory, undo, redo,
