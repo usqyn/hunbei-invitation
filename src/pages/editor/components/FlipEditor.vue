@@ -1,114 +1,161 @@
 <template>
   <view class="flip-editor">
-    <!-- 顶部工具栏 -->
-    <view class="flip-toolbar">
-      <view class="toolbar-left">
-        <text class="toolbar-title">翻页编辑</text>
+    <!-- 顶部导航栏 -->
+    <view class="editor-header">
+      <view class="header-back" @click="goBack">
+        <text class="back-icon">‹</text>
       </view>
-      <view class="toolbar-right">
-        <view class="page-actions">
-          <text class="page-action-btn" @click="addFlipPage">+ 添加页</text>
-          <text class="page-action-btn page-action-btn--danger" @click="deleteFlipPage">删除页</text>
-          <text class="page-indicator">{{ editorStore.currentFlipPageIndex + 1 }}/{{ editorStore.flipPages.length }}</text>
-        </view>
+      <text class="header-title">翻页编辑</text>
+      <view class="header-actions">
+        <text class="header-action" @click="handleUndo">↩</text>
+        <text class="header-action" @click="handleRedo">↪</text>
       </view>
     </view>
 
-    <!-- 主内容区 -->
-    <view class="flip-main">
-      <!-- 左侧页面列表 -->
-      <scroll-view class="flip-page-list" scroll-y>
-        <view
-          v-for="(page, idx) in editorStore.flipPages"
-          :key="page.id"
-          class="page-list-item"
-          :class="{ 'page-list-item--active': editorStore.currentFlipPageIndex === idx }"
-          @click="selectPage(idx)"
-        >
-          <view class="page-list-thumb">
-            <text class="page-list-num">{{ idx + 1 }}</text>
+    <!-- 页面管理栏 -->
+    <view class="page-manager">
+      <scroll-view class="page-list-scroll" scroll-x>
+        <view class="page-list">
+          <view
+            v-for="(page, idx) in editorStore.flipPages"
+            :key="page.id"
+            class="page-list-item"
+            :class="{ 'page-list-item--active': editorStore.currentFlipPageIndex === idx }"
+            @click="selectPage(idx)"
+          >
+            <view class="page-list-thumb">
+              <text class="page-list-num">{{ idx + 1 }}</text>
+            </view>
+            <text class="page-list-name">{{ page.name }}</text>
           </view>
-          <text class="page-list-name">{{ page.name }}</text>
         </view>
       </scroll-view>
-
-      <!-- 中间预览区 -->
-      <swiper
-        class="flip-swiper"
-        :current="editorStore.currentFlipPageIndex"
-        @change="onSwiperChange"
-      >
-        <swiper-item v-for="(page, idx) in editorStore.flipPages" :key="page.id">
-          <view class="flip-page" :style="getPageBgStyle(page)">
-            <view
-              v-for="(el, eIdx) in page.elements"
-              :key="eIdx"
-              class="flip-element"
-              :class="{ 'flip-element--active': activeElementIndex === eIdx }"
-              :style="getElementStyle(el)"
-              @click="onElementClick(el, eIdx)"
-            >
-              <image
-                v-if="el.type === 'image'"
-                class="flip-image"
-                :src="el.text || '/static/images/templates/wedding-1.svg'"
-                mode="aspectFit"
-              />
-              <text
-                v-else-if="el.type === 'text'"
-                class="flip-text"
-                :style="getTextStyle(el)"
-              >{{ resolveText(el.text) }}</text>
-            </view>
-          </view>
-        </swiper-item>
-      </swiper>
-
-      <!-- 右侧编辑面板 -->
-      <view class="flip-panel">
-        <view class="panel-header">
-          <text class="panel-title">编辑</text>
+      <view class="page-actions">
+        <view class="page-action-btn" @click="addFlipPage">
+          <text class="action-icon">+</text>
+          <text class="action-text">添加页</text>
         </view>
-        <scroll-view class="panel-body" scroll-y>
-          <!-- 当前页面信息 -->
-          <view v-if="currentPage" class="panel-section">
-            <text class="section-label">页面名称</text>
-            <input class="section-input" v-model="currentPage.name" placeholder="页面名称" @blur="onPageNameBlur" />
-            <text class="section-label">页面类型</text>
-            <text class="section-value">{{ getPageTypeName(currentPage.pageType) }}</text>
-          </view>
-
-          <!-- 元素编辑 -->
-          <view v-if="selectedElement" class="panel-section">
-            <text class="section-label">元素类型</text>
-            <text class="section-value">{{ selectedElement.type === 'text' ? '文字' : '图片' }}</text>
-            
-            <text v-if="selectedElement.type === 'text'" class="section-label">文字内容</text>
-            <textarea
-              v-if="selectedElement.type === 'text'"
-              class="section-textarea"
-              :value="selectedElement.text"
-              @input="onTextInput"
-              placeholder="请输入文字"
-            />
-
-            <text v-if="selectedElement.type === 'image'" class="section-label">图片</text>
-            <view class="image-upload-area" @click="onImageUpload">
-              <image v-if="selectedElement.text" :src="selectedElement.text" class="upload-preview" mode="aspectFit" />
-              <view v-else class="upload-placeholder">
-                <text class="upload-icon">📷</text>
-                <text class="upload-text">上传图片</text>
-              </view>
-            </view>
-          </view>
-
-          <view v-else class="panel-empty">
-            <text class="empty-icon">👆</text>
-            <text class="empty-text">点击页面元素进行编辑</text>
-          </view>
-        </scroll-view>
+        <view class="page-action-btn page-action-btn--danger" @click="deleteFlipPage">
+          <text class="action-icon">×</text>
+          <text class="action-text">删除</text>
+        </view>
       </view>
     </view>
+
+    <!-- 主内容区：全屏 Swiper -->
+    <swiper
+      class="flip-swiper"
+      :current="editorStore.currentFlipPageIndex"
+      @change="onSwiperChange"
+    >
+      <swiper-item v-for="(page, idx) in editorStore.flipPages" :key="page.id">
+        <view class="flip-page" :style="getPageBgStyle(page)">
+          <view
+            v-for="(el, eIdx) in page.elements"
+            :key="eIdx"
+            class="flip-element"
+            :class="{ 'flip-element--active': activeElementIndex === eIdx }"
+            :style="getElementStyle(el)"
+            @click="onElementClick(el, eIdx)"
+          >
+            <image
+              v-if="el.type === 'image'"
+              class="flip-image"
+              :src="el.text || '/static/images/templates/wedding-1.svg'"
+              mode="aspectFit"
+            />
+            <text
+              v-else-if="el.type === 'text'"
+              class="flip-text"
+              :style="getTextStyle(el)"
+            >{{ resolveText(el.text) }}</text>
+          </view>
+        </view>
+      </swiper-item>
+    </swiper>
+
+    <!-- 底部工具栏 -->
+    <view class="editor-footer">
+      <!-- 选中元素时的上下文工具栏 -->
+      <view v-if="selectedElement !== null" class="context-toolbar">
+        <view class="ctx-btn" @click="handleEditText">
+          <text class="ctx-icon">✏️</text>
+          <text class="ctx-label">编辑</text>
+        </view>
+        <view v-if="selectedElement.type === 'image'" class="ctx-btn" @click="handleReplaceImage">
+          <text class="ctx-icon">🖼️</text>
+          <text class="ctx-label">换图</text>
+        </view>
+        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
+          <text class="ctx-icon">↩</text>
+          <text class="ctx-label">撤销</text>
+        </view>
+        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canRedo }" @click="handleRedo">
+          <text class="ctx-icon">↪</text>
+          <text class="ctx-label">重做</text>
+        </view>
+        <view class="ctx-btn ctx-btn--danger" @click="deselectElement">
+          <text class="ctx-icon">✕</text>
+          <text class="ctx-label">取消</text>
+        </view>
+      </view>
+      <!-- 底部主操作区 -->
+      <view class="footer-main">
+        <view class="footer-tabs">
+          <view class="footer-tab" @click="openUnifiedEdit">
+            <text class="tab-icon">📋</text>
+            <text class="tab-label">信息</text>
+          </view>
+          <view class="footer-tab" @click="handleEditText">
+            <text class="tab-icon">✏️</text>
+            <text class="tab-label">文字</text>
+          </view>
+          <view class="footer-tab" @click="handleReplaceImage">
+            <text class="tab-icon">🖼️</text>
+            <text class="tab-label">图片</text>
+          </view>
+          <view class="footer-tab" @click="handleMusic">
+            <text class="tab-icon">🎵</text>
+            <text class="tab-label">音乐</text>
+          </view>
+          <view class="footer-tab" @click="handleMore">
+            <text class="tab-icon">⋯</text>
+            <text class="tab-label">更多</text>
+          </view>
+        </view>
+        <view class="footer-actions">
+          <view class="footer-action-btn footer-save-btn" @click="handleSave">
+            <text class="action-btn-text">保存</text>
+          </view>
+          <view class="footer-action-btn footer-share-btn" @click="handleShare">
+            <text class="action-btn-text">预览分享</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 文本编辑弹窗 -->
+    <TextEditorPopup
+      v-if="editorStore.showTextEditor"
+      :visible="editorStore.showTextEditor"
+      :editing-text="editorStore.editingText"
+      @input="(v: string) => editorStore.editingText = v"
+      @close="editorStore.closeTextEditor"
+      @confirm="onTextEditorConfirm"
+    />
+
+    <!-- 统一编辑表单 -->
+    <UnifiedEditForm
+      v-if="editorStore.showBasicInfoEditor"
+      :visible="editorStore.showBasicInfoEditor"
+      :basic-info="templateStore.basicInfo"
+      :elements="getCurrentPageElements()"
+      :template-data="templateStore.templateData"
+      @close="onUnifiedEditCancel"
+      @confirm="onUnifiedEditConfirm"
+      @update="onSmartFieldUpdate"
+      @location="handleLocation"
+    />
   </view>
 </template>
 
@@ -116,21 +163,25 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
+import { useWorksStore } from '@/stores/works'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { useGoBack } from '@/composables/useGoBack'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { uploadImage } from '@/api'
+import TextEditorPopup from './TextEditorPopup.vue'
+import UnifiedEditForm from './UnifiedEditForm.vue'
+import type { Work } from '@/types'
 
 const editorStore = useEditorStore()
 const templateStore = useTemplateStore()
+const worksStore = useWorksStore()
+const goBack = useGoBack()
+
 const { getTextStyle } = useCanvasRender({
   getElements: () => [],
   getCanvasSize: () => undefined,
   getBackground: () => undefined,
 })
-
-function resolveText(text: string): string {
-  return resolveDatePlaceholders(text, templateStore.templateData)
-}
 
 const activeElementIndex = ref(-1)
 const selectedElement = ref<any>(null)
@@ -138,6 +189,14 @@ const selectedElement = ref<any>(null)
 const currentPage = computed(() => {
   return editorStore.flipPages[editorStore.currentFlipPageIndex]
 })
+
+function getCurrentPageElements() {
+  return currentPage.value?.elements || []
+}
+
+function resolveText(text: string): string {
+  return resolveDatePlaceholders(text, templateStore.templateData)
+}
 
 function selectPage(idx: number) {
   editorStore.currentFlipPageIndex = idx
@@ -156,22 +215,43 @@ function onElementClick(el: any, idx: number) {
   selectedElement.value = el
 }
 
-// 文本输入防抖记录历史
+function deselectElement() {
+  activeElementIndex.value = -1
+  selectedElement.value = null
+}
+
+function handleEditText() {
+  if (!selectedElement.value || selectedElement.value.type !== 'text') {
+    uni.showToast({ title: '请先选择文字元素', icon: 'none' })
+    return
+  }
+  editorStore.editingText = selectedElement.value.text
+  editorStore.showTextEditor = true
+}
+
+function handleReplaceImage() {
+  if (!selectedElement.value || selectedElement.value.type !== 'image') {
+    uni.showToast({ title: '请先选择图片元素', icon: 'none' })
+    return
+  }
+  onImageUpload()
+}
+
 let textInputTimer: any = null
-function onTextInput(e: any) {
+
+function onTextEditorConfirm() {
   if (selectedElement.value) {
-    selectedElement.value.text = e.detail.value
-    // 持久化文本修改到 store，并同步到所有模式
+    selectedElement.value.text = editorStore.editingText
     if (selectedElement.value.dataKey) {
-      editorStore.syncFieldToAllModes(selectedElement.value.dataKey, e.detail.value)
+      editorStore.syncFieldToAllModes(selectedElement.value.dataKey, editorStore.editingText)
     }
-    // 防抖记录历史
     if (textInputTimer) clearTimeout(textInputTimer)
     textInputTimer = setTimeout(() => {
       editorStore.pushHistory()
       textInputTimer = null
     }, 800)
   }
+  editorStore.closeTextEditor()
 }
 
 async function applySelectedImage(tempFilePath: string) {
@@ -185,7 +265,6 @@ async function applySelectedImage(tempFilePath: string) {
     }
     editorStore.pushHistory()
   } catch (e) {
-    // 上传失败回退到临时路径
     console.warn('图片上传失败:', e)
     selectedElement.value.text = tempFilePath
     if (selectedElement.value.dataKey) {
@@ -198,7 +277,6 @@ async function applySelectedImage(tempFilePath: string) {
 }
 
 function onImageUpload() {
-  // 微信小程序端
   // #ifdef MP-WEIXIN
   uni.chooseMedia({
     count: 1,
@@ -215,7 +293,6 @@ function onImageUpload() {
   })
   // #endif
 
-  // H5 / App 端
   // #ifndef MP-WEIXIN
   uni.chooseImage({
     count: 1,
@@ -262,15 +339,6 @@ function getElementStyle(el: any): Record<string, string> {
   }
 }
 
-function getPageTypeName(type: string): string {
-  const map: Record<string, string> = {
-    cover: '封面', photo: '照片', invitation: '邀请', info: '时间地点',
-    countdown: '倒计时', map: '地图', rsvp: '回执', blessing: '祝福', ending: '尾页', custom: '自定义'
-  }
-  return map[type] || type
-}
-
-// 添加新页面
 function addFlipPage() {
   const newPage = {
     id: `page_${Date.now()}`,
@@ -284,7 +352,6 @@ function addFlipPage() {
   editorStore.pushHistory()
 }
 
-// 删除当前页
 function deleteFlipPage() {
   if (editorStore.flipPages.length <= 1) {
     uni.showToast({ title: '至少保留一页', icon: 'none' })
@@ -298,7 +365,6 @@ function deleteFlipPage() {
       if (res.confirm) {
         const idx = editorStore.currentFlipPageIndex
         editorStore.flipPages.splice(idx, 1)
-        // 调整当前页码
         if (idx >= editorStore.flipPages.length) {
           editorStore.currentFlipPageIndex = editorStore.flipPages.length - 1
         }
@@ -310,12 +376,151 @@ function deleteFlipPage() {
   })
 }
 
-// 页面重命名时记录历史
-function onPageNameBlur() {
-  editorStore.pushHistory()
+function openUnifiedEdit() {
+  editorStore.showBasicInfoEditor = true
 }
 
-// 组件卸载时清理定时器，防止内存泄漏
+function onUnifiedEditConfirm() {
+  editorStore.syncBasicInfoToElements()
+  editorStore.closeBasicInfoEditor()
+}
+
+function onUnifiedEditCancel() {
+  editorStore.closeBasicInfoEditor()
+}
+
+function onSmartFieldUpdate(key: string, value: string) {
+  editorStore.syncSmartField(key, value)
+}
+
+function handleUndo() {
+  if (!editorStore.canUndo) return
+  editorStore.undo()
+}
+
+function handleRedo() {
+  if (!editorStore.canRedo) return
+  editorStore.redo()
+}
+
+function handleMusic() {
+  uni.navigateTo({ url: '/pages/music/index' })
+}
+
+function handleMore() {
+  uni.showActionSheet({
+    itemList: ['撤销', '重做', '设置', '更换模板', '导出'],
+    success: (res: any) => {
+      switch (res.tapIndex) {
+        case 0: handleUndo(); break
+        case 1: handleRedo(); break
+        case 2: handleSettings(); break
+        case 3: handleChangeTemplate(); break
+        case 4: handleExport(); break
+      }
+    },
+  })
+}
+
+function handleSettings() {
+  const settingItems = [
+    { name: '礼物相册', key: 'giftAlbum' },
+    { name: '礼物购买', key: 'giftBuy' },
+    { name: '礼金功能', key: 'moneyGift' },
+    { name: '点赞功能', key: 'like' },
+    { name: '弹幕功能', key: 'danmaku' },
+    { name: '相册功能', key: 'album' },
+  ]
+  uni.showActionSheet({
+    itemList: settingItems.map(s => {
+      const enabled = (templateStore.settings as any)[s.key]
+      return `${s.name}${enabled ? ' ✓' : ''}`
+    }),
+    success: (res: any) => {
+      const item = settingItems[res.tapIndex]
+      if (item) {
+        templateStore.toggleSetting(item.key)
+        const enabled = (templateStore.settings as any)[item.key]
+        uni.showToast({ title: `${item.name}已${enabled ? '开启' : '关闭'}`, icon: 'none' })
+      }
+    },
+  })
+}
+
+function handleChangeTemplate() {
+  uni.showModal({
+    title: '更换模板',
+    content: '切换模板可能会丢失当前编辑内容，确定要继续吗？',
+    confirmText: '继续',
+    confirmColor: '#e84a6e',
+    success: (res) => {
+      if (res.confirm) {
+        uni.navigateTo({ url: '/pages/template/index?from=editor' })
+      }
+    },
+  })
+}
+
+function handleExport() {
+  uni.showToast({ title: '导出功能开发中', icon: 'none' })
+}
+
+function handleLocation() {
+  uni.showToast({ title: '定位功能开发中', icon: 'none' })
+}
+
+function handleSave() {
+  const editorData = {
+    elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
+    pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
+    flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
+    background: JSON.parse(JSON.stringify(editorStore.background)),
+    canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
+    templateType: editorStore.templateType,
+    templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
+    basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
+    settings: JSON.parse(JSON.stringify(templateStore.settings)),
+    currentFlipPageIndex: editorStore.currentFlipPageIndex,
+  }
+  const musicId = templateStore.selectedMusicId
+  if (editorStore.currentWorkId) {
+    const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+    if (existing) {
+      existing.title = templateStore.templateData.coverTitle || '未命名作品'
+      existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+      existing.image = templateStore.templateData.coverImage
+      existing.templateType = editorStore.currentTemplateId
+      existing.musicId = musicId
+      existing.data = editorData
+      existing.updatedAt = new Date().toISOString()
+      worksStore.saveAsWork(existing)
+      uni.showToast({ title: '已保存', icon: 'success' })
+      return
+    }
+  }
+  const id = editorStore.currentWorkId || String(Date.now())
+  if (!editorStore.currentWorkId) {
+    editorStore.setCurrentWorkId(id)
+  }
+  const work: Work = {
+    id,
+    title: templateStore.templateData.coverTitle || '未命名作品',
+    date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+    image: templateStore.templateData.coverImage,
+    templateType: editorStore.currentTemplateId,
+    musicId,
+    status: 'draft',
+    data: editorData,
+    updatedAt: new Date().toISOString(),
+  }
+  worksStore.saveAsWork(work)
+  uni.showToast({ title: '已保存', icon: 'success' })
+}
+
+function handleShare() {
+  uni.showToast({ title: '预览分享功能开发中', icon: 'none' })
+}
+
 onUnmounted(() => {
   if (textInputTimer) clearTimeout(textInputTimer)
 })
@@ -323,82 +528,99 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 .flip-editor {
-  height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f5f5f5;
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
 }
 
-.flip-toolbar {
+.editor-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  padding: 16rpx 24rpx;
-  background: #ffffff;
-  border-bottom: 1rpx solid #e0e0e0;
+  padding: 20rpx 30rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #f0e0e5;
+  flex-shrink: 0;
 }
 
-.toolbar-title {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: var(--color-text-primary, #333);
-}
-
-.page-actions {
+.header-back {
+  width: 60rpx;
+  height: 60rpx;
   display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+.back-icon {
+  font-size: 48rpx;
+  color: #333;
+  font-weight: 300;
+}
+
+.header-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.header-actions {
+  display: flex;
   gap: 16rpx;
 }
 
-.page-action-btn {
-  font-size: 26rpx;
-  color: var(--color-primary, #e84a6e);
-  padding: 8rpx 16rpx;
-  border-radius: 8rpx;
-  background: var(--color-primary-light, #fce4ec);
-}
-
-.page-action-btn--danger {
-  color: #ff4d4f;
-  background: #fff1f0;
-}
-
-.page-action-btn:active {
-  opacity: 0.7;
-}
-
-.page-indicator {
-  font-size: 28rpx;
-  color: var(--color-text-secondary, #666);
-}
-
-.flip-main {
-  flex: 1;
+.header-action {
+  width: 60rpx;
+  height: 60rpx;
   display: flex;
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: #666;
+  background: #f5f5f5;
+  border-radius: 50%;
 }
 
-.flip-page-list {
-  width: 120rpx;
-  background: #ffffff;
-  border-right: 1rpx solid #e0e0e0;
+.page-manager {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 20rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #f0e0e5;
+  flex-shrink: 0;
+  gap: 20rpx;
+}
+
+.page-list-scroll {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.page-list {
+  display: inline-flex;
+  gap: 16rpx;
 }
 
 .page-list-item {
-  padding: 16rpx 8rpx;
-  border-bottom: 1rpx solid #f0f0f0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 12rpx;
+  background: #fafafa;
+  transition: all 0.2s;
 }
 
 .page-list-item--active {
-  background: var(--color-primary-light, #fce4ec);
+  background: #fdf6f8;
+  outline: 3rpx solid #e84a6e;
 }
 
 .page-list-thumb {
-  width: 60rpx;
-  height: 100rpx;
+  width: 80rpx;
+  height: 120rpx;
   background: #f0f0f0;
   border-radius: 8rpx;
   display: flex;
@@ -407,20 +629,59 @@ onUnmounted(() => {
 }
 
 .page-list-num {
-  font-size: 24rpx;
+  font-size: 28rpx;
   font-weight: bold;
   color: #999;
 }
 
+.page-list-item--active .page-list-num {
+  color: #e84a6e;
+}
+
 .page-list-name {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #666;
-  margin-top: 8rpx;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
+  max-width: 100rpx;
   text-align: center;
+}
+
+.page-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.page-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 24rpx;
+  background: #fdf6f8;
+  border-radius: 12rpx;
+  gap: 4rpx;
+}
+
+.page-action-btn--danger {
+  background: #fff5f5;
+}
+
+.action-icon {
+  font-size: 36rpx;
+  color: #e84a6e;
+}
+
+.page-action-btn--danger .action-icon {
+  color: #ff4d4f;
+}
+
+.action-text {
+  font-size: 22rpx;
+  color: #666;
 }
 
 .flip-swiper {
@@ -440,6 +701,11 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.flip-element--active {
+  outline: 4rpx solid #e84a6e;
+  outline-offset: -4rpx;
+}
+
 .flip-image {
   width: 100%;
   height: 100%;
@@ -456,110 +722,141 @@ onUnmounted(() => {
   white-space: pre-wrap;
 }
 
-.flip-panel {
-  width: 360rpx;
-  background: #ffffff;
+.editor-footer {
   display: flex;
   flex-direction: column;
+  background: #fff;
+  border-top: 1rpx solid #f0e0e5;
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, 0.04);
 }
 
-.panel-header {
-  padding: 16rpx 20rpx;
-  border-bottom: 1rpx solid #e0e0e0;
+.context-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 16rpx;
+  background: linear-gradient(135deg, #fff5f7 0%, #fef0f3 100%);
+  border-bottom: 1rpx solid #f0e0e5;
+  animation: slide-up 0.2s ease;
 }
 
-.panel-title {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #333;
-}
-
-.panel-body {
+.ctx-btn {
   flex: 1;
-  padding: 16rpx 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10rpx 0;
+  border-radius: 12rpx;
+  background: #fff;
+  gap: 4rpx;
+  transition: transform 0.1s ease;
 }
 
-.panel-section {
-  margin-bottom: 24rpx;
+.ctx-btn:active {
+  transform: scale(0.94);
+  opacity: 0.8;
 }
 
-.section-label {
-  font-size: 24rpx;
+.ctx-btn--disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.ctx-btn--danger {
+  background: #fff5f5;
+}
+
+.ctx-icon {
+  font-size: 28rpx;
+}
+
+.ctx-label {
+  font-size: 20rpx;
   color: #666;
-  margin-bottom: 8rpx;
-  display: block;
 }
 
-.section-input {
-  width: 100%;
-  padding: 12rpx 16rpx;
-  border: 1rpx solid #ddd;
-  border-radius: 8rpx;
-  font-size: 26rpx;
+.ctx-btn--danger .ctx-label {
+  color: #e84a6e;
 }
 
-.section-value {
-  font-size: 26rpx;
-  color: #333;
-  padding: 8rpx 0;
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
-.section-textarea {
-  width: 100%;
-  height: 200rpx;
-  padding: 12rpx 16rpx;
-  border: 1rpx solid #ddd;
-  border-radius: 8rpx;
-  font-size: 26rpx;
+.footer-main {
+  display: flex;
+  align-items: center;
+  padding: 12rpx 24rpx;
+  gap: 16rpx;
 }
 
-.image-upload-area {
-  width: 100%;
-  height: 200rpx;
-  border: 2rpx dashed #ddd;
-  border-radius: 8rpx;
-  overflow: hidden;
+.footer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  flex: 1;
 }
 
-.upload-preview {
-  width: 100%;
-  height: 100%;
-}
-
-.upload-placeholder {
-  width: 100%;
-  height: 100%;
+.footer-tab {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-width: 96rpx;
+  min-height: 80rpx;
+  padding: 8rpx 12rpx;
+  gap: 4rpx;
+  border-radius: 12rpx;
+  transition: transform 0.1s ease, background 0.15s ease;
 }
 
-.upload-icon {
-  font-size: 48rpx;
-  margin-bottom: 8rpx;
+.footer-tab:active {
+  transform: scale(0.92);
+  background: #fce4ec;
 }
 
-.upload-text {
-  font-size: 24rpx;
-  color: #999;
+.tab-icon {
+  font-size: 36rpx;
+  line-height: 1;
 }
 
-.panel-empty {
+.tab-label {
+  font-size: 20rpx;
+  color: #666;
+}
+
+.footer-actions {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding-top: 100rpx;
+  gap: 12rpx;
 }
 
-.empty-icon {
-  font-size: 64rpx;
-  margin-bottom: 16rpx;
+.footer-action-btn {
+  padding: 16rpx 28rpx;
+  border-radius: 50rpx;
+  text-align: center;
 }
 
-.empty-text {
+.footer-save-btn {
+  background: #f5f5f5;
+}
+
+.footer-share-btn {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.3);
+}
+
+.action-btn-text {
   font-size: 26rpx;
-  color: #999;
+  font-weight: 600;
+  color: #fff;
+}
+
+.footer-save-btn .action-btn-text {
+  color: #666;
 }
 </style>

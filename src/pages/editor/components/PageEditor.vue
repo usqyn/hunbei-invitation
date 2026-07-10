@@ -1,158 +1,201 @@
 <template>
   <view class="page-editor">
-    <!-- 左侧预览区：长页面滚动 -->
-    <view class="page-preview">
-      <scroll-view class="preview-scroll" scroll-y>
-        <view class="preview-card" :style="canvasBackgroundStyle">
-          <view
-            v-for="(sec, idx) in editorStore.pageSections"
-            :key="sec.id"
-            class="page-section"
-            :class="[
-              `page-section--${sec.type}`,
-              { 'page-section--active': editorStore.activeSectionId === sec.id },
-              { 'page-section--non-editable': sec.editable === false }
-            ]"
-            @click="onSectionClick(sec)"
-          >
-            <template v-if="sec.type === 'title'">
-              <text class="section-title" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入标题' }}</text>
-            </template>
-            <template v-else-if="sec.type === 'date'">
-              <text class="section-date" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || 'YYYY/MM/DD' }}</text>
-            </template>
-            <template v-else-if="sec.type === 'image'">
-              <image
-                class="section-image"
-                :src="sec.image || '/static/images/icons/img-placeholder.svg'"
-                mode="aspectFit"
-                @error="onImageError"
-              />
-              <view v-if="!sec.image" class="image-placeholder">
-                <text class="placeholder-icon">📷</text>
-                <text class="placeholder-text">{{ sec.placeholder || '点击上传照片' }}</text>
-              </view>
-            </template>
-            <template v-else-if="sec.type === 'text'">
-              <text class="section-text" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入正文内容' }}</text>
-            </template>
-            <template v-else-if="sec.type === 'location'">
-              <view class="location-row">
-                <text class="location-icon">📍</text>
-                <text class="location-text" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入地址' }}</text>
-              </view>
-            </template>
-            <template v-else-if="sec.type === 'rsvp'">
-              <view class="rsvp-section">
-                <text class="rsvp-title">RSVP</text>
-                <view class="rsvp-form">
-                  <view class="form-item">
-                    <text class="form-label">姓名</text>
-                    <input class="form-input" placeholder="请输入姓名" />
-                  </view>
-                  <view class="form-item">
-                    <text class="form-label">出席人数</text>
-                    <input class="form-input" type="number" placeholder="请输入人数" />
-                  </view>
-                  <view class="rsvp-submit">提交</view>
-                </view>
-              </view>
-            </template>
-            <template v-else-if="sec.type === 'map'">
-              <view class="map-section">
-                <image
-                  class="map-image"
-                  src="/static/images/icons/map-placeholder.svg"
-                  mode="aspectFit"
-                />
-                <text class="map-address">{{ sec.text || '请输入地址' }}</text>
-              </view>
-            </template>
-            <template v-else-if="sec.type === 'divider'">
-              <view class="divider-line">
-                <text class="divider-text">{{ sec.text }}</text>
-              </view>
-            </template>
-            <template v-else-if="sec.type === 'countdown'">
-              <view class="countdown-section">
-                <text class="countdown-label">距婚礼还有</text>
-                <view class="countdown-days">{{ sec.text || '0' }}</view>
-                <text class="countdown-unit">天</text>
-              </view>
-            </template>
-          </view>
-        </view>
-      </scroll-view>
+    <!-- 顶部导航 -->
+    <view class="editor-header">
+      <view class="header-back" @click="goBack">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">编辑请柬</text>
+      <view class="header-actions">
+        <text class="header-action" @click="handleUndo">↩</text>
+        <text class="header-action" @click="handleRedo">↪</text>
+      </view>
     </view>
 
-    <!-- 右侧编辑面板 -->
-    <view class="page-panel">
-      <view class="panel-header">
-        <view class="panel-tabs">
-          <view
-            class="panel-tab"
-            :class="{ 'panel-tab--active': panelTab === 'content' }"
-            @click="panelTab = 'content'"
-          >修改对应内容</view>
-          <view
-            class="panel-tab"
-            :class="{ 'panel-tab--active': panelTab === 'free' }"
-            @click="panelTab = 'free'"
-          >自由编辑</view>
+    <!-- 主预览区：全屏滚动 -->
+    <scroll-view class="preview-scroll" scroll-y>
+      <view class="preview-card" :style="canvasBackgroundStyle">
+        <view
+          v-for="(sec, idx) in editorStore.pageSections"
+          :key="sec.id"
+          class="page-section"
+          :class="[
+            `page-section--${sec.type}`,
+            { 'page-section--active': editorStore.activeSectionId === sec.id },
+            { 'page-section--non-editable': sec.editable === false }
+          ]"
+          @click="onSectionClick(sec)"
+        >
+          <template v-if="sec.type === 'title'">
+            <text class="section-title" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入标题' }}</text>
+          </template>
+          <template v-else-if="sec.type === 'date'">
+            <text class="section-date" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || 'YYYY/MM/DD' }}</text>
+          </template>
+          <template v-else-if="sec.type === 'image'">
+            <image
+              class="section-image"
+              :src="sec.image || '/static/images/icons/img-placeholder.svg'"
+              mode="aspectFit"
+              @error="onImageError"
+            />
+            <view v-if="!sec.image" class="image-placeholder">
+              <text class="placeholder-icon">📷</text>
+              <text class="placeholder-text">{{ sec.placeholder || '点击上传照片' }}</text>
+            </view>
+          </template>
+          <template v-else-if="sec.type === 'text'">
+            <text class="section-text" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入正文内容' }}</text>
+          </template>
+          <template v-else-if="sec.type === 'location'">
+            <view class="location-row">
+              <text class="location-icon">📍</text>
+              <text class="location-text" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入地址' }}</text>
+            </view>
+          </template>
+          <template v-else-if="sec.type === 'rsvp'">
+            <view class="rsvp-section">
+              <text class="rsvp-title">RSVP</text>
+              <view class="rsvp-form">
+                <view class="form-item">
+                  <text class="form-label">姓名</text>
+                  <input class="form-input" placeholder="请输入姓名" />
+                </view>
+                <view class="form-item">
+                  <text class="form-label">出席人数</text>
+                  <input class="form-input" type="number" placeholder="请输入人数" />
+                </view>
+                <view class="rsvp-submit">提交</view>
+              </view>
+            </view>
+          </template>
+          <template v-else-if="sec.type === 'map'">
+            <view class="map-section">
+              <image
+                class="map-image"
+                src="/static/images/icons/map-placeholder.svg"
+                mode="aspectFit"
+              />
+              <text class="map-address">{{ sec.text || '请输入地址' }}</text>
+            </view>
+          </template>
+          <template v-else-if="sec.type === 'divider'">
+            <view class="divider-line">
+              <text class="divider-text">{{ sec.text }}</text>
+            </view>
+          </template>
+          <template v-else-if="sec.type === 'countdown'">
+            <view class="countdown-section">
+              <text class="countdown-label">距婚礼还有</text>
+              <view class="countdown-days">{{ sec.text || '0' }}</view>
+              <text class="countdown-unit">天</text>
+            </view>
+          </template>
         </view>
       </view>
-      <scroll-view class="panel-content" scroll-y>
-        <template v-if="panelTab === 'content'">
-          <view
-            v-for="(sec, idx) in editorStore.pageSections"
-            :key="sec.id"
-            class="panel-item"
-            :class="{ 'panel-item--active': editorStore.activeSectionId === sec.id }"
-            @click="onPanelItemClick(sec)"
-          >
-            <template v-if="sec.type === 'title' || sec.type === 'text' || sec.type === 'date' || sec.type === 'location'">
-              <view class="item-label">{{ sec.label || getSectionLabel(sec.type) }}</view>
-              <view class="item-value">{{ sec.text || sec.placeholder }}</view>
-            </template>
-            <template v-else-if="sec.type === 'image'">
-              <view class="item-label">{{ sec.label || '照片' }}</view>
-              <image class="item-image" :src="sec.image || ''" mode="aspectFill" />
-              <text class="item-placeholder" v-if="!sec.image">{{ sec.placeholder }}</text>
-            </template>
-            <template v-else-if="sec.type === 'rsvp'">
-              <view class="item-label">出席确认</view>
-              <text class="item-value">RSVP 表单</text>
-            </template>
-            <template v-else-if="sec.type === 'map'">
-              <view class="item-label">地图</view>
-              <text class="item-value">{{ sec.text || '地址信息' }}</text>
-            </template>
-            <template v-else-if="sec.type === 'countdown'">
-              <view class="item-label">倒计时</view>
-              <text class="item-value">{{ sec.text || '设置日期' }}</text>
-            </template>
+    </scroll-view>
+
+    <!-- 底部工具栏 -->
+    <view class="editor-footer">
+      <!-- 选中元素时的上下文工具栏 -->
+      <view v-if="editorStore.activeSectionId !== null" class="context-toolbar">
+        <view class="ctx-btn" @click="handleEditSection">
+          <text class="ctx-icon">✏️</text>
+          <text class="ctx-label">编辑</text>
+        </view>
+        <view v-if="activeSection?.type === 'image'" class="ctx-btn" @click="handleReplaceImage">
+          <text class="ctx-icon">🖼️</text>
+          <text class="ctx-label">换图</text>
+        </view>
+        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
+          <text class="ctx-icon">↩</text>
+          <text class="ctx-label">撤销</text>
+        </view>
+        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canRedo }" @click="handleRedo">
+          <text class="ctx-icon">↪</text>
+          <text class="ctx-label">重做</text>
+        </view>
+        <view class="ctx-btn ctx-btn--danger" @click="deselectSection">
+          <text class="ctx-icon">✕</text>
+          <text class="ctx-label">取消</text>
+        </view>
+      </view>
+      <!-- 底部主操作区 -->
+      <view class="footer-main">
+        <view class="footer-tabs">
+          <view class="footer-tab" @click="openUnifiedEdit">
+            <text class="tab-icon">📋</text>
+            <text class="tab-label">信息</text>
           </view>
-        </template>
-        <template v-else-if="panelTab === 'free'">
-          <view class="free-edit-tips">
-            <text class="tips-icon">✏️</text>
-            <text class="tips-text">点击左侧预览区的元素，即可自由编辑</text>
+          <view class="footer-tab" @click="handleEditSection">
+            <text class="tab-icon">✏️</text>
+            <text class="tab-label">文字</text>
           </view>
-        </template>
-      </scroll-view>
+          <view class="footer-tab" @click="handleReplaceImage">
+            <text class="tab-icon">🖼️</text>
+            <text class="tab-label">图片</text>
+          </view>
+          <view class="footer-tab" @click="handleMusic">
+            <text class="tab-icon">🎵</text>
+            <text class="tab-label">音乐</text>
+          </view>
+          <view class="footer-tab" @click="handleMore">
+            <text class="tab-icon">⋯</text>
+            <text class="tab-label">更多</text>
+          </view>
+        </view>
+        <view class="footer-actions">
+          <view class="footer-action-btn footer-save-btn" @click="handleSave">
+            <text class="action-btn-text">保存</text>
+          </view>
+          <view class="footer-action-btn footer-share-btn" @click="handleShare">
+            <text class="action-btn-text">预览分享</text>
+          </view>
+        </view>
+      </view>
     </view>
+
+    <!-- 文本编辑弹窗 -->
+    <TextEditorPopup
+      v-if="editorStore.showSectionTextEditor"
+      :visible="editorStore.showSectionTextEditor"
+      :editing-text="editorStore.editingText"
+      @input="(v: string) => editorStore.editingText = v"
+      @close="editorStore.closeSectionTextEditor"
+      @confirm="onTextEditorConfirm"
+    />
+
+    <!-- 统一编辑表单 -->
+    <UnifiedEditForm
+      v-if="editorStore.showBasicInfoEditor"
+      :visible="editorStore.showBasicInfoEditor"
+      :basic-info="templateStore.basicInfo"
+      :elements="editorStore.pageSections as any"
+      :template-data="templateStore.templateData"
+      @close="onUnifiedEditCancel"
+      @confirm="onUnifiedEditConfirm"
+      @update="onSmartFieldUpdate"
+      @location="handleLocation"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useEditorStore } from '@/stores/editor'
+import { useTemplateStore } from '@/stores/template'
+import { useWorksStore } from '@/stores/works'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { useGoBack } from '@/composables/useGoBack'
 import { uploadImage } from '@/api'
-import type { PageSection } from '@/types'
+import TextEditorPopup from './TextEditorPopup.vue'
+import UnifiedEditForm from './UnifiedEditForm.vue'
+import type { PageSection, Work } from '@/types'
 
 const editorStore = useEditorStore()
-const panelTab = ref<'content' | 'free'>('content')
+const templateStore = useTemplateStore()
+const worksStore = useWorksStore()
+const goBack = useGoBack()
 
 const { canvasBackgroundStyle, getTextStyle } = useCanvasRender({
   getElements: () => [],
@@ -160,23 +203,13 @@ const { canvasBackgroundStyle, getTextStyle } = useCanvasRender({
   getBackground: () => editorStore.background as any,
 })
 
-function getSectionLabel(type: string): string {
-  const labels: Record<string, string> = {
-    title: '标题',
-    date: '日期',
-    image: '照片',
-    text: '正文',
-    location: '地址',
-    rsvp: '出席确认',
-    map: '地图',
-    divider: '分隔线',
-    countdown: '倒计时',
-  }
-  return labels[type] || type
-}
+const activeSection = computed(() => {
+  return editorStore.pageSections.find(s => s.id === editorStore.activeSectionId)
+})
 
 function onSectionClick(sec: PageSection) {
   if (sec.editable === false) return
+  editorStore.activeSectionId = sec.id
   if (sec.type === 'image') {
     chooseImage(sec.id)
   } else if (sec.type === 'title' || sec.type === 'text' || sec.type === 'date' || sec.type === 'location') {
@@ -184,18 +217,28 @@ function onSectionClick(sec: PageSection) {
   }
 }
 
-function onPanelItemClick(sec: PageSection) {
-  if (sec.editable === false) return
-  if (sec.type === 'image') {
-    chooseImage(sec.id)
-  } else if (sec.type === 'title' || sec.type === 'text' || sec.type === 'date' || sec.type === 'location') {
-    editorStore.openSectionTextEditor(sec.id)
+function deselectSection() {
+  editorStore.activeSectionId = null
+}
+
+function handleEditSection() {
+  if (!activeSection.value) {
+    uni.showToast({ title: '请先点击选择要编辑的内容', icon: 'none' })
+    return
   }
+  onSectionClick(activeSection.value)
+}
+
+function handleReplaceImage() {
+  if (!activeSection.value || activeSection.value.type !== 'image') {
+    uni.showToast({ title: '请先选择图片区域', icon: 'none' })
+    return
+  }
+  chooseImage(activeSection.value.id)
 }
 
 function chooseImage(sectionId: string) {
   editorStore.activeSectionId = sectionId
-  editorStore.selectedElement = null
 
   const applyImage = async (tempPath: string) => {
     uni.showLoading({ title: '上传中...' })
@@ -245,6 +288,156 @@ function chooseImage(sectionId: string) {
   // #endif
 }
 
+function onTextEditorConfirm() {
+  editorStore.confirmTextEdit()
+  editorStore.pushHistory()
+}
+
+function openUnifiedEdit() {
+  editorStore.showBasicInfoEditor = true
+}
+
+function onUnifiedEditConfirm() {
+  editorStore.syncBasicInfoToElements()
+  editorStore.closeBasicInfoEditor()
+}
+
+function onUnifiedEditCancel() {
+  editorStore.closeBasicInfoEditor()
+}
+
+function onSmartFieldUpdate(key: string, value: string) {
+  editorStore.syncSmartField(key, value)
+}
+
+function handleUndo() {
+  if (!editorStore.canUndo) return
+  editorStore.undo()
+}
+
+function handleRedo() {
+  if (!editorStore.canRedo) return
+  editorStore.redo()
+}
+
+function handleMusic() {
+  uni.navigateTo({ url: '/pages/music/index' })
+}
+
+function handleMore() {
+  uni.showActionSheet({
+    itemList: ['撤销', '重做', '设置', '更换模板', '导出'],
+    success: (res: any) => {
+      switch (res.tapIndex) {
+        case 0: handleUndo(); break
+        case 1: handleRedo(); break
+        case 2: handleSettings(); break
+        case 3: handleChangeTemplate(); break
+        case 4: handleExport(); break
+      }
+    },
+  })
+}
+
+function handleSettings() {
+  const settingItems = [
+    { name: '礼物相册', key: 'giftAlbum' },
+    { name: '礼物购买', key: 'giftBuy' },
+    { name: '礼金功能', key: 'moneyGift' },
+    { name: '点赞功能', key: 'like' },
+    { name: '弹幕功能', key: 'danmaku' },
+    { name: '相册功能', key: 'album' },
+  ]
+  uni.showActionSheet({
+    itemList: settingItems.map(s => {
+      const enabled = (templateStore.settings as any)[s.key]
+      return `${s.name}${enabled ? ' ✓' : ''}`
+    }),
+    success: (res: any) => {
+      const item = settingItems[res.tapIndex]
+      if (item) {
+        templateStore.toggleSetting(item.key)
+        const enabled = (templateStore.settings as any)[item.key]
+        uni.showToast({ title: `${item.name}已${enabled ? '开启' : '关闭'}`, icon: 'none' })
+      }
+    },
+  })
+}
+
+function handleChangeTemplate() {
+  uni.showModal({
+    title: '更换模板',
+    content: '切换模板可能会丢失当前编辑内容，确定要继续吗？',
+    confirmText: '继续',
+    confirmColor: '#e84a6e',
+    success: (res) => {
+      if (res.confirm) {
+        uni.navigateTo({ url: '/pages/template/index?from=editor' })
+      }
+    },
+  })
+}
+
+function handleExport() {
+  uni.showToast({ title: '导出功能开发中', icon: 'none' })
+}
+
+function handleLocation() {
+  uni.showToast({ title: '定位功能开发中', icon: 'none' })
+}
+
+function handleSave() {
+  const editorData = {
+    elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
+    pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
+    flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
+    background: JSON.parse(JSON.stringify(editorStore.background)),
+    canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
+    templateType: editorStore.templateType,
+    templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
+    basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
+    settings: JSON.parse(JSON.stringify(templateStore.settings)),
+    currentFlipPageIndex: editorStore.currentFlipPageIndex,
+  }
+  const musicId = templateStore.selectedMusicId
+  if (editorStore.currentWorkId) {
+    const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+    if (existing) {
+      existing.title = templateStore.templateData.coverTitle || '未命名作品'
+      existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+      existing.image = templateStore.templateData.coverImage
+      existing.templateType = editorStore.currentTemplateId
+      existing.musicId = musicId
+      existing.data = editorData
+      existing.updatedAt = new Date().toISOString()
+      worksStore.saveAsWork(existing)
+      uni.showToast({ title: '已保存', icon: 'success' })
+      return
+    }
+  }
+  const id = editorStore.currentWorkId || String(Date.now())
+  if (!editorStore.currentWorkId) {
+    editorStore.setCurrentWorkId(id)
+  }
+  const work: Work = {
+    id,
+    title: templateStore.templateData.coverTitle || '未命名作品',
+    date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+    image: templateStore.templateData.coverImage,
+    templateType: editorStore.currentTemplateId,
+    musicId,
+    status: 'draft',
+    data: editorData,
+    updatedAt: new Date().toISOString(),
+  }
+  worksStore.saveAsWork(work)
+  uni.showToast({ title: '已保存', icon: 'success' })
+}
+
+function handleShare() {
+  uni.showToast({ title: '预览分享功能开发中', icon: 'none' })
+}
+
 function onImageError() {
   console.warn('PageEditor image load failed')
 }
@@ -253,18 +446,63 @@ function onImageError() {
 <style lang="scss" scoped>
 .page-editor {
   display: flex;
+  flex-direction: column;
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
 }
 
-.page-preview {
-  flex: 1;
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 30rpx;
   background: #fff;
-  overflow: hidden;
+  border-bottom: 1rpx solid #f0e0e5;
+  flex-shrink: 0;
+}
+
+.header-back {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-icon {
+  font-size: 48rpx;
+  color: #333;
+  font-weight: 300;
+}
+
+.header-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.header-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.header-action {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: #666;
+  background: #f5f5f5;
+  border-radius: 50%;
 }
 
 .preview-scroll {
+  flex: 1;
   height: 100%;
+  min-height: 0;
 }
 
 .preview-card {
@@ -276,11 +514,12 @@ function onImageError() {
   margin-bottom: 30rpx;
   padding: 16rpx;
   border-radius: 12rpx;
-  transition: background 0.2s;
+  transition: all 0.2s;
 
   &--active {
     background: rgba(232, 74, 110, 0.05);
-    outline: 3rpx solid #e84a6e;
+    outline: 4rpx solid #e84a6e;
+    outline-offset: -4rpx;
   }
 
   &--non-editable {
@@ -471,104 +710,141 @@ function onImageError() {
   margin-left: 8rpx;
 }
 
-.page-panel {
-  width: 360rpx;
-  background: #fff;
-  border-left: 2rpx solid #f0e0e5;
+.editor-footer {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  background: #fff;
+  border-top: 1rpx solid #f0e0e5;
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, 0.04);
 }
 
-.panel-header {
-  padding: 20rpx;
-  border-bottom: 2rpx solid #f0e0e5;
-}
-
-.panel-tabs {
+.context-toolbar {
   display: flex;
-  gap: 10rpx;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 16rpx;
+  background: linear-gradient(135deg, #fff5f7 0%, #fef0f3 100%);
+  border-bottom: 1rpx solid #f0e0e5;
+  animation: slide-up 0.2s ease;
 }
 
-.panel-tab {
+.ctx-btn {
   flex: 1;
-  padding: 16rpx;
-  text-align: center;
-  font-size: 26rpx;
-  color: #999;
-  border-radius: 8rpx;
-  transition: all 0.2s;
-
-  &--active {
-    background: #fdf6f8;
-    color: #e84a6e;
-    font-weight: 600;
-  }
-}
-
-.panel-content {
-  flex: 1;
-  padding: 16rpx;
-}
-
-.panel-item {
-  padding: 16rpx;
-  border-radius: 10rpx;
-  margin-bottom: 12rpx;
-  background: #fafafa;
-  transition: all 0.2s;
-
-  &--active {
-    background: #fdf6f8;
-    border: 2rpx solid #e84a6e;
-  }
-}
-
-.item-label {
-  font-size: 22rpx;
-  color: #999;
-  margin-bottom: 8rpx;
-}
-
-.item-value {
-  font-size: 26rpx;
-  color: #333;
-  word-break: break-all;
-  line-height: 1.5;
-}
-
-.item-image {
-  width: 100%;
-  height: 120rpx;
-  border-radius: 8rpx;
-  background: #f0f0f0;
-}
-
-.item-placeholder {
-  display: block;
-  font-size: 24rpx;
-  color: #ccc;
-  text-align: center;
-  margin-top: 8rpx;
-}
-
-.free-edit-tips {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60rpx 20rpx;
+  padding: 10rpx 0;
+  border-radius: 12rpx;
+  background: #fff;
+  gap: 4rpx;
+  transition: transform 0.1s ease;
+}
+
+.ctx-btn:active {
+  transform: scale(0.94);
+  opacity: 0.8;
+}
+
+.ctx-btn--disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.ctx-btn--danger {
+  background: #fff5f5;
+}
+
+.ctx-icon {
+  font-size: 28rpx;
+}
+
+.ctx-label {
+  font-size: 20rpx;
+  color: #666;
+}
+
+.ctx-btn--danger .ctx-label {
+  color: #e84a6e;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.footer-main {
+  display: flex;
+  align-items: center;
+  padding: 12rpx 24rpx;
   gap: 16rpx;
 }
 
-.tips-icon {
-  font-size: 60rpx;
+.footer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  flex: 1;
 }
 
-.tips-text {
-  font-size: 26rpx;
-  color: #999;
+.footer-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 96rpx;
+  min-height: 80rpx;
+  padding: 8rpx 12rpx;
+  gap: 4rpx;
+  border-radius: 12rpx;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.footer-tab:active {
+  transform: scale(0.92);
+  background: #fce4ec;
+}
+
+.tab-icon {
+  font-size: 36rpx;
+  line-height: 1;
+}
+
+.tab-label {
+  font-size: 20rpx;
+  color: #666;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.footer-action-btn {
+  padding: 16rpx 28rpx;
+  border-radius: 50rpx;
   text-align: center;
-  line-height: 1.6;
+}
+
+.footer-save-btn {
+  background: #f5f5f5;
+}
+
+.footer-share-btn {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.3);
+}
+
+.action-btn-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
+.footer-save-btn .action-btn-text {
+  color: #666;
 }
 </style>

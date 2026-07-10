@@ -228,7 +228,7 @@ const corsOrigins = process.env.CORS_ORIGINS
   : ['http://localhost:5172', 'http://localhost:5173']
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || corsOrigins.includes(origin)) {
+    if (!origin || corsOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
