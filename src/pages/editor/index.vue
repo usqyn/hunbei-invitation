@@ -476,6 +476,18 @@ function handleSettings() {
 
 function handleSave() {
   track('edit_save', { progress: editProgress.value })
+  const editorData = {
+    elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
+    pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
+    flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
+    background: JSON.parse(JSON.stringify(editorStore.background)),
+    canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
+    templateType: editorStore.templateType,
+    templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
+    basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
+    settings: JSON.parse(JSON.stringify(templateStore.settings)),
+  }
+  const musicId = templateStore.selectedMusicId
   if (editorStore.currentWorkId) {
     const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
     if (existing) {
@@ -483,6 +495,9 @@ function handleSave() {
       existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
       existing.image = templateStore.templateData.coverImage
       existing.templateType = editorStore.currentTemplateId
+      existing.musicId = musicId
+      existing.data = editorData
+      existing.updatedAt = new Date().toISOString()
       worksStore.saveAsWork(existing)
       uni.showToast({ title: '已保存', icon: 'success' })
       return
@@ -498,7 +513,10 @@ function handleSave() {
     date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
     image: templateStore.templateData.coverImage,
     templateType: editorStore.currentTemplateId,
+    musicId,
     status: 'draft',
+    data: editorData,
+    updatedAt: new Date().toISOString(),
   }
   worksStore.saveAsWork(work)
   uni.showToast({ title: '已保存', icon: 'success' })
@@ -539,13 +557,24 @@ function handleExport() {
 }
 
 async function doExport(options: { watermark: boolean; quality: string }) {
-  if (!editorStore.currentWorkId) return
+  if (!editorStore.currentWorkId) {
+    uni.showModal({
+      title: '提示',
+      content: '请先保存作品再导出',
+      confirmText: '去保存',
+      success: (res) => {
+        if (res.confirm) {
+          handleSave()
+        }
+      }
+    })
+    return
+  }
   uni.showLoading({ title: '导出中...' })
   try {
     const res = await exportInvitation(editorStore.currentWorkId, options)
     uni.hideLoading()
     uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
-    // 可以下载图片
     uni.downloadFile({ url: res.url, success: (r) => {
       uni.saveImageToPhotosAlbum({ filePath: r.tempFilePath })
     }})

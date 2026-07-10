@@ -88,7 +88,10 @@ import { ref, onMounted } from 'vue'
 import { POSTER_CATEGORIES } from '@/constants/categories'
 import { request } from '@/utils/request'
 import { resolveUrl } from '@/utils/url'
+import { useUserStore } from '@/stores/user'
 import type { PosterTemplate } from '@/types'
+
+const userStore = useUserStore()
 
 // ============ 状态 ============
 const PAGE_SIZE = 20
@@ -155,6 +158,21 @@ function onSelectCategory(catId: string) {
 }
 
 function onSelectTemplate(template: PosterTemplate) {
+  if (!template.is_free && template.is_vip) {
+    if (!userStore.isVip()) {
+      uni.showModal({
+        title: 'VIP 专属',
+        content: '该模板为 VIP 专属模板，开通 VIP 即可使用',
+        confirmText: '去开通',
+        success: (res) => {
+          if (res.confirm) {
+            uni.navigateTo({ url: '/pages/vip/index' })
+          }
+        },
+      })
+      return
+    }
+  }
   uni.navigateTo({
     url: `/pages/poster/editor/index?id=${template.id}`,
   })

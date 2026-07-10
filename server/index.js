@@ -158,6 +158,8 @@ async function initDatabase() {
   try { db.run("ALTER TABLE templates ADD COLUMN is_paid INTEGER DEFAULT 0") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN price INTEGER DEFAULT 0") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN is_premium INTEGER DEFAULT 0") } catch (_) {}
+  // 迁移：为 orders 表添加 paid_at 字段
+  try { db.run("ALTER TABLE orders ADD COLUMN paid_at TEXT") } catch (_) {}
   // 已有模板全部标记为 published
   db.run("UPDATE templates SET status = 'published' WHERE status IS NULL OR status = ''")
 
@@ -182,14 +184,18 @@ async function initDatabase() {
   db.run("CREATE INDEX IF NOT EXISTS idx_orders_createdAt ON orders(createdAt)")
   db.run("CREATE INDEX IF NOT EXISTS idx_favorites_phone_createdAt ON favorites(phone, createdAt)")
   db.run("CREATE INDEX IF NOT EXISTS idx_footprints_phone_timestamp ON footprints(phone, timestamp)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_footprints_phone_template_timestamp ON footprints(phone, template_id, timestamp)")
   db.run("CREATE INDEX IF NOT EXISTS idx_notifications_phone_createdAt ON notifications(phone, createdAt)")
+  db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_favorites_phone_work_id ON favorites(phone, work_id)")
 
   saveDatabase()
 }
 
 function saveDatabase() {
   const data = db.export()
-  fs.writeFileSync(DB_PATH, Buffer.from(data))
+  const tmpPath = DB_PATH + '.tmp'
+  fs.writeFileSync(tmpPath, Buffer.from(data))
+  fs.renameSync(tmpPath, DB_PATH)
 }
 
 // 防抖保存：延迟 500ms，避免短时间内多次写操作重复保存文件
@@ -234,6 +240,7 @@ app.use((req, res, next) => {
   next()
 })
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+app.use('/uploads/music', express.static(path.join(__dirname, 'music')))
 
 // ============ Poster uploads static serving ============
 const POSTER_UPLOADS_DIR = path.join(__dirname, 'uploads', 'poster')
@@ -272,26 +279,34 @@ function requireAdmin(req, res, next) {
   next()
 }
 
+// 判断当前请求是否来自管理员（公开接口中据此对 deleted 资源做差异化可见性控制）
+function isRequestFromAdmin(req) {
+  const adminPhone = process.env.ADMIN_PHONE || '13800138000'
+  return !!(req.user && req.user.phone === adminPhone)
+}
+
 // ============ 字体目录 ============
 const FONTS_DIR = path.join(__dirname, 'uploads', 'fonts')
 if (!fs.existsSync(FONTS_DIR)) fs.mkdirSync(FONTS_DIR, { recursive: true })
 app.use('/uploads/fonts', express.static(FONTS_DIR))
 
-// 简单的 IP 限流（登录接口防暴力破解）
-const loginAttempts = {}
-function rateLimit(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown'
-  const now = Date.now()
-  if (!loginAttempts[ip]) loginAttempts[ip] = []
-  loginAttempts[ip] = loginAttempts[ip].filter(t => now - t < 60000)
-  if (loginAttempts[ip].length === 0) {
-    delete loginAttempts[ip]
+// IP 限流中间件工厂：默认 10 次/分钟，可按路由配置上限(max)与窗口(windowMs)
+// 同一工厂产出的中间件各自维护独立计数，避免不同接口共享同一限流计数互相干扰
+function rateLimit({ max = 10, windowMs = 60000 } = {}) {
+  const attempts = {}
+  return function rateLimitMiddleware(req, res, next) {
+    const ip = req.ip || (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || 'unknown'
+    const now = Date.now()
+    // 仅保留窗口期内的请求时间戳（先过滤，避免 delete 后再访问导致的 undefined.push 错误）
+    const recent = (attempts[ip] || []).filter(t => now - t < windowMs)
+    if (recent.length >= max) {
+      attempts[ip] = recent
+      return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试' })
+    }
+    recent.push(now)
+    attempts[ip] = recent
+    next()
   }
-  if (loginAttempts[ip] && loginAttempts[ip].length >= 10) {
-    return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试' })
-  }
-  loginAttempts[ip].push(now)
-  next()
 }
 
 // ============ 文件上传配置 ============
@@ -433,7 +448,7 @@ setInterval(() => {
 }, 60000)
 
 // 发送验证码
-app.post('/api/sms/send', rateLimit, (req, res) => {
+app.post('/api/sms/send', rateLimit(), (req, res) => {
   const { phone } = req.body
   if (!phone || phone.length < 11) {
     return res.status(400).json({ success: false, error: '请输入正确的手机号' })
@@ -445,24 +460,24 @@ app.post('/api/sms/send', rateLimit, (req, res) => {
 })
 
 // 用户登录
-app.post('/api/user/login', rateLimit, (req, res) => {
+app.post('/api/user/login', rateLimit(), (req, res) => {
   const { phone, code } = req.body
 
   // 微信小程序登录（encryptedData 模式）
   if (req.body.encryptedData && req.body.code) {
     // 生产环境应调用 wx.login 服务端接口验证
-    // 演示环境直接放行
-    const token = jwt.sign({ phone: 'wechat_user', role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
+    // 演示环境直接放行，每次登录生成唯一标识（模拟 openid 隔离）
+    const wechatPhone = 'wx_' + uuidv4()
+    const token = jwt.sign({ phone: wechatPhone, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
     const now = new Date().toISOString()
-    const userCheck = db.exec("SELECT id FROM users WHERE phone = ?", ['wechat_user'])
-    if (!userCheck.length || !userCheck[0].values.length) {
-      db.run(`INSERT INTO users (id, phone, nickname, avatar, vip_status, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
-        uuidv4(), 'wechat_user', '微信用户', '', 0, now, now,
-      ])
-      saveDatabaseDebounced()
-    }
-    return res.json({ success: true, data: { token, nickname: '微信用户', phone: 'wechat_user' } })
+    db.run(`INSERT INTO users (id, phone, nickname, avatar, vip_status, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+      uuidv4(), wechatPhone, '微信用户', '', 0, now, now,
+    ])
+    db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
+      [wechatPhone, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
+    saveDatabaseDebounced()
+    return res.json({ success: true, data: { token, nickname: '微信用户', phone: wechatPhone } })
   }
 
   // 手机号+验证码登录
@@ -490,6 +505,8 @@ app.post('/api/user/login', rateLimit, (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?)`, [
         uuidv4(), phone, phone.substring(0, 3) + '****' + phone.substring(7), '', 0, now, now,
       ])
+      db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
+        [phone, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
       saveDatabaseDebounced()
     }
     return res.json({
@@ -506,14 +523,14 @@ app.post('/api/user/login', rateLimit, (req, res) => {
 })
 
 // 事件追踪
-app.post('/api/track', requireAuth, (req, res) => {
+app.post('/api/track', rateLimit({ max: 60, windowMs: 60000 }), (req, res) => {
   try {
     const { event, params, platform, version } = req.body
     if (!event) {
       return res.status(400).json({ success: false, error: '缺少 event 字段' })
     }
     const sessionId = req.headers['x-session-id'] || req.headers['session-id'] || uuidv4()
-    const userId = req.user?.phone || ''
+    const userId = req.user?.phone || null
     const timestamp = Date.now()
     db.run(`INSERT INTO events (event, user_id, session_id, timestamp, params, platform, version)
       VALUES (?, ?, ?, ?, ?, ?, ?)`, [
@@ -542,6 +559,12 @@ app.get('/api/user/info', (req, res) => {
     const result = db.exec("SELECT * FROM users WHERE phone = ?", [phone])
     if (result.length && result[0].values.length) {
       const user = rowToObject(result)
+      if (user.vip_status === 1 && user.vip_expire_at && Date.now() > parseInt(user.vip_expire_at, 10)) {
+        db.run("UPDATE users SET vip_status = 0, updatedAt = ? WHERE phone = ?",
+          [new Date().toISOString(), phone])
+        saveDatabaseDebounced()
+        user.vip_status = 0
+      }
       res.json({ success: true, data: user })
     } else {
       res.json({
@@ -563,7 +586,7 @@ app.get('/api/categories', (req, res) => {
       count: 0,
     })) : []
 
-    const countResult = db.exec("SELECT category, COUNT(*) as c FROM templates GROUP BY category")
+    const countResult = db.exec("SELECT category, COUNT(*) as c FROM templates WHERE status = 'published' GROUP BY category")
     const counts = {}
     if (countResult.length) {
       countResult[0].values.forEach(row => { counts[row[0]] = row[1] })
@@ -664,10 +687,30 @@ app.get('/api/templates', (req, res) => {
   }
 })
 
+// 记录足迹（同一用户同一模板 24 小时内不重复记录，避免浏览产生大量重复数据）
+function recordFootprint(phone, templateId, templateName, templateCover) {
+  const since = Date.now() - 86400000
+  const existing = db.exec(
+    "SELECT id FROM footprints WHERE phone = ? AND template_id = ? AND timestamp > ?",
+    [phone, templateId, since]
+  )
+  if (existing.length && existing[0].values.length) return false
+  db.run(
+    "INSERT INTO footprints (phone, template_id, template_name, template_cover, timestamp) VALUES (?, ?, ?, ?, ?)",
+    [phone, templateId, templateName || '', templateCover || '', Date.now()]
+  )
+  saveDatabaseDebounced()
+  return true
+}
+
 // 获取单个模板
 app.get('/api/templates/:id', (req, res) => {
   try {
-    const result = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
+    // 非管理员不返回已软删除的模板；管理员可查看以便管理/恢复
+    const sql = isRequestFromAdmin(req)
+      ? "SELECT * FROM templates WHERE id = ?"
+      : "SELECT * FROM templates WHERE id = ? AND status != 'deleted'"
+    const result = db.exec(sql, [req.params.id])
     if (!result.length || !result[0].values.length) {
       return res.status(404).json({ success: false, error: '模板不存在' })
     }
@@ -681,6 +724,11 @@ app.get('/api/templates/:id', (req, res) => {
         obj[cols[i]] = val
       }
     })
+    const phone = req.user?.phone
+    if (phone) {
+      // 自动记录足迹（24 小时内同一模板不重复）
+      recordFootprint(phone, obj.id, obj.name || '', obj.cover || '')
+    }
     res.json({ success: true, data: obj })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -758,12 +806,34 @@ app.get('/api/fonts', (req, res) => {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
-app.post('/api/music/upload', requireAuth, upload.array('music', 10), (req, res) => {
+const musicStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const musicUploadDir = path.join(__dirname, 'uploads', 'music')
+    if (!fs.existsSync(musicUploadDir)) fs.mkdirSync(musicUploadDir, { recursive: true })
+    cb(null, musicUploadDir)
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname)
+    cb(null, `${uuidv4()}${ext}`)
+  },
+})
+const musicUpload = multer({
+  storage: musicStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.mp3', '.wav', '.ogg', '.aac']
+    const ext = path.extname(file.originalname).toLowerCase()
+    if (allowed.includes(ext)) cb(null, true)
+    else cb(new Error('不支持的音乐格式，请上传 mp3/wav/ogg/aac'))
+  },
+})
+
+app.post('/api/music/upload', requireAuth, musicUpload.array('music', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
       originalName: f.originalname,
-      url: `/uploads/${f.filename}`,
+      url: `/uploads/music/${f.filename}`,
       size: f.size,
     }))
     files.forEach(f => {
@@ -931,14 +1001,14 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
   }
 })
 
-// 删除模板
+// 删除模板（软删除）
 app.delete('/api/templates/:id', requireAdmin, (req, res) => {
   try {
     const existing = db.exec("SELECT id FROM templates WHERE id = ?", [req.params.id])
     if (!existing.length || !existing[0].values.length) {
       return res.status(404).json({ success: false, error: '模板不存在' })
     }
-    db.run("DELETE FROM templates WHERE id = ?", [req.params.id])
+    db.run("UPDATE templates SET status = 'deleted', updatedAt = ? WHERE id = ?", [new Date().toISOString(), req.params.id])
     bumpVersion()
     saveDatabase()
     res.json({ success: true, message: '删除成功' })
@@ -956,13 +1026,24 @@ app.post('/api/orders', requireAuth, (req, res) => {
     if (!items || !items.length) {
       return res.status(400).json({ success: false, error: '订单商品不能为空' })
     }
+    for (const item of items) {
+      if (item.templateId) {
+        const tplResult = db.exec("SELECT id FROM templates WHERE id = ? AND status = 'published'", [item.templateId])
+        if (!tplResult.length || !tplResult[0].values.length) {
+          return res.status(400).json({ success: false, error: `模板 ${item.templateId} 不存在` })
+        }
+      }
+    }
     const id = uuidv4()
     const now = new Date().toISOString()
+    const phone = req.user?.phone || ''
     db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt)
       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`, [
-      id, req.user?.phone || '', JSON.stringify(items), totalAmount || '0',
+      id, phone, JSON.stringify(items), totalAmount || '0',
       contactName || '', contactPhone || '', address || '', note || '', now, now,
     ])
+    db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
+      [phone, '订单创建成功', `您的订单已创建，金额 ¥${totalAmount || '0'}，请尽快完成支付。`, 'order', now])
     saveDatabaseDebounced()
     const order = db.exec("SELECT * FROM orders WHERE id = ?", [id])
     res.json({ success: true, data: rowToObject(order) })
@@ -1150,7 +1231,7 @@ app.get('/api/products', (req, res) => {
 
 app.get('/api/products/:id', (req, res) => {
   try {
-    const result = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
+    const result = db.exec("SELECT * FROM templates WHERE id = ? AND status != 'deleted'", [req.params.id])
     if (!result.length || !result[0].values.length) {
       return res.status(404).json({ success: false, error: '商品不存在' })
     }
@@ -1196,21 +1277,37 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     if (!phone) {
       return res.status(401).json({ success: false, error: '请先登录' })
     }
-    // TODO: 接入真实支付回调验证
-    // 当前为演示，实际应验证支付状态
-    // 临时方案：检查是否有 payment_id 参数
     if (!req.body.payment_id) {
       return res.status(400).json({ success: false, error: '缺少支付凭证' })
     }
     const { plan, price } = req.body
     const planDuration = { monthly: 30, quarterly: 90, yearly: 365 }
     const days = planDuration[plan] || 30
-    const expireAt = Date.now() + days * 24 * 60 * 60 * 1000
-    db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
-      [String(expireAt), plan, new Date().toISOString(), phone])
-    saveDatabaseDebounced()
+    const now = Date.now()
     const orderId = uuidv4()
-    res.json({ success: true, data: { orderId, prepayId: `prepay_${orderId}` } })
+    const nowStr = new Date().toISOString()
+
+    const orderItems = [{ type: 'vip', plan, days, price: price || 0 }]
+    db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt, paid_at)
+      VALUES (?, ?, ?, ?, 'paid', '', '', '', ?, ?, ?, ?)`, [
+      orderId, phone, JSON.stringify(orderItems), String(price || 0), '', nowStr, nowStr, nowStr,
+    ])
+
+    const userResult = db.exec("SELECT vip_status, vip_expire_at, vip_plan FROM users WHERE phone = ?", [phone])
+    let currentExpire = 0
+    if (userResult.length && userResult[0].values.length) {
+      const [status, expireAt, currentPlan] = userResult[0].values[0]
+      if (status === 1 && expireAt) {
+        currentExpire = parseInt(expireAt, 10) || 0
+      }
+    }
+    const baseExpire = Math.max(currentExpire, now)
+    const newExpireAt = baseExpire + days * 24 * 60 * 60 * 1000
+    db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
+      [String(newExpireAt), plan, nowStr, phone])
+    saveDatabaseDebounced()
+
+    res.json({ success: true, data: { orderId, prepayId: `prepay_${orderId}`, expireAt: newExpireAt } })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1254,11 +1351,17 @@ app.post('/api/favorites', requireAuth, (req, res) => {
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
     const { workId, templateId, title, image } = req.body
     if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
+    if (templateId) {
+      const tplResult = db.exec("SELECT id FROM templates WHERE id = ? AND status != 'deleted'", [templateId])
+      if (!tplResult.length || !tplResult[0].values.length) {
+        return res.status(400).json({ success: false, error: '模板不存在' })
+      }
+    }
     const existing = db.exec("SELECT id FROM favorites WHERE phone = ? AND work_id = ?", [phone, workId])
     if (existing.length && existing[0].values.length) {
       return res.json({ success: true, message: '已收藏' })
     }
-    db.run("INSERT INTO favorites (phone, work_id, template_id, title, image, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
+    db.run("INSERT OR IGNORE INTO favorites (phone, work_id, template_id, title, image, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
       [phone, workId, templateId || '', title || '', image || '', new Date().toISOString()])
     saveDatabaseDebounced()
     res.json({ success: true, message: '收藏成功' })
@@ -1358,18 +1461,45 @@ app.post('/api/export/poster', (req, res) => {
 // ========== 支付订单 ==========
 app.post('/api/orders/:id/pay', requireAuth, (req, res) => {
   try {
-    const existing = db.exec("SELECT id FROM orders WHERE id = ?", [req.params.id])
+    const existing = db.exec("SELECT id, status FROM orders WHERE id = ? AND phone = ?", [req.params.id, req.user?.phone || ''])
     if (!existing.length || !existing[0].values.length) {
       return res.status(404).json({ success: false, error: '订单不存在' })
     }
+    const status = existing[0].values[0][1]
+    if (status === 'paid') {
+      return res.status(400).json({ success: false, error: '订单已支付' })
+    }
+    const now = new Date().toISOString()
+    db.run("UPDATE orders SET status = 'paid', paid_at = ?, updatedAt = ? WHERE id = ?",
+      [now, now, req.params.id])
+    saveDatabaseDebounced()
     const prepayId = `prepay_${req.params.id}`
-    res.json({ success: true, data: { prepayId } })
+    res.json({ success: true, data: { prepayId, status: 'paid' } })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
 // ========== 足迹系统 ==========
+app.post('/api/footprints', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const { templateId } = req.body
+    if (!templateId) return res.status(400).json({ success: false, error: '缺少 templateId' })
+    const tplResult = db.exec("SELECT name, cover FROM templates WHERE id = ? AND status != 'deleted'", [templateId])
+    if (!tplResult.length || !tplResult[0].values.length) {
+      return res.status(400).json({ success: false, error: '模板不存在' })
+    }
+    const templateName = tplResult[0].values[0][0] || ''
+    const templateCover = tplResult[0].values[0][1] || ''
+    recordFootprint(phone, templateId, templateName, templateCover)
+    res.json({ success: true, message: '足迹已记录' })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
 app.get('/api/footprints', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
@@ -1420,6 +1550,30 @@ app.get('/api/footprints', requireAuth, (req, res) => {
 })
 
 // ========== 通知系统 ==========
+app.post('/api/notifications/send', requireAdmin, (req, res) => {
+  try {
+    const { phone, title, content, type } = req.body
+    if (!title) return res.status(400).json({ success: false, error: '缺少 title' })
+    if (phone) {
+      db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
+        [phone, title, content || '', type || 'system', new Date().toISOString()])
+    } else {
+      const users = db.exec("SELECT phone FROM users")
+      if (users.length && users[0].values.length) {
+        const now = new Date().toISOString()
+        users[0].values.forEach(row => {
+          db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
+            [row[0], title, content || '', type || 'system', now])
+        })
+      }
+    }
+    saveDatabaseDebounced()
+    res.json({ success: true, message: '通知已发送' })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
 app.get('/api/notifications', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
@@ -1583,7 +1737,7 @@ app.delete('/api/works/:id', requireAuth, (req, res) => {
 })
 
 // ========== 批量事件追踪 ==========
-app.post('/api/track/batch', requireAuth, (req, res) => {
+app.post('/api/track/batch', rateLimit({ max: 20, windowMs: 60000 }), (req, res) => {
   try {
     const { events } = req.body
     if (!events || !Array.isArray(events)) {
@@ -1593,7 +1747,7 @@ app.post('/api/track/batch', requireAuth, (req, res) => {
       return res.status(400).json({ success: false, error: '单次上报事件数不能超过 100 条' })
     }
     const sessionId = req.headers['x-session-id'] || req.headers['session-id'] || uuidv4()
-    const userId = req.user?.phone || ''
+    const userId = req.user?.phone || null
     events.forEach(evt => {
       db.run(`INSERT INTO events (event, user_id, session_id, timestamp, params, platform, version)
         VALUES (?, ?, ?, ?, ?, ?, ?)`, [
@@ -1616,7 +1770,7 @@ app.get('/api/version', (req, res) => {
   res.json({ success: true, version: getVersion(), count })
 })
 
-app.post('/api/version/refresh', (req, res) => {
+app.post('/api/version/refresh', requireAdmin, (req, res) => {
   bumpVersion()
   saveDatabaseDebounced()
   res.json({ success: true, version: getVersion() })

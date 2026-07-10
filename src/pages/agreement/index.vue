@@ -76,11 +76,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 
 const goBack = useGoBack()
 const activeTab = ref<'user' | 'privacy'>('user')
+
+onMounted(() => {
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  const options = curPage?.options || {}
+  if (options.type === 'privacy') {
+    activeTab.value = 'privacy'
+  } else if (options.type === 'user') {
+    activeTab.value = 'user'
+  }
+})
 </script>
 
 <style lang="scss" scoped>

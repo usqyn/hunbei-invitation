@@ -154,9 +154,9 @@ function onElementClick(el: any, idx: number) {
 function onTextInput(e: any) {
   if (selectedElement.value) {
     selectedElement.value.text = e.detail.value
-    // 持久化文本修改到 store
+    // 持久化文本修改到 store，并同步到所有模式
     if (selectedElement.value.dataKey) {
-      templateStore.updateField(selectedElement.value.dataKey as any, e.detail.value)
+      editorStore.syncFieldToAllModes(selectedElement.value.dataKey, e.detail.value)
     }
   }
 }
@@ -164,9 +164,9 @@ function onTextInput(e: any) {
 function applySelectedImage(tempFilePath: string) {
   if (selectedElement.value) {
     selectedElement.value.text = tempFilePath
-    // 持久化图片修改到 store
+    // 持久化图片修改到 store，并同步到所有模式
     if (selectedElement.value.dataKey) {
-      templateStore.updateField(selectedElement.value.dataKey as any, tempFilePath)
+      editorStore.syncFieldToAllModes(selectedElement.value.dataKey, tempFilePath)
     }
   }
 }
@@ -223,14 +223,16 @@ function getPageBgStyle(page: any): Record<string, string> {
 }
 
 function getElementStyle(el: any): Record<string, string> {
+  const cs = editorStore.canvasSize
   return {
     position: 'absolute',
-    left: el.x + '%',
-    top: el.y + '%',
-    width: el.width + '%',
-    height: el.height + '%',
+    left: (el.x / cs.width * 100) + '%',
+    top: (el.y / cs.height * 100) + '%',
+    width: (el.width / cs.width * 100) + '%',
+    height: (el.height / cs.height * 100) + '%',
     transform: `rotate(${el.rotation || 0}deg)`,
     opacity: el.opacity ?? 1,
+    zIndex: el.zIndex || 1,
   }
 }
 

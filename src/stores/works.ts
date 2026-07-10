@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Work } from '@/types'
+import { useUserStore } from './user'
+import { addFavorite, removeFavorite, fetchFavorites } from '@/api'
+import { request } from '@/utils/request'
 
 const STORAGE_KEY = 'hunbei_works'
 
@@ -34,7 +37,36 @@ export const useWorksStore = defineStore('works', () => {
   async function loadAll() {
     loading.value = true
     restore()
+    const userStore = useUserStore()
+    if (userStore.isLoggedIn) {
+      try {
+        await syncFavoritesFromServer()
+      } catch (e) {
+        console.warn('sync favorites failed', e)
+      }
+    }
     loading.value = false
+  }
+
+  async function syncFavoritesFromServer() {
+    try {
+      const data = await fetchFavorites()
+      if (data && Array.isArray(data)) {
+        const serverFavoriteIds = new Set(data.map((item: any) => item.workId || item.id))
+        const allWorks = [...works.value, ...drafts.value]
+        const newFavorites: Work[] = []
+        serverFavoriteIds.forEach(id => {
+          const work = allWorks.find(w => w.id === id)
+          if (work) {
+            newFavorites.push(work)
+          }
+        })
+        favorites.value = newFavorites
+        persist()
+      }
+    } catch (e) {
+      console.warn('sync favorites from server failed', e)
+    }
   }
 
   function addWork(work: Work) {
@@ -50,11 +82,25 @@ export const useWorksStore = defineStore('works', () => {
     }
   }
 
-  function deleteWork(id: string) {
+  async function deleteWork(id: string) {
+    const userStore = useUserStore()
+    if (userStore.isLoggedIn) {
+      try {
+        await request({
+          url: `/api/works/${id}`,
+          method: 'DELETE',
+        })
+      } catch (e) {
+        console.warn('delete work from server failed:', e)
+        uni.showToast({ title: '删除失败，请重试', icon: 'none' })
+        return
+      }
+    }
     works.value = works.value.filter(w => w.id !== id)
     drafts.value = drafts.value.filter(w => w.id !== id)
     favorites.value = favorites.value.filter(w => w.id !== id)
     persist()
+    uni.showToast({ title: '删除成功', icon: 'success' })
   }
 
   function addDraft(draft: Work) {
@@ -62,15 +108,37 @@ export const useWorksStore = defineStore('works', () => {
     persist()
   }
 
-  function toggleFavorite(id: string) {
-    const idx = favorites.value.findIndex(f => f.id === id)
-    if (idx !== -1) {
-      favorites.value.splice(idx, 1)
+  async function toggleFavorite(id: string) {
+    const userStore = useUserStore()
+    const isCurrentlyFavorite = isFavorite(id)
+
+    if (isCurrentlyFavorite) {
+      favorites.value = favorites.value.filter(f => f.id !== id)
     } else {
       const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
       if (work) favorites.value.unshift(work)
     }
     persist()
+
+    if (userStore.isLoggedIn) {
+      try {
+        if (isCurrentlyFavorite) {
+          await removeFavorite(id)
+        } else {
+          await addFavorite(id)
+        }
+      } catch (e) {
+        console.warn('favorite api failed', e)
+        if (isCurrentlyFavorite) {
+          const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
+          if (work) favorites.value.unshift(work)
+        } else {
+          favorites.value = favorites.value.filter(f => f.id !== id)
+        }
+        persist()
+        uni.showToast({ title: '操作失败，请重试', icon: 'none' })
+      }
+    }
   }
 
   function isFavorite(id: string): boolean {
@@ -95,5 +163,6 @@ export const useWorksStore = defineStore('works', () => {
     works, drafts, favorites, loading,
     addWork, updateWork, deleteWork, addDraft,
     toggleFavorite, isFavorite, saveAsWork, loadAll,
+    syncFavoritesFromServer,
   }
 })

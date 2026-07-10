@@ -38,7 +38,7 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
   const base: any = {
     id: el.id,
     type: el.type === 'sticker' ? 'image' : el.type,
-    text: el.content || el.src || '',
+    text: el.content || el.text || el.src || '',
     dataKey: el.dataKey,
     label: el.label || el.name,
     x: Math.round(topLeftX * 100) / 100,
@@ -52,7 +52,7 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
   }
 
   if (el.type === 'text') {
-    const content = el.content || ''
+    const content = el.content || el.text || ''
     const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
     const detectedDirection = rtlChars.test(content) ? 'rtl' : 'ltr'
     const direction = el.direction === 'auto' ? detectedDirection : (el.direction || 'ltr')

@@ -9,6 +9,7 @@ import { request } from '@/utils/request'
 import { getStorage, setStorage } from '@/utils/storage'
 
 const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
+const STORAGE_KEY_TEMPLATE_DATA = 'hunbei_current_template_data'
 
 export const useEditorStore = defineStore('editor', () => {
   const showTextEditor = ref(false)
@@ -215,6 +216,9 @@ export const useEditorStore = defineStore('editor', () => {
     if (template.orientation) {
       templateStore.orientation = template.orientation
     }
+
+    // 重置选中的音乐
+    templateStore.setSelectedMusic(null)
   }
 
   function syncCurrentFromElement(idx: number) {
@@ -237,15 +241,68 @@ export const useEditorStore = defineStore('editor', () => {
 
   function persistTemplate() {
     setStorage(STORAGE_KEY_TEMPLATE, currentTemplateId.value)
+    try {
+      const templateStore = useTemplateStore()
+      const data = {
+        templateType: templateType.value,
+        elements: JSON.parse(JSON.stringify(editableElements)),
+        pageSections: JSON.parse(JSON.stringify(pageSections)),
+        flipPages: JSON.parse(JSON.stringify(flipPages)),
+        canvasSize: JSON.parse(JSON.stringify(canvasSize.value)),
+        background: JSON.parse(JSON.stringify(background.value)),
+        templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
+        basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
+        settings: JSON.parse(JSON.stringify(templateStore.settings)),
+        selectedMusicId: templateStore.selectedMusicId,
+      }
+      setStorage(STORAGE_KEY_TEMPLATE_DATA, data)
+    } catch (e) {
+      console.warn('persistTemplate data failed:', e)
+    }
   }
 
   function restoreTemplate() {
-    const saved = getStorage<string>(STORAGE_KEY_TEMPLATE, '')
-    if (saved && typeof saved === 'string') {
-      loadTemplateById(saved)
-    } else {
-      loadTemplateById(DEFAULT_TEMPLATE_ID)
+    const savedId = getStorage<string>(STORAGE_KEY_TEMPLATE, '')
+    const templateId = savedId || DEFAULT_TEMPLATE_ID
+    try {
+      const savedData = getStorage<any>(STORAGE_KEY_TEMPLATE_DATA, null)
+      if (savedData && typeof savedData === 'object') {
+        const templateStore = useTemplateStore()
+        templateType.value = savedData.templateType || 'canvas'
+        if (savedData.elements && Array.isArray(savedData.elements)) {
+          editableElements.splice(0, editableElements.length, ...savedData.elements)
+        }
+        if (savedData.pageSections && Array.isArray(savedData.pageSections)) {
+          pageSections.splice(0, pageSections.length, ...savedData.pageSections)
+        }
+        if (savedData.flipPages && Array.isArray(savedData.flipPages)) {
+          flipPages.splice(0, flipPages.length, ...savedData.flipPages)
+        }
+        if (savedData.canvasSize) {
+          canvasSize.value = { ...savedData.canvasSize }
+        }
+        if (savedData.background) {
+          background.value = { ...savedData.background }
+        }
+        if (savedData.templateData) {
+          Object.assign(templateStore.templateData, savedData.templateData)
+        }
+        if (savedData.basicInfo) {
+          Object.assign(templateStore.basicInfo, savedData.basicInfo)
+        }
+        if (savedData.settings) {
+          Object.assign(templateStore.settings, savedData.settings)
+        }
+        if (savedData.selectedMusicId !== undefined) {
+          templateStore.selectedMusicId = savedData.selectedMusicId
+        }
+        currentTemplateId.value = templateId
+        return true
+      }
+    } catch (e) {
+      console.warn('restoreTemplate data failed, falling back to loadTemplateById:', e)
     }
+    loadTemplateById(templateId)
   }
 
   function openEditor(idx: number) {
@@ -340,6 +397,22 @@ export const useEditorStore = defineStore('editor', () => {
 
   function syncSmartField(key: string, value: string) {
     syncFieldToAllModes(key, value)
+    syncFieldToBasicInfo(key, value)
+  }
+
+  function syncFieldToBasicInfo(key: string, value: string) {
+    const templateStore = useTemplateStore()
+    const basicInfoFieldMap: Record<string, keyof typeof templateStore.basicInfo> = {
+      groomName: 'groomName',
+      brideName: 'brideName',
+      date: 'weddingDate',
+      location: 'location',
+      address: 'detailAddress',
+    }
+    const field = basicInfoFieldMap[key]
+    if (field) {
+      ;(templateStore.basicInfo as any)[field] = value
+    }
   }
 
   function syncBasicInfoToElements() {

@@ -240,6 +240,7 @@ const props = defineProps<{
   getFabricCanvas?: () => any
   pageMode: string
   getFlipPages?: () => any[]
+  saveCurrentFlipPage?: () => void
 }>()
 
 const emit = defineEmits<{
@@ -420,6 +421,7 @@ async function doPublish() {
   uploadProgressText.value = '准备发布...'
 
   try {
+    props.saveCurrentFlipPage?.()
     const draft = props.getDraft()
 
     uploadProgress.value = 20

@@ -36,18 +36,24 @@ export const DEFAULT_MUSIC: Music = {
 /**
  * 从服务端获取音乐列表，失败时回退到本地列表
  */
-export async function fetchMusicFromApi(tag?: string): Promise<Music[]> {
+export async function fetchMusicFromApi(tag?: string, page: number = 1, limit: number = 20): Promise<{ list: Music[]; hasMore: boolean }> {
   try {
-    const query = tag && tag !== '全部' ? `?tag=${encodeURIComponent(tag)}` : ''
+    const params: string[] = []
+    if (tag && tag !== '全部') params.push(`tag=${encodeURIComponent(tag)}`)
+    params.push(`page=${page}`)
+    params.push(`limit=${limit}`)
+    const query = params.length > 0 ? `?${params.join('&')}` : ''
     const url = `${API_BASE}/api/music${query}`
-    return await new Promise<Music[]>((resolve, reject) => {
+    return await new Promise<{ list: Music[]; hasMore: boolean }>((resolve, reject) => {
       uni.request({
         url,
         method: 'GET',
         timeout: 8000,
         success: (res: any) => {
           if (res.data?.success && Array.isArray(res.data.data)) {
-            resolve(res.data.data)
+            const list = res.data.data
+            const hasMore = list.length >= limit
+            resolve({ list, hasMore })
           } else {
             reject(new Error('Invalid response'))
           }
@@ -58,5 +64,10 @@ export async function fetchMusicFromApi(tag?: string): Promise<Music[]> {
   } catch (e) {
     console.warn('fetchMusicFromApi failed, using fallback list:', e)
   }
-  return tag && tag !== '全部' ? MUSIC_LIST.filter(m => m.tag === tag) : MUSIC_LIST
+  const allList = tag && tag !== '全部' ? MUSIC_LIST.filter(m => m.tag === tag) : MUSIC_LIST
+  const start = (page - 1) * limit
+  const end = start + limit
+  const list = allList.slice(start, end)
+  const hasMore = end < allList.length
+  return { list, hasMore }
 }

@@ -7,7 +7,9 @@ import type {
   TextElement,
   ImageElement,
   PageMode,
+  FlipPage,
 } from '../types/canvas'
+import { createId } from '../types/canvas'
 
 export interface FlipPageItem {
   id: string
@@ -125,8 +127,6 @@ export function useFlipPages(options: UseFlipPagesOptions) {
     if (page) {
       options.setBackground(page.background)
       options.clearCanvas()
-      const cSize = options.canvasSize.value
-      const pxToRpx = 750 / cSize.width
       page.elements.forEach(el => {
         if (el.type === 'image') {
           options.addImage(el.text || el.src, {
@@ -153,7 +153,6 @@ export function useFlipPages(options: UseFlipPagesOptions) {
             editable: el.editable !== false,
           } as any)
         } else {
-          const fontSize = el.fontSize != null ? Math.round(el.fontSize / pxToRpx) : 24
           options.addText({
             id: el.id,
             x: el.x,
@@ -165,19 +164,19 @@ export function useFlipPages(options: UseFlipPagesOptions) {
             zIndex: el.zIndex ?? 0,
             content: el.text || '',
             fontFamily: el.fontFamily || '思源宋体, serif',
-            fontSize: fontSize,
+            fontSize: el.fontSize ?? 24,
             fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
             fontStyle: el.fontStyle || 'normal',
             color: el.color || '#333333',
             textAlign: el.textAlign || 'center',
             lineHeight: el.lineHeight || 1.5,
-            letterSpacing: el.letterSpacing || 2,
+            letterSpacing: el.letterSpacing ?? 2,
             strokeColor: el.strokeColor || 'transparent',
-            strokeWidth: el.strokeWidth || 0,
+            strokeWidth: el.strokeWidth ?? 0,
             shadowColor: el.shadowColor || 'transparent',
-            shadowOffsetX: el.shadowOffsetX || 0,
-            shadowOffsetY: el.shadowOffsetY || 0,
-            shadowBlur: el.shadowBlur || 0,
+            shadowOffsetX: el.shadowOffsetX ?? 0,
+            shadowOffsetY: el.shadowOffsetY ?? 0,
+            shadowBlur: el.shadowBlur ?? 0,
             textDecoration: el.textDecoration || 'none',
             direction: el.direction || 'auto',
             dataKey: el.dataKey,
@@ -186,6 +185,72 @@ export function useFlipPages(options: UseFlipPagesOptions) {
         }
       })
     }
+  }
+
+  function addFlipPage(afterIndex?: number) {
+    saveCurrentFlipPage()
+    const newPage: FlipPageItem = {
+      id: createId('flip'),
+      name: `新页面 ${flipPages.value.length + 1}`,
+      pageType: 'custom',
+      background: { type: 'solid', color1: '#ffffff' } as CanvasBackground,
+      elements: [],
+    }
+    if (afterIndex !== undefined && afterIndex >= 0 && afterIndex < flipPages.value.length) {
+      flipPages.value.splice(afterIndex + 1, 0, newPage)
+      currentFlipPageIndex.value = afterIndex + 1
+    } else {
+      flipPages.value.push(newPage)
+      currentFlipPageIndex.value = flipPages.value.length - 1
+    }
+    loadCurrentFlipPage()
+  }
+
+  function removeFlipPage(idx: number) {
+    if (flipPages.value.length <= 1) return
+    saveCurrentFlipPage()
+    flipPages.value.splice(idx, 1)
+    // 删除的是当前页之前的页面时，后续页面整体前移一位，当前页索引需同步减一以保持指向同一页面；
+    // 否则当索引越界（删除最后一页或当前页已是末页）时回退到新的末页。
+    if (idx < currentFlipPageIndex.value) {
+      currentFlipPageIndex.value -= 1
+    } else if (currentFlipPageIndex.value >= flipPages.value.length) {
+      currentFlipPageIndex.value = flipPages.value.length - 1
+    }
+    loadCurrentFlipPage()
+  }
+
+  function moveFlipPageUp(idx: number) {
+    if (idx <= 0) return
+    saveCurrentFlipPage()
+    const temp = flipPages.value[idx]
+    flipPages.value[idx] = flipPages.value[idx - 1]
+    flipPages.value[idx - 1] = temp
+    if (currentFlipPageIndex.value === idx) {
+      currentFlipPageIndex.value = idx - 1
+    } else if (currentFlipPageIndex.value === idx - 1) {
+      currentFlipPageIndex.value = idx
+    }
+    loadCurrentFlipPage()
+  }
+
+  function moveFlipPageDown(idx: number) {
+    if (idx >= flipPages.value.length - 1) return
+    saveCurrentFlipPage()
+    const temp = flipPages.value[idx]
+    flipPages.value[idx] = flipPages.value[idx + 1]
+    flipPages.value[idx + 1] = temp
+    if (currentFlipPageIndex.value === idx) {
+      currentFlipPageIndex.value = idx + 1
+    } else if (currentFlipPageIndex.value === idx + 1) {
+      currentFlipPageIndex.value = idx
+    }
+    loadCurrentFlipPage()
+  }
+
+  function renameFlipPage(idx: number, name: string) {
+    if (idx < 0 || idx >= flipPages.value.length) return
+    flipPages.value[idx].name = name
   }
 
   return {
@@ -197,5 +262,10 @@ export function useFlipPages(options: UseFlipPagesOptions) {
     nextFlipPage,
     saveCurrentFlipPage,
     loadCurrentFlipPage,
+    addFlipPage,
+    removeFlipPage,
+    moveFlipPageUp,
+    moveFlipPageDown,
+    renameFlipPage,
   }
 }

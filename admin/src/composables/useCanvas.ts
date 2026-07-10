@@ -530,6 +530,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.remove(active)
     elements.value = elements.value.filter(e => e.id !== id)
     selectedId.value = null
+    updateZIndexFromFabric()
   }
 
   // 通过 id 删除
@@ -541,6 +542,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.remove(obj)
     elements.value = elements.value.filter(e => e.id !== id)
     if (selectedId.value === id) selectedId.value = null
+    updateZIndexFromFabric()
   }
 
   // 切换隐藏/锁定
@@ -687,6 +689,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       canvas.setActiveObject(t)
       elements.value.push(newEl)
       selectedId.value = newEl.id
+      updateZIndexFromFabric()
     } else if (newEl.type === 'image') {
       const ie = newEl as ImageElement
       fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
@@ -706,6 +709,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         canvas.setActiveObject(img)
         elements.value.push(newEl)
         selectedId.value = newEl.id
+        updateZIndexFromFabric()
         canvas.renderAll()
       }).catch(() => {
         // 粘贴图片加载失败时静默处理
@@ -892,9 +896,74 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     if (el.type === 'image') {
       const img = el as ImageElement
+      const imgPatch = patch as Partial<ImageElement>
+      
+      if (imgPatch.src && imgPatch.src !== img.src) {
+        const newSrc = imgPatch.src
+        const isSvgDataUrl = newSrc.startsWith('data:image/svg+xml')
+        
+        if (isSvgDataUrl) {
+          const svgString = atob(newSrc.split(',')[1])
+          loadSVGFromString(svgString).then((result: any) => {
+            const newObj = fabricUtil.groupSVGElements(result.objects, result.options)
+            if (!newObj || !fabricCanvas.value) return
+            const scaleX = (obj.width || 1) / (newObj.width || 1)
+            const scaleY = (obj.height || 1) / (newObj.height || 1)
+            newObj.set({
+              left: obj.left,
+              top: obj.top,
+              originX: 'center',
+              originY: 'center',
+              scaleX,
+              scaleY,
+              opacity: obj.opacity,
+              angle: obj.angle,
+            })
+            ;(newObj as any).id = (obj as any).id
+            ;(newObj as any).elementType = 'image'
+            ;(newObj as any).srcUrl = newSrc
+            const canvas = fabricCanvas.value
+            canvas.remove(obj)
+            canvas.add(newObj)
+            canvas.setActiveObject(newObj)
+            canvas.renderAll()
+          }).catch((err: any) => {
+            console.error('updateSelected: SVG image replace failed:', err)
+          })
+        } else {
+          const isDataUrl = newSrc.startsWith('data:')
+          const loadOpts = isDataUrl ? {} : { crossOrigin: 'anonymous' }
+          fabric.FabricImage.fromURL(newSrc, loadOpts).then(newImg => {
+            if (!newImg || !fabricCanvas.value) return
+            const scaleX = (obj.width || 1) / (newImg.width || 1)
+            const scaleY = (obj.height || 1) / (newImg.height || 1)
+            newImg.set({
+              left: obj.left,
+              top: obj.top,
+              originX: 'center',
+              originY: 'center',
+              scaleX,
+              scaleY,
+              opacity: obj.opacity,
+              angle: obj.angle,
+            })
+            ;(newImg as any).id = (obj as any).id
+            ;(newImg as any).elementType = 'image'
+            ;(newImg as any).srcUrl = newSrc
+            const canvas = fabricCanvas.value
+            canvas.remove(obj)
+            canvas.add(newImg)
+            canvas.setActiveObject(newImg)
+            canvas.renderAll()
+          }).catch(err => {
+            console.error('updateSelected: image replace failed:', err)
+          })
+        }
+      }
+      
       obj.set({
-        opacity: (patch as Partial<ImageElement>).opacity ?? img.opacity,
-        angle: (patch as Partial<ImageElement>).rotation ?? img.rotation,
+        opacity: imgPatch.opacity ?? img.opacity,
+        angle: imgPatch.rotation ?? img.rotation,
       })
       // 应用图片滤镜（CSS filter 方式）
       const brightness = patch.brightness ?? img.brightness
@@ -1017,6 +1086,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return
 
+    suppressHistory = true
+
     // 清空
     canvas.getObjects().forEach(o => canvas.remove(o))
     canvas.discardActiveObject()
@@ -1061,6 +1132,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         const ie = el as ImageElement
         addTasks.push(() => {
           fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
+            if (!fabricCanvas.value) return
             const sx = ie.width / (img.width || 1)
             const sy = ie.height / (img.height || 1)
             img.set({
@@ -1074,6 +1146,7 @@ export function useCanvas(opts: UseCanvasOptions) {
             ;img.elementType = 'image'
             ;img.srcUrl = ie.src
             canvas.add(img)
+            updateZIndexFromFabric()
             canvas.renderAll()
           }).catch(() => {
             // loadDraft 时图片加载失败不中断其他元素
@@ -1084,7 +1157,14 @@ export function useCanvas(opts: UseCanvasOptions) {
     })
 
     addTasks.forEach(fn => fn())
+    updateZIndexFromFabric()
     canvas.renderAll()
+
+    // 清空历史栈，推入初始记录
+    history.value = []
+    historyIdx.value = -1
+    suppressHistory = false
+    pushHistory('load draft')
   }
 
   function pushHistory(description = 'change') {
@@ -1236,7 +1316,6 @@ export function useCanvas(opts: UseCanvasOptions) {
       ;cloned.elementType = obj.elementType || 'sticker'
       canvas.add(cloned)
       canvas.setActiveObject(cloned)
-      canvas.renderAll()
 
       // 同步 model
       const sourceEl = elements.value.find(e => e.id === selectedId.value)
@@ -1249,6 +1328,8 @@ export function useCanvas(opts: UseCanvasOptions) {
         elements.value.push(newEl)
         selectedId.value = newEl.id
       }
+      updateZIndexFromFabric()
+      canvas.renderAll()
       pushHistory('duplicate')
     })
   }

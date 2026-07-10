@@ -97,19 +97,23 @@ async function handlePay() {
   try {
     const order = await createVipOrder(selectedPlan.value, currentPlan.value.price)
     uni.hideLoading()
-    // 调用微信支付
     uni.requestPayment({
       provider: 'wxpay',
       orderInfo: { prepayId: order.prepayId },
-      success: () => {
-        const expireDays = selectedPlan.value === 'monthly' ? 30 : selectedPlan.value === 'quarterly' ? 90 : 365
-        const expireAt = Date.now() + expireDays * 24 * 60 * 60 * 1000
-        userStore.vipStatus.value = 1
-        userStore.vipExpireAt.value = expireAt
-        userStore.vipPlan.value = selectedPlan.value
-        userStore.persist()
+      success: async () => {
+        uni.showLoading({ title: '验证中...' })
+        try {
+          await userStore.fetchUserInfo()
+        } catch (e) {
+          console.warn('fetch user info after pay failed', e)
+        }
+        uni.hideLoading()
         track('vip_pay_success', { plan: selectedPlan.value, price: currentPlan.value.price })
-        uni.showToast({ title: '开通成功！', icon: 'success' })
+        if (userStore.isVip()) {
+          uni.showToast({ title: '开通成功！', icon: 'success' })
+        } else {
+          uni.showToast({ title: '支付成功', icon: 'success' })
+        }
         setTimeout(() => uni.navigateBack(), 1500)
       },
       fail: () => uni.showToast({ title: '支付取消', icon: 'none' }),

@@ -51,6 +51,8 @@
         :loadingTemplates="loadingTemplates"
         :historyVersions="historyVersions"
         :dateValues="dateValues"
+        :flipPages="flipPages"
+        :currentFlipPageIndex="currentFlipPageIndex"
         v-model:activeGradientCat="activeGradientCat"
         v-model:activeMaterialCat="activeMaterialCat"
         v-model:activePresetCat="activePresetCat"
@@ -61,6 +63,7 @@
         :SMART_FIELDS="SMART_FIELDS"
         :TEXT_PRESETS="TEXT_PRESETS"
         :materialCategories="materialCategories"
+        :basicInfo="basicInfo"
         @addText="addText"
         @applyTextPreset="applyTextPreset"
         @addSmartField="addSmartField"
@@ -85,6 +88,15 @@
         @cloneTemplate="onCloneTemplate"
         @deleteTemplate="onDeleteTemplate"
         @restoreVersion="onRestoreVersion"
+        @update:currentTemplateName="v => currentTemplateName = v"
+        @selectFlipPage="selectFlipPage"
+        @addFlipPage="addFlipPage"
+        @removeFlipPage="removeFlipPage"
+        @moveFlipPageUp="moveFlipPageUp"
+        @moveFlipPageDown="moveFlipPageDown"
+        @renameFlipPage="renameFlipPage"
+        @updateBasicInfo="onUpdateBasicInfo"
+        @syncBasicInfo="onSyncBasicInfo"
       />
 
       <!-- 中间画布 -->
@@ -163,6 +175,7 @@
       :getFabricCanvas="() => fabricCanvas.value"
       :pageMode="pageMode"
       :getFlipPages="() => flipPages"
+      :saveCurrentFlipPage="saveCurrentFlipPage"
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
@@ -207,11 +220,90 @@ import { COLOR_SCHEMES } from './constants/colorSchemes'
 import type { ColorScheme } from './constants/colorSchemes'
 import { BRAND_COLOR } from './constants/common'
 
+// 基本信息（模板数据）
+const basicInfo = reactive<Record<string, string>>({
+  inviter: '',
+  invitee: '',
+  date: '',
+  time: '',
+  location: '',
+  address: '',
+  phone: '',
+  year: '',
+  month: '',
+  day: '',
+  coverTitle: '',
+  coverSubtitle: '',
+  photoTitle: '',
+  photoSubtitle: '',
+  footerText: '',
+  footerSubText: '',
+})
+
 // 日期占位符预览值
 const dateValues = reactive<Record<string, string>>({ year: '', month: '', day: '' })
 watch(dateValues, (val) => {
   refreshDatePlaceholders(val)
+  basicInfo.year = val.year
+  basicInfo.month = val.month
+  basicInfo.day = val.day
 }, { deep: true })
+
+function syncBasicInfoToElements() {
+  if (pageMode.value === 'flip') {
+    saveCurrentFlipPage()
+    flipPages.value.forEach((page) => {
+      page.elements.forEach((el: any) => {
+        if (el.dataKey && basicInfo[el.dataKey] !== undefined) {
+          if (el.type === 'text') {
+            el.text = basicInfo[el.dataKey]
+          } else if (el.type === 'image') {
+            el.text = basicInfo[el.dataKey]
+            el.src = basicInfo[el.dataKey]
+          }
+        }
+      })
+    })
+    loadCurrentFlipPage()
+  } else {
+    elements.value.forEach((el) => {
+      const dataKey = (el as any).dataKey
+      if (dataKey && basicInfo[dataKey] !== undefined) {
+        if (el.type === 'text') {
+          updateElementById(el.id, { content: basicInfo[dataKey] })
+        } else if (el.type === 'image') {
+          updateElementById(el.id, { src: basicInfo[dataKey] })
+        }
+      }
+    })
+  }
+}
+
+function updateElementById(id: string, patch: any) {
+  const el = elements.value.find(e => e.id === id)
+  if (!el) return
+  const canvas = fabricCanvas.value
+  if (!canvas) return
+  const obj = canvas.getObjects().find(o => o.id === id)
+  Object.assign(el, patch)
+  if (obj && el.type === 'text') {
+    (obj as fabric.IText).set('text', patch.content ?? (el as TextElement).content)
+  }
+  canvas.renderAll()
+}
+
+function onUpdateBasicInfo(key: string, value: string) {
+  basicInfo[key] = value
+  if (key === 'year' || key === 'month' || key === 'day') {
+    dateValues[key] = value
+  }
+}
+
+function onSyncBasicInfo() {
+  syncBasicInfoToElements()
+  pushHistory('sync basic info')
+  showToast('基本信息已同步到画布元素 ✅')
+}
 
 const uploadedFontNames = ref<string[]>([])
 const fontList = computed(() => [...uploadedFontNames.value, ...fontListBase])
@@ -346,6 +438,12 @@ const {
   prevFlipPage,
   nextFlipPage,
   loadCurrentFlipPage,
+  saveCurrentFlipPage,
+  addFlipPage,
+  removeFlipPage,
+  moveFlipPageUp,
+  moveFlipPageDown,
+  renameFlipPage,
 } = useFlipPages({
   pageMode,
   background,
@@ -371,9 +469,49 @@ const { onKeyDown } = useKeyboardShortcuts({
 })
 
 // ============ 自动保存 ============
-const { saveDraftToLocal, restoreDraftFromLocal, startAutoSave } = useAutoSave({
-  getDraft,
-  loadDraft,
+function getFullDraft() {
+  const draft = getDraft()
+  if (pageMode.value === 'flip') {
+    saveCurrentFlipPage()
+    return {
+      ...draft,
+      pageMode: pageMode.value,
+      flipPages: flipPages.value,
+      currentFlipPageIndex: currentFlipPageIndex.value,
+    }
+  }
+  return {
+    ...draft,
+    pageMode: pageMode.value,
+  }
+}
+
+function loadFullDraft(draft: any) {
+  if (draft.pageMode === 'flip' && draft.flipPages && draft.flipPages.length > 0) {
+    pageMode.value = 'flip'
+    flipPages.value = draft.flipPages
+    currentFlipPageIndex.value = draft.currentFlipPageIndex ?? 0
+    const { canvasSize: _, background: __, elements: ___, ...rest } = draft
+    loadDraft({
+      canvasSize: draft.canvasSize,
+      background: draft.flipPages[draft.currentFlipPageIndex ?? 0]?.background || draft.background,
+      elements: [],
+      ...rest,
+    })
+    nextTick(() => {
+      loadCurrentFlipPage()
+    })
+  } else {
+    if (draft.pageMode) {
+      pageMode.value = draft.pageMode
+    }
+    loadDraft(draft)
+  }
+}
+
+const { saveDraftToLocal, restoreDraftFromLocal, startAutoSave, getDraftInfo, isDraftRecent, discardDraft } = useAutoSave({
+  getDraft: getFullDraft,
+  loadDraft: loadFullDraft,
 })
 
 // ============ Phase 2: 素材库 ============
@@ -448,6 +586,12 @@ const currentTemplateId = ref<string | null>(null)
 const currentTemplateName = ref('')
 const currentTemplateCategory = ref('wedding')
 const currentTemplateSubtitle = ref('')
+const currentTemplateTags = ref<string[]>([])
+const currentTemplateLikes = ref(100)
+const currentTemplatePageCount = ref(10)
+const currentTemplateIsPaid = ref(false)
+const currentTemplatePrice = ref(3)
+const currentTemplateIsPremium = ref(false)
 const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 
@@ -489,6 +633,18 @@ async function loadTemplateList() {
 async function onLoadTemplate(id: string) {
   try {
     const tpl = await fetchTemplate(id)
+    
+    if (tpl.data) {
+      Object.keys(basicInfo).forEach(key => {
+        if ((tpl.data as any)[key] !== undefined) {
+          basicInfo[key] = (tpl.data as any)[key]
+        }
+      })
+      dateValues.year = basicInfo.year
+      dateValues.month = basicInfo.month
+      dateValues.day = basicInfo.day
+    }
+    
     const draft = {
       canvasSize: tpl.canvasSize || { width: 375, height: 667 },
       background: tpl.background || { type: 'solid', color1: '#ffffff' },
@@ -547,17 +703,89 @@ async function onLoadTemplate(id: string) {
     currentTemplateName.value = tpl.name || ''
     currentTemplateCategory.value = tpl.category || 'wedding'
     currentTemplateSubtitle.value = tpl.subtitle || ''
+    currentTemplateTags.value = tpl.tags || []
+    currentTemplateLikes.value = tpl.likes ?? 100
+    currentTemplatePageCount.value = tpl.pageCount ?? 10
+    currentTemplateIsPaid.value = !!tpl.isPaid
+    currentTemplatePrice.value = tpl.price ?? 3
+    currentTemplateIsPremium.value = !!tpl.isPremium
   } catch (e) {
     alert('加载模板失败：' + (e as Error).message)
   }
 }
 
-function onCloneTemplate(tpl: any) {
-  currentTemplateId.value = null
-  currentTemplateName.value = ''
-  currentTemplateCategory.value = 'wedding'
-  currentTemplateSubtitle.value = ''
-  onLoadTemplate(tpl.id)
+async function onCloneTemplate(tpl: any) {
+  try {
+    const fetchedTpl = await fetchTemplate(tpl.id)
+    const draft = {
+      canvasSize: fetchedTpl.canvasSize || { width: 375, height: 667 },
+      background: fetchedTpl.background || { type: 'solid', color1: '#ffffff' },
+      elements: (fetchedTpl.elements || []).map((el: any, idx: number) => {
+        const w = el.width ?? 240
+        const h = el.height ?? 60
+        const centerX = (el.x ?? 187) + w / 2
+        const centerY = (el.y ?? (200 + idx * 80)) + h / 2
+        return {
+          id: el.id || `el_${idx}`,
+          type: el.type,
+          name: el.label || (el.type === 'text' ? '文字' : '图片'),
+          x: centerX,
+          y: centerY,
+          width: w,
+          height: h,
+        rotation: el.rotation ?? 0,
+        opacity: el.opacity ?? 1,
+        locked: false,
+        visible: true,
+        zIndex: el.zIndex ?? idx,
+        content: el.text || (el.dataKey ? (fetchedTpl.data as any)?.[el.dataKey] : '') || '',
+        dataKey: el.dataKey,
+        fontFamily: el.style?.font || '思源宋体, serif',
+        fontSize: el.style?.fontSize ? Math.round(el.style.fontSize * (fetchedTpl.canvasSize?.width || 375) / 750) : 24,
+        fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
+        fontStyle: el.style?.fontStyle || 'normal',
+        color: el.style?.color || '#333333',
+        textAlign: el.style?.textAlign || 'center',
+        lineHeight: el.style?.lineHeight || 1.5,
+        letterSpacing: el.style?.spacing || 2,
+        strokeColor: el.style?.strokeColor || 'transparent',
+        strokeWidth: el.style?.strokeWidth ?? 0,
+        shadowColor: el.style?.shadowColor || 'transparent',
+        shadowOffsetX: el.style?.shadowOffsetX ?? 0,
+        shadowOffsetY: el.style?.shadowOffsetY ?? 0,
+        shadowBlur: el.style?.shadowBlur ?? 0,
+        textDecoration: el.style?.textDecoration || 'none',
+        src: el.type === 'image' ? (el.text || (el.dataKey ? (fetchedTpl.data as any)?.[el.dataKey] : '') || '') : '',
+        scale: 'cover',
+        mask: 'rect',
+        borderRadius: 0,
+        borderColor: 'transparent',
+        borderWidth: 0,
+        brightness: 100,
+        contrast: 0,
+        blur: 0,
+        grayscale: 0,
+        saturate: 100,
+        }
+      }),
+    }
+    loadDraft(draft)
+    currentTemplateId.value = null
+    currentTemplateName.value = `${fetchedTpl.name || tpl.name || '模板'} 副本`
+    currentTemplateCategory.value = fetchedTpl.category || tpl.category || 'wedding'
+    currentTemplateSubtitle.value = fetchedTpl.subtitle || tpl.subtitle || ''
+    currentTemplateTags.value = fetchedTpl.tags || tpl.tags || []
+    currentTemplateLikes.value = fetchedTpl.likes ?? tpl.likes ?? 100
+    currentTemplatePageCount.value = fetchedTpl.pageCount ?? tpl.pageCount ?? 10
+    currentTemplateIsPaid.value = !!(fetchedTpl.isPaid || tpl.isPaid)
+    currentTemplatePrice.value = fetchedTpl.price ?? tpl.price ?? 3
+    currentTemplateIsPremium.value = !!(fetchedTpl.isPremium || tpl.isPremium)
+    historyVersions.value = []
+    pushHistory('clone template')
+    showToast('模板克隆成功 ✅')
+  } catch (e) {
+    alert('克隆模板失败：' + (e as Error).message)
+  }
 }
 
 async function onDeleteTemplate(tpl: any) {
@@ -576,6 +804,12 @@ function createNewFromCanvas() {
   currentTemplateName.value = ''
   currentTemplateCategory.value = 'wedding'
   currentTemplateSubtitle.value = ''
+  currentTemplateTags.value = []
+  currentTemplateLikes.value = 100
+  currentTemplatePageCount.value = 10
+  currentTemplateIsPaid.value = false
+  currentTemplatePrice.value = 3
+  currentTemplateIsPremium.value = false
   clearCanvas()
   historyVersions.value = []
   pushHistory('new')
@@ -587,6 +821,12 @@ function loadPreset(preset: TemplatePreset) {
   currentTemplateName.value = ''
   currentTemplateCategory.value = 'wedding'
   currentTemplateSubtitle.value = ''
+  currentTemplateTags.value = []
+  currentTemplateLikes.value = 100
+  currentTemplatePageCount.value = 10
+  currentTemplateIsPaid.value = false
+  currentTemplatePrice.value = 3
+  currentTemplateIsPremium.value = false
   loadDraft(preset.draft)
   historyVersions.value = []
   pushHistory('load preset: ' + preset.name)
@@ -608,26 +848,49 @@ function applyTextPreset(tp: TextPreset) {
 }
 
 function applyColorScheme(cs: ColorScheme) {
-  // 1. 替换背景
-  setBackground(cs.background as any)
-  // 2. 遍历文字元素智能换色
-  const allEls = [...elements.value]
   let changed = 0
-  allEls.forEach((el) => {
-    if (el.type !== 'text') return
-    const textEl = el as TextElement
-    const oldColor = textEl.color
-    // 亮度判断：简单 hex 亮度计算
-    const luminance = getLuminance(oldColor)
-    let newColor = cs.textColor
-    if (luminance > 0.75 && cs.subTextColor) {
-      newColor = cs.subTextColor // 原来是浅色，用副色
-    }
-    if (oldColor !== newColor) {
-      updateElementStyle(textEl.id, { color: newColor })
-      changed++
-    }
-  })
+
+  if (pageMode.value === 'flip') {
+    // flip 模式：遍历所有页面应用配色
+    saveCurrentFlipPage()
+    flipPages.value.forEach((page) => {
+      page.background = { ...cs.background }
+      page.elements.forEach((el: any) => {
+        if (el.type !== 'text') return
+        const oldColor = el.color
+        const luminance = getLuminance(oldColor)
+        let newColor = cs.textColor
+        if (luminance > 0.75 && cs.subTextColor) {
+          newColor = cs.subTextColor
+        }
+        if (oldColor !== newColor) {
+          el.color = newColor
+          changed++
+        }
+      })
+    })
+    // 重新加载当前页
+    loadCurrentFlipPage()
+  } else {
+    // 单页模式
+    setBackground(cs.background as any)
+    const allEls = [...elements.value]
+    allEls.forEach((el) => {
+      if (el.type !== 'text') return
+      const textEl = el as TextElement
+      const oldColor = textEl.color
+      const luminance = getLuminance(oldColor)
+      let newColor = cs.textColor
+      if (luminance > 0.75 && cs.subTextColor) {
+        newColor = cs.subTextColor
+      }
+      if (oldColor !== newColor) {
+        updateElementStyle(textEl.id, { color: newColor })
+        changed++
+      }
+    })
+  }
+
   pushHistory('apply color scheme: ' + cs.name)
   showToast(`已应用「${cs.name}」配色，修改 ${changed} 个元素 ✅`)
 }
@@ -708,6 +971,7 @@ async function generateRenderedImage(): Promise<string> {
 
 async function saveToServer() {
   try {
+    saveCurrentFlipPage()
     const draft = getDraft()
     const cSize = draft?.canvasSize || { width: 375, height: 667 }
     let name = currentTemplateName.value || ''
@@ -725,34 +989,63 @@ async function saveToServer() {
       try { coverDataUrl = canvas.toDataURL('image/jpeg', 0.85) } catch (_) {}
     }
 
+    const isFlipMode = pageMode.value === 'flip'
+    const resolvedPageCount = isFlipMode ? flipPages.value.length : currentTemplatePageCount.value
+
     const payload: any = {
       name,
       subtitle: currentTemplateSubtitle.value || '',
       category: currentTemplateCategory.value || 'wedding',
-      tags: [],
+      tags: currentTemplateTags.value || [],
       cover: coverDataUrl,
       primaryColor: BRAND_COLOR,
-      likes: 0,
-      pageCount: 10,
+      likes: currentTemplateLikes.value,
+      pageCount: resolvedPageCount,
       status: 'draft',
+      isPaid: currentTemplateIsPaid.value,
+      price: currentTemplateIsPaid.value ? currentTemplatePrice.value : 0,
+      isPremium: currentTemplateIsPremium.value,
       renderedImage: await generateRenderedImage(),
       orientation: cSize.width > cSize.height ? 'landscape' : 'portrait',
+      templateType: isFlipMode ? 'flip' : 'canvas',
       data: {
         coverImage: coverDataUrl,
-        coverTitle: name,
-        coverSubtitle: currentTemplateSubtitle.value || '',
+        coverTitle: basicInfo.coverTitle || name,
+        coverSubtitle: basicInfo.coverSubtitle || currentTemplateSubtitle.value || '',
         photo1: '', photo2: '', photo3: '', photo4: '',
-        photoTitle: '', photoSubtitle: '',
-        footerText: '', footerSubText: '',
-        inviter: '', invitee: '', date: '', time: '',
-        location: '', address: '', phone: '',
-        year: '', month: '', day: '',
+        photoTitle: basicInfo.photoTitle || '',
+        photoSubtitle: basicInfo.photoSubtitle || '',
+        footerText: basicInfo.footerText || '',
+        footerSubText: basicInfo.footerSubText || '',
+        inviter: basicInfo.inviter || '',
+        invitee: basicInfo.invitee || '',
+        date: basicInfo.date || '',
+        time: basicInfo.time || '',
+        location: basicInfo.location || '',
+        address: basicInfo.address || '',
+        phone: basicInfo.phone || '',
+        year: basicInfo.year || '',
+        month: basicInfo.month || '',
+        day: basicInfo.day || '',
       },
       canvasSize: cSize,
       background: draft?.background || { type: 'solid', color1: '#ffffff' },
-      elements: (draft?.elements || []).map((el: any) =>
+    }
+
+    if (isFlipMode) {
+      payload.pages = flipPages.value.map(page => ({
+        id: page.id,
+        name: page.name,
+        pageType: page.pageType,
+        background: page.background,
+        elements: (page.elements || []).map((el: any) =>
+          serializeElement(el, { canvasWidth: cSize.width })
+        ),
+      }))
+    } else {
+      payload.elements = (draft?.elements || []).map((el: any) =>
         serializeElement(el, { canvasWidth: cSize.width })
-      ),
+      )
     }
 
     let resultId: string
@@ -834,6 +1127,7 @@ async function onImageReplaceFile(file: File) {
     const el = elements.value.find(e => e.id === id)
     if (el) {
       updateSelected({ src: dataUrl } as any)
+      pushHistory('replace image')
     }
     showToast('图片替换成功')
   } catch (err) {
@@ -919,12 +1213,15 @@ function onPageModeChange(mode: PageMode) {
 }
 
 // 页面模式切换时，画布 DOM 会重建（v-if），需销毁旧 Fabric 实例并在新 canvas 上重建
-watch(pageMode, async () => {
+watch(pageMode, async (newMode, oldMode) => {
+  if (oldMode === 'flip') {
+    saveCurrentFlipPage()
+  }
   await nextTick()
   const draft = getDraft()
   dispose()
   init()
-  if (pageMode.value === 'flip') {
+  if (newMode === 'flip') {
     loadCurrentFlipPage()
   } else {
     loadDraft(draft)
@@ -964,9 +1261,23 @@ function onWheel(e: WheelEvent) {
 onMounted(async () => {
   await initApi()
   setTimeout(() => appRootRef.value?.focus(), 50)
-  if (!restoreDraftFromLocal()) {
+  
+  const draftInfo = getDraftInfo()
+  if (draftInfo && isDraftRecent(24 * 60 * 60 * 1000)) {
+    const savedAtStr = new Date(draftInfo.savedAt).toLocaleString()
+    if (confirm(`检测到上次未保存的草稿（${savedAtStr}），是否恢复？`)) {
+      restoreDraftFromLocal()
+    } else {
+      discardDraft()
+      pushHistory('init')
+    }
+  } else if (draftInfo) {
+    discardDraft()
+    pushHistory('init')
+  } else {
     pushHistory('init')
   }
+  
   startAutoSave()
   loadTemplateList()
   loadUploadedFonts()

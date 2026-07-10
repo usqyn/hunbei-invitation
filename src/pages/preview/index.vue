@@ -221,17 +221,19 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
+import { useWorksStore } from '@/stores/works'
 import { loadFontsForElements } from '@/utils/font-loader'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
-import { exportInvitation, addFavorite, removeFavorite, fetchSimilarTemplates, fetchRecommendProducts } from '@/api'
+import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts } from '@/api'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const userStore = useUserStore()
+const worksStore = useWorksStore()
 
 const {
   isCanvasMode,
@@ -304,7 +306,9 @@ onMounted(() => {
   const id = options.templateId || options.id
   if (id) {
     templateId.value = id
-    editorStore.loadTemplateById(id)
+    if (editorStore.currentTemplateId !== id) {
+      editorStore.loadTemplateById(id)
+    }
   }
   track('preview_view', { template_id: templateId.value })
   nextTick(() => {
@@ -351,22 +355,17 @@ const handleShare = () => {
   })
 }
 
-const isFavorited = ref(false)
+const isFavorited = computed(() => {
+  if (!editorStore.currentWorkId) return false
+  return worksStore.isFavorite(editorStore.currentWorkId)
+})
 
 async function toggleFavorite() {
   if (!editorStore.currentWorkId) return
-  try {
-    if (isFavorited.value) {
-      await removeFavorite(editorStore.currentWorkId)
-      isFavorited.value = false
-      uni.showToast({ title: '已取消收藏', icon: 'none' })
-    } else {
-      await addFavorite(editorStore.currentWorkId)
-      isFavorited.value = true
-      uni.showToast({ title: '已收藏', icon: 'success' })
-    }
-  } catch (e) {
-    uni.showToast({ title: '操作失败', icon: 'none' })
+  const wasFavorited = isFavorited.value
+  await worksStore.toggleFavorite(editorStore.currentWorkId)
+  if (wasFavorited !== isFavorited.value) {
+    uni.showToast({ title: isFavorited.value ? '已收藏' : '已取消收藏', icon: isFavorited.value ? 'success' : 'none' })
   }
 }
 

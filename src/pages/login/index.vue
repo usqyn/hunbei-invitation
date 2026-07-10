@@ -90,10 +90,12 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { useWorksStore } from '@/stores/works'
 import { request } from '@/utils/request'
 import { useGoBack } from '@/composables/useGoBack'
 
 const userStore = useUserStore()
+const worksStore = useWorksStore()
 
 const agreed = ref(false)
 const logging = ref(false)
@@ -117,7 +119,7 @@ onUnmounted(() => {
 })
 
 const openAgreement = (type: string) => {
-  uni.navigateTo({ url: '/pages/agreement/index' })
+  uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
 }
 
 const toggleAgreement = () => {
@@ -126,8 +128,18 @@ const toggleAgreement = () => {
 
 const goBack = useGoBack()
 
-const loginSuccess = () => {
+const loginSuccess = async () => {
   logging.value = false
+  try {
+    await userStore.fetchUserInfo()
+  } catch (e) {
+    console.warn('fetch user info after login failed', e)
+  }
+  try {
+    await worksStore.loadAll()
+  } catch (e) {
+    console.warn('load works after login failed', e)
+  }
   uni.hideLoading()
   uni.showToast({ title: '登录成功', icon: 'success' })
   setTimeout(() => goBack(), 1500)
@@ -159,14 +171,24 @@ const onGetPhoneNumber = (e: any) => {
   })
 }
 
-const handleH5Login = () => {
+const handleH5Login = async () => {
   if (!agreed.value || logging.value) return
   logging.value = true
   uni.showLoading({ title: '登录中...' })
-  setTimeout(async () => {
-    await userStore.doLogin({ phone: 'h5_user' })
-    loginSuccess()
-  }, 800)
+  try {
+    const testPhone = '13800000000'
+    const universalCode = '000000'
+    const ok = await userStore.doLogin({ phone: testPhone, code: universalCode })
+    if (ok) {
+      loginSuccess()
+    } else {
+      logging.value = false
+      uni.hideLoading()
+    }
+  } catch (e) {
+    logging.value = false
+    uni.hideLoading()
+  }
 }
 
 const sendCode = async () => {

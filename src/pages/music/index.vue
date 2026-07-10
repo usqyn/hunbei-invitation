@@ -42,6 +42,8 @@
         </view>
       </view>
       <view v-if="loading" class="loading-text">加载中...</view>
+      <view v-else-if="loadingMore" class="loading-text">加载中...</view>
+      <view v-else-if="!hasMore && musicList.length > 0" class="loading-text">没有更多了</view>
     </scroll-view>
 
     <view class="music-player">
@@ -71,9 +73,13 @@ import type { Music } from '@/types'
 
 const templateStore = useTemplateStore()
 
+const PAGE_SIZE = 20
 const currentTag = ref('全部')
 const musicList = ref<Music[]>([])
 const loading = ref(false)
+const currentPage = ref(1)
+const hasMore = ref(true)
+const loadingMore = ref(false)
 const currentSongIndex = ref<number | null>(null)
 const isPlaying = ref(false)
 const progressPercent = ref(0)
@@ -98,23 +104,40 @@ const currentSong = computed(() => {
 
 async function loadMusic() {
   loading.value = true
-  musicList.value = await fetchMusicFromApi()
+  currentPage.value = 1
+  hasMore.value = true
+  const result = await fetchMusicFromApi(undefined, 1, PAGE_SIZE)
+  musicList.value = result.list
+  hasMore.value = result.hasMore
   loading.value = false
 }
 
 async function switchTag(tag: string) {
   currentTag.value = tag
   loading.value = true
-  musicList.value = await fetchMusicFromApi(tag)
+  currentPage.value = 1
+  hasMore.value = true
+  const result = await fetchMusicFromApi(tag, 1, PAGE_SIZE)
+  musicList.value = result.list
+  hasMore.value = result.hasMore
   loading.value = false
 }
 
 async function loadMore() {
-  if (!loading.value) {
-    loading.value = true
-    musicList.value = await fetchMusicFromApi(currentTag.value === '全部' ? undefined : currentTag.value)
-    loading.value = false
+  if (loading.value || loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  const nextPage = currentPage.value + 1
+  const result = await fetchMusicFromApi(currentTag.value === '全部' ? undefined : currentTag.value, nextPage, PAGE_SIZE)
+  if (result.list.length > 0) {
+    const existingIds = new Set(musicList.value.map(m => m.id))
+    const newSongs = result.list.filter(m => !existingIds.has(m.id))
+    musicList.value.push(...newSongs)
+    currentPage.value = nextPage
+    hasMore.value = result.hasMore
+  } else {
+    hasMore.value = false
   }
+  loadingMore.value = false
 }
 
 function stopAudio() {

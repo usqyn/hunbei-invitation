@@ -100,6 +100,9 @@ export interface CanvasDraft {
   background: CanvasBackground
   elements: AnyCanvasElement[]
   orientation?: 'portrait' | 'landscape'
+  pageMode?: PageMode
+  flipPages?: FlipPage[]
+  currentFlipPageIndex?: number
 }
 
 // 历史快照（撤销栈中的一条）

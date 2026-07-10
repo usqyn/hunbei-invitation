@@ -19,17 +19,35 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     } catch (_) {}
   }
 
-  function restoreDraftFromLocal(): boolean {
+  function getDraftInfo(): { draft: any; savedAt: number } | null {
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
-      if (!raw) return false
+      if (!raw) return null
       const draft = JSON.parse(raw)
       if (draft && Array.isArray(draft.elements)) {
-        options.loadDraft(draft)
-        return true
+        return { draft, savedAt: draft._savedAt || 0 }
       }
     } catch (_) {}
-    return false
+    return null
+  }
+
+  function isDraftRecent(maxAgeMs: number = 24 * 60 * 60 * 1000): boolean {
+    const info = getDraftInfo()
+    if (!info) return false
+    return Date.now() - info.savedAt < maxAgeMs
+  }
+
+  function restoreDraftFromLocal(): boolean {
+    const info = getDraftInfo()
+    if (!info) return false
+    options.loadDraft(info.draft)
+    return true
+  }
+
+  function discardDraft() {
+    try {
+      localStorage.removeItem(DRAFT_KEY)
+    } catch (_) {}
   }
 
   function startAutoSave() {
@@ -55,5 +73,8 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     restoreDraftFromLocal,
     startAutoSave,
     stopAutoSave,
+    getDraftInfo,
+    isDraftRecent,
+    discardDraft,
   }
 }

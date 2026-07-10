@@ -48,16 +48,27 @@ async function initPosterDatabase() {
     created_at TEXT NOT NULL
   )`)
 
+  posterDb.run(`CREATE TABLE IF NOT EXISTS recycle_bin (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    work_id TEXT NOT NULL,
+    work_data TEXT NOT NULL,
+    deleted_at TEXT NOT NULL
+  )`)
+
   // 创建索引（提升按 user_id 查询作品、按分类查询模板的性能）
   posterDb.run("CREATE INDEX IF NOT EXISTS idx_poster_works_user_id ON poster_works(user_id)")
   posterDb.run("CREATE INDEX IF NOT EXISTS idx_poster_templates_category ON poster_templates(category_id, is_active)")
+  posterDb.run("CREATE INDEX IF NOT EXISTS idx_recycle_bin_user_id ON recycle_bin(user_id)")
 
   savePosterDatabase()
 }
 
 function savePosterDatabase() {
   const data = posterDb.export()
-  fs.writeFileSync(POSTER_DB_PATH, Buffer.from(data))
+  const tmpPath = POSTER_DB_PATH + '.tmp'
+  fs.writeFileSync(tmpPath, Buffer.from(data))
+  fs.renameSync(tmpPath, POSTER_DB_PATH)
 }
 
 // 延迟批量保存：避免频繁写磁盘（如 use_count 更新）
@@ -273,9 +284,6 @@ router.get('/templates/hot', (req, res) => {
 // GET /templates/:id — template detail
 router.get('/templates/:id', (req, res) => {
   try {
-    // Increment use_count first, then query the updated record
-    posterDb.run("UPDATE poster_templates SET use_count = use_count + 1 WHERE id = ?", [req.params.id])
-    scheduleSave()
     const result = posterDb.exec("SELECT * FROM poster_templates WHERE id = ?", [req.params.id])
     const template = resultToObject(result)
     if (!template) {
@@ -305,6 +313,9 @@ router.post('/works', (req, res) => {
       template_name || '', cover_url || '',
       JSON.stringify(content || {}), poster_url || '', now,
     ])
+    if (template_id) {
+      posterDb.run("UPDATE poster_templates SET use_count = use_count + 1 WHERE id = ?", [template_id])
+    }
     savePosterDatabase()
 
     const result = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [id])
@@ -444,12 +455,120 @@ router.post('/works/:id/upload', requireWorkOwner, (req, res) => {
   }
 })
 
-// DELETE /works/:id — delete work (requires ownership)
+// DELETE /works/:id — soft delete work (move to recycle bin)
 router.delete('/works/:id', requireWorkOwner, (req, res) => {
   try {
+    const work = req.work
+    const now = new Date().toISOString()
+    posterDb.run(`INSERT INTO recycle_bin (user_id, work_id, work_data, deleted_at)
+      VALUES (?, ?, ?, ?)`, [
+      work.user_id, work.id, JSON.stringify(work), now,
+    ])
     posterDb.run("DELETE FROM poster_works WHERE id = ?", [req.params.id])
     savePosterDatabase()
-    res.json({ success: true, message: '删除成功' })
+    res.json({ success: true, message: '删除成功，已移入回收站' })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ success: false, error: '服务器错误' })
+  }
+})
+
+// GET /works/recycle — list recycled works
+router.get('/works/recycle', (req, res) => {
+  try {
+    const userId = getUserId(req)
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    const sql = "SELECT * FROM recycle_bin WHERE user_id = ? ORDER BY deleted_at DESC"
+    const params = [userId]
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM recycle_bin WHERE user_id = ?"
+      const countResult = posterDb.exec(countSql, [userId])
+      const total = countResult.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = posterDb.exec(paginatedSql, paginatedParams)
+      const items = resultToArray(result).map(item => {
+        try {
+          item.work_data = JSON.parse(item.work_data)
+        } catch (_) {}
+        return item
+      })
+
+      return res.json({
+        success: true,
+        data: items,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    const result = posterDb.exec(sql, params)
+    const items = resultToArray(result).map(item => {
+      try {
+        item.work_data = JSON.parse(item.work_data)
+      } catch (_) {}
+      return item
+    })
+    res.json({ success: true, data: items })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ success: false, error: '服务器错误' })
+  }
+})
+
+// PUT /works/:id/restore — restore work from recycle bin
+router.put('/works/:id/restore', (req, res) => {
+  try {
+    const userId = getUserId(req)
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    const result = posterDb.exec("SELECT * FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, userId])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '记录不存在' })
+    }
+    const item = resultToObject(result)
+    let workData
+    try {
+      workData = JSON.parse(item.work_data)
+    } catch (_) {
+      return res.status(500).json({ success: false, error: '数据损坏' })
+    }
+
+    posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+      workData.id, workData.user_id, workData.template_id || '',
+      workData.template_name || '', workData.cover_url || '',
+      workData.content || '{}', workData.poster_url || '',
+      workData.created_at || new Date().toISOString(),
+    ])
+    posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+    savePosterDatabase()
+    res.json({ success: true, message: '已恢复' })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ success: false, error: '服务器错误' })
+  }
+})
+
+// DELETE /works/:id/permanent — permanently delete from recycle bin
+router.delete('/works/:id/permanent', (req, res) => {
+  try {
+    const userId = getUserId(req)
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    posterDb.run("DELETE FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, userId])
+    savePosterDatabase()
+    res.json({ success: true, message: '已永久删除' })
   } catch (e) {
     console.error(e)
     res.status(500).json({ success: false, error: '服务器错误' })

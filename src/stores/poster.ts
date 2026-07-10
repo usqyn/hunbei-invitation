@@ -416,6 +416,8 @@ export const usePosterStore = defineStore('poster', () => {
             _scale: a._scale,
             _fontFamily: a._fontFamily,
           })),
+          canvasSize: { ...canvasSize.value },
+          background_url: currentTemplate.value.background_url,
         },
       }
 

@@ -26,6 +26,35 @@
 
     <!-- 素材 Tab -->
     <div v-if="leftTab === 'material'" class="panel-body">
+      <div class="section-title">基本信息</div>
+      <div class="basic-info-fields">
+        <div class="info-field">
+          <label>新郎名</label>
+          <input :value="basicInfo.inviter" placeholder="请输入新郎姓名" @input="onBasicInfoChange('inviter', ($event.target as HTMLInputElement).value)" />
+        </div>
+        <div class="info-field">
+          <label>新娘名</label>
+          <input :value="basicInfo.invitee" placeholder="请输入新娘姓名" @input="onBasicInfoChange('invitee', ($event.target as HTMLInputElement).value)" />
+        </div>
+        <div class="info-field">
+          <label>日期</label>
+          <input :value="basicInfo.date" placeholder="2024年10月1日" @input="onBasicInfoChange('date', ($event.target as HTMLInputElement).value)" />
+        </div>
+        <div class="info-field">
+          <label>时间</label>
+          <input :value="basicInfo.time" placeholder="18:00" @input="onBasicInfoChange('time', ($event.target as HTMLInputElement).value)" />
+        </div>
+        <div class="info-field">
+          <label>地点</label>
+          <input :value="basicInfo.location" placeholder="点击填写地点" @input="onBasicInfoChange('location', ($event.target as HTMLInputElement).value)" />
+        </div>
+        <div class="info-field">
+          <label>地址</label>
+          <input :value="basicInfo.address" placeholder="xx酒店xx厅" @input="onBasicInfoChange('address', ($event.target as HTMLInputElement).value)" />
+        </div>
+      </div>
+      <button class="sync-btn" @click="$emit('syncBasicInfo')">同步到画布元素</button>
+      <div class="section-divider"></div>
       <div class="section-title">文字</div>
       <div class="material-grid">
         <button class="material-item text-item" @click="$emit('addText', { content: '标题文字', fontSize: 32, fontWeight: 'bold' })">
@@ -146,6 +175,31 @@
       </div>
     </div>
 
+    <!-- 页面 Tab -->
+    <div v-if="leftTab === 'pages'" class="panel-body pages-body">
+      <button class="btn-new-page" @click="$emit('addFlipPage')">+ 新增页面</button>
+      <div class="section-title">页面列表</div>
+      <div v-for="(page, idx) in flipPages" :key="page.id" class="page-row" :class="{ active: currentFlipPageIndex === idx }" @click="$emit('selectFlipPage', idx)">
+        <span class="page-index">{{ idx + 1 }}</span>
+        <input 
+          v-if="editingPageIdx === idx"
+          v-model="editingPageName"
+          class="page-name-input"
+          @blur="onFinishRename(idx)"
+          @keyup.enter="onFinishRename(idx)"
+          @keyup.esc="editingPageIdx = -1"
+          ref="pageNameInput"
+        />
+        <span v-else class="page-name" @dblclick="startRename(idx, page.name)">{{ page.name }}</span>
+        <div class="page-actions">
+          <button class="page-btn" @click="$emit('moveFlipPageUp', idx)" :disabled="idx === 0" title="上移">⬆</button>
+          <button class="page-btn" @click="$emit('moveFlipPageDown', idx)" :disabled="idx === flipPages.length - 1" title="下移">⬇</button>
+          <button class="page-btn" @click="startRename(idx, page.name)" title="重命名">✏️</button>
+          <button class="page-btn danger" @click="onDeletePage(idx)" :disabled="flipPages.length <= 1" title="删除">🗑</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 模板 Tab -->
     <div v-if="leftTab === 'templates'" class="panel-body templates-body">
       <button class="btn-new-template" @click="$emit('createNewFromCanvas')">+ 新建空白模板</button>
@@ -208,8 +262,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { PageMode, AnyCanvasElement, CanvasBackground } from '../types/canvas'
+import { computed, ref, nextTick } from 'vue'
+import type { PageMode, AnyCanvasElement, CanvasBackground, FlipPage } from '../types/canvas'
 import { API_BASE } from '../composables/useApi'
 import { getMaterialCategories, getMaterialsByCategory } from '../constants/materials'
 import { PRESET_CATEGORIES, getPresetsByCategory } from '../constants/presets'
@@ -231,6 +285,9 @@ const props = defineProps<{
   loadingTemplates: boolean
   historyVersions: Array<{ description: string; ts: number; draft: any }>
   dateValues: Record<string, string>
+  flipPages: FlipPage[]
+  currentFlipPageIndex: number
+  basicInfo: Record<string, string>
   activeGradientCat: string
   activeMaterialCat: string
   activePresetCat: string
@@ -273,7 +330,44 @@ const emit = defineEmits<{
   'cloneTemplate': [tpl: any]
   'deleteTemplate': [tpl: any]
   'restoreVersion': [idx: number]
+  'selectFlipPage': [idx: number]
+  'addFlipPage': []
+  'removeFlipPage': [idx: number]
+  'moveFlipPageUp': [idx: number]
+  'moveFlipPageDown': [idx: number]
+  'renameFlipPage': [idx: number, name: string]
+  'updateBasicInfo': [key: string, value: string]
+  'syncBasicInfo': []
 }>()
+
+const editingPageIdx = ref(-1)
+const editingPageName = ref('')
+const pageNameInput = ref<HTMLInputElement | null>(null)
+
+function startRename(idx: number, name: string) {
+  editingPageIdx.value = idx
+  editingPageName.value = name
+  nextTick(() => {
+    pageNameInput.value?.focus()
+    pageNameInput.value?.select()
+  })
+}
+
+function onFinishRename(idx: number) {
+  if (editingPageName.value.trim()) {
+    emit('renameFlipPage', idx, editingPageName.value.trim())
+  }
+  editingPageIdx.value = -1
+}
+
+function onDeletePage(idx: number) {
+  if (!confirm(`确定删除页面「${props.flipPages[idx]?.name}」？`)) return
+  emit('removeFlipPage', idx)
+}
+
+function onBasicInfoChange(key: string, value: string) {
+  emit('updateBasicInfo', key, value)
+}
 
 function onMaterialDragStart(e: DragEvent, mat: any) {
   if (e.dataTransfer) {
@@ -904,6 +998,147 @@ function onBgImageFile(e: Event) {
   font-size: 11px;
   color: #bbb;
 }
+
+/* 基本信息 */
+.basic-info-fields {
+  margin-bottom: 12px;
+}
+
+.info-field {
+  margin-bottom: 8px;
+}
+
+.info-field label {
+  display: block;
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.info-field input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.info-field input:focus {
+  border-color: #409eff;
+}
+
+.sync-btn {
+  width: 100%;
+  padding: 8px;
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  color: #1565c0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sync-btn:hover {
+  background: #e3f2fd;
+  border-color: #1976d2;
+}
+
+/* 页面 Tab */
+.pages-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 12px 0;
+}
+
+.btn-new-page {
+  margin: 0 12px 12px;
+  padding: 10px;
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  border: 1.5px dashed #90caf9;
+  border-radius: 8px;
+  color: #1565c0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-new-page:hover { background: #e3f2fd; border-color: #1976d2; }
+
+.page-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.page-row:hover { background: #f5f7fa; }
+.page-row.active { background: #e3f2fd; }
+
+.page-index {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eee;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  flex-shrink: 0;
+}
+
+.page-name {
+  flex: 1;
+  font-size: 13px;
+  color: #333;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.page-name-input {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  outline: none;
+}
+
+.page-name-input:focus {
+  border-color: #e84a6e;
+}
+
+.page-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.page-btn {
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s;
+  opacity: 0.7;
+}
+
+.page-btn:hover { background: #e8e8e8; opacity: 1; }
+.page-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+.page-btn.danger:hover { background: #ffebee; color: #c62828; }
 
 /* 滚动条样式（webkit） */
 .panel-body::-webkit-scrollbar { width: 6px; height: 6px; }

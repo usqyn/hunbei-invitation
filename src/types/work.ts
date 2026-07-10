@@ -1,3 +1,17 @@
+import type { EditableElement, PageSection, FlipPage, TemplateBackground, TemplateData, BasicInfo, TemplateSettings } from './template'
+
+export interface WorkEditorData {
+  elements?: EditableElement[]
+  pageSections?: PageSection[]
+  flipPages?: FlipPage[]
+  background?: TemplateBackground
+  canvasSize?: { width: number; height: number }
+  templateType?: 'canvas' | 'page' | 'flip'
+  templateData?: TemplateData
+  basicInfo?: BasicInfo
+  settings?: TemplateSettings
+}
+
 export interface Work {
   id: string
   title: string
@@ -5,6 +19,7 @@ export interface Work {
   image: string
   status?: 'draft' | 'published'
   templateType?: string
-  musicId?: number
+  musicId?: number | null
   updatedAt?: string
+  data?: WorkEditorData
 }
