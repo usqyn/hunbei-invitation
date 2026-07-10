@@ -690,10 +690,10 @@ app.get('/api/templates', (req, res) => {
     if (!(req.query.all && isRequestFromAdmin(req))) {
       conditions.push("status = 'published'")
     }
-    // 支持 is_paid=1 只返回付费模板；?includePaid=1 返回全部；默认只返回免费模板
+    // 支持 is_paid=1 只返回付费模板；?includePaid=1 返回全部；默认返回所有模板（含付费）供前端控制显示
     if (req.query.is_paid === '1') {
       conditions.push("is_paid = 1")
-    } else if (!req.query.includePaid) {
+    } else if (req.query.is_paid === '0') {
       conditions.push("is_paid = 0")
     }
 
@@ -1794,60 +1794,57 @@ app.post('/api/feedback', requireAuth, (req, res) => {
 })
 
 // ========== 回收站系统 ==========
+// 同时查询主数据库和 poster 数据库的回收站，统一返回格式
+function queryRecycleBin(userId, dbRef, isPosterDb = false) {
+  const idField = isPosterDb ? 'user_id' : 'phone'
+  const timeField = isPosterDb ? 'deleted_at' : 'deletedAt'
+  const result = dbRef.exec(`SELECT * FROM recycle_bin WHERE ${idField} = ? ORDER BY ${timeField} DESC`, [userId])
+  return result.length ? result[0].values.map(row => {
+    const cols = result[0].columns
+    const obj = {}
+    row.forEach((val, i) => {
+      if (cols[i] === 'work_data') {
+        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+      } else {
+        obj[cols[i]] = val
+      }
+    })
+    obj.source = isPosterDb ? 'poster' : 'template'
+    return obj
+  }) : []
+}
+
 app.get('/api/works/recycle', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.json({ success: true, data: [] })
-    const sql = "SELECT * FROM recycle_bin WHERE phone = ? ORDER BY deletedAt DESC"
-    const params = [phone]
 
     const page = parseInt(req.query.page, 10)
     const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
+    const mainItems = queryRecycleBin(phone, db, false)
+    const posterItems = posterDb ? queryRecycleBin(phone, posterDb, true) : []
+
+    let allItems = [...mainItems, ...posterItems].sort((a, b) => {
+      const timeA = a.deletedAt || a.deleted_at || ''
+      const timeB = b.deletedAt || b.deleted_at || ''
+      return timeB.localeCompare(timeA)
+    })
+
     if (page > 0 && limit > 0) {
-      const countSql = "SELECT COUNT(*) as total FROM recycle_bin WHERE phone = ?"
-      const countResult = db.exec(countSql, [phone])
-      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const total = allItems.length
       const totalPages = Math.ceil(total / limit)
       const offset = (page - 1) * limit
-
-      const paginatedSql = sql + " LIMIT ? OFFSET ?"
-      const paginatedParams = [...params, limit, offset]
-      const result = db.exec(paginatedSql, paginatedParams)
-      const items = result.length ? result[0].values.map(row => {
-        const cols = result[0].columns
-        const obj = {}
-        row.forEach((val, i) => {
-          if (cols[i] === 'work_data') {
-            try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
-          } else {
-            obj[cols[i]] = val
-          }
-        })
-        return obj
-      }) : []
+      const paginatedItems = allItems.slice(offset, offset + limit)
 
       return res.json({
         success: true,
-        data: items,
+        data: paginatedItems,
         pagination: { page, limit, total, totalPages },
       })
     }
 
-    const result = db.exec(sql, params)
-    const items = result.length ? result[0].values.map(row => {
-      const cols = result[0].columns
-      const obj = {}
-      row.forEach((val, i) => {
-        if (cols[i] === 'work_data') {
-          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
-        } else {
-          obj[cols[i]] = val
-        }
-      })
-      return obj
-    }) : []
-    res.json({ success: true, data: items })
+    res.json({ success: true, data: allItems })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1857,12 +1854,31 @@ app.put('/api/works/:id/restore', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
-    const result = db.exec("SELECT work_data FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
-    if (!result.length || !result[0].values.length) {
+
+    let found = false
+    let workData = null
+
+    const mainResult = db.exec("SELECT work_data FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
+    if (mainResult.length && mainResult[0].values.length) {
+      workData = JSON.parse(mainResult[0].values[0][0])
+      db.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+      saveDatabaseDebounced()
+      found = true
+    } else if (posterDb) {
+      const posterResult = posterDb.exec("SELECT work_data FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, phone])
+      if (posterResult.length && posterResult[0].values.length) {
+        workData = JSON.parse(posterResult[0].values[0][0])
+        posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+        const { savePosterDatabase } = require('./routes/poster')
+        savePosterDatabase()
+        found = true
+      }
+    }
+
+    if (!found) {
       return res.status(404).json({ success: false, error: '记录不存在' })
     }
-    db.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
-    saveDatabaseDebounced()
+
     res.json({ success: true, message: '已恢复' })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -1873,8 +1889,28 @@ app.delete('/api/works/:id', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
-    db.run("DELETE FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
-    saveDatabaseDebounced()
+
+    let deleted = false
+
+    const mainResult = db.exec("SELECT id FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
+    if (mainResult.length && mainResult[0].values.length) {
+      db.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+      saveDatabaseDebounced()
+      deleted = true
+    } else if (posterDb) {
+      const posterResult = posterDb.exec("SELECT id FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, phone])
+      if (posterResult.length && posterResult[0].values.length) {
+        posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+        const { savePosterDatabase } = require('./routes/poster')
+        savePosterDatabase()
+        deleted = true
+      }
+    }
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: '记录不存在' })
+    }
+
     res.json({ success: true, message: '已永久删除' })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
