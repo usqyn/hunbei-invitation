@@ -26,35 +26,6 @@
 
     <!-- 素材 Tab -->
     <div v-if="leftTab === 'material'" class="panel-body">
-      <div class="section-title">基本信息</div>
-      <div class="basic-info-fields">
-        <div class="info-field">
-          <label>新郎名</label>
-          <input :value="basicInfo.inviter" placeholder="请输入新郎姓名" @input="onBasicInfoChange('inviter', ($event.target as HTMLInputElement).value)" />
-        </div>
-        <div class="info-field">
-          <label>新娘名</label>
-          <input :value="basicInfo.invitee" placeholder="请输入新娘姓名" @input="onBasicInfoChange('invitee', ($event.target as HTMLInputElement).value)" />
-        </div>
-        <div class="info-field">
-          <label>日期</label>
-          <input :value="basicInfo.date" placeholder="2024年10月1日" @input="onBasicInfoChange('date', ($event.target as HTMLInputElement).value)" />
-        </div>
-        <div class="info-field">
-          <label>时间</label>
-          <input :value="basicInfo.time" placeholder="18:00" @input="onBasicInfoChange('time', ($event.target as HTMLInputElement).value)" />
-        </div>
-        <div class="info-field">
-          <label>地点</label>
-          <input :value="basicInfo.location" placeholder="点击填写地点" @input="onBasicInfoChange('location', ($event.target as HTMLInputElement).value)" />
-        </div>
-        <div class="info-field">
-          <label>地址</label>
-          <input :value="basicInfo.address" placeholder="xx酒店xx厅" @input="onBasicInfoChange('address', ($event.target as HTMLInputElement).value)" />
-        </div>
-      </div>
-      <button class="sync-btn" @click="$emit('syncBasicInfo')">同步到画布元素</button>
-      <div class="section-divider"></div>
       <div class="section-title">文字</div>
       <div class="material-grid">
         <button class="material-item text-item" @click="$emit('addText', { content: '标题文字', fontSize: 32, fontWeight: 'bold' })">
@@ -334,7 +305,6 @@ const props = defineProps<{
   dateValues: Record<string, string>
   flipPages: FlipPage[]
   currentFlipPageIndex: number
-  basicInfo: Record<string, string>
   activeGradientCat: string
   activeMaterialCat: string
   activePresetCat: string
@@ -386,8 +356,6 @@ const emit = defineEmits<{
   'moveFlipPage': [fromIdx: number, toIdx: number]
   'renameFlipPage': [idx: number, name: string]
   'duplicateFlipPage': [idx: number]
-  'updateBasicInfo': [key: string, value: string]
-  'syncBasicInfo': []
 }>()
 
 const editingPageIdx = ref(-1)
@@ -473,10 +441,6 @@ function onFinishRename(idx: number) {
 function onDeletePage(idx: number) {
   if (!confirm(`确定删除页面「${props.flipPages[idx]?.name}」？`)) return
   emit('removeFlipPage', idx)
-}
-
-function onBasicInfoChange(key: string, value: string) {
-  emit('updateBasicInfo', key, value)
 }
 
 function onMaterialDragStart(e: DragEvent, mat: any) {
