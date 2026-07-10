@@ -13,6 +13,52 @@
       </transition>
     </Teleport>
 
+    <!-- ============ 管理员登录界面 ============ -->
+    <div v-if="!isLoggedIn" class="login-view">
+      <div class="login-card">
+        <div class="login-logo">💌</div>
+        <h1 class="login-title">婚贝管理后台</h1>
+        <p class="login-subtitle">请使用管理员账号登录</p>
+        <div class="login-form">
+          <div class="login-field">
+            <label class="login-label">手机号</label>
+            <input
+              v-model="loginForm.phone"
+              class="login-input"
+              placeholder="请输入管理员手机号"
+              maxlength="11"
+              @keyup.enter="onSendLoginCode"
+            />
+          </div>
+          <div class="login-field">
+            <label class="login-label">验证码</label>
+            <div class="login-code-row">
+              <input
+                v-model="loginForm.code"
+                class="login-input"
+                placeholder="请输入验证码"
+                maxlength="6"
+                @keyup.enter="onLogin"
+              />
+              <button
+                class="login-code-btn"
+                :disabled="smsCountdown > 0"
+                @click="onSendLoginCode"
+              >
+                {{ smsCountdown > 0 ? `${smsCountdown}s` : '获取验证码' }}
+              </button>
+            </div>
+          </div>
+          <button class="login-submit-btn" :disabled="loginLoading" @click="onLogin">
+            {{ loginLoading ? '登录中…' : '登 录' }}
+          </button>
+        </div>
+        <p class="login-tip">提示：开发环境可使用万能验证码 000000</p>
+      </div>
+    </div>
+
+    <!-- ============ 主应用（登录后显示） ============ -->
+    <template v-else>
     <!-- ============ 顶部工具栏 ============ -->
     <EditorToolbar
       :currentView="currentView"
@@ -40,6 +86,7 @@
       @save="saveToServer"
       @publish="showPublishWizard = true"
       @export="onExportPNG"
+      @logout="onLogout"
     />
 
     <!-- ============ 主工作区 ============ -->
@@ -230,6 +277,7 @@
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
+    </template>
   </div>
 </template>
 
@@ -248,6 +296,10 @@ import {
   fetchTemplate,
   deleteTemplate,
   initApi,
+  adminLogin,
+  sendAdminSmsCode,
+  logoutAdmin,
+  ADMIN_PHONE,
   createTemplate,
   updateTemplate,
 } from './composables/useApi'
@@ -392,6 +444,87 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
   toast.type = type
   toast.visible = true
   toastTimer = setTimeout(() => { toast.visible = false }, 2500)
+}
+
+// ============ 管理员登录 ============
+const isLoggedIn = ref(false)
+const loginLoading = ref(false)
+const loginForm = reactive({
+  phone: ADMIN_PHONE,
+  code: '',
+})
+const smsCountdown = ref(0)
+let smsTimer: ReturnType<typeof setInterval> | null = null
+
+// 发送验证码
+async function onSendLoginCode() {
+  if (!loginForm.phone || loginForm.phone.length < 11) {
+    showToast('请输入正确的手机号', 'error')
+    return
+  }
+  if (smsCountdown.value > 0) return
+  try {
+    await sendAdminSmsCode(loginForm.phone)
+    showToast('验证码已发送')
+    smsCountdown.value = 60
+    smsTimer = setInterval(() => {
+      smsCountdown.value--
+      if (smsCountdown.value <= 0 && smsTimer) {
+        clearInterval(smsTimer)
+        smsTimer = null
+      }
+    }, 1000)
+  } catch (err: any) {
+    showToast('验证码发送失败：' + (err?.response?.data?.error || err?.message || ''), 'error')
+  }
+}
+
+// 登录提交
+async function onLogin() {
+  if (!loginForm.phone || !loginForm.code) {
+    showToast('请输入手机号和验证码', 'error')
+    return
+  }
+  loginLoading.value = true
+  try {
+    const ok = await adminLogin(loginForm.phone, loginForm.code)
+    if (ok) {
+      isLoggedIn.value = true
+      loginForm.code = ''
+      showToast('登录成功')
+      // 登录成功后加载初始数据
+      pushHistory('init')
+      startAutoSave()
+      loadTemplateList()
+      loadUploadedFonts()
+      window.addEventListener('publish-success', () => showToast('模板发布成功！'))
+      // 恢复草稿
+      const draftInfo = getDraftInfo()
+      if (draftInfo && isDraftRecent(24 * 60 * 60 * 1000)) {
+        const savedAtStr = new Date(draftInfo.savedAt).toLocaleString()
+        if (confirm(`检测到上次未保存的草稿（${savedAtStr}），是否恢复？`)) {
+          restoreDraftFromLocal()
+        } else {
+          discardDraft()
+        }
+      } else if (draftInfo) {
+        discardDraft()
+      }
+    } else {
+      showToast('登录失败', 'error')
+    }
+  } catch (err: any) {
+    showToast('登录失败：' + (err?.response?.data?.error || err?.message || ''), 'error')
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+// 退出登录
+function onLogout() {
+  if (!confirm('确定退出登录？')) return
+  logoutAdmin()
+  isLoggedIn.value = false
 }
 
 // ============ DOM refs ============
@@ -1421,29 +1554,31 @@ function onWheel(e: WheelEvent) {
 
 // ============ 聚焦根元素以接收键盘事件 ============
 onMounted(async () => {
-  await initApi()
-  setTimeout(() => appRootRef.value?.focus(), 50)
-  
-  const draftInfo = getDraftInfo()
-  if (draftInfo && isDraftRecent(24 * 60 * 60 * 1000)) {
-    const savedAtStr = new Date(draftInfo.savedAt).toLocaleString()
-    if (confirm(`检测到上次未保存的草稿（${savedAtStr}），是否恢复？`)) {
-      restoreDraftFromLocal()
-    } else {
+  const ok = await initApi()
+  if (ok) {
+    isLoggedIn.value = true
+    // 已登录：加载初始数据
+    const draftInfo = getDraftInfo()
+    if (draftInfo && isDraftRecent(24 * 60 * 60 * 1000)) {
+      const savedAtStr = new Date(draftInfo.savedAt).toLocaleString()
+      if (confirm(`检测到上次未保存的草稿（${savedAtStr}），是否恢复？`)) {
+        restoreDraftFromLocal()
+      } else {
+        discardDraft()
+        pushHistory('init')
+      }
+    } else if (draftInfo) {
       discardDraft()
       pushHistory('init')
+    } else {
+      pushHistory('init')
     }
-  } else if (draftInfo) {
-    discardDraft()
-    pushHistory('init')
-  } else {
-    pushHistory('init')
+    startAutoSave()
+    loadTemplateList()
+    loadUploadedFonts()
+    window.addEventListener('publish-success', () => showToast('模板发布成功！'))
   }
-  
-  startAutoSave()
-  loadTemplateList()
-  loadUploadedFonts()
-  window.addEventListener('publish-success', () => showToast('模板发布成功！'))
+  setTimeout(() => appRootRef.value?.focus(), 50)
 })
 </script>
 
@@ -1545,6 +1680,75 @@ onMounted(async () => {
   min-height: 0;
   overflow: hidden;
 }
+
+/* ====== 管理员登录界面 ====== */
+.login-view {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+.login-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px 36px;
+  width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  text-align: center;
+}
+.login-logo { font-size: 48px; margin-bottom: 12px; }
+.login-title { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 6px; }
+.login-subtitle { font-size: 13px; color: #999; margin: 0 0 24px; }
+.login-form { text-align: left; }
+.login-field { margin-bottom: 18px; }
+.login-label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+.login-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e0e4ea;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.login-input:focus { border-color: #667eea; }
+.login-code-row { display: flex; gap: 8px; }
+.login-code-row .login-input { flex: 1; }
+.login-code-btn {
+  flex-shrink: 0;
+  padding: 0 16px;
+  border: 1px solid #667eea;
+  border-radius: 8px;
+  background: #f0f0ff;
+  color: #667eea;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.login-code-btn:hover:not(:disabled) { background: #667eea; color: #fff; }
+.login-code-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.login-submit-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  margin-top: 4px;
+}
+.login-submit-btn:hover:not(:disabled) { opacity: 0.9; }
+.login-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-tip { font-size: 12px; color: #bbb; margin-top: 16px; }
 
 /* ====== 全局 Toast ====== */
 .global-toast {

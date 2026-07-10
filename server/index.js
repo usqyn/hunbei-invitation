@@ -6,6 +6,10 @@ const fs = require('fs')
 const { v4: uuidv4 } = require('uuid')
 const initSqlJs = require('sql.js')
 const jwt = require('jsonwebtoken')
+// 公共鉴权中间件（requireAuth / requireAdmin / isRequestFromAdmin）
+const { requireAuth, requireAdmin, isRequestFromAdmin } = require('./middleware/auth')
+// 数据库事务辅助函数（多步操作保证原子性）
+const { runTransaction } = require('./middleware/db')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -229,7 +233,17 @@ app.use(cors({
     }
   },
 }))
-app.use(express.json({ limit: '5mb' }))
+// 默认 JSON 解析器（5mb），需要更大 body 的上传路由在各自路由内使用 largeJsonParser
+const defaultJsonParser = express.json({ limit: '5mb' })
+// 大 body 解析器（15mb），用于 base64 图片上传等场景
+const largeJsonParser = express.json({ limit: '15mb' })
+app.use((req, res, next) => {
+  // poster 上传路由使用 15mb 限制（base64 编码的图片），其余路由使用默认 5mb
+  if (req.method === 'POST' && /^\/api\/poster\/works\/[^/]+\/upload$/.test(req.path)) {
+    return largeJsonParser(req, res, next)
+  }
+  defaultJsonParser(req, res, next)
+})
 app.use((req, res, next) => {
   const auth = req.headers.authorization
   if (auth && auth.startsWith('Bearer ')) {
@@ -247,11 +261,8 @@ const POSTER_UPLOADS_DIR = path.join(__dirname, 'uploads', 'poster')
 if (!fs.existsSync(POSTER_UPLOADS_DIR)) fs.mkdirSync(POSTER_UPLOADS_DIR, { recursive: true })
 app.use('/uploads/poster', express.static(POSTER_UPLOADS_DIR))
 
-// ============ Poster routes ============
-const posterRouter = require('./routes/poster')
-app.use('/api/poster', posterRouter)
-
 // ============ 慢请求日志中间件（仅记录 >1s 的请求） ============
+// 必须在所有路由挂载之前注册，否则挂载在它之前的路由（如 poster）不会被记录
 app.use((req, res, next) => {
   const start = Date.now()
   res.on('finish', () => {
@@ -263,27 +274,12 @@ app.use((req, res, next) => {
   next()
 })
 
+// ============ Poster routes ============
+const posterRouter = require('./routes/poster')
+app.use('/api/poster', posterRouter)
+
 // ============ 鉴权中间件 ============
-function requireAuth(req, res, next) {
-  if (!req.user || !req.user.phone) {
-    return res.status(401).json({ success: false, error: '请先登录' })
-  }
-  next()
-}
-
-function requireAdmin(req, res, next) {
-  const adminPhone = process.env.ADMIN_PHONE || '13800138000'
-  if (!req.user || req.user.phone !== adminPhone) {
-    return res.status(403).json({ success: false, error: '无管理员权限' })
-  }
-  next()
-}
-
-// 判断当前请求是否来自管理员（公开接口中据此对 deleted 资源做差异化可见性控制）
-function isRequestFromAdmin(req) {
-  const adminPhone = process.env.ADMIN_PHONE || '13800138000'
-  return !!(req.user && req.user.phone === adminPhone)
-}
+// requireAuth / requireAdmin / isRequestFromAdmin 已从 ./middleware/auth 导入（见文件顶部）
 
 // ============ 字体目录 ============
 const FONTS_DIR = path.join(__dirname, 'uploads', 'fonts')
@@ -294,9 +290,18 @@ app.use('/uploads/fonts', express.static(FONTS_DIR))
 // 同一工厂产出的中间件各自维护独立计数，避免不同接口共享同一限流计数互相干扰
 function rateLimit({ max = 10, windowMs = 60000 } = {}) {
   const attempts = {}
+  // 过期 IP 清理阈值：超过 15 分钟未访问的 IP 条目直接删除，避免内存泄漏
+  const MAX_IDLE = 15 * 60 * 1000
   return function rateLimitMiddleware(req, res, next) {
     const ip = req.ip || (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || 'unknown'
     const now = Date.now()
+    // 每次调用时清理过期 IP 条目（最后一次访问超过 15 分钟的直接 delete）
+    Object.keys(attempts).forEach(key => {
+      const list = attempts[key]
+      if (!list || !list.length || now - list[list.length - 1] > MAX_IDLE) {
+        delete attempts[key]
+      }
+    })
     // 仅保留窗口期内的请求时间戳（先过滤，避免 delete 后再访问导致的 undefined.push 错误）
     const recent = (attempts[ip] || []).filter(t => now - t < windowMs)
     if (recent.length >= max) {
@@ -308,6 +313,8 @@ function rateLimit({ max = 10, windowMs = 60000 } = {}) {
     next()
   }
 }
+
+// withTransaction 已被导入的 runTransaction 替代（见文件顶部，从 ./middleware/db 导入）
 
 // ============ 文件上传配置 ============
 const storage = multer.diskStorage({
@@ -447,6 +454,17 @@ setInterval(() => {
   Object.keys(smsCodes).forEach(k => { if (now - smsCodes[k].time > 300000) delete smsCodes[k] })
 }, 60000)
 
+// 微信登录 IP 限流计数器：记录同一 IP 每小时创建微信用户的次数（防止滥用）
+const wxLoginIpCounter = {} // { ip: [timestamp, ...] }
+setInterval(() => {
+  const now = Date.now()
+  // 清理超过 1 小时的记录，避免内存泄漏
+  Object.keys(wxLoginIpCounter).forEach(ip => {
+    wxLoginIpCounter[ip] = (wxLoginIpCounter[ip] || []).filter(t => now - t < 3600000)
+    if (!wxLoginIpCounter[ip].length) delete wxLoginIpCounter[ip]
+  })
+}, 60000)
+
 // 发送验证码
 app.post('/api/sms/send', rateLimit(), (req, res) => {
   const { phone } = req.body
@@ -465,7 +483,25 @@ app.post('/api/user/login', rateLimit(), (req, res) => {
 
   // 微信小程序登录（encryptedData 模式）
   if (req.body.encryptedData && req.body.code) {
-    // 生产环境应调用 wx.login 服务端接口验证
+    // TODO: 生产环境应调用微信 wx.login 接口进行服务端验签（jscode2session + 解密 encryptedData）
+    // 当前为演示环境，未做真正的微信服务端校验，仅做基本防护
+
+    // 基本防护 1：对 encryptedData 做格式校验（非空字符串且长度合理，防止恶意构造超大请求）
+    const encryptedData = req.body.encryptedData
+    if (typeof encryptedData !== 'string' || encryptedData.length === 0 || encryptedData.length > 10 * 1024) {
+      return res.status(400).json({ success: false, error: 'encryptedData 格式不正确' })
+    }
+
+    // 基本防护 2：限制同一 IP 每小时最多创建 5 个微信用户，防止滥用
+    const clientIp = req.ip || (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || 'unknown'
+    const nowMs = Date.now()
+    const recentWxLogins = (wxLoginIpCounter[clientIp] || []).filter(t => nowMs - t < 3600000)
+    if (recentWxLogins.length >= 5) {
+      return res.status(429).json({ success: false, error: '微信登录过于频繁，请稍后再试' })
+    }
+    recentWxLogins.push(nowMs)
+    wxLoginIpCounter[clientIp] = recentWxLogins
+
     // 演示环境直接放行，每次登录生成唯一标识（模拟 openid 隔离）
     const wechatPhone = 'wx_' + uuidv4()
     const token = jwt.sign({ phone: wechatPhone, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
@@ -497,7 +533,10 @@ app.post('/api/user/login', rateLimit(), (req, res) => {
       delete smsCodes[phone]
     }
 
-    const token = jwt.sign({ phone, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
+    // 如果手机号为管理员账号（ADMIN_PHONE），签发的 JWT 中 role 设为 'admin'
+    const adminPhone = process.env.ADMIN_PHONE || '13800138000'
+    const role = phone === adminPhone ? 'admin' : 'user'
+    const token = jwt.sign({ phone, role }, JWT_SECRET, { expiresIn: '30d' })
     const now = new Date().toISOString()
     const userCheck = db.exec("SELECT id FROM users WHERE phone = ?", [phone])
     if (!userCheck.length || !userCheck[0].values.length) {
@@ -520,6 +559,42 @@ app.post('/api/user/login', rateLimit(), (req, res) => {
   }
 
   res.status(400).json({ success: false, error: '缺少登录参数' })
+})
+
+// 管理员专用登录接口：验证手机号为 ADMIN_PHONE 后签发带 role:'admin' 的 JWT
+app.post('/api/admin/login', rateLimit(), (req, res) => {
+  const { phone, code } = req.body
+  if (!phone) {
+    return res.status(400).json({ success: false, error: '请输入手机号' })
+  }
+  const adminPhone = process.env.ADMIN_PHONE || '13800138000'
+  // 校验手机号是否为管理员账号
+  if (phone !== adminPhone) {
+    return res.status(403).json({ success: false, error: '该账号无管理员权限' })
+  }
+  if (!code) {
+    return res.status(400).json({ success: false, error: '请输入验证码' })
+  }
+  // 验证码校验：开发环境支持 DEV_CODE 万能码，生产环境仅校验短信验证码
+  const isDev = process.env.NODE_ENV !== 'production'
+  const devCode = isDev ? (process.env.DEV_CODE || '000000') : null
+  if (!isDev || code !== devCode) {
+    const stored = smsCodes[phone]
+    if (!stored) {
+      return res.status(400).json({ success: false, error: '请先获取验证码' })
+    }
+    if (Date.now() - stored.time > 300000) {
+      delete smsCodes[phone]
+      return res.status(400).json({ success: false, error: '验证码已过期，请重新获取' })
+    }
+    if (stored.code !== code) {
+      return res.status(400).json({ success: false, error: '验证码错误' })
+    }
+    delete smsCodes[phone]
+  }
+  // 签发管理员令牌（role: 'admin'，有效期 7 天）
+  const token = jwt.sign({ phone, role: 'admin' }, JWT_SECRET, { expiresIn: '7d' })
+  res.json({ success: true, data: { token, phone } })
 })
 
 // 事件追踪
@@ -623,16 +698,19 @@ app.get('/api/templates', (req, res) => {
     }
 
     if (req.query.search) {
-      conditions.push("name LIKE ?")
-      params.push(`%${req.query.search}%`)
+      // 转义 LIKE 通配符（% 和 _），避免搜索关键词中的特殊字符被当作通配符
+      const escapedSearch = req.query.search.replace(/([%_\\])/g, '\\$1')
+      conditions.push("name LIKE ? ESCAPE '\\'")
+      params.push(`%${escapedSearch}%`)
     }
 
     // 统一构建 WHERE 子句，数据查询与计数查询共用，避免字符串替换的脆弱性
     const whereClause = conditions.length ? " WHERE " + conditions.join(" AND ") : ""
     const dataSql = "SELECT * FROM templates" + whereClause + " ORDER BY updatedAt DESC"
 
+    // 分页参数：limit 统一上限 100，防止恶意请求超大分页
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
@@ -750,6 +828,18 @@ app.post('/api/upload', requireAuth, upload.array('images', 10), (req, res) => {
   }
 })
 
+// 上传单张图片（小程序编辑器专用）
+app.post('/api/upload/image', requireAuth, upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: '未收到图片文件' })
+    }
+    res.json({ success: true, url: `/uploads/${req.file.filename}` })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '图片上传失败' })
+  }
+})
+
 // 上传字体
 const fontStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -863,7 +953,7 @@ app.get('/api/music', (req, res) => {
     sql += " ORDER BY hot DESC, id ASC"
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     if (page > 0 && limit > 0) {
       const countSql = "SELECT COUNT(*) as total FROM music" + (conditions.length ? " WHERE " + conditions.join(" AND ") : "")
@@ -902,6 +992,25 @@ app.post('/api/templates', requireAdmin, (req, res) => {
     const body = req.body
     if (!body.name || !body.category) {
       return res.status(400).json({ success: false, error: '缺少必填字段：name、category' })
+    }
+    // 数据校验：name 长度上限 100 字符
+    if (typeof body.name !== 'string' || body.name.length > 100) {
+      return res.status(400).json({ success: false, error: '模板名称不能超过 100 个字符' })
+    }
+    // 数据校验：price 必须 >= 0
+    if (body.price !== undefined && body.price !== null && (typeof body.price !== 'number' || body.price < 0)) {
+      return res.status(400).json({ success: false, error: '价格必须为非负数' })
+    }
+    // 数据校验：JSON 字段序列化后长度上限 500KB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 500 * 1024
+    const jsonFields = { data: body.data, elements: body.elements, canvasSize: body.canvasSize, background: body.background, tags: body.tags }
+    for (const [key, val] of Object.entries(jsonFields)) {
+      if (val !== undefined && val !== null) {
+        const str = JSON.stringify(val)
+        if (str.length > MAX_JSON_LENGTH) {
+          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 500KB 限制` })
+        }
+      }
     }
 
     const id = body.id || uuidv4()
@@ -958,7 +1067,28 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
     const fields = []
     const params = []
 
-    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'likes', 'pageCount', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium']
+    // 数据校验：name 长度上限 100 字符
+    if (body.name !== undefined && (typeof body.name !== 'string' || body.name.length > 100)) {
+      return res.status(400).json({ success: false, error: '模板名称不能超过 100 个字符' })
+    }
+    // 数据校验：price 必须 >= 0
+    if (body.price !== undefined && body.price !== null && (typeof body.price !== 'number' || body.price < 0)) {
+      return res.status(400).json({ success: false, error: '价格必须为非负数' })
+    }
+    // 数据校验：JSON 字段序列化后长度上限 500KB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 500 * 1024
+    const jsonFields = { data: body.data, elements: body.elements, canvasSize: body.canvasSize, background: body.background, tags: body.tags }
+    for (const [key, val] of Object.entries(jsonFields)) {
+      if (val !== undefined && val !== null) {
+        const str = JSON.stringify(val)
+        if (str.length > MAX_JSON_LENGTH) {
+          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 500KB 限制` })
+        }
+      }
+    }
+
+    // 移除统计字段（likes、pageCount），管理员编辑不应直接篡改统计数据
+    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium']
     allowedFields.forEach(f => {
       if (body[f] !== undefined) {
         fields.push(`${f} = ?`)
@@ -1067,7 +1197,7 @@ app.get('/api/orders', requireAuth, (req, res) => {
     const whereClause = conditions.length ? " WHERE " + conditions.join(" AND ") : ""
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
@@ -1175,7 +1305,7 @@ app.get('/api/products', (req, res) => {
     const dataSql = "SELECT * FROM templates" + whereClause + " ORDER BY likes DESC"
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
@@ -1288,10 +1418,6 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     const nowStr = new Date().toISOString()
 
     const orderItems = [{ type: 'vip', plan, days, price: price || 0 }]
-    db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt, paid_at)
-      VALUES (?, ?, ?, ?, 'paid', '', '', '', ?, ?, ?, ?)`, [
-      orderId, phone, JSON.stringify(orderItems), String(price || 0), '', nowStr, nowStr, nowStr,
-    ])
 
     const userResult = db.exec("SELECT vip_status, vip_expire_at, vip_plan FROM users WHERE phone = ?", [phone])
     let currentExpire = 0
@@ -1303,8 +1429,16 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     }
     const baseExpire = Math.max(currentExpire, now)
     const newExpireAt = baseExpire + days * 24 * 60 * 60 * 1000
-    db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
-      [String(newExpireAt), plan, nowStr, phone])
+
+    // 使用事务：创建订单 + 更新用户 VIP 状态，保证原子性
+    runTransaction(db, () => {
+      db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt, paid_at)
+        VALUES (?, ?, ?, ?, 'paid', '', '', '', ?, ?, ?, ?)`, [
+        orderId, phone, JSON.stringify(orderItems), String(price || 0), '', nowStr, nowStr, nowStr,
+      ])
+      db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
+        [String(newExpireAt), plan, nowStr, phone])
+    })
     saveDatabaseDebounced()
 
     res.json({ success: true, data: { orderId, prepayId: `prepay_${orderId}`, expireAt: newExpireAt } })
@@ -1390,7 +1524,7 @@ app.get('/api/favorites', requireAuth, (req, res) => {
     const params = [phone]
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
@@ -1508,7 +1642,7 @@ app.get('/api/footprints', requireAuth, (req, res) => {
     const params = [phone]
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
@@ -1582,7 +1716,7 @@ app.get('/api/notifications', requireAuth, (req, res) => {
     const params = [phone]
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
@@ -1657,7 +1791,7 @@ app.get('/api/works/recycle', requireAuth, (req, res) => {
     const params = [phone]
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     if (page > 0 && limit > 0) {
       const countSql = "SELECT COUNT(*) as total FROM recycle_bin WHERE phone = ?"
@@ -1803,6 +1937,22 @@ app.use((req, res) => {
 // ============ 错误处理 ============
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err)
+
+  // multer 上传错误（文件过大、格式不支持等）：返回 400 + 具体信息
+  if (err.code && (err.code.startsWith('LIMIT_') || err.code.startsWith('MULTER_'))) {
+    let msg = '文件上传失败'
+    if (err.code === 'LIMIT_FILE_SIZE') msg = '文件大小超过限制（最大 10MB）'
+    else if (err.code === 'LIMIT_UNEXPECTED_FILE') msg = '不支持的文件字段'
+    else if (err.message) msg = err.message
+    return res.status(400).json({ success: false, error: msg })
+  }
+
+  // 自定义业务错误：返回对应状态码和错误信息
+  if (err.statusCode) {
+    return res.status(err.statusCode).json({ success: false, error: err.message || '请求错误' })
+  }
+
+  // 其他错误：返回 500 + 通用信息（不泄露内部细节）
   res.status(500).json({ success: false, error: '服务器内部错误' })
 })
 

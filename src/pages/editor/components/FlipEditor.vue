@@ -6,7 +6,11 @@
         <text class="toolbar-title">翻页编辑</text>
       </view>
       <view class="toolbar-right">
-        <text class="page-indicator">{{ editorStore.currentFlipPageIndex + 1 }}/{{ editorStore.flipPages.length }}</text>
+        <view class="page-actions">
+          <text class="page-action-btn" @click="addFlipPage">+ 添加页</text>
+          <text class="page-action-btn page-action-btn--danger" @click="deleteFlipPage">删除页</text>
+          <text class="page-indicator">{{ editorStore.currentFlipPageIndex + 1 }}/{{ editorStore.flipPages.length }}</text>
+        </view>
       </view>
     </view>
 
@@ -69,7 +73,7 @@
           <!-- 当前页面信息 -->
           <view v-if="currentPage" class="panel-section">
             <text class="section-label">页面名称</text>
-            <input class="section-input" v-model="currentPage.name" placeholder="页面名称" />
+            <input class="section-input" v-model="currentPage.name" placeholder="页面名称" @blur="onPageNameBlur" />
             <text class="section-label">页面类型</text>
             <text class="section-value">{{ getPageTypeName(currentPage.pageType) }}</text>
           </view>
@@ -114,6 +118,7 @@ import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { uploadImage } from '@/api'
 
 const editorStore = useEditorStore()
 const templateStore = useTemplateStore()
@@ -151,6 +156,8 @@ function onElementClick(el: any, idx: number) {
   selectedElement.value = el
 }
 
+// 文本输入防抖记录历史
+let textInputTimer: any = null
 function onTextInput(e: any) {
   if (selectedElement.value) {
     selectedElement.value.text = e.detail.value
@@ -158,16 +165,35 @@ function onTextInput(e: any) {
     if (selectedElement.value.dataKey) {
       editorStore.syncFieldToAllModes(selectedElement.value.dataKey, e.detail.value)
     }
+    // 防抖记录历史
+    if (textInputTimer) clearTimeout(textInputTimer)
+    textInputTimer = setTimeout(() => {
+      editorStore.pushHistory()
+      textInputTimer = null
+    }, 800)
   }
 }
 
-function applySelectedImage(tempFilePath: string) {
-  if (selectedElement.value) {
+async function applySelectedImage(tempFilePath: string) {
+  if (!selectedElement.value) return
+  uni.showLoading({ title: '上传中...' })
+  try {
+    const permanentUrl = await uploadImage(tempFilePath)
+    selectedElement.value.text = permanentUrl
+    if (selectedElement.value.dataKey) {
+      editorStore.syncFieldToAllModes(selectedElement.value.dataKey, permanentUrl)
+    }
+    editorStore.pushHistory()
+  } catch (e) {
+    // 上传失败回退到临时路径
+    console.warn('图片上传失败:', e)
     selectedElement.value.text = tempFilePath
-    // 持久化图片修改到 store，并同步到所有模式
     if (selectedElement.value.dataKey) {
       editorStore.syncFieldToAllModes(selectedElement.value.dataKey, tempFilePath)
     }
+    uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
+  } finally {
+    uni.hideLoading()
   }
 }
 
@@ -243,6 +269,51 @@ function getPageTypeName(type: string): string {
   }
   return map[type] || type
 }
+
+// 添加新页面
+function addFlipPage() {
+  const newPage = {
+    id: `page_${Date.now()}`,
+    name: `第${editorStore.flipPages.length + 1}页`,
+    pageType: 'custom',
+    background: { type: 'solid', color1: '#ffffff' },
+    elements: [],
+  }
+  editorStore.flipPages.push(newPage)
+  editorStore.currentFlipPageIndex = editorStore.flipPages.length - 1
+  editorStore.pushHistory()
+}
+
+// 删除当前页
+function deleteFlipPage() {
+  if (editorStore.flipPages.length <= 1) {
+    uni.showToast({ title: '至少保留一页', icon: 'none' })
+    return
+  }
+  uni.showModal({
+    title: '删除页面',
+    content: `确定删除第${editorStore.currentFlipPageIndex + 1}页？`,
+    confirmColor: '#e84a6e',
+    success: (res) => {
+      if (res.confirm) {
+        const idx = editorStore.currentFlipPageIndex
+        editorStore.flipPages.splice(idx, 1)
+        // 调整当前页码
+        if (idx >= editorStore.flipPages.length) {
+          editorStore.currentFlipPageIndex = editorStore.flipPages.length - 1
+        }
+        activeElementIndex.value = -1
+        selectedElement.value = null
+        editorStore.pushHistory()
+      }
+    },
+  })
+}
+
+// 页面重命名时记录历史
+function onPageNameBlur() {
+  editorStore.pushHistory()
+}
 </script>
 
 <style lang="scss" scoped>
@@ -265,12 +336,35 @@ function getPageTypeName(type: string): string {
 .toolbar-title {
   font-size: 32rpx;
   font-weight: bold;
-  color: #333;
+  color: var(--color-text-primary, #333);
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.page-action-btn {
+  font-size: 26rpx;
+  color: var(--color-primary, #e84a6e);
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+  background: var(--color-primary-light, #fce4ec);
+}
+
+.page-action-btn--danger {
+  color: #ff4d4f;
+  background: #fff1f0;
+}
+
+.page-action-btn:active {
+  opacity: 0.7;
 }
 
 .page-indicator {
   font-size: 28rpx;
-  color: #666;
+  color: var(--color-text-secondary, #666);
 }
 
 .flip-main {
@@ -294,7 +388,7 @@ function getPageTypeName(type: string): string {
 }
 
 .page-list-item--active {
-  background: #e3f2fd;
+  background: var(--color-primary-light, #fce4ec);
 }
 
 .page-list-thumb {

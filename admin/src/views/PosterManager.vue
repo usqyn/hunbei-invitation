@@ -86,12 +86,14 @@
           <span class="pm-card-badge" :class="{ vip: tpl.is_vip }">
             {{ tpl.is_vip ? 'VIP' : '免费' }}
           </span>
+          <span v-if="tpl.is_active === false" class="pm-card-badge inactive">已下架</span>
         </div>
         <div class="pm-card-body">
           <div class="pm-card-name" :title="tpl.name">{{ tpl.name }}</div>
           <div class="pm-card-cat">{{ getCategoryName(tpl.category_id) }}</div>
           <div class="pm-card-actions">
             <button class="pm-btn sm" @click="openEditModal(tpl)">✎ 编辑</button>
+            <button class="pm-btn sm" @click="cloneTemplate(tpl)" title="复制此模板创建新模板">⧉ 克隆</button>
             <button class="pm-btn sm" @click="exportTemplateJson(tpl)" title="导出为 JSON 文件">⬇ 导出</button>
             <button class="pm-btn sm danger" @click="onDeleteTemplate(tpl)">🗑 删除</button>
           </div>
@@ -153,6 +155,15 @@
                     </label>
                   </label>
                 </div>
+              </div>
+              <div class="pm-form-row">
+                <label class="pm-toggle-label">
+                  <span>{{ form.is_active ? '✅ 已上架' : '⏸ 已下架' }}</span>
+                  <label class="pm-switch">
+                    <input type="checkbox" v-model="form.is_active" />
+                    <span class="pm-slider"></span>
+                  </label>
+                </label>
               </div>
             </div>
 
@@ -285,9 +296,18 @@
                     <input type="number" min="1" max="1334" step="1" v-model.number="form.editableAreas[selectedAreaIdx].height" class="pm-input" />
                   </div>
                 </div>
-                <div class="pm-form-row" v-if="form.editableAreas[selectedAreaIdx].type === 'text'">
-                  <label>字号 (px)</label>
-                  <input type="number" min="8" max="72" v-model.number="form.editableAreas[selectedAreaIdx].fontSize" class="pm-input" />
+                <div class="pm-form-row two-col" v-if="form.editableAreas[selectedAreaIdx].type === 'text'">
+                  <div>
+                    <label>字号 (px)</label>
+                    <input type="number" min="8" max="72" v-model.number="form.editableAreas[selectedAreaIdx].fontSize" class="pm-input" />
+                  </div>
+                  <div>
+                    <label>粗细</label>
+                    <select v-model="form.editableAreas[selectedAreaIdx].fontWeight" class="pm-input">
+                      <option value="normal">正常</option>
+                      <option value="bold">加粗</option>
+                    </select>
+                  </div>
                 </div>
                 <div class="pm-form-row two-col" v-if="form.editableAreas[selectedAreaIdx].type === 'text'">
                   <div>
@@ -346,6 +366,7 @@ interface EditableArea {
   width: number    // 像素尺寸
   height: number
   fontSize?: number
+  fontWeight?: string  // 'normal' | 'bold' | 数字字重，保留以兼容历史数据
   color?: string
   align?: 'left' | 'center' | 'right'
   borderRadius?: number
@@ -484,6 +505,32 @@ function pushPosterHistory() {
   redoStack.value = []
 }
 
+// 延迟入栈机制：交互开始时记录初始状态（不立即入栈），交互结束时确认发生实际变化后才入栈
+// 避免单纯点击（无拖拽/无修改）污染撤销栈
+let pendingSnapshot: PosterSnapshot | null = null
+
+function beginInteraction() {
+  pendingSnapshot = snapshotForm()
+}
+
+function endInteraction() {
+  if (!pendingSnapshot) return
+  const current = snapshotForm()
+  // 仅在 editableAreas 或其他表单字段发生变化时才入栈
+  if (JSON.stringify(current.editableAreas) !== JSON.stringify(pendingSnapshot.editableAreas) ||
+      current.name !== pendingSnapshot.name ||
+      current.category_id !== pendingSnapshot.category_id ||
+      current.cover_url !== pendingSnapshot.cover_url ||
+      current.background_url !== pendingSnapshot.background_url ||
+      current.is_free !== pendingSnapshot.is_free ||
+      current.is_vip !== pendingSnapshot.is_vip) {
+    historyStack.value.push(pendingSnapshot)
+    if (historyStack.value.length > 50) historyStack.value.shift()
+    redoStack.value = []
+  }
+  pendingSnapshot = null
+}
+
 function undoPoster() {
   if (historyStack.value.length === 0) return
   // 当前状态入 redo 栈
@@ -539,6 +586,7 @@ function areaStyle(area: EditableArea): Record<string, string> {
     width: `${(area.width / 750) * 100}%`,
     height: `${(area.height / 1334) * 100}%`,
     fontSize: area.fontSize ? `${Math.max(10, area.fontSize * 0.35)}px` : '12px',
+    fontWeight: area.fontWeight || 'normal',  // 预览中应用字重
     color: area.color || '#333',
     textAlign: area.align || 'center',
     direction: area.direction || 'ltr',
@@ -549,8 +597,9 @@ function areaStyle(area: EditableArea): Record<string, string> {
 async function fetchTemplates() {
   loading.value = true
   try {
+    // 管理后台需要查看所有模板（含下架），传 all=true 跳过 is_active 过滤
     const res = await api.get('/api/poster/templates', {
-      params: { limit: 100 },
+      params: { limit: 100, all: 'true' },
     })
     if (res.data.success !== false) {
       templates.value = (res.data.data || []).map((t: any) => normalizeTemplate(t))
@@ -620,6 +669,7 @@ function normalizeTemplate(raw: any): PosterTemplateRaw {
       width: a.width ?? 200,
       height: a.height ?? 60,
       fontSize: a.fontSize ?? 28,
+      fontWeight: a.fontWeight || 'normal',  // 保留字重字段
       color: a.color || '#333333',
       align: a.align || 'center',
       borderRadius: a.borderRadius || 0,
@@ -664,6 +714,7 @@ async function saveTemplate() {
           width: a.width,
           height: a.height,
           fontSize: a.fontSize,
+          fontWeight: a.fontWeight || 'normal',  // 保留字重字段
           color: a.color,
           align: a.align,
           borderRadius: a.borderRadius,
@@ -732,6 +783,42 @@ function exportTemplateJson(tpl: PosterTemplateRaw) {
   URL.revokeObjectURL(url)
 }
 
+// ============ 克隆模板（复制现有模板数据创建新模板）============
+async function cloneTemplate(tpl: PosterTemplateRaw) {
+  if (!confirm(`确定克隆模板「${tpl.name}」？将创建一个副本。`)) return
+  try {
+    // 深拷贝当前模板数据，id 设为 null 让服务端生成新 id，名称加"_副本"后缀
+    const clonedAreas = JSON.parse(JSON.stringify(tpl.editableAreas || []))
+    // 为克隆的区域生成新 id，避免冲突
+    clonedAreas.forEach((a: EditableArea) => {
+      a.id = `area_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    })
+    const payload = {
+      name: `${tpl.name}_副本`,
+      category_id: tpl.category_id,
+      cover_url: tpl.cover_url,
+      background_url: tpl.background_url,
+      is_free: tpl.is_free ? 1 : 0,
+      is_vip: tpl.is_vip ? 1 : 0,
+      is_active: tpl.is_active === false ? 0 : 1,
+      config: {
+        width: tpl.config?.width || 750,
+        height: tpl.config?.height || 1334,
+        editableAreas: clonedAreas,
+      },
+    }
+    const res = await api.post('/api/poster/templates', payload)
+    if (res.data && res.data.success === false) {
+      throw new Error(res.data.error || '克隆失败')
+    }
+    await fetchTemplates()
+    await fetchStats()
+    alert('模板克隆成功！')
+  } catch (e: any) {
+    alert('克隆失败：' + (e?.response?.data?.error || e?.message || '未知错误'))
+  }
+}
+
 // ============ 弹窗操作 ============
 function openCreateModal() {
   Object.assign(form, defaultForm())
@@ -771,7 +858,7 @@ function addArea(type: 'text' | 'image') {
     width: type === 'text' ? 350 : 300,
     height: type === 'text' ? 80 : 300,
     ...(type === 'text'
-      ? { defaultText: '示例文字', fontSize: 28, color: '#333333', align: 'center', direction: '' }
+      ? { defaultText: '示例文字', fontSize: 28, fontWeight: 'normal', color: '#333333', align: 'center', direction: '' }
       : { borderRadius: 8 }),
   }
   form.editableAreas.push(area)
@@ -821,13 +908,16 @@ function moveAreaDown(idx: number) {
 function startEditText(idx: number) {
   const area = form.editableAreas[idx]
   if (!area || area.type !== 'text') return
-  pushPosterHistory()
+  // 记录初始状态（延迟入栈），编辑结束时确认文本变化才入栈
+  beginInteraction()
   editingAreaIdx.value = idx
   selectedAreaIdx.value = idx
 }
 
 function finishEditText() {
   editingAreaIdx.value = null
+  // 确认文本发生变化后才入栈
+  endInteraction()
 }
 
 // ============ 图片区域默认图片 ============
@@ -858,7 +948,8 @@ let dragState: { idx: number; startX: number; startY: number; origX: number; ori
 
 function startDragArea(e: MouseEvent, idx: number) {
   selectedAreaIdx.value = idx
-  pushPosterHistory()
+  // 记录初始状态（延迟入栈），mouseup 时确认发生实际拖拽才入栈
+  beginInteraction()
   const area = form.editableAreas[idx]
   dragState = {
     idx,
@@ -885,6 +976,8 @@ function onDragEnd() {
   dragState = null
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragEnd)
+  // 确认发生实际拖拽后才入栈
+  endInteraction()
 }
 
 // ============ Resize（缩放）逻辑 ============
@@ -904,7 +997,8 @@ function startResize(e: MouseEvent, idx: number, dir: ResizeDir) {
   e.preventDefault()
   e.stopPropagation()
   selectedAreaIdx.value = idx
-  pushPosterHistory()
+  // 记录初始状态（延迟入栈），mouseup 时确认发生实际缩放才入栈
+  beginInteraction()
   const area = form.editableAreas[idx]
   resizeState = {
     idx,
@@ -965,6 +1059,8 @@ function onResizeEnd() {
   resizeState = null
   window.removeEventListener('mousemove', onResizeMove)
   window.removeEventListener('mouseup', onResizeEnd)
+  // 确认发生实际缩放后才入栈
+  endInteraction()
 }
 
 // 组件卸载时清理拖拽监听器，避免拖拽过程中卸载导致监听器残留
@@ -1102,6 +1198,7 @@ onMounted(async () => {
   color: #2e7d32;
 }
 .pm-card-badge.vip { background: linear-gradient(135deg, #ffd54f, #ffb300); color: #5d4037; }
+.pm-card-badge.inactive { top: 8px; left: 8px; right: auto; background: #ffebee; color: #c62828; }
 
 .pm-card-body { padding: 12px 14px; }
 .pm-card-name { font-size: 14px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

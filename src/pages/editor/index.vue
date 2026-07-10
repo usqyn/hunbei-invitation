@@ -11,7 +11,12 @@
 
     <!-- Body: 根据模板类型渲染不同编辑界面 -->
     <view v-if="editorStore.templateLoading" class="loading-overlay">
-      <text class="loading-overlay-text">加载模板中...</text>
+      <view class="skeleton-card">
+        <view class="skeleton-img skeleton-pulse"></view>
+        <view class="skeleton-line skeleton-pulse" style="width: 60%"></view>
+        <view class="skeleton-line skeleton-pulse" style="width: 40%"></view>
+        <view class="skeleton-line skeleton-pulse" style="width: 70%"></view>
+      </view>
     </view>
     <view v-else-if="editorStore.templateType === 'page'" class="editor-body editor-body--page">
       <PageEditor />
@@ -101,36 +106,62 @@
       </view>
     </view>
 
-    <!-- 底部工具栏：5 Tab + 操作按钮 -->
+    <!-- 底部工具栏：上下文工具栏 + 5 Tab + 操作按钮 -->
     <view class="editor-footer">
-      <view class="footer-tabs">
-        <view class="footer-tab" @click="openUnifiedEdit">
-          <text class="tab-icon">📋</text>
-          <text class="tab-label">信息</text>
+      <!-- 上下文工具栏：选中元素时显示快捷操作 -->
+      <view v-if="editorStore.selectedElement !== null" class="context-toolbar">
+        <view class="ctx-btn" @click="handleEditText">
+          <text class="ctx-icon">✏️</text>
+          <text class="ctx-label">编辑</text>
         </view>
-        <view class="footer-tab" @click="handleEditText">
-          <text class="tab-icon">✏️</text>
-          <text class="tab-label">文字</text>
+        <view v-if="selectedElType === 'image'" class="ctx-btn" @click="handleReplaceImage">
+          <text class="ctx-icon">🖼️</text>
+          <text class="ctx-label">换图</text>
         </view>
-        <view class="footer-tab" @click="handleReplaceImage">
-          <text class="tab-icon">🖼️</text>
-          <text class="tab-label">图片</text>
+        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
+          <text class="ctx-icon">↩</text>
+          <text class="ctx-label">撤销</text>
         </view>
-        <view class="footer-tab" @click="handleMusic">
-          <text class="tab-icon">🎵</text>
-          <text class="tab-label">音乐</text>
+        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canRedo }" @click="handleRedo">
+          <text class="ctx-icon">↪</text>
+          <text class="ctx-label">重做</text>
         </view>
-        <view class="footer-tab" @click="handleMore">
-          <text class="tab-icon">⋯</text>
-          <text class="tab-label">更多</text>
+        <view class="ctx-btn ctx-btn--danger" @click="deselectElement">
+          <text class="ctx-icon">✕</text>
+          <text class="ctx-label">取消</text>
         </view>
       </view>
-      <view class="footer-actions">
-        <view class="footer-action-btn footer-save-btn" @click="handleSave">
-          <text class="action-btn-text">保存</text>
+      <!-- 底部 Tab + 操作区 -->
+      <view class="footer-main">
+        <view class="footer-tabs">
+          <view class="footer-tab" @click="openUnifiedEdit">
+            <text class="tab-icon">📋</text>
+            <text class="tab-label">信息</text>
+          </view>
+          <view class="footer-tab" @click="handleEditText">
+            <text class="tab-icon">✏️</text>
+            <text class="tab-label">文字</text>
+          </view>
+          <view class="footer-tab" @click="handleReplaceImage">
+            <text class="tab-icon">🖼️</text>
+            <text class="tab-label">图片</text>
+          </view>
+          <view class="footer-tab" @click="handleMusic">
+            <text class="tab-icon">🎵</text>
+            <text class="tab-label">音乐</text>
+          </view>
+          <view class="footer-tab" @click="handleMore">
+            <text class="tab-icon">⋯</text>
+            <text class="tab-label">更多</text>
+          </view>
         </view>
-        <view class="footer-action-btn footer-share-btn" @click="handleShare">
-          <text class="action-btn-text">预览分享</text>
+        <view class="footer-actions">
+          <view class="footer-action-btn footer-save-btn" @click="handleSave">
+            <text class="action-btn-text">保存</text>
+          </view>
+          <view class="footer-action-btn footer-share-btn" @click="handleShare">
+            <text class="action-btn-text">预览分享</text>
+          </view>
         </view>
       </view>
     </view>
@@ -152,7 +183,7 @@
       :basic-info="basicInfo"
       :elements="editorStore.editableElements"
       :template-data="templateStore.templateData"
-      @close="editorStore.closeBasicInfoEditor"
+      @close="onUnifiedEditCancel"
       @confirm="onUnifiedEditConfirm"
       @update="onSmartFieldUpdate"
       @location="handleLocation"
@@ -173,7 +204,7 @@ import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
-import { exportInvitation } from '@/api'
+import { exportInvitation, uploadImage } from '@/api'
 import PageEditor from './components/PageEditor.vue'
 import FlipEditor from './components/FlipEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
@@ -237,7 +268,22 @@ function onTextEditorConfirm() {
 function onUnifiedEditConfirm() {
   editorStore.syncBasicInfoToElements()
   editorStore.closeBasicInfoEditor()
+  formSnapshot = null
   renderedImageStale.value = true
+}
+
+// 统一表单取消：回滚到打开前的状态
+function onUnifiedEditCancel() {
+  if (formSnapshot) {
+    const templateStore2 = templateStore
+    Object.assign(templateStore2.basicInfo, formSnapshot.basicInfo)
+    Object.assign(templateStore2.templateData, formSnapshot.templateData)
+    editorStore.editableElements.splice(0, editorStore.editableElements.length, ...formSnapshot.elements)
+    editorStore.pageSections.splice(0, editorStore.pageSections.length, ...formSnapshot.pageSections)
+    editorStore.flipPages.splice(0, editorStore.flipPages.length, ...formSnapshot.flipPages)
+    formSnapshot = null
+  }
+  editorStore.closeBasicInfoEditor()
 }
 
 // 智能字段更新后标记过期（输入时防抖记录历史）
@@ -280,9 +326,14 @@ interface DragState {
 }
 const dragState = ref<DragState | null>(null)
 const DRAG_THRESHOLD = 5
+// 记录最近一次拖拽是否产生了位移，防止 touchend 后 click 仍触发编辑器
+let lastDragMoved = false
 
 function onElementTap(idx: number) {
-  if (dragState.value && dragState.value.moved) return
+  if (lastDragMoved) {
+    lastDragMoved = false
+    return
+  }
   onOpenEditor(idx)
 }
 
@@ -334,6 +385,7 @@ function onElementTouchMove(e: any) {
 function onElementTouchEnd() {
   const ds = dragState.value
   if (ds && ds.moved) {
+    lastDragMoved = true
     editorStore.pushHistory()
     renderedImageStale.value = true
   }
@@ -407,6 +459,18 @@ const hasShownProgressPopup = ref(false)
 const editStartTime = ref(Date.now())
 
 const basicInfo = computed(() => templateStore.basicInfo)
+
+// 选中元素的类型（用于上下文工具栏显示）
+const selectedElType = computed(() => {
+  if (editorStore.selectedElement === null) return null
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  return el?.type || null
+})
+
+// 取消选中元素
+function deselectElement() {
+  editorStore.selectedElement = null
+}
 
 function resolveText(text: string): string {
   return resolveDatePlaceholders(text, templateStore.templateData)
@@ -495,6 +559,22 @@ function onOpenEditor(idx: number) {
 }
 
 function chooseLocalImage(idx: number) {
+  const applyImage = async (tempPath: string) => {
+    uni.showLoading({ title: '上传中...' })
+    try {
+      const permanentUrl = await uploadImage(tempPath)
+      editorStore.applyImageToElement(idx, permanentUrl)
+      renderedImageStale.value = true
+    } catch (e) {
+      // 上传失败时回退到临时路径（至少当前会话可用）
+      console.warn('图片上传失败，使用临时路径:', e)
+      editorStore.applyImageToElement(idx, tempPath)
+      renderedImageStale.value = true
+      uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
+    } finally {
+      uni.hideLoading()
+    }
+  }
   // #ifdef MP-WEIXIN
   uni.chooseMedia({
     count: 1,
@@ -502,8 +582,7 @@ function chooseLocalImage(idx: number) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0) {
-        editorStore.applyImageToElement(idx, res.tempFiles[0].tempFilePath)
-        renderedImageStale.value = true
+        applyImage(res.tempFiles[0].tempFilePath)
       }
     },
     fail: () => {
@@ -519,8 +598,7 @@ function chooseLocalImage(idx: number) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
-        editorStore.applyImageToElement(idx, res.tempFilePaths[0])
-        renderedImageStale.value = true
+        applyImage(res.tempFilePaths[0])
       }
     },
     fail: () => {
@@ -530,8 +608,19 @@ function chooseLocalImage(idx: number) {
   // #endif
 }
 
+// 表单快照（取消时回滚）
+let formSnapshot: any = null
+
 // 打开统一编辑表单
 function openUnifiedEdit() {
+  // 保存快照用于取消回滚
+  formSnapshot = JSON.parse(JSON.stringify({
+    basicInfo: templateStore.basicInfo,
+    elements: editorStore.editableElements,
+    pageSections: editorStore.pageSections,
+    flipPages: editorStore.flipPages,
+    templateData: templateStore.templateData,
+  }))
   editorStore.showBasicInfoEditor = true
 }
 
@@ -621,7 +710,7 @@ function handleChangeTemplate() {
   })
 }
 
-function handleSave() {
+async function handleSave() {
   track('edit_save', { progress: editProgress.value })
   const editorData = {
     elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
@@ -701,16 +790,21 @@ function handleExport() {
 
 async function doExport(options: { watermark: boolean; quality: string }) {
   if (!editorStore.currentWorkId) {
-    uni.showModal({
-      title: '提示',
-      content: '请先保存作品再导出',
-      confirmText: '去保存',
-      success: (res) => {
-        if (res.confirm) {
-          handleSave()
-        }
-      }
+    const confirmed = await new Promise<boolean>((resolve) => {
+      uni.showModal({
+        title: '提示',
+        content: '请先保存作品再导出',
+        confirmText: '去保存',
+        success: (res) => resolve(res.confirm || false),
+      })
     })
+    if (confirmed) {
+      await handleSave()
+      // 保存成功后自动重试导出
+      if (editorStore.currentWorkId) {
+        return doExport(options)
+      }
+    }
     return
   }
   uni.showLoading({ title: '导出中...' })
@@ -742,6 +836,10 @@ function handleLocation() {
     success: (res) => {
       templateStore.basicInfo.location = res.name
       templateStore.basicInfo.detailAddress = res.address
+      // 同步到所有模式中 dataKey 为 location/address 的元素
+      editorStore.syncSmartField('location', res.name)
+      editorStore.syncSmartField('address', res.address)
+      renderedImageStale.value = true
     }
   })
 }
@@ -772,11 +870,13 @@ onMounted(async () => {
     if (work) {
       editorStore.setCurrentWorkId(work.id)
       const templateId = work.templateType || options.templateId || options.id
+      // 有作品数据时，先加载模板获取基础结构，再用作品数据覆盖
       if (templateId) {
         await editorStore.loadTemplateById(templateId)
       }
       if (work.data) {
-        editorStore.restoreFromWorkData(work.data)
+        // 恢复作品数据，并恢复音乐选择
+        editorStore.restoreFromWorkData(work.data, work.musicId)
       }
       track('edit_start', { template_id: templateId, work_id: workId })
     } else {
@@ -1003,18 +1103,83 @@ watch(() => editorStore.editableElements, () => {
 /* ===== 底部工具栏 ===== */
 .editor-footer {
   display: flex;
-  align-items: center;
-  padding: 16rpx 24rpx;
+  flex-direction: column;
   background: #fff;
   border-top: 1rpx solid #f0e0e5;
   flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+/* 上下文工具栏 */
+.context-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 16rpx;
+  background: linear-gradient(135deg, #fff5f7 0%, #fef0f3 100%);
+  border-bottom: 1rpx solid #f0e0e5;
+  animation: slide-up 0.2s ease;
+}
+
+.ctx-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10rpx 0;
+  border-radius: 12rpx;
+  background: #fff;
+  gap: 4rpx;
+  transition: transform 0.1s ease;
+}
+
+.ctx-btn:active {
+  transform: scale(0.94);
+  opacity: 0.8;
+}
+
+.ctx-btn--disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.ctx-btn--danger {
+  background: #fff5f5;
+}
+
+.ctx-icon {
+  font-size: 28rpx;
+}
+
+.ctx-label {
+  font-size: 20rpx;
+  color: #666;
+}
+
+.ctx-btn--danger .ctx-label {
+  color: #e84a6e;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* 底部主区域 */
+.footer-main {
+  display: flex;
+  align-items: center;
+  padding: 12rpx 24rpx;
   gap: 16rpx;
 }
 
 .footer-tabs {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  gap: 4rpx;
+  flex: 1;
 }
 
 .footer-tab {
@@ -1022,12 +1187,22 @@ watch(() => editorStore.editableElements, () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 16rpx;
+  min-width: 96rpx;
+  min-height: 80rpx;
+  padding: 8rpx 12rpx;
   gap: 4rpx;
+  border-radius: 12rpx;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.footer-tab:active {
+  transform: scale(0.92);
+  background: #fce4ec;
 }
 
 .tab-icon {
   font-size: 36rpx;
+  line-height: 1;
 }
 
 .tab-label {
@@ -1039,7 +1214,6 @@ watch(() => editorStore.editableElements, () => {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  margin-left: auto;
 }
 
 .footer-action-btn {
@@ -1054,6 +1228,7 @@ watch(() => editorStore.editableElements, () => {
 
 .footer-share-btn {
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.3);
 }
 
 .action-btn-text {
@@ -1066,12 +1241,43 @@ watch(() => editorStore.editableElements, () => {
   color: #666;
 }
 
+/* ===== Loading 骨架屏 ===== */
 .loading-overlay {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #fdf6f8;
+  padding: 32rpx;
+}
+
+.skeleton-card {
+  width: 100%;
+  max-width: 600rpx;
+}
+
+.skeleton-img {
+  width: 100%;
+  height: 400rpx;
+  border-radius: 20rpx;
+  margin-bottom: 24rpx;
+}
+
+.skeleton-line {
+  height: 32rpx;
+  border-radius: 8rpx;
+  margin-bottom: 16rpx;
+}
+
+.skeleton-pulse {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .loading-overlay-text {

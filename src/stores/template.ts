@@ -35,16 +35,26 @@ export const useTemplateStore = defineStore('template', () => {
 
   function updateField(key: keyof TemplateData, value: string) {
     templateData[key] = value
-    persist()
+    debouncedPersist()
   }
 
   function toggleSetting(key: string) {
-    if (key in settings) { settings[key] = !settings[key]; persist() }
+    if (key in settings) { settings[key] = !settings[key]; debouncedPersist() }
   }
 
   function setSelectedMusic(musicId: number | null) {
     selectedMusicId.value = musicId
-    persist()
+    debouncedPersist()
+  }
+
+  // 防抖持久化：避免每次按键都触发同步 IO
+  let persistTimer: any = null
+  function debouncedPersist() {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => {
+      persist()
+      persistTimer = null
+    }, 500)
   }
 
   function persist() {

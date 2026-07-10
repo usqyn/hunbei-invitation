@@ -1111,7 +1111,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.renderAll()
   }
 
-  function loadDraft(draft: CanvasDraft) {
+  function loadDraft(draft: CanvasDraft, opts?: { resetHistory?: boolean }) {
     const canvas = fabricCanvas.value
     if (!canvas) return
 
@@ -1189,11 +1189,16 @@ export function useCanvas(opts: UseCanvasOptions) {
     updateZIndexFromFabric()
     canvas.renderAll()
 
-    // 清空历史栈，推入初始记录
-    history.value = []
-    historyIdx.value = -1
-    suppressHistory = false
-    pushHistory('load draft')
+    // 默认清空历史栈并推入初始记录；undo/redo 调用时传入 resetHistory:false 以保留历史
+    if (opts?.resetHistory !== false) {
+      history.value = []
+      historyIdx.value = -1
+      suppressHistory = false
+      pushHistory('load draft')
+    } else {
+      // undo/redo 场景：保留历史栈，仅恢复 suppressHistory 状态
+      suppressHistory = false
+    }
   }
 
   function pushHistory(description = 'change') {
@@ -1226,7 +1231,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     historyIdx.value -= 1
     const draft = history.value[historyIdx.value]
     suppressHistory = true
-    loadDraft(draft)
+    loadDraft(draft, { resetHistory: false })
     suppressHistory = false
     updateCanUndoRedo()
   }
@@ -1236,7 +1241,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     historyIdx.value += 1
     const draft = history.value[historyIdx.value]
     suppressHistory = true
-    loadDraft(draft)
+    loadDraft(draft, { resetHistory: false })
     suppressHistory = false
     updateCanUndoRedo()
   }

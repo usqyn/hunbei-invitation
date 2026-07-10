@@ -55,6 +55,8 @@
       </button>
       <button class="tb-btn publish-btn" @click="$emit('publish')" title="发布模板">🚀 发布</button>
       <button class="tb-btn" @click="$emit('export')" title="导出 PNG">📥 导出</button>
+      <span class="toolbar-divider"></span>
+      <button class="tb-btn sm" @click="$emit('logout')" title="退出登录">🚪 退出</button>
     </div>
   </header>
 </template>
@@ -93,6 +95,7 @@ const emit = defineEmits<{
   'save': []
   'publish': []
   'export': []
+  'logout': []
 }>()
 
 const fileInput = ref<HTMLInputElement | null>(null)

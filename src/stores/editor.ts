@@ -50,6 +50,8 @@ export const useEditorStore = defineStore('editor', () => {
       elements: JSON.parse(JSON.stringify(editableElements)),
       pageSections: JSON.parse(JSON.stringify(pageSections)),
       flipPages: JSON.parse(JSON.stringify(flipPages)),
+      background: JSON.parse(JSON.stringify(background.value)),
+      canvasSize: JSON.parse(JSON.stringify(canvasSize.value)),
     }
   }
 
@@ -81,7 +83,14 @@ export const useEditorStore = defineStore('editor', () => {
     if (snap && Array.isArray(snap.flipPages)) {
       flipPages.splice(0, flipPages.length, ...snap.flipPages)
     }
+    if (snap && snap.background) {
+      background.value = JSON.parse(JSON.stringify(snap.background))
+    }
+    if (snap && snap.canvasSize) {
+      canvasSize.value = JSON.parse(JSON.stringify(snap.canvasSize))
+    }
     selectedElement.value = null
+    activeSectionId.value = null
   }
 
   function undo() {
@@ -344,7 +353,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   /** 从已保存的作品数据恢复编辑状态（编辑已有作品时调用） */
-  function restoreFromWorkData(data: WorkEditorData) {
+  function restoreFromWorkData(data: WorkEditorData, musicId?: string) {
     if (!data) return
     if (data.templateType) templateType.value = data.templateType
     if (data.elements && Array.isArray(data.elements)) {
@@ -362,9 +371,14 @@ export const useEditorStore = defineStore('editor', () => {
     if (data.templateData) Object.assign(templateStore.templateData, data.templateData)
     if (data.basicInfo) Object.assign(templateStore.basicInfo, data.basicInfo)
     if (data.settings) Object.assign(templateStore.settings, data.settings)
+    // 恢复音乐选择
+    if (musicId) {
+      templateStore.selectedMusicId = musicId
+    }
     // 作品编辑后渲染图需重新生成
     renderedImage.value = ''
     selectedElement.value = null
+    activeSectionId.value = null
     // 重置历史，以当前作品状态为基线
     resetHistory()
     pushHistory()
@@ -421,10 +435,11 @@ export const useEditorStore = defineStore('editor', () => {
         el.text = value
       }
     })
-    // page 模式
+    // page 模式：图片类型更新 image 字段，文本类型更新 text 字段
     pageSections.forEach(sec => {
       if (sec.dataKey === key) {
-        sec.text = value
+        if (sec.type === 'image') sec.image = value
+        else sec.text = value
       }
     })
     // flip 模式：遍历所有页面的元素
@@ -496,9 +511,9 @@ export const useEditorStore = defineStore('editor', () => {
     const el = editableElements[idx]
     if (el.type !== 'image') return
     el.text = imageUrl
+    // 同步到所有模式（canvas/page/flip），而非仅更新 templateData
     if (el.dataKey) {
-      const templateStore = useTemplateStore()
-      templateStore.updateField(el.dataKey, imageUrl)
+      syncFieldToAllModes(el.dataKey, imageUrl)
     }
     pushHistory()
     selectedElement.value = null

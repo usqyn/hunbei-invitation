@@ -3,6 +3,10 @@ const path = require('path')
 const fs = require('fs')
 const { v4: uuidv4 } = require('uuid')
 const initSqlJs = require('sql.js')
+// 公共鉴权中间件（requireAdmin 已包含 role 校验）
+const { requireAdmin } = require('../middleware/auth')
+// 数据库事务辅助函数（多步操作保证原子性）
+const { runTransaction } = require('../middleware/db')
 
 // 海报模板配置数据（从数据文件加载，避免在代码中内联大量静态配置）
 const POSTER_TEMPLATE_CONFIGS = require('../data/poster-templates.json')
@@ -103,13 +107,11 @@ function resultToObject(result) {
   return arr.length ? arr[0] : null
 }
 
-// TODO: 统一鉴权中间件 —— 当前 poster.js 独立维护了简化版 requireAdmin，
-// 后续应将 requireAdmin / requireAuth 提取到公共模块供所有路由复用。
-function requireAdmin(req, res, next) {
-  const adminPhone = process.env.ADMIN_PHONE || '13800138000'
-  if (req.user && req.user.phone === adminPhone) return next()
-  return res.status(403).json({ success: false, error: '无管理员权限' })
-}
+// poster 路由专用 JSON 解析器：提高 body 限制以支持 base64 图片上传
+const posterJsonParser = express.json({ limit: '15mb' })
+
+// requireAdmin 已从 ../middleware/auth 导入（见文件顶部，含 role 校验）
+// runTransaction 已从 ../middleware/db 导入（见文件顶部，用于多步操作事务）
 
 function getUserId(req) {
   return req.user ? req.user.phone : null
@@ -215,16 +217,19 @@ function seedPosterTemplates() {
 
 // ============ Routes ============
 
-// GET /templates — list poster templates (query: category_id, keyword, page, limit)
+// GET /templates — list poster templates (query: category_id, keyword, page, limit, all)
 router.get('/templates', (req, res) => {
   try {
-    const { category_id, keyword, page: pageStr, limit: limitStr } = req.query
+    const { category_id, keyword, page: pageStr, limit: limitStr, all } = req.query
     const page = Math.max(1, parseInt(pageStr, 10) || 1)
     const limit = Math.max(1, Math.min(100, parseInt(limitStr, 10) || 20))
     const offset = (page - 1) * limit
 
-    let sql = "SELECT * FROM poster_templates WHERE is_active = 1"
-    let countSql = "SELECT COUNT(*) as total FROM poster_templates WHERE is_active = 1"
+    // all=true 时返回所有模板（含下架），供管理后台使用；默认仅返回上架模板
+    const showAll = all === 'true' || all === '1'
+    const whereClause = showAll ? "1=1" : "is_active = 1"
+    let sql = `SELECT * FROM poster_templates WHERE ${whereClause}`
+    let countSql = `SELECT COUNT(*) as total FROM poster_templates WHERE ${whereClause}`
     const params = []
 
     if (category_id) {
@@ -307,15 +312,18 @@ router.post('/works', (req, res) => {
     const id = uuidv4()
     const now = new Date().toISOString()
 
-    posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
-      id, userId, template_id || '',
-      template_name || '', cover_url || '',
-      JSON.stringify(content || {}), poster_url || '', now,
-    ])
-    if (template_id) {
-      posterDb.run("UPDATE poster_templates SET use_count = use_count + 1 WHERE id = ?", [template_id])
-    }
+    // 使用事务：保存作品 + 更新模板使用次数，保证原子性
+    runTransaction(posterDb, () => {
+      posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+        id, userId, template_id || '',
+        template_name || '', cover_url || '',
+        JSON.stringify(content || {}), poster_url || '', now,
+      ])
+      if (template_id) {
+        posterDb.run("UPDATE poster_templates SET use_count = use_count + 1 WHERE id = ?", [template_id])
+      }
+    })
     savePosterDatabase()
 
     const result = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [id])
@@ -338,7 +346,7 @@ router.get('/works', (req, res) => {
     const params = [userId]
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
@@ -417,7 +425,7 @@ router.put('/works/:id', requireWorkOwner, (req, res) => {
 })
 
 // POST /works/:id/upload — upload work poster image (requires ownership)
-router.post('/works/:id/upload', requireWorkOwner, (req, res) => {
+router.post('/works/:id/upload', posterJsonParser, requireWorkOwner, (req, res) => {
   try {
     if (!req.body.image) {
       return res.status(400).json({ success: false, error: '请上传图片文件' })
@@ -460,11 +468,14 @@ router.delete('/works/:id', requireWorkOwner, (req, res) => {
   try {
     const work = req.work
     const now = new Date().toISOString()
-    posterDb.run(`INSERT INTO recycle_bin (user_id, work_id, work_data, deleted_at)
-      VALUES (?, ?, ?, ?)`, [
-      work.user_id, work.id, JSON.stringify(work), now,
-    ])
-    posterDb.run("DELETE FROM poster_works WHERE id = ?", [req.params.id])
+    // 使用事务：插入回收站 + 删除作品，保证原子性
+    runTransaction(posterDb, () => {
+      posterDb.run(`INSERT INTO recycle_bin (user_id, work_id, work_data, deleted_at)
+        VALUES (?, ?, ?, ?)`, [
+        work.user_id, work.id, JSON.stringify(work), now,
+      ])
+      posterDb.run("DELETE FROM poster_works WHERE id = ?", [req.params.id])
+    })
     savePosterDatabase()
     res.json({ success: true, message: '删除成功，已移入回收站' })
   } catch (e) {
@@ -484,7 +495,7 @@ router.get('/works/recycle', (req, res) => {
     const params = [userId]
 
     const page = parseInt(req.query.page, 10)
-    const limit = parseInt(req.query.limit, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     if (page > 0 && limit > 0) {
       const countSql = "SELECT COUNT(*) as total FROM recycle_bin WHERE user_id = ?"
@@ -543,14 +554,17 @@ router.put('/works/:id/restore', (req, res) => {
       return res.status(500).json({ success: false, error: '数据损坏' })
     }
 
-    posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
-      workData.id, workData.user_id, workData.template_id || '',
-      workData.template_name || '', workData.cover_url || '',
-      workData.content || '{}', workData.poster_url || '',
-      workData.created_at || new Date().toISOString(),
-    ])
-    posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+    // 使用事务：恢复作品 + 删除回收站记录，保证原子性
+    runTransaction(posterDb, () => {
+      posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+        workData.id, workData.user_id, workData.template_id || '',
+        workData.template_name || '', workData.cover_url || '',
+        workData.content || '{}', workData.poster_url || '',
+        workData.created_at || new Date().toISOString(),
+      ])
+      posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+    })
     savePosterDatabase()
     res.json({ success: true, message: '已恢复' })
   } catch (e) {
@@ -605,6 +619,18 @@ router.post('/templates', requireAdmin, (req, res) => {
     if (!name || !category_id) {
       return res.status(400).json({ success: false, error: '缺少必填字段: name, category_id' })
     }
+    // 数据校验：name 长度上限 100 字符
+    if (typeof name !== 'string' || name.length > 100) {
+      return res.status(400).json({ success: false, error: '模板名称不能超过 100 个字符' })
+    }
+    // 数据校验：config 序列化后长度上限 500KB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 500 * 1024
+    if (config !== undefined && config !== null) {
+      const configStr = JSON.stringify(config)
+      if (configStr.length > MAX_JSON_LENGTH) {
+        return res.status(400).json({ success: false, error: 'config 数据过大，超过 500KB 限制' })
+      }
+    }
     const id = req.body.id || `tpl_${uuidv4().substring(0, 8)}`
     const existing = posterDb.exec("SELECT id FROM poster_templates WHERE id = ?", [id])
     if (existing.length && existing[0].values.length) {
@@ -640,11 +666,25 @@ router.put('/templates/:id', requireAdmin, (req, res) => {
       return res.status(404).json({ success: false, error: '模板不存在' })
     }
 
-    const { name, category_id, cover_url, background_url, config, is_free, is_vip, like_count, use_count, is_active } = req.body
+    const { name, category_id, cover_url, background_url, config, is_free, is_vip, is_active } = req.body
     const fields = []
     const params = []
 
-    const allowedFields = { name: 'name', category_id: 'category_id', cover_url: 'cover_url', background_url: 'background_url', is_free: 'is_free', is_vip: 'is_vip', like_count: 'like_count', use_count: 'use_count', is_active: 'is_active' }
+    // 数据校验：name 长度上限 100 字符
+    if (name !== undefined && (typeof name !== 'string' || name.length > 100)) {
+      return res.status(400).json({ success: false, error: '模板名称不能超过 100 个字符' })
+    }
+    // 数据校验：config 序列化后长度上限 500KB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 500 * 1024
+    if (config !== undefined && config !== null) {
+      const configStr = JSON.stringify(config)
+      if (configStr.length > MAX_JSON_LENGTH) {
+        return res.status(400).json({ success: false, error: 'config 数据过大，超过 500KB 限制' })
+      }
+    }
+
+    // 移除统计字段（like_count、use_count），管理员编辑不应直接篡改统计数据
+    const allowedFields = { name: 'name', category_id: 'category_id', cover_url: 'cover_url', background_url: 'background_url', is_free: 'is_free', is_vip: 'is_vip', is_active: 'is_active' }
     Object.keys(allowedFields).forEach(f => {
       if (req.body[f] !== undefined) {
         fields.push(`${allowedFields[f]} = ?`)

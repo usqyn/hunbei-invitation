@@ -1,4 +1,5 @@
 import { request } from '@/utils/request'
+import { API_BASE } from '@/config'
 import type { PosterTemplate, PosterWork, PosterEditableAreaRuntime, StickerItem } from '@/types/poster'
 
 // ========== 用户相关 ==========
@@ -15,6 +16,28 @@ export function createVipOrder(plan: string, price: number) {
 /** @deprecated 死代码，暂未使用 */
 export function checkVipStatus() {
   return request<{ isVip: boolean; expireAt: number; plan: string }>({ url: '/api/vip/status' })
+}
+
+// ========== 图片上传 ==========
+/** 上传图片到服务器，返回永久 URL */
+export function uploadImage(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: `${API_BASE}/api/upload/image`,
+      filePath,
+      name: 'image',
+      success: (res) => {
+        try {
+          const data = JSON.parse(res.data)
+          if (data.url) resolve(data.url)
+          else reject(new Error(data.error || '上传失败'))
+        } catch {
+          reject(new Error('上传响应解析失败'))
+        }
+      },
+      fail: (err) => reject(err),
+    })
+  })
 }
 
 // ========== 模板相关 ==========

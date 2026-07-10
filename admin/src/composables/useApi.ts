@@ -3,7 +3,6 @@ import type { TemplateItem, Category } from '../types/template'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || '13800138000'
-const DEV_CODE = import.meta.env.VITE_DEV_CODE || '000000'
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -46,20 +45,38 @@ export function getAdminToken(): string {
 }
 
 export async function initApi(): Promise<boolean> {
+  // 检查 localStorage 中是否有之前登录保存的管理员令牌
   const saved = localStorage.getItem('admin_token')
   if (saved) {
     setAdminToken(saved)
     return true
   }
-  try {
-    const res = await api.post('/api/user/login', { phone: ADMIN_PHONE, code: DEV_CODE })
-    if (res.data.success && res.data.data?.token) {
-      setAdminToken(res.data.data.token)
-      return true
-    }
-  } catch (_) {}
+  // 没有有效令牌，返回 false 以触发登录界面
   return false
 }
+
+// 管理员登录：调用专用登录接口获取带 role:'admin' 的 JWT
+export async function adminLogin(phone: string, code: string): Promise<boolean> {
+  const res = await api.post('/api/admin/login', { phone, code })
+  if (res.data.success && res.data.data?.token) {
+    setAdminToken(res.data.data.token)
+    return true
+  }
+  return false
+}
+
+// 发送管理员登录验证码（复用通用短信接口）
+export async function sendAdminSmsCode(phone: string): Promise<void> {
+  await api.post('/api/sms/send', { phone })
+}
+
+export function logoutAdmin(): void {
+  adminToken = ''
+  delete api.defaults.headers.common['Authorization']
+  localStorage.removeItem('admin_token')
+}
+
+export { ADMIN_PHONE }
 
 // ============ 模板 API ============
 

@@ -133,14 +133,15 @@ export interface EditorState {
   isSaving: boolean
 }
 
+// 分类（id 与 poster.js 种子数据的 category_id 保持一致）
 export const CATEGORIES = [
   { id: 'wedding', name: '新婚', icon: '💒' },
-  { id: 'proposal', name: '求婚', icon: '💍' },
-  { id: 'consultation-tea', name: '商量茶', icon: '🍵' },
-  { id: 'festival', name: '割礼', icon: '🎁' },
-  { id: 'business', name: '耳环礼', icon: '💎' },
-  { id: 'baby', name: '周岁宴', icon: '🎉' },
-  { id: 'graduation', name: '升学宴', icon: '🎓' },
-  { id: 'festival-invitation', name: '节日请柬', icon: '🎊' },
-  { id: 'housewarming', name: '乔迁', icon: '🏠' },
+  { id: 'engagement', name: '订婚', icon: '💍' },
+  { id: 'baby', name: '宝宝宴', icon: '🎉' },
+  { id: 'birthday', name: '生日', icon: '🎂' },
+  { id: 'house', name: '乔迁', icon: '🏠' },
+  { id: 'parents', name: '感恩父母', icon: '👨‍👩‍👧' },
+  { id: 'study', name: '升学宴', icon: '🎓' },
+  { id: 'poster', name: '海报', icon: '📊' },
+  { id: 'creative', name: '创意设计', icon: '🎨' },
 ]

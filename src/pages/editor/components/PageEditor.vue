@@ -24,7 +24,7 @@
             <template v-else-if="sec.type === 'image'">
               <image
                 class="section-image"
-                :src="sec.image || 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=wedding%20photo%20placeholder&image_size=square'"
+                :src="sec.image || '/static/images/icons/img-placeholder.png'"
                 mode="aspectFit"
                 @error="onImageError"
               />
@@ -148,6 +148,7 @@
 import { ref, computed } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { uploadImage } from '@/api'
 import type { PageSection } from '@/types'
 
 const editorStore = useEditorStore()
@@ -195,6 +196,22 @@ function onPanelItemClick(sec: PageSection) {
 function chooseImage(sectionId: string) {
   editorStore.activeSectionId = sectionId
   editorStore.selectedElement = null
+
+  const applyImage = async (tempPath: string) => {
+    uni.showLoading({ title: '上传中...' })
+    try {
+      const permanentUrl = await uploadImage(tempPath)
+      editorStore.updatePageSectionImage(sectionId, permanentUrl)
+      editorStore.pushHistory()
+    } catch (e) {
+      console.warn('图片上传失败:', e)
+      editorStore.updatePageSectionImage(sectionId, tempPath)
+      uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
+    } finally {
+      uni.hideLoading()
+    }
+  }
+
   // #ifdef MP-WEIXIN
   uni.chooseMedia({
     count: 1,
@@ -202,7 +219,7 @@ function chooseImage(sectionId: string) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0) {
-        editorStore.updatePageSectionImage(sectionId, res.tempFiles[0].tempFilePath)
+        applyImage(res.tempFiles[0].tempFilePath)
       }
     },
     fail: () => {
@@ -218,7 +235,7 @@ function chooseImage(sectionId: string) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
-        editorStore.updatePageSectionImage(sectionId, res.tempFilePaths[0])
+        applyImage(res.tempFilePaths[0])
       }
     },
     fail: () => {
