@@ -20,7 +20,7 @@
       <FlipEditor />
     </view>
     <view v-else class="editor-body" :class="{ 'editor-body--landscape': isLandscape }">
-      <!-- 画布模式：全屏画布 + 浮动右侧面板 -->
+      <!-- 画布模式：全屏画布（去除右侧面板，最大化预览区） -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
         <scroll-view class="preview-scroll" scroll-y>
           <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
@@ -99,100 +99,39 @@
           </template>
         </scroll-view>
       </view>
-
-      <!-- 右侧浮动编辑面板（竖屏模式） -->
-      <view v-if="!isLandscape" class="sidebar-area" :class="{ 'sidebar-area--collapsed': sidebarCollapsed }">
-        <view class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
-          <text class="sidebar-toggle-icon">{{ sidebarCollapsed ? '›' : '‹' }}</text>
-        </view>
-        <view class="sidebar-content" v-if="!sidebarCollapsed">
-          <view class="sidebar-main">
-            <RightPanel
-              :active-panel-tab="editorStore.activePanelTab"
-              :editable-elements="editorStore.editableElements"
-              :selected-element="editorStore.selectedElement"
-              :material-list="editorStore.materialList"
-              :settings="templateStore.settings"
-              mode="sidebar"
-              @update:active-panel-tab="editorStore.activePanelTab = $event"
-              @open-editor="onOpenEditor"
-              @select-material="onMaterialSelect"
-              @toggle-setting="toggleSetting"
-            />
-          </view>
-          <view class="shop-recommend" v-if="recommendProducts.length > 0">
-            <view class="shop-rec-title">\u{1F6D2} 婚礼推荐</view>
-            <view class="shop-rec-list">
-              <view v-for="product in recommendProducts.slice(0, 3)" :key="product.id" class="shop-rec-item" @click="goToShop(product)">
-                <image class="shop-rec-img" :src="product.image" mode="aspectFill" />
-                <text class="shop-rec-name">{{ product.name }}</text>
-                <text class="shop-rec-price">{{ product.price }}元</text>
-              </view>
-            </view>
-          </view>
-        </view>
-      </view>
-      <!-- 底部面板（横屏模式） -->
-      <view v-else class="bottom-panel">
-        <RightPanel
-          :active-panel-tab="editorStore.activePanelTab"
-          :editable-elements="editorStore.editableElements"
-          :selected-element="editorStore.selectedElement"
-          :material-list="editorStore.materialList"
-          :settings="templateStore.settings"
-          mode="bottom"
-          @update:active-panel-tab="editorStore.activePanelTab = $event"
-          @open-editor="onOpenEditor"
-          @select-material="onMaterialSelect"
-          @toggle-setting="toggleSetting"
-        />
-      </view>
     </view>
 
-    <!-- Footer Toolbar -->
+    <!-- 底部工具栏：5 Tab + 操作按钮 -->
     <view class="editor-footer">
-      <view
-        class="footer-item"
-        :class="{ 'footer-item--disabled': !editorStore.canUndo }"
-        @click="handleUndo"
-      >
-        <text class="footer-icon">↩</text>
-        <text class="footer-label">撤销</text>
+      <view class="footer-tabs">
+        <view class="footer-tab" @click="openUnifiedEdit">
+          <text class="tab-icon">📋</text>
+          <text class="tab-label">信息</text>
+        </view>
+        <view class="footer-tab" @click="handleEditText">
+          <text class="tab-icon">✏️</text>
+          <text class="tab-label">文字</text>
+        </view>
+        <view class="footer-tab" @click="handleReplaceImage">
+          <text class="tab-icon">🖼️</text>
+          <text class="tab-label">图片</text>
+        </view>
+        <view class="footer-tab" @click="handleMusic">
+          <text class="tab-icon">🎵</text>
+          <text class="tab-label">音乐</text>
+        </view>
+        <view class="footer-tab" @click="handleMore">
+          <text class="tab-icon">⋯</text>
+          <text class="tab-label">更多</text>
+        </view>
       </view>
-      <view
-        class="footer-item"
-        :class="{ 'footer-item--disabled': !editorStore.canRedo }"
-        @click="handleRedo"
-      >
-        <text class="footer-icon">↪</text>
-        <text class="footer-label">重做</text>
-      </view>
-      <view class="footer-item" @click="handleMusic">
-        <text class="footer-icon">🎵</text>
-        <text class="footer-label">音乐</text>
-      </view>
-      <view class="footer-item" @click="handleSettings">
-        <text class="footer-icon">⚙️</text>
-        <text class="footer-label">设置</text>
-      </view>
-      <view class="footer-item" @click="openBasicInfoEditor">
-        <text class="footer-icon">📋</text>
-        <text class="footer-label">基本信息</text>
-      </view>
-      <view class="footer-item" @click="openQuickEdit">
-        <text class="footer-icon">✏️</text>
-        <text class="footer-label">快捷填写</text>
-      </view>
-      <view class="footer-item" @click="handleSave">
-        <text class="footer-icon">💾</text>
-        <text class="footer-label">保存</text>
-      </view>
-      <view class="footer-item" @click="handleExport">
-        <text class="footer-icon">📤</text>
-        <text class="footer-label">导出</text>
-      </view>
-      <view class="footer-share-btn" @click="handleShare">
-        <text class="share-btn-text">预览分享</text>
+      <view class="footer-actions">
+        <view class="footer-action-btn footer-save-btn" @click="handleSave">
+          <text class="action-btn-text">保存</text>
+        </view>
+        <view class="footer-action-btn footer-share-btn" @click="handleShare">
+          <text class="action-btn-text">预览分享</text>
+        </view>
       </view>
     </view>
 
@@ -206,24 +145,17 @@
       @confirm="onTextEditorConfirm"
     />
 
-    <!-- Basic Info Popup -->
-    <BasicInfoForm
+    <!-- Unified Edit Form（合并基本信息 + 快捷填写） -->
+    <UnifiedEditForm
       v-if="editorStore.showBasicInfoEditor"
       :visible="editorStore.showBasicInfoEditor"
       :basic-info="basicInfo"
-      @close="editorStore.closeBasicInfoEditor"
-      @confirm="onBasicInfoConfirm"
-      @location="handleLocation"
-    />
-
-    <!-- Quick Edit Popup -->
-    <QuickEditForm
-      v-if="editorStore.showQuickEdit"
-      :visible="editorStore.showQuickEdit"
       :elements="editorStore.editableElements"
       :template-data="templateStore.templateData"
-      @close="editorStore.closeQuickEdit"
+      @close="editorStore.closeBasicInfoEditor"
+      @confirm="onUnifiedEditConfirm"
       @update="onSmartFieldUpdate"
+      @location="handleLocation"
     />
 
   </view>
@@ -231,8 +163,6 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick, watch } from 'vue'
-
-const sidebarCollapsed = ref(false)
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
@@ -243,14 +173,12 @@ import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
-import { exportInvitation, fetchRecommendProducts } from '@/api'
-import RightPanel from './components/RightPanel.vue'
+import { exportInvitation } from '@/api'
 import PageEditor from './components/PageEditor.vue'
 import FlipEditor from './components/FlipEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
-import BasicInfoForm from './components/BasicInfoForm.vue'
-import QuickEditForm from './components/QuickEditForm.vue'
-import type { Material, EditableElement, Work } from '@/types'
+import UnifiedEditForm from './components/UnifiedEditForm.vue'
+import type { EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
@@ -260,7 +188,6 @@ const userStore = useUserStore()
 const {
   isCanvasMode,
   isLandscape,
-  canvasCardStyle,
   canvasBackgroundStyle,
   updateCardHeight,
   getCanvasElementStyle,
@@ -286,25 +213,14 @@ function onRenderedImageLoad(e: any) {
 // 交互层元素定位：基于 renderedImage 实际显示尺寸，将 Admin px 值转为百分比
 function getOverlayElementStyle(el: EditableElement): Record<string, string> {
   if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
-  if (!renderedImageWidth.value || !renderedImageHeight.value) {
-    // 图片未加载完成，先用 canvasSize 比例
-    const cw = editorStore.canvasSize?.width || 375
-    const ch = editorStore.canvasSize?.height || 667
-    return {
-      position: 'absolute',
-      left: `${(el.x / cw) * 100}%`,
-      top: `${(el.y / ch) * 100}%`,
-      width: `${(el.width / cw) * 100}%`,
-      height: `${(el.height / ch) * 100}%`,
-    }
-  }
-  // 使用实际渲染尺寸
+  const cw = editorStore.canvasSize?.width || 375
+  const ch = editorStore.canvasSize?.height || 667
   return {
     position: 'absolute',
-    left: `${(el.x / editorStore.canvasSize!.width!) * 100}%`,
-    top: `${(el.y / editorStore.canvasSize!.height!) * 100}%`,
-    width: `${(el.width / editorStore.canvasSize!.width!) * 100}%`,
-    height: `${(el.height / editorStore.canvasSize!.height!) * 100}%`,
+    left: `${(el.x / cw) * 100}%`,
+    top: `${(el.y / ch) * 100}%`,
+    width: `${(el.width / cw) * 100}%`,
+    height: `${(el.height / ch) * 100}%`,
   }
 }
 
@@ -317,17 +233,10 @@ function onTextEditorConfirm() {
   renderedImageStale.value = true
 }
 
-// 基本信息确认：同步到可编辑元素，标记过期
-function onBasicInfoConfirm() {
+// 统一表单确认：同步到可编辑元素，标记过期
+function onUnifiedEditConfirm() {
   editorStore.syncBasicInfoToElements()
   editorStore.closeBasicInfoEditor()
-  renderedImageStale.value = true
-}
-
-// 替换图片后标记过期
-function onMaterialSelect(material: Material) {
-  if (editorStore.selectedElement === null) return
-  editorStore.applyImageToElement(editorStore.selectedElement, material.url)
   renderedImageStale.value = true
 }
 
@@ -344,7 +253,6 @@ function onSmartFieldUpdate(key: string, value: string) {
 }
 
 // ============ 元素拖拽 / 缩放（touch 事件） ============
-// 画布实际显示尺寸（用于将屏幕像素位移换算为画布坐标）
 const canvasDisplayRect = ref({ width: 0, height: 0 })
 
 function updateCanvasDisplayRect() {
@@ -371,15 +279,13 @@ interface DragState {
   moved: boolean
 }
 const dragState = ref<DragState | null>(null)
-const DRAG_THRESHOLD = 5 // 触发拖动的位移阈值（屏幕像素）
+const DRAG_THRESHOLD = 5
 
-// 点击/轻触元素：打开编辑器（仅当未发生拖动时）
 function onElementTap(idx: number) {
   if (dragState.value && dragState.value.moved) return
   onOpenEditor(idx)
 }
 
-// 元素触摸开始：记录起点
 function onElementTouchStart(idx: number, e: any) {
   const el = editorStore.editableElements[idx]
   if (!el || el.editable === false) return
@@ -400,7 +306,6 @@ function onElementTouchStart(idx: number, e: any) {
   }
 }
 
-// 元素触摸移动：更新 x/y
 function onElementTouchMove(e: any) {
   const ds = dragState.value
   if (!ds || ds.type !== 'move') return
@@ -408,11 +313,7 @@ function onElementTouchMove(e: any) {
   const dx = touch.clientX - ds.startTouchX
   const dy = touch.clientY - ds.startTouchY
   if (!ds.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
-  // 注意：不在拖动过程中切换渲染模式（renderedImageStale），
-  // 否则会卸载当前触摸目标、中断 touchmove 事件流。
-  // 渲染图模式下选中元素会显示描边，可直观看到位置变化。
   ds.moved = true
-  // 屏幕像素 -> 画布坐标
   const rect = canvasDisplayRect.value
   const scaleX = rect.width ? editorStore.canvasSize.width / rect.width : 1
   const scaleY = rect.height ? editorStore.canvasSize.height / rect.height : 1
@@ -424,25 +325,21 @@ function onElementTouchMove(e: any) {
   const elH = el.height || 0
   let newX = ds.startX + dx * scaleX
   let newY = ds.startY + dy * scaleY
-  // 限制在画布范围内
   newX = Math.max(0, Math.min(cw - elW, newX))
   newY = Math.max(0, Math.min(ch - elH, newY))
   el.x = newX
   el.y = newY
 }
 
-// 元素触摸结束
 function onElementTouchEnd() {
   const ds = dragState.value
   if (ds && ds.moved) {
     editorStore.pushHistory()
-    // 拖动结束后标记渲染图过期，下次会重新生成
     renderedImageStale.value = true
   }
   dragState.value = null
 }
 
-// 缩放手柄：触摸开始
 function onResizeHandleTouchStart(e: any) {
   if (editorStore.selectedElement === null) return
   const el = editorStore.editableElements[editorStore.selectedElement]
@@ -462,7 +359,6 @@ function onResizeHandleTouchStart(e: any) {
   }
 }
 
-// 缩放手柄：触摸移动
 function onResizeHandleTouchMove(e: any) {
   const ds = dragState.value
   if (!ds || ds.type !== 'scale') return
@@ -477,7 +373,6 @@ function onResizeHandleTouchMove(e: any) {
   const aspect = ds.startHeight && ds.startWidth ? ds.startHeight / ds.startWidth : 1
   const newWidth = Math.max(20, ds.startWidth + deltaCanvas)
   const newHeight = Math.max(20, newWidth * aspect)
-  // 限制不超出画布
   const cw = editorStore.canvasSize.width
   const ch = editorStore.canvasSize.height
   el.width = Math.min(newWidth, cw - (el.x || 0))
@@ -485,7 +380,6 @@ function onResizeHandleTouchMove(e: any) {
   ds.moved = true
 }
 
-// 缩放手柄：触摸结束
 function onResizeHandleTouchEnd() {
   const ds = dragState.value
   if (ds && ds.type === 'scale' && ds.moved) {
@@ -533,7 +427,6 @@ function updateCardSize() {
   })
 }
 
-// 计算编辑完成度
 function calculateProgress(): number {
   const elements = editorStore.editableElements
   if (!elements.length) return 0
@@ -542,12 +435,10 @@ function calculateProgress(): number {
     if (el.type === 'text' && el.text && el.text.trim()) completed++
     if (el.type === 'image' && el.text && !el.text.includes('default')) completed++
   })
-  // 基本信息也算进度
   if (templateStore.basicInfo?.groomName || templateStore.basicInfo?.brideName) completed += 2
   return Math.min(100, Math.round((completed / (elements.length + 2)) * 100))
 }
 
-// 监听进度变化
 watch(editProgress, (val) => {
   if (val >= 30 && val < 40 && !hasShownProgressPopup.value && !userStore.isVip()) {
     hasShownProgressPopup.value = true
@@ -555,11 +446,10 @@ watch(editProgress, (val) => {
   }
 })
 
-// 30% 完成度弹窗
 function showProgressPopup() {
   track('edit_progress_30', { elapsed_time: Date.now() - editStartTime.value })
   uni.showModal({
-    title: '\u{1F389} 您的请柬已初具雏形',
+    title: '🎉 您的请柬已初具雏形',
     content: '解锁高级模板、去水印导出、高清大图，让请柬更完美',
     confirmText: '解锁全部 9.9元/月',
     cancelText: '继续免费编辑',
@@ -577,11 +467,10 @@ function onOpenEditor(idx: number) {
   const el = editorStore.editableElements[idx]
   if (!el || el.editable === false) return
 
-  // 付费元素拦截
   if (el.isPremium && !userStore.isVip()) {
     track('click_premium_element', { element_type: el.type })
     uni.showModal({
-      title: '\u{1F512} 高级素材',
+      title: '🔒 高级素材',
       content: '该素材为 VIP 专属，开通 VIP 立即可用',
       confirmText: '开通VIP',
       cancelText: '取消',
@@ -598,18 +487,14 @@ function onOpenEditor(idx: number) {
   editorStore.selectedElement = idx
 
   if (el.type === 'image') {
-    // 图片 - 直接让用户选择本地图片
     chooseLocalImage(idx)
   } else if (el.type === 'text') {
-    // 文字 - 打开文字编辑器
     editorStore.editingText = el.text
     editorStore.showTextEditor = true
   }
 }
 
-// 选择本地图片
 function chooseLocalImage(idx: number) {
-  // 微信小程序端
   // #ifdef MP-WEIXIN
   uni.chooseMedia({
     count: 1,
@@ -627,7 +512,6 @@ function chooseLocalImage(idx: number) {
   })
   // #endif
 
-  // H5 / App 端
   // #ifndef MP-WEIXIN
   uni.chooseImage({
     count: 1,
@@ -646,18 +530,39 @@ function chooseLocalImage(idx: number) {
   // #endif
 }
 
-// 选择素材（已移至 onMaterialSelect）
-
-// 打开基本信息编辑器
-function openBasicInfoEditor() {
+// 打开统一编辑表单
+function openUnifiedEdit() {
   editorStore.showBasicInfoEditor = true
 }
 
-function openQuickEdit() {
-  editorStore.openQuickEdit()
+// 编辑选中文字元素
+function handleEditText() {
+  if (editorStore.selectedElement === null) {
+    uni.showToast({ title: '请先点击画布上的文字', icon: 'none' })
+    return
+  }
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el || el.type !== 'text') {
+    uni.showToast({ title: '请选择文字元素', icon: 'none' })
+    return
+  }
+  editorStore.editingText = el.text
+  editorStore.showTextEditor = true
 }
 
-// smart field update handled by onSmartFieldUpdate wrapper
+// 替换选中图片元素
+function handleReplaceImage() {
+  if (editorStore.selectedElement === null) {
+    uni.showToast({ title: '请先点击画布上的图片', icon: 'none' })
+    return
+  }
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el || el.type !== 'image') {
+    uni.showToast({ title: '请选择图片元素', icon: 'none' })
+    return
+  }
+  chooseLocalImage(editorStore.selectedElement)
+}
 
 // 切换设置
 function toggleSetting(key: string) {
@@ -674,22 +579,33 @@ function handleMusic() {
   uni.navigateTo({ url: '/pages/music/index' })
 }
 
-function handleSettings() {
+// 更多操作：撤销/重做/设置/更换模板/导出
+function handleMore() {
   uni.showActionSheet({
-    itemList: ['礼物功能', '礼金功能', '点赞功能', '相册功能', '更换模板'],
+    itemList: ['撤销', '重做', '设置', '更换模板', '导出'],
     success: (res: any) => {
-      const keys = ['giftAlbum', 'moneyGift', 'like', 'album']
-      if (res.tapIndex < keys.length) {
-        const key = keys[res.tapIndex]
-        if (key) toggleSetting(key)
-      } else if (res.tapIndex === 4) {
-        handleChangeTemplate()
+      switch (res.tapIndex) {
+        case 0: handleUndo(); break
+        case 1: handleRedo(); break
+        case 2: handleSettings(); break
+        case 3: handleChangeTemplate(); break
+        case 4: handleExport(); break
       }
     },
   })
 }
 
-// 更换模板：提示当前编辑可能丢失后跳转到模板列表
+function handleSettings() {
+  uni.showActionSheet({
+    itemList: ['礼物功能', '礼金功能', '点赞功能', '相册功能'],
+    success: (res: any) => {
+      const keys = ['giftAlbum', 'moneyGift', 'like', 'album']
+      const key = keys[res.tapIndex]
+      if (key) toggleSetting(key)
+    },
+  })
+}
+
 function handleChangeTemplate() {
   uni.showModal({
     title: '更换模板',
@@ -756,24 +672,20 @@ function handleSave() {
 function handleExport() {
   track('click_export')
   if (userStore.isVip()) {
-    // VIP：直接高清无水印导出
     doExport({ watermark: false, quality: 'high' })
   } else {
-    // 免费用户：弹出选择
     uni.showActionSheet({
       title: '选择导出方式',
-      itemList: ['\u{1F4E6} 高清无水印导出（3元）', '\u{1F4E6} 免费导出（带水印）'],
+      itemList: ['📦 高清无水印导出（3元）', '📦 免费导出（带水印）'],
       success: (res: any) => {
         if (res.tapIndex === 0) {
           track('click_export', { export_type: 'paid' })
-          // 跳转支付流程（简化版：直接提示）
           uni.showModal({
             title: '高清导出',
             content: '支付 3 元即可高清无水印导出',
             confirmText: '立即支付',
             success: (r) => {
               if (r.confirm) {
-                // TODO: 调用微信支付
                 uni.showToast({ title: '微信支付功能开发中', icon: 'none' })
               }
             }
@@ -825,37 +737,6 @@ function handleShare() {
   }
 }
 
-// 商城推荐数据
-const recommendProducts = ref<Array<{ id: string; name: string; price: number; image: string; category: string }>>([])
-
-// 根据模板分类映射商品分类
-function getCategoryByTemplate(): string {
-  const category = (templateStore.templateData as any).category || '婚礼'
-  if (category.includes('婚礼')) return '婚礼饰品/摄影'
-  if (category.includes('割礼')) return '仪式用品'
-  if (category.includes('生日')) return '生日派对用品'
-  if (category.includes('节日')) return '节日装饰品'
-  return '婚礼饰品/摄影'
-}
-
-// 加载推荐商品
-async function loadRecommendProducts() {
-  const category = getCategoryByTemplate()
-  try {
-    const data = await fetchRecommendProducts(category)
-    if (data && Array.isArray(data)) {
-      recommendProducts.value = data
-    }
-  } catch (e) {
-    console.warn('加载推荐商品失败:', e)
-  }
-}
-
-function goToShop(product: { id: string; name: string; price: number; image: string; category: string }) {
-  track('click_shop_recommend', { product_id: product.id, product_name: product.name, price: product.price })
-  uni.navigateTo({ url: `/pages/mall/index?productId=${product.id}` })
-}
-
 function handleLocation() {
   uni.chooseLocation({
     success: (res) => {
@@ -887,7 +768,6 @@ onMounted(async () => {
 
   const workId = options.workId
   if (workId) {
-    // 编辑已有作品：用 work.id 加载，而非把 work.id 当作 templateId
     const work = findWork(workId)
     if (work) {
       editorStore.setCurrentWorkId(work.id)
@@ -895,13 +775,11 @@ onMounted(async () => {
       if (templateId) {
         await editorStore.loadTemplateById(templateId)
       }
-      // 用已保存的作品数据恢复编辑状态
       if (work.data) {
         editorStore.restoreFromWorkData(work.data)
       }
       track('edit_start', { template_id: templateId, work_id: workId })
     } else {
-      // 作品未找到，回退到模板恢复
       editorStore.restoreTemplate()
       track('edit_start', { template_id: editorStore.currentTemplateId })
     }
@@ -919,8 +797,6 @@ onMounted(async () => {
   nextTick(() => {
     setTimeout(() => updateCardSize(), 100)
   })
-
-  loadRecommendProducts()
 })
 
 watch(isLandscape, () => {
@@ -940,7 +816,6 @@ watch(() => editorStore.editableElements.length, () => {
   nextTick(() => updateCardSize())
 })
 
-// 监听元素内容变化，更新完成度
 watch(() => editorStore.editableElements, () => {
   editProgress.value = calculateProgress()
 }, { deep: true })
@@ -1001,7 +876,7 @@ watch(() => editorStore.editableElements, () => {
   flex-direction: column;
 }
 
-/* Preview Area - 全屏宽度，竖屏时右侧留出 sidebar 宽度 */
+/* Preview Area - 全屏宽度 */
 .preview-area {
   flex: 1;
   display: flex;
@@ -1024,63 +899,6 @@ watch(() => editorStore.editableElements, () => {
   flex-direction: column;
   padding: 16rpx;
   gap: 20rpx;
-}
-
-.section {
-  position: relative;
-  width: 100%;
-}
-
-/* 图片区块 */
-.image-section {
-  border-radius: 12rpx;
-  overflow: hidden;
-}
-
-.section-image {
-  width: 100%;
-  min-height: 400rpx;
-  aspect-ratio: 3 / 4;
-  background: #f5f5f5;
-}
-
-.image-overlay {
-  position: absolute;
-  bottom: 20rpx;
-  left: 0;
-  right: 0;
-  text-align: center;
-}
-
-.overlay-label {
-  font-size: 28rpx;
-  color: #fff;
-  font-weight: 600;
-  text-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.5);
-}
-
-/* 文字区块 */
-.text-section {
-  padding: 20rpx;
-  background: #fff;
-  border-radius: 12rpx;
-  text-align: center;
-  min-height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.section-text {
-  font-size: 30rpx;
-  color: #333;
-  line-height: 1.6;
-}
-
-/* 高亮样式 */
-.active-section {
-  outline: 4rpx solid #e84a6e;
-  outline-offset: 4rpx;
 }
 
 /* ===== 画布模式 ===== */
@@ -1164,66 +982,6 @@ watch(() => editorStore.editableElements, () => {
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
 }
 
-.footer-item--disabled {
-  opacity: 0.35;
-}
-
-/* Sidebar Area - 右侧浮动编辑面板 */
-.sidebar-area {
-  position: fixed;
-  right: 0;
-  top: 100rpx;
-  bottom: 120rpx;
-  width: 320rpx;
-  display: flex;
-  flex-direction: row;
-  background: #fff;
-  border-left: 1rpx solid #f0e0e5;
-  box-shadow: -4rpx 0 20rpx rgba(0, 0, 0, 0.08);
-  z-index: 100;
-  overflow: hidden;
-}
-
-.sidebar-toggle {
-  flex-shrink: 0;
-  width: 50rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fdf6f8;
-  border-right: 1rpx solid #f0e0e5;
-  cursor: pointer;
-}
-
-.sidebar-toggle-icon {
-  font-size: 36rpx;
-  color: #999;
-  font-weight: 300;
-}
-
-.sidebar-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.sidebar-area--collapsed {
-  width: 50rpx;
-}
-
-/* Bottom Panel - 横屏模式下底部编辑面板 */
-.bottom-panel {
-  flex-shrink: 0;
-  background: #fff;
-  border-top: 1rpx solid #f0e0e5;
-  border-radius: 16rpx 16rpx 0 0;
-  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.06);
-  min-height: 200rpx;
-  max-height: 340rpx;
-  overflow: hidden;
-}
-
 /* 横屏模式布局 */
 .editor-body--landscape {
   flex-direction: column;
@@ -1240,50 +998,72 @@ watch(() => editorStore.editableElements, () => {
   background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
   padding: 20rpx 16rpx;
   min-height: 0;
-  margin-right: 0;
 }
 
-/* Footer Toolbar */
+/* ===== 底部工具栏 ===== */
 .editor-footer {
   display: flex;
   align-items: center;
-  padding: 20rpx 30rpx;
+  padding: 16rpx 24rpx;
   background: #fff;
   border-top: 1rpx solid #f0e0e5;
   flex-shrink: 0;
+  gap: 16rpx;
 }
 
-.footer-item {
+.footer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.footer-tab {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 24rpx;
-  gap: 6rpx;
+  padding: 0 16rpx;
+  gap: 4rpx;
 }
 
-.footer-icon {
-  font-size: 40rpx;
+.tab-icon {
+  font-size: 36rpx;
 }
 
-.footer-label {
-  font-size: 22rpx;
+.tab-label {
+  font-size: 20rpx;
   color: #666;
 }
 
-.footer-share-btn {
-  flex: 1;
-  margin-left: 20rpx;
-  padding: 24rpx 0;
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-left: auto;
+}
+
+.footer-action-btn {
+  padding: 16rpx 28rpx;
   border-radius: 50rpx;
   text-align: center;
 }
 
-.share-btn-text {
-  font-size: 28rpx;
-  color: #fff;
+.footer-save-btn {
+  background: #f5f5f5;
+}
+
+.footer-share-btn {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+}
+
+.action-btn-text {
+  font-size: 26rpx;
   font-weight: 600;
+  color: #fff;
+}
+
+.footer-save-btn .action-btn-text {
+  color: #666;
 }
 
 .loading-overlay {
@@ -1298,69 +1078,4 @@ watch(() => editorStore.editableElements, () => {
   font-size: 28rpx;
   color: #999;
 }
-
-/* Sidebar 主内容区 */
-.sidebar-main {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 商城推荐 */
-.shop-recommend {
-  flex-shrink: 0;
-  background: #fff;
-  border-top: 1rpx solid #f0e0e5;
-  padding: 16rpx;
-  margin-top: 8rpx;
-  border-radius: 12rpx;
-}
-
-.shop-rec-title {
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 12rpx;
-}
-
-.shop-rec-list {
-  display: flex;
-  gap: 12rpx;
-  overflow-x: auto;
-}
-
-.shop-rec-item {
-  flex-shrink: 0;
-  width: 140rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6rpx;
-}
-
-.shop-rec-img {
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: 10rpx;
-  background: #f5f5f5;
-}
-
-.shop-rec-name {
-  font-size: 18rpx;
-  color: #333;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-}
-
-.shop-rec-price {
-  font-size: 18rpx;
-  color: #e84a6e;
-  font-weight: 600;
-}
-
 </style>

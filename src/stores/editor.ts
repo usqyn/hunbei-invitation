@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { useTemplateStore } from './template'
-import { DEFAULT_ELEMENT_STYLE, MATERIAL_LIST } from '@/constants/editor'
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { resolveUrl } from '@/utils/url'
 import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData } from '@/types'
@@ -14,19 +13,12 @@ const STORAGE_KEY_TEMPLATE_DATA = 'hunbei_current_template_data'
 export const useEditorStore = defineStore('editor', () => {
   const showTextEditor = ref(false)
   const showBasicInfoEditor = ref(false)
-  const showQuickEdit = ref(false)
-  const activePanelTab = ref('edit')
   const selectedElement = ref<number | null>(null)
   const editingText = ref('')
   const currentTemplateId = ref<string>(DEFAULT_TEMPLATE_ID)
   const currentWorkId = ref<string | null>(null)
   const templateLoading = ref(false)
 
-  const currentFont = ref<string>('思源宋体')
-  const currentColor = ref<string>('#666666')
-  const currentFontSize = ref<number>(12)
-  const currentSpacing = ref<number>(2)
-  const currentLineHeight = ref<number>(2)
   const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
   const background = ref<{ type: string; color1: string; color2?: string; angle?: number; image?: string }>({ type: 'solid', color1: '#ffffff' })
   const renderedImage = ref<string>('')
@@ -106,9 +98,6 @@ export const useEditorStore = defineStore('editor', () => {
 
   const canUndo = computed(() => historyIndex.value > 0)
   const canRedo = computed(() => historyIndex.value < history.value.length - 1)
-
-  // 素材库
-  const materialList = MATERIAL_LIST
 
   // 请求计数器，用于忽略过期请求（避免 restoreTemplate 与 onMounted 竞争）
   let _loadReqId = 0
@@ -285,24 +274,6 @@ export const useEditorStore = defineStore('editor', () => {
     pushHistory()
   }
 
-  function syncCurrentFromElement(idx: number) {
-    const el = editableElements[idx]
-    if (el?.style) {
-      currentFont.value = el.style.font
-      currentColor.value = el.style.color
-      currentFontSize.value = el.style.fontSize
-      currentSpacing.value = el.style.spacing
-      currentLineHeight.value = el.style.lineHeight
-    } else {
-      el.style = { ...DEFAULT_ELEMENT_STYLE }
-      currentFont.value = DEFAULT_ELEMENT_STYLE.font
-      currentColor.value = DEFAULT_ELEMENT_STYLE.color
-      currentFontSize.value = DEFAULT_ELEMENT_STYLE.fontSize
-      currentSpacing.value = DEFAULT_ELEMENT_STYLE.spacing
-      currentLineHeight.value = DEFAULT_ELEMENT_STYLE.lineHeight
-    }
-  }
-
   function persistTemplate() {
     setStorage(STORAGE_KEY_TEMPLATE, currentTemplateId.value)
     try {
@@ -399,22 +370,6 @@ export const useEditorStore = defineStore('editor', () => {
     pushHistory()
   }
 
-  function openEditor(idx: number) {
-    const el = editableElements[idx]
-    selectedElement.value = idx
-    activeSectionId.value = null
-    if (el.type === 'image') {
-      activePanelTab.value = 'material'
-      uni.showToast({ title: '请在素材库中选择替换图片', icon: 'none' })
-    } else if (el.type === 'basic') {
-      showBasicInfoEditor.value = true
-    } else if (el.type === 'text') {
-      syncCurrentFromElement(idx)
-      editingText.value = el.text
-      showTextEditor.value = true
-    }
-  }
-
   function openSectionTextEditor(sectionId: string) {
     const sec = pageSections.find(s => s.id === sectionId)
     if (!sec) return
@@ -454,14 +409,6 @@ export const useEditorStore = defineStore('editor', () => {
 
   function closeBasicInfoEditor() {
     showBasicInfoEditor.value = false
-  }
-
-  function openQuickEdit() {
-    showQuickEdit.value = true
-  }
-
-  function closeQuickEdit() {
-    showQuickEdit.value = false
   }
 
   /** 将字段值同步到所有模式（canvas / page / flip）的对应元素中 */
@@ -555,7 +502,6 @@ export const useEditorStore = defineStore('editor', () => {
     }
     pushHistory()
     selectedElement.value = null
-    activePanelTab.value = 'edit'
     uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
@@ -588,15 +534,14 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   return {
-    showTextEditor, showBasicInfoEditor, showQuickEdit, activePanelTab,
-    selectedElement, editingText, currentFont, currentColor,
-    currentFontSize, currentSpacing, currentLineHeight,
-    editableElements, materialList, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
+    showTextEditor, showBasicInfoEditor,
+    selectedElement, editingText,
+    editableElements, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
     templateType, pageSections, activeSectionId,
     flipPages, currentFlipPageIndex,
     history, historyIndex, canUndo, canRedo,
-    loadTemplateById, restoreTemplate, restoreFromWorkData, openEditor, openSectionTextEditor, closeTextEditor, confirmTextEdit,
-    closeBasicInfoEditor, openQuickEdit, closeQuickEdit, syncSmartField, syncBasicInfoToElements,
+    loadTemplateById, restoreTemplate, restoreFromWorkData, openSectionTextEditor, closeTextEditor, confirmTextEdit,
+    closeBasicInfoEditor, syncSmartField, syncBasicInfoToElements,
     selectMaterial, applyImageToElement: selectMaterial, setCurrentWorkId,
     updatePageSection, updatePageSectionText, updatePageSectionImage,
     pushHistory, undo, redo,

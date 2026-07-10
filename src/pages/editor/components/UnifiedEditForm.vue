@@ -5,14 +5,15 @@
         <view class="header-left" @click="$emit('close')">
           <text class="header-back">‹</text>
         </view>
-        <text class="header-title">完善基本信息</text>
-        <view class="header-right" @click="$emit('confirm')">
+        <text class="header-title">编辑信息</text>
+        <view class="header-right" @click="onConfirm">
           <text class="header-confirm">完成</text>
         </view>
       </view>
 
       <scroll-view class="popup-scroll" scroll-y>
         <view class="form-container">
+          <!-- 新人信息 -->
           <view class="form-section">
             <view class="section-title">
               <text class="title-icon">💑</text>
@@ -28,7 +29,8 @@
                 <input
                   class="form-input"
                   placeholder="请输入新郎真实姓名"
-                  v-model="basicInfo.groomName"
+                  :value="basicInfo.groomName"
+                  @input="(e: any) => onInput('groomName', e.detail.value)"
                   maxlength="20"
                   placeholder-class="input-placeholder"
                 />
@@ -45,7 +47,8 @@
                 <input
                   class="form-input"
                   placeholder="请输入新娘真实姓名"
-                  v-model="basicInfo.brideName"
+                  :value="basicInfo.brideName"
+                  @input="(e: any) => onInput('brideName', e.detail.value)"
                   maxlength="20"
                   placeholder-class="input-placeholder"
                 />
@@ -54,6 +57,7 @@
             </view>
           </view>
 
+          <!-- 婚礼信息 -->
           <view class="form-section">
             <view class="section-title">
               <text class="title-icon">📅</text>
@@ -95,7 +99,33 @@
                 <input
                   class="form-input"
                   placeholder="例：婚贝大酒店9F幸福宴会厅"
-                  v-model="basicInfo.detailAddress"
+                  :value="basicInfo.detailAddress"
+                  @input="(e: any) => onInput('address', e.detail.value)"
+                  maxlength="100"
+                  placeholder-class="input-placeholder"
+                />
+              </view>
+            </view>
+          </view>
+
+          <!-- 其他信息（动态字段） -->
+          <view v-if="extraFields.length > 0" class="form-section">
+            <view class="section-title">
+              <text class="title-icon">📝</text>
+              <text class="title-text">其他信息</text>
+            </view>
+
+            <view v-for="field in extraFields" :key="field.key" class="form-item">
+              <view class="form-label">
+                <text class="label-icon">{{ field.icon }}</text>
+                <text class="label-name">{{ field.label }}</text>
+              </view>
+              <view class="input-wrapper">
+                <input
+                  class="form-input"
+                  :placeholder="field.placeholder"
+                  :value="field.value"
+                  @input="(e: any) => onInput(field.key, e.detail.value)"
                   maxlength="100"
                   placeholder-class="input-placeholder"
                 />
@@ -114,24 +144,91 @@
 </template>
 
 <script setup lang="ts">
-import type { BasicInfo } from '@/types'
+import { computed } from 'vue'
+import type { EditableElement, BasicInfo } from '@/types'
+
+const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholder: string }> = {
+  inviter: { label: '邀请者', icon: '👤', placeholder: '请输入邀请者姓名' },
+  invitee: { label: '受邀者', icon: '👥', placeholder: '请输入受邀者姓名' },
+  date: { label: '日期', icon: '📅', placeholder: '请选择日期' },
+  time: { label: '时间', icon: '⏰', placeholder: '请填写时间' },
+  location: { label: '地点', icon: '📍', placeholder: '请填写地点' },
+  address: { label: '详细地址', icon: '🏠', placeholder: '请填写详细地址' },
+  phone: { label: '联系电话', icon: '📞', placeholder: '请填写联系电话' },
+  year: { label: '年份', icon: '📅', placeholder: '例如: 2025' },
+  month: { label: '月份', icon: '📅', placeholder: '例如: 6' },
+  day: { label: '日', icon: '📅', placeholder: '例如: 15' },
+}
+
+// 基础字段 key（始终显示，值从 basicInfo 读取）
+const BASIC_FIELD_KEYS = ['groomName', 'brideName', 'date', 'location', 'address']
+
+// 日期占位符全局字段
+const DATE_PLACEHOLDER_KEYS = ['year', 'month', 'day']
 
 const props = defineProps<{
   visible: boolean
   basicInfo: BasicInfo
+  elements: EditableElement[]
+  templateData?: Record<string, string | undefined>
 }>()
 
 const emit = defineEmits<{
   close: []
   confirm: []
   location: []
-  datePicker: []
+  update: [key: string, value: string]
 }>()
 
-const onDateChange = (e: any) => {
-  if (props.basicInfo) {
-    props.basicInfo.weddingDate = e.detail.value
+// 额外字段（从 elements 的 dataKey 收集，排除基础字段）
+const extraFields = computed(() => {
+  const seen = new Set(BASIC_FIELD_KEYS)
+  const result: Array<{ key: string; label: string; icon: string; placeholder: string; value: string }> = []
+
+  props.elements.forEach(el => {
+    if (el.dataKey && el.dataKey in SMART_FIELD_META && !seen.has(el.dataKey)) {
+      seen.add(el.dataKey)
+      const meta = SMART_FIELD_META[el.dataKey]
+      result.push({
+        key: el.dataKey,
+        label: meta.label,
+        icon: meta.icon,
+        placeholder: meta.placeholder,
+        value: el.text || '',
+      })
+    }
+  })
+
+  // 添加日期占位符全局字段
+  if (props.templateData) {
+    DATE_PLACEHOLDER_KEYS.forEach(key => {
+      if (!seen.has(key) && key in SMART_FIELD_META) {
+        seen.add(key)
+        const meta = SMART_FIELD_META[key]
+        result.push({
+          key,
+          label: meta.label,
+          icon: meta.icon,
+          placeholder: meta.placeholder,
+          value: props.templateData![key] || '',
+        })
+      }
+    })
   }
+
+  return result
+})
+
+function onInput(key: string, value: string) {
+  emit('update', key, value)
+}
+
+function onDateChange(e: any) {
+  emit('update', 'date', e.detail.value)
+}
+
+function onConfirm() {
+  emit('confirm')
 }
 </script>
 
@@ -246,6 +343,11 @@ const onDateChange = (e: any) => {
   margin-right: 4rpx;
 }
 
+.label-icon {
+  font-size: 28rpx;
+  margin-right: 8rpx;
+}
+
 .label-name {
   font-size: 28rpx;
   color: var(--color-text-primary);
@@ -260,9 +362,6 @@ const onDateChange = (e: any) => {
   padding: 24rpx 28rpx;
   border: 2rpx solid #eee;
   transition: border-color 0.2s ease;
-
-  &.clickable {
-  }
 }
 
 .form-input {
