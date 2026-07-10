@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { request } from '@/utils/request'
 import { resolveUrl } from '@/utils/url'
+import { uniqueId } from '@/utils/common'
 import type { PosterTemplate, PosterEditableAreaRuntime, StickerItem } from '@/types/poster'
 
 const MAX_HISTORY = 30
@@ -463,7 +464,7 @@ export const usePosterStore = defineStore('poster', () => {
     }
   }
   function insertSticker(src: string) {
-    const id = `sticker_${Date.now()}`
+    const id = uniqueId('sticker_')
     const stickerSize = canvasSize.value.width * 0.2
     const newArea: PosterEditableAreaRuntime = {
       id,

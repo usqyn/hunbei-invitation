@@ -91,11 +91,16 @@ import { resolveUrl } from '@/utils/url'
 import type { PosterTemplate } from '@/types'
 
 // ============ 状态 ============
+const PAGE_SIZE = 20
 const categories = POSTER_CATEGORIES
 const posterTemplates = ref<PosterTemplate[]>([])
 const activeCategory = ref<string>('all')
 const loading = ref(false)
 const loadError = ref(false)
+// 分页加载状态
+const currentPage = ref(1)
+const hasMore = ref(true)
+const loadingMore = ref(false)
 
 // ============ 生命周期 ============
 onMounted(async () => {
@@ -114,15 +119,25 @@ onMounted(async () => {
 async function loadPosterTemplates() {
   loading.value = true
   loadError.value = false
+  // 重置分页状态
+  currentPage.value = 1
+  hasMore.value = true
+  loadingMore.value = false
 
   try {
     const data = await request<PosterTemplate[]>({
       url: '/api/poster/templates',
-      data: activeCategory.value !== 'all' ? { category_id: activeCategory.value } : undefined,
+      data: {
+        page: 1,
+        limit: PAGE_SIZE,
+        ...(activeCategory.value !== 'all' ? { category_id: activeCategory.value } : {}),
+      },
       hideLoading: true,
     })
     if (data && Array.isArray(data)) {
       posterTemplates.value = data
+      // 返回不足一页说明已无更多数据
+      hasMore.value = data.length >= PAGE_SIZE
     }
   } catch (e) {
     console.error('加载海报模板列表失败:', e)
@@ -159,8 +174,38 @@ function onImageError(e: any, template: PosterTemplate) {
   }
 }
 
-function loadMore() {
-  // TODO: 后端支持分页后实现无限滚动加载
+async function loadMore() {
+  // 防止重复触发：加载中 / 首屏加载中 / 无更多数据时直接返回
+  if (loadingMore.value || loading.value || !hasMore.value) return
+  loadingMore.value = true
+
+  try {
+    const nextPage = currentPage.value + 1
+    const data = await request<PosterTemplate[]>({
+      url: '/api/poster/templates',
+      data: {
+        page: nextPage,
+        limit: PAGE_SIZE,
+        ...(activeCategory.value !== 'all' ? { category_id: activeCategory.value } : {}),
+      },
+      hideLoading: true,
+    })
+    if (data && Array.isArray(data) && data.length) {
+      // 追加到列表，按 id 去重避免重复
+      const existingIds = new Set(posterTemplates.value.map(t => t.id))
+      const appended = data.filter(t => !existingIds.has(t.id))
+      posterTemplates.value.push(...appended)
+      currentPage.value = nextPage
+      hasMore.value = data.length >= PAGE_SIZE
+    } else {
+      // 后端未返回数据，视为无更多
+      hasMore.value = false
+    }
+  } catch (e) {
+    console.error('加载更多海报模板失败:', e)
+  } finally {
+    loadingMore.value = false
+  }
 }
 
 function onBack() {

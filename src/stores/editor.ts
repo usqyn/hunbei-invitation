@@ -6,8 +6,8 @@ import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { resolveImageUrl } from '@/utils/image'
 import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage } from '@/types'
 import { request } from '@/utils/request'
+import { getStorage, setStorage } from '@/utils/storage'
 
-const STORAGE_KEY_STYLES = 'hunbei_editor_styles'
 const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
 
 export const useEditorStore = defineStore('editor', () => {
@@ -95,6 +95,26 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   // ============ 应用模板数据到编辑区 ============
+
+  /** 将模板元素映射为可编辑元素（canvas / flip 模式共用） */
+  function mapTemplateElement(el: any): EditableElement {
+    return {
+      type: el.type,
+      text: el.type === 'image' ? resolveImageUrl(el.text) : el.text,
+      dataKey: el.dataKey,
+      label: el.label,
+      style: el.style ? { ...el.style } : undefined,
+      x: el.x,
+      y: el.y,
+      width: el.width,
+      height: el.height,
+      zIndex: el.zIndex,
+      rotation: el.rotation,
+      opacity: el.opacity,
+      editable: el.editable,
+    }
+  }
+
   function applyTemplateData(template: TemplateItem) {
     if (!template) return
 
@@ -104,21 +124,7 @@ export const useEditorStore = defineStore('editor', () => {
     // canvas 模式：加载 elements
     editableElements.splice(0, editableElements.length)
     ;(template.elements || []).forEach(el => {
-      editableElements.push({
-        type: el.type,
-        text: el.type === 'image' ? resolveImageUrl(el.text) : el.text,
-        dataKey: el.dataKey,
-        label: el.label,
-        style: el.style ? { ...el.style } : undefined,
-        x: el.x,
-        y: el.y,
-        width: el.width,
-        height: el.height,
-        zIndex: el.zIndex,
-        rotation: el.rotation,
-        opacity: el.opacity,
-        editable: el.editable,
-      })
+      editableElements.push(mapTemplateElement(el))
     })
 
     // page 模式：加载 sections
@@ -140,21 +146,7 @@ export const useEditorStore = defineStore('editor', () => {
     // flip 模式：加载 pages
     flipPages.splice(0, flipPages.length)
     ;(template.pages || []).forEach(page => {
-      const elements = (page.elements || []).map(el => ({
-        type: el.type,
-        text: el.type === 'image' ? resolveImageUrl(el.text) : el.text,
-        dataKey: el.dataKey,
-        label: el.label,
-        style: el.style ? { ...el.style } : undefined,
-        x: el.x,
-        y: el.y,
-        width: el.width,
-        height: el.height,
-        zIndex: el.zIndex,
-        rotation: el.rotation,
-        opacity: el.opacity,
-        editable: el.editable,
-      }))
+      const elements = (page.elements || []).map(el => mapTemplateElement(el))
       flipPages.push({
         id: page.id,
         name: page.name,
@@ -243,29 +235,15 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
-  function persistStyles() {
-    try {
-      const styles = editableElements.map(e => e.style ? { ...e.style } : null)
-      uni.setStorageSync(STORAGE_KEY_STYLES, styles)
-    } catch (e) { console.error('persistStyles failed', e) }
-  }
-
   function persistTemplate() {
-    try {
-      uni.setStorageSync(STORAGE_KEY_TEMPLATE, currentTemplateId.value)
-    } catch (e) { console.error('persistTemplate failed', e) }
+    setStorage(STORAGE_KEY_TEMPLATE, currentTemplateId.value)
   }
 
   function restoreTemplate() {
-    try {
-      const saved = uni.getStorageSync(STORAGE_KEY_TEMPLATE)
-      if (saved && typeof saved === 'string') {
-        loadTemplateById(saved)
-      } else {
-        loadTemplateById(DEFAULT_TEMPLATE_ID)
-      }
-    } catch (e) {
-      console.error('restoreTemplate failed', e)
+    const saved = getStorage<string>(STORAGE_KEY_TEMPLATE, '')
+    if (saved && typeof saved === 'string') {
+      loadTemplateById(saved)
+    } else {
       loadTemplateById(DEFAULT_TEMPLATE_ID)
     }
   }
@@ -406,7 +384,6 @@ export const useEditorStore = defineStore('editor', () => {
       const templateStore = useTemplateStore()
       templateStore.updateField(el.dataKey, imageUrl)
     }
-    persistStyles()
     selectedElement.value = null
     activePanelTab.value = 'edit'
     uni.showToast({ title: '图片已替换', icon: 'success' })

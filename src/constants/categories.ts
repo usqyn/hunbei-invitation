@@ -22,7 +22,7 @@ export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 5, name: '耳环礼', image: '/static/images/categories/earring.jpg', bgColor: '#fce4ec', categoryId: 'poster' },
   { id: 6, name: '周岁宴', image: '/static/images/categories/baby.jpg', bgColor: '#ffeaa7', categoryId: 'baby' },
   { id: 7, name: '升学宴', image: '/static/images/categories/graduation.jpg', bgColor: '#fff3e0', categoryId: 'study' },
-  { id: 8, name: '节日请柬', image: '/static/images/categories/festival-invitation.jpg', bgColor: '#fef3e2', categoryId: 'creative' },
+  { id: 8, name: '节日请柬', image: '/static/images/categories/festival-invitation.jpg', bgColor: '#fef3e2', categoryId: 'festival' },
   { id: 9, name: '乔迁', image: '/static/images/categories/housewarming.jpg', bgColor: '#fff7e6', categoryId: 'house' },
 ]
 

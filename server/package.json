@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "lint": "echo 'TODO: install eslint'",
+    "test": "echo 'TODO: add tests'"
   },
   "keywords": [],
   "author": "",
@@ -18,5 +20,9 @@
     "multer": "^2.2.0",
     "sql.js": "^1.14.1",
     "uuid": "^14.0.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

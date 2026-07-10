@@ -169,6 +169,10 @@ async function initDatabase() {
   db.run("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
   db.run("CREATE INDEX IF NOT EXISTS idx_favorites_phone ON favorites(phone)")
   db.run("CREATE INDEX IF NOT EXISTS idx_footprints_phone ON footprints(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_notifications_phone ON notifications(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_feedback_phone ON feedback(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_recycle_bin_phone ON recycle_bin(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone)")
 
   saveDatabase()
 }
@@ -563,7 +567,6 @@ app.get('/api/categories', (req, res) => {
 // 获取全部模板（支持分页 ?page=1&limit=20&category=xxx&search=xxx）
 app.get('/api/templates', (req, res) => {
   try {
-    let sql = "SELECT * FROM templates"
     const params = []
     const conditions = []
 
@@ -588,24 +591,23 @@ app.get('/api/templates', (req, res) => {
       params.push(`%${req.query.search}%`)
     }
 
-    if (conditions.length) {
-      sql += " WHERE " + conditions.join(" AND ")
-    }
-    sql += " ORDER BY updatedAt DESC"
+    // 统一构建 WHERE 子句，数据查询与计数查询共用，避免字符串替换的脆弱性
+    const whereClause = conditions.length ? " WHERE " + conditions.join(" AND ") : ""
+    const dataSql = "SELECT * FROM templates" + whereClause + " ORDER BY updatedAt DESC"
 
     const page = parseInt(req.query.page, 10)
     const limit = parseInt(req.query.limit, 10)
 
     // 有分页参数时返回分页格式
     if (page > 0 && limit > 0) {
-      // 查询总数
-      const countSql = sql.replace("SELECT *", "SELECT COUNT(*) as total")
+      // 查询总数：直接构建 COUNT 查询，不依赖字符串替换
+      const countSql = "SELECT COUNT(*) as total FROM templates" + whereClause
       const countResult = db.exec(countSql, params)
       const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
       const totalPages = Math.ceil(total / limit)
       const offset = (page - 1) * limit
 
-      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedSql = dataSql + " LIMIT ? OFFSET ?"
       const paginatedParams = [...params, limit, offset]
       const result = db.exec(paginatedSql, paginatedParams)
       const templates = result.length ? result[0].values.map(row => {
@@ -629,7 +631,7 @@ app.get('/api/templates', (req, res) => {
     }
 
     // 无分页参数时保持原有行为（返回全部）
-    const result = db.exec(sql, params)
+    const result = db.exec(dataSql, params)
     const templates = result.length ? result[0].values.map(row => {
       const cols = result[0].columns
       const obj = {}
@@ -1039,14 +1041,53 @@ app.get('/api/products/recommend', (req, res) => {
 // 与 /api/templates 共享数据源（templates 表），此为面向前端商品展示的别名路由。
 app.get('/api/products', (req, res) => {
   try {
-    let sql = "SELECT * FROM templates WHERE status = 'published'"
     const params = []
+    const conditions = ["status = 'published'"]
     if (req.query.category) {
-      sql += " AND category = ?"
+      conditions.push("category = ?")
       params.push(req.query.category)
     }
-    sql += " ORDER BY likes DESC"
-    const result = db.exec(sql, params)
+    // 统一构建 WHERE 子句，数据查询与计数查询共用，避免字符串替换的脆弱性
+    const whereClause = " WHERE " + conditions.join(" AND ")
+    const dataSql = "SELECT * FROM templates" + whereClause + " ORDER BY likes DESC"
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    // 有分页参数时返回分页格式
+    if (page > 0 && limit > 0) {
+      // 查询总数：直接构建 COUNT 查询，不依赖字符串替换
+      const countSql = "SELECT COUNT(*) as total FROM templates" + whereClause
+      const countResult = db.exec(countSql, params)
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = dataSql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const products = result.length ? result[0].values.map(row => {
+        const cols = result[0].columns
+        const obj = {}
+        row.forEach((val, i) => {
+          if (['data', 'elements', 'tags', 'canvasSize', 'background'].includes(cols[i])) {
+            try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+          } else {
+            obj[cols[i]] = val
+          }
+        })
+        return obj
+      }) : []
+
+      return res.json({
+        success: true,
+        data: products,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    // 无分页参数时保持原有行为（返回全部）
+    const result = db.exec(dataSql, params)
     const products = result.length ? result[0].values.map(row => {
       const cols = result[0].columns
       const obj = {}
@@ -1194,7 +1235,39 @@ app.get('/api/favorites', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.json({ success: true, data: [] })
-    const result = db.exec("SELECT * FROM favorites WHERE phone = ? ORDER BY createdAt DESC", [phone])
+    const sql = "SELECT * FROM favorites WHERE phone = ? ORDER BY createdAt DESC"
+    const params = [phone]
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    // 有分页参数时返回分页格式
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM favorites WHERE phone = ?"
+      const countResult = db.exec(countSql, [phone])
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const favorites = result.length ? result[0].values.map(row => {
+        const cols = result[0].columns
+        const obj = {}
+        row.forEach((val, i) => { obj[cols[i]] = val })
+        return obj
+      }) : []
+
+      return res.json({
+        success: true,
+        data: favorites,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    // 无分页参数时保持原有行为（返回全部）
+    const result = db.exec(sql, params)
     const favorites = result.length ? result[0].values.map(row => {
       const cols = result[0].columns
       const obj = {}
@@ -1253,7 +1326,39 @@ app.get('/api/footprints', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.json({ success: true, data: [] })
-    const result = db.exec("SELECT * FROM footprints WHERE phone = ? ORDER BY timestamp DESC LIMIT 50", [phone])
+    const sql = "SELECT * FROM footprints WHERE phone = ? ORDER BY timestamp DESC"
+    const params = [phone]
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    // 有分页参数时返回分页格式
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM footprints WHERE phone = ?"
+      const countResult = db.exec(countSql, [phone])
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const footprints = result.length ? result[0].values.map(row => {
+        const cols = result[0].columns
+        const obj = {}
+        row.forEach((val, i) => { obj[cols[i]] = val })
+        return obj
+      }) : []
+
+      return res.json({
+        success: true,
+        data: footprints,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    // 无分页参数时保持原有行为（最多返回 50 条）
+    const result = db.exec(sql + " LIMIT 50", params)
     const footprints = result.length ? result[0].values.map(row => {
       const cols = result[0].columns
       const obj = {}
@@ -1271,7 +1376,39 @@ app.get('/api/notifications', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.json({ success: true, data: [] })
-    const result = db.exec("SELECT * FROM notifications WHERE phone = ? ORDER BY createdAt DESC LIMIT 50", [phone])
+    const sql = "SELECT * FROM notifications WHERE phone = ? ORDER BY createdAt DESC"
+    const params = [phone]
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    // 有分页参数时返回分页格式
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM notifications WHERE phone = ?"
+      const countResult = db.exec(countSql, [phone])
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const notifications = result.length ? result[0].values.map(row => {
+        const cols = result[0].columns
+        const obj = {}
+        row.forEach((val, i) => { obj[cols[i]] = val })
+        return obj
+      }) : []
+
+      return res.json({
+        success: true,
+        data: notifications,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    // 无分页参数时保持原有行为（最多返回 50 条）
+    const result = db.exec(sql + " LIMIT 50", params)
     const notifications = result.length ? result[0].values.map(row => {
       const cols = result[0].columns
       const obj = {}
@@ -1424,13 +1561,8 @@ app.use((req, res) => {
 
 // ============ 错误处理 ============
 app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({ success: false, error: err.message })
-  }
-  if (err) {
-    return res.status(400).json({ success: false, error: err.message })
-  }
-  next()
+  console.error('Unhandled error:', err)
+  res.status(500).json({ success: false, error: '服务器内部错误' })
 })
 
 // ============ 启动 ============

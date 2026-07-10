@@ -507,11 +507,14 @@ async function doPublish() {
         dataValueToKey[value] = key
       }
     }
-    payload.elements.forEach((el: any) => {
-      if (el.type === 'text' && !el.dataKey && el.text && dataValueToKey[el.text]) {
-        el.dataKey = dataValueToKey[el.text]
-      }
-    })
+    // 只在非翻页模式下处理 elements 的 dataKey 自动绑定
+    if (payload.elements && Array.isArray(payload.elements)) {
+      payload.elements.forEach((el: any) => {
+        if (el.type === 'text' && !el.dataKey && el.text && dataValueToKey[el.text]) {
+          el.dataKey = dataValueToKey[el.text]
+        }
+      })
+    }
 
     uploadProgress.value = 50
     uploadProgressText.value = '保存到服务器...'

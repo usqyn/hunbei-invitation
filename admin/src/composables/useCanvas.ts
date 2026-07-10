@@ -906,8 +906,14 @@ export function useCanvas(opts: UseCanvasOptions) {
       ;(obj as any).set('filters', [])
       ;(obj as any).set('dirty', true)
       // 使用 CSS filter 通过样式注入
-      if ((obj as any)._element) {
-        ;(obj as any)._element.style.filter = cssFilter
+      // 安全检查：通过 Fabric 原生 API 应用滤镜，避免直接操作内部实现导致异常
+      try {
+        const el = (obj as any)._element
+        if (el && el.style) {
+          el.style.filter = cssFilter
+        }
+      } catch (e) {
+        console.warn('Failed to apply CSS filter:', e)
       }
       // borderRadius → clipPath
       const br = patch.borderRadius ?? img.borderRadius

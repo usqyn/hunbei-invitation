@@ -35,6 +35,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
 
 const props = defineProps<{
   visible: boolean
@@ -48,8 +49,7 @@ const emit = defineEmits<{
 }>()
 
 const isRtl = computed(() => {
-  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-  return rtlChars.test(props.editingText)
+  return RTL_CHAR_REGEX.test(props.editingText)
 })
 
 const textareaStyle = computed(() => {

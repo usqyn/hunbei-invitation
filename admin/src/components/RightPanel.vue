@@ -78,7 +78,7 @@
         <div class="section-title">文字内容</div>
         <textarea
           class="form-textarea"
-          :value="(selectedElement as any).content"
+          :value="selectedElement.content"
           @change="$emit('updateSelected', { content: ($event.target as HTMLTextAreaElement).value })"
         ></textarea>
 
@@ -88,7 +88,7 @@
           <div class="font-select-row">
             <select
               class="form-input"
-              :value="(selectedElement as any).fontFamily"
+              :value="selectedElement.fontFamily"
               @change="$emit('updateSelected', { fontFamily: ($event.target as HTMLSelectElement).value })"
             >
               <option v-for="f in fontList" :key="f" :value="f">{{ f }}</option>
@@ -105,7 +105,7 @@
             <input
               type="number"
               class="form-input"
-              :value="(selectedElement as any).fontSize"
+              :value="selectedElement.fontSize"
               min="8" max="120"
               @change="$emit('updateSelected', { fontSize: Number(($event.target as HTMLInputElement).value) })"
             />
@@ -114,7 +114,7 @@
             <label>样式</label>
             <select
               class="form-input"
-              :value="fontStyleLabel(selectedElement as any)"
+              :value="fontStyleLabel(selectedElement)"
               @change="$emit('fontStyleChange', ($event.target as HTMLSelectElement).value)"
             >
               <option value="normal">正常</option>
@@ -131,17 +131,17 @@
           <div class="btn-group">
             <button
               class="btn-seg"
-              :class="{ active: (selectedElement as any).textAlign === 'left' }"
+              :class="{ active: selectedElement.textAlign === 'left' }"
               @click="$emit('updateSelected', { textAlign: 'left' })"
             >左</button>
             <button
               class="btn-seg"
-              :class="{ active: (selectedElement as any).textAlign === 'center' }"
+              :class="{ active: selectedElement.textAlign === 'center' }"
               @click="$emit('updateSelected', { textAlign: 'center' })"
             >中</button>
             <button
               class="btn-seg"
-              :class="{ active: (selectedElement as any).textAlign === 'right' }"
+              :class="{ active: selectedElement.textAlign === 'right' }"
               @click="$emit('updateSelected', { textAlign: 'right' })"
             >右</button>
           </div>
@@ -151,38 +151,38 @@
           <div class="btn-group">
             <button
               class="btn-seg"
-              :class="{ active: (selectedElement as any).direction === 'ltr' }"
+              :class="{ active: selectedElement.direction === 'ltr' }"
               @click="$emit('updateSelected', { direction: 'ltr' })"
             >LTR</button>
             <button
               class="btn-seg"
-              :class="{ active: (selectedElement as any).direction === 'rtl' }"
+              :class="{ active: selectedElement.direction === 'rtl' }"
               @click="$emit('updateSelected', { direction: 'rtl' })"
             >RTL</button>
             <button
               class="btn-seg"
-              :class="{ active: (selectedElement as any).direction === 'auto' }"
+              :class="{ active: selectedElement.direction === 'auto' }"
               @click="$emit('updateSelected', { direction: 'auto' })"
             >自动</button>
           </div>
         </div>
         <div class="form-row">
-          <label>行高 {{ ((selectedElement as any).lineHeight ?? 1.5).toFixed(2) }}</label>
+          <label>行高 {{ (selectedElement.lineHeight ?? 1.5).toFixed(2) }}</label>
           <input
             type="range"
             class="form-input"
             min="1" max="3" step="0.1"
-            :value="(selectedElement as any).lineHeight"
+            :value="selectedElement.lineHeight"
             @change="$emit('updateSelected', { lineHeight: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
         <div class="form-row">
-          <label>字间距 {{ (selectedElement as any).letterSpacing }}px</label>
+          <label>字间距 {{ selectedElement.letterSpacing }}px</label>
           <input
             type="range"
             class="form-input"
             min="-5" max="30" step="1"
-            :value="(selectedElement as any).letterSpacing"
+            :value="selectedElement.letterSpacing"
             @change="$emit('updateSelected', { letterSpacing: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
@@ -194,17 +194,17 @@
             <input
               type="color"
               class="form-input color"
-              :value="(selectedElement as any).color"
+              :value="selectedElement.color"
               @change="$emit('updateSelected', { color: ($event.target as HTMLInputElement).value })"
             />
           </div>
           <div>
-            <label>透明度 {{ Math.round(((selectedElement as any).opacity) * 100) }}%</label>
+            <label>透明度 {{ Math.round((selectedElement.opacity) * 100) }}%</label>
             <input
               type="range"
               class="form-input"
               min="0" max="100"
-              :value="Math.round(((selectedElement as any).opacity) * 100)"
+              :value="Math.round((selectedElement.opacity) * 100)"
               @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
             />
           </div>
@@ -215,17 +215,17 @@
             <input
               type="color"
               class="form-input color"
-              :value="(selectedElement as any).strokeColor || '#000000'"
+              :value="selectedElement.strokeColor || '#000000'"
               @change="$emit('updateSelected', { strokeColor: ($event.target as HTMLInputElement).value })"
             />
           </div>
           <div>
-            <label>描边宽度 {{ (selectedElement as any).strokeWidth }}px</label>
+            <label>描边宽度 {{ selectedElement.strokeWidth }}px</label>
             <input
               type="range"
               class="form-input"
               min="0" max="10" step="1"
-              :value="(selectedElement as any).strokeWidth"
+              :value="selectedElement.strokeWidth"
               @change="$emit('updateSelected', { strokeWidth: Number(($event.target as HTMLInputElement).value) })"
             />
           </div>
@@ -238,17 +238,17 @@
             <input
               type="color"
               class="form-input color"
-              :value="(selectedElement as any).shadowColor || '#000000'"
+              :value="selectedElement.shadowColor || '#000000'"
               @change="$emit('updateSelected', { shadowColor: ($event.target as HTMLInputElement).value })"
             />
           </div>
           <div>
-            <label>模糊 {{ (selectedElement as any).shadowBlur }}px</label>
+            <label>模糊 {{ selectedElement.shadowBlur }}px</label>
             <input
               type="range"
               class="form-input"
               min="0" max="30" step="1"
-              :value="(selectedElement as any).shadowBlur"
+              :value="selectedElement.shadowBlur"
               @change="$emit('updateSelected', { shadowBlur: Number(($event.target as HTMLInputElement).value) })"
             />
           </div>
@@ -256,12 +256,12 @@
 
         <div class="section-title">旋转</div>
         <div class="form-row">
-          <label>角度 {{ Math.round((selectedElement as any).rotation) }}°</label>
+          <label>角度 {{ Math.round(selectedElement.rotation) }}°</label>
           <input
             type="range"
             class="form-input"
             min="-180" max="180"
-            :value="Math.round((selectedElement as any).rotation)"
+            :value="Math.round(selectedElement.rotation)"
             @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
@@ -272,7 +272,7 @@
             <label class="switch">
               <input
                 type="checkbox"
-                :checked="(selectedElement as any).editable !== false"
+                :checked="selectedElement.editable !== false"
                 @change="$emit('updateSelected', { editable: ($event.target as HTMLInputElement).checked })"
               />
               <span class="slider"></span>
@@ -293,7 +293,7 @@
           <label>数据字段</label>
           <select
             class="form-input"
-            :value="(selectedElement as any).dataKey || ''"
+            :value="selectedElement.dataKey || ''"
             @change="$emit('updateSelected', { dataKey: ($event.target as HTMLSelectElement).value || undefined })"
           >
             <option value="">无绑定</option>
@@ -314,22 +314,22 @@
         </div>
         <div class="form-row two-col">
           <div>
-            <label>透明度 {{ Math.round(((selectedElement as any).opacity) * 100) }}%</label>
+            <label>透明度 {{ Math.round((selectedElement.opacity) * 100) }}%</label>
             <input
               type="range"
               class="form-input"
               min="0" max="100"
-              :value="Math.round(((selectedElement as any).opacity) * 100)"
+              :value="Math.round((selectedElement.opacity) * 100)"
               @change="$emit('updateSelected', { opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
             />
           </div>
           <div>
-            <label>旋转 {{ Math.round((selectedElement as any).rotation) }}°</label>
+            <label>旋转 {{ Math.round(selectedElement.rotation) }}°</label>
             <input
               type="range"
               class="form-input"
               min="-180" max="180"
-              :value="Math.round((selectedElement as any).rotation)"
+              :value="Math.round(selectedElement.rotation)"
               @change="$emit('updateSelected', { rotation: Number(($event.target as HTMLInputElement).value) })"
             />
           </div>
@@ -339,7 +339,7 @@
           <label>填充</label>
           <select
             class="form-input"
-            :value="(selectedElement as any).scale"
+            :value="selectedElement.scale"
             @change="$emit('updateSelected', { scale: ($event.target as HTMLSelectElement).value })"
           >
             <option value="cover">cover</option>
@@ -352,31 +352,31 @@
         <div class="btn-group">
           <button
             class="btn-seg"
-            :class="{ active: (selectedElement as any).mask === 'rect' }"
+            :class="{ active: selectedElement.mask === 'rect' }"
             @click="$emit('updateSelected', { mask: 'rect' })"
           >矩形</button>
           <button
             class="btn-seg"
-            :class="{ active: (selectedElement as any).mask === 'rounded' }"
+            :class="{ active: selectedElement.mask === 'rounded' }"
             @click="$emit('updateSelected', { mask: 'rounded' })"
           >圆角</button>
           <button
             class="btn-seg"
-            :class="{ active: (selectedElement as any).mask === 'circle' }"
+            :class="{ active: selectedElement.mask === 'circle' }"
             @click="$emit('updateSelected', { mask: 'circle' })"
           >圆形</button>
           <button
             class="btn-seg"
-            :class="{ active: (selectedElement as any).mask === 'heart' }"
+            :class="{ active: selectedElement.mask === 'heart' }"
             @click="$emit('updateSelected', { mask: 'heart' })"
           >心</button>
         </div>
         <div class="section-title">圆角</div>
         <div class="form-row">
-          <label>圆角 {{ (selectedElement as any).borderRadius || 0 }}px</label>
+          <label>圆角 {{ selectedElement.borderRadius || 0 }}px</label>
           <input
             type="range" class="form-input" min="0" max="100"
-            :value="(selectedElement as any).borderRadius || 0"
+            :value="selectedElement.borderRadius || 0"
             @change="$emit('updateSelected', { borderRadius: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
@@ -386,7 +386,7 @@
             <label>粗细</label>
             <input
               type="number" class="form-input" min="0" max="20"
-              :value="(selectedElement as any).borderWidth || 0"
+              :value="selectedElement.borderWidth || 0"
               @change="$emit('updateSelected', { borderWidth: Number(($event.target as HTMLInputElement).value) })"
             />
           </div>
@@ -394,7 +394,7 @@
             <label>颜色</label>
             <input
               type="color" class="form-input color-input"
-              :value="(selectedElement as any).borderColor || '#ffffff'"
+              :value="selectedElement.borderColor || '#ffffff'"
               @change="$emit('updateSelected', { borderColor: ($event.target as HTMLInputElement).value })"
             />
           </div>
@@ -409,42 +409,42 @@
           <button class="filter-preset-btn" @click="$emit('applyFilterPreset', 'soft')">柔光</button>
         </div>
         <div class="form-row">
-          <label>亮度 {{ (selectedElement as any).brightness ?? 100 }}%</label>
+          <label>亮度 {{ selectedElement.brightness ?? 100 }}%</label>
           <input
             type="range" class="form-input" min="0" max="200"
-            :value="(selectedElement as any).brightness ?? 100"
+            :value="selectedElement.brightness ?? 100"
             @change="$emit('updateSelected', { brightness: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
         <div class="form-row">
-          <label>对比度 {{ (selectedElement as any).contrast ?? 0 }}</label>
+          <label>对比度 {{ selectedElement.contrast ?? 0 }}</label>
           <input
             type="range" class="form-input" min="-100" max="100"
-            :value="(selectedElement as any).contrast ?? 0"
+            :value="selectedElement.contrast ?? 0"
             @change="$emit('updateSelected', { contrast: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
         <div class="form-row">
-          <label>饱和度 {{ (selectedElement as any).saturate ?? 100 }}%</label>
+          <label>饱和度 {{ selectedElement.saturate ?? 100 }}%</label>
           <input
             type="range" class="form-input" min="0" max="200"
-            :value="(selectedElement as any).saturate ?? 100"
+            :value="selectedElement.saturate ?? 100"
             @change="$emit('updateSelected', { saturate: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
         <div class="form-row">
-          <label>模糊 {{ (selectedElement as any).blur ?? 0 }}px</label>
+          <label>模糊 {{ selectedElement.blur ?? 0 }}px</label>
           <input
             type="range" class="form-input" min="0" max="20"
-            :value="(selectedElement as any).blur ?? 0"
+            :value="selectedElement.blur ?? 0"
             @change="$emit('updateSelected', { blur: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
         <div class="form-row">
-          <label>灰度 {{ (selectedElement as any).grayscale ?? 0 }}%</label>
+          <label>灰度 {{ selectedElement.grayscale ?? 0 }}%</label>
           <input
             type="range" class="form-input" min="0" max="100"
-            :value="(selectedElement as any).grayscale ?? 0"
+            :value="selectedElement.grayscale ?? 0"
             @change="$emit('updateSelected', { grayscale: Number(($event.target as HTMLInputElement).value) })"
           />
         </div>
@@ -466,7 +466,7 @@
             <label class="switch">
               <input
                 type="checkbox"
-                :checked="(selectedElement as any).editable !== false"
+                :checked="selectedElement.editable !== false"
                 @change="$emit('updateSelected', { editable: ($event.target as HTMLInputElement).checked })"
               />
               <span class="slider"></span>
@@ -479,7 +479,7 @@
           <label>数据字段</label>
           <select
             class="form-input"
-            :value="(selectedElement as any).dataKey || ''"
+            :value="selectedElement.dataKey || ''"
             @change="$emit('updateSelected', { dataKey: ($event.target as HTMLSelectElement).value || undefined })"
           >
             <option value="">无绑定</option>
@@ -499,16 +499,7 @@
 <script setup lang="ts">
 import type { AnyCanvasElement, TextElement, CanvasSize, CanvasBackground } from '../types/canvas'
 import { CANVAS_PRESETS } from '../types/canvas'
-
-const TEMPLATE_DATA_KEYS = [
-  'coverImage', 'coverTitle', 'coverSubtitle',
-  'photo1', 'photo2', 'photo3', 'photo4',
-  'photoTitle', 'photoSubtitle',
-  'footerText', 'footerSubText',
-  'inviter', 'invitee', 'date', 'time',
-  'location', 'address', 'phone',
-  'year', 'month', 'day',
-]
+import { TEMPLATE_DATA_KEYS } from '../constants/config-data'
 
 defineProps<{
   selectedElement: AnyCanvasElement | null

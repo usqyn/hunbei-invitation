@@ -209,8 +209,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PageMode, AnyCanvasElement, TextElement, CanvasBackground } from '../types/canvas'
-import { CATEGORIES } from '../types/template'
+import type { PageMode, AnyCanvasElement, CanvasBackground } from '../types/canvas'
 import { API_BASE } from '../composables/useApi'
 import { ALL_MATERIALS, getMaterialCategories, getMaterialsByCategory } from '../constants/materials'
 import { ALL_PRESETS, PRESET_CATEGORIES, getPresetsByCategory } from '../constants/presets'
@@ -218,26 +217,8 @@ import type { TemplatePreset } from '../constants/presets'
 import { GRADIENT_CATEGORIES, getGradientsByCategory } from '../constants/gradients'
 import { COLOR_SCHEMES } from '../constants/colorSchemes'
 import type { ColorScheme } from '../constants/colorSchemes'
-
-// 文字样式预设接口
-interface TextPreset {
-  name: string
-  description: string
-  sample: string
-  previewStyle: Record<string, string>
-  config: Partial<TextElement>
-}
-
-// 快捷字段接口
-interface SmartFieldConfig {
-  key: string
-  label: string
-  icon: string
-  placeholder: string
-  fontSize: number
-  fontWeight: 'normal' | 'bold'
-  color: string
-}
+import { sanitizeSvg, getCategoryName, formatTime } from '../utils/common'
+import type { TextPreset, SmartFieldConfig } from '../constants/config-data'
 
 const props = defineProps<{
   leftTab: 'material' | 'layers' | 'templates' | 'pages'
@@ -315,18 +296,6 @@ function onBgImageFile(e: Event) {
   input.value = ''
 }
 
-function sanitizeSvg(svg: string): string {
-  return svg.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '').replace(/on\w+="[^"]*"/gi, '')
-}
-
-function getCategoryName(catId: string): string {
-  return CATEGORIES.find(c => c.id === catId)?.name || catId
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
-}
 </script>
 
 <style scoped>

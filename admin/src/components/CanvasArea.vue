@@ -152,7 +152,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { PageMode, CanvasSize, AnyCanvasElement } from '../types/canvas'
+import type { PageMode, CanvasSize, AnyCanvasElement, FlipPage } from '../types/canvas'
 
 const props = defineProps<{
   pageMode: PageMode
@@ -163,7 +163,7 @@ const props = defineProps<{
   showPreview: boolean
   previewImage: string
   currentFlipPageIndex: number
-  flipPages: any[]
+  flipPages: FlipPage[]
 }>()
 
 const emit = defineEmits<{

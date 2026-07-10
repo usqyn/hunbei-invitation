@@ -111,6 +111,15 @@ export interface HistorySnapshot {
 
 export type PageMode = 'single' | 'long' | 'landscape' | 'flip'
 
+// 翻页模式单页定义
+export interface FlipPage {
+  id: string
+  name: string
+  pageType: string
+  background: CanvasBackground
+  elements: AnyCanvasElement[]
+}
+
 // 预设尺寸（常见微信小程序尺寸）
 export const CANVAS_PRESETS: Array<{ label: string; width: number; height: number }> = [
   { label: '320 × 480', width: 320, height: 480 },

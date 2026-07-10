@@ -91,6 +91,7 @@
 import { ref, onUnmounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { request } from '@/utils/request'
+import { useGoBack } from '@/composables/useGoBack'
 
 const userStore = useUserStore()
 

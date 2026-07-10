@@ -47,7 +47,7 @@
               <image
                 v-if="el.type === 'image'"
                 class="flip-image"
-                :src="el.text || 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=wedding%20photo&image_size=square'"
+                :src="el.text || '/static/images/templates/wedding-1.svg'"
                 mode="aspectFit"
               />
               <text
@@ -161,20 +161,50 @@ function onTextInput(e: any) {
   }
 }
 
+function applySelectedImage(tempFilePath: string) {
+  if (selectedElement.value) {
+    selectedElement.value.text = tempFilePath
+    // 持久化图片修改到 store
+    if (selectedElement.value.dataKey) {
+      templateStore.updateField(selectedElement.value.dataKey as any, tempFilePath)
+    }
+  }
+}
+
 function onImageUpload() {
+  // 微信小程序端
+  // #ifdef MP-WEIXIN
+  uni.chooseMedia({
+    count: 1,
+    mediaType: ['image'],
+    sourceType: ['album', 'camera'],
+    success: (res: any) => {
+      if (res.tempFiles && res.tempFiles.length > 0) {
+        applySelectedImage(res.tempFiles[0].tempFilePath)
+      }
+    },
+    fail: () => {
+      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    },
+  })
+  // #endif
+
+  // H5 / App 端
+  // #ifndef MP-WEIXIN
   uni.chooseImage({
     count: 1,
-    success: (res) => {
-      const tempFilePath = res.tempFilePaths[0]
-      if (selectedElement.value) {
-        selectedElement.value.text = tempFilePath
-        // 持久化图片修改到 store
-        if (selectedElement.value.dataKey) {
-          templateStore.updateField(selectedElement.value.dataKey as any, tempFilePath)
-        }
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res: any) => {
+      if (res.tempFilePaths && res.tempFilePaths.length > 0) {
+        applySelectedImage(res.tempFilePaths[0])
       }
-    }
+    },
+    fail: () => {
+      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    },
   })
+  // #endif
 }
 
 function getPageBgStyle(page: any): Record<string, string> {

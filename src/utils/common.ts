@@ -63,6 +63,3 @@ export function safeJsonParse<T = any>(str: string, fallback: T): T {
 export function uniqueId(prefix: string = ''): string {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
-
-// RTL 字符检测正则
-export const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/

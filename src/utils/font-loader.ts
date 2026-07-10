@@ -1,4 +1,5 @@
 import { API_BASE } from '@/config'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
 
 // ============ 字体加载 ============
 const SYSTEM_FONTS = ['sans-serif', 'serif', 'monospace', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', 'Georgia', 'KaiTi', 'KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq']
@@ -73,7 +74,6 @@ function loadCustomFont(fontFamily: string) {
 
 export function loadFontsForElements(elements: Array<{ type: string; style?: { font?: string } }>) {
   const fontSet = new Set<string>()
-  const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 
   elements.forEach(el => {
     if (el.type === 'text') {
@@ -81,7 +81,7 @@ export function loadFontsForElements(elements: Array<{ type: string; style?: { f
         const primary = el.style.font.split(',')[0].trim().replace(/['"]/g, '')
         if (primary) fontSet.add(primary)
       }
-      if (el.text && rtlChars.test(el.text)) {
+      if (el.text && RTL_CHAR_REGEX.test(el.text)) {
         fontSet.add('KazakhSoftAsilya')
         fontSet.add('KazakhSoftAsilyaQaniq')
       }

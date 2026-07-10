@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive, ref, computed } from 'vue'
-import { DEFAULT_TEMPLATE_DATA, DEFAULT_BASIC_INFO, DEFAULT_SETTINGS } from '@/constants/editor'
+import { DEFAULT_TEMPLATE_DATA, DEFAULT_BASIC_INFO, DEFAULT_SETTINGS, DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '@/constants/editor'
 import type { TemplateData, BasicInfo, TemplateSettings, Template } from '@/types'
 import { request } from '@/utils/request'
 import { useEditorStore } from './editor'
@@ -91,6 +91,8 @@ export const useTemplateStore = defineStore('template', () => {
     Object.assign(basicInfo, { ...DEFAULT_BASIC_INFO })
     Object.assign(settings, { ...DEFAULT_SETTINGS })
     selectedMusicId.value = null
+    // 重置画布尺寸与方向（setCanvasSize 会同步到 editorStore 并根据宽高推导 orientation）
+    setCanvasSize({ width: DEFAULT_CANVAS_WIDTH, height: DEFAULT_CANVAS_HEIGHT })
   }
 
   restore()

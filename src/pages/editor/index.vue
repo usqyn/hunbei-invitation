@@ -301,10 +301,6 @@ const editProgress = ref(0)
 const hasShownProgressPopup = ref(false)
 const editStartTime = ref(Date.now())
 
-const templateName = computed(() => {
-  return templateStore.templateData.coverTitle || '请柬'
-})
-
 const basicInfo = computed(() => templateStore.basicInfo)
 
 function resolveText(text: string): string {

@@ -252,7 +252,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { api, API_BASE, initApi } from '../composables/useApi'
 import { CATEGORIES } from '../types/template'
 
@@ -593,6 +593,12 @@ function onDragEnd() {
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragEnd)
 }
+
+// 组件卸载时清理拖拽监听器，避免拖拽过程中卸载导致监听器残留
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', onDragMove)
+  window.removeEventListener('mouseup', onDragEnd)
+})
 
 // ============ 初始化 ============
 onMounted(async () => {

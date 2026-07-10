@@ -8,5 +8,6 @@ unpackage/
 .idea/
 *.err
 *.db
+server/data.json
 monetization-funnel/_shared/fonts/
 monetization-funnel/_shared/js/

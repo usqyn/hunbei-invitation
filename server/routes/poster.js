@@ -5,6 +5,9 @@ const { v4: uuidv4 } = require('uuid')
 const initSqlJs = require('sql.js')
 const jwt = require('jsonwebtoken')
 
+// 海报模板配置数据（从数据文件加载，避免在代码中内联大量静态配置）
+const POSTER_TEMPLATE_CONFIGS = require('../data/poster-templates.json')
+
 const router = express.Router()
 
 // ============ Poster Database (separate SQLite file) ============
@@ -46,6 +49,10 @@ async function initPosterDatabase() {
     poster_url TEXT DEFAULT '',
     created_at TEXT NOT NULL
   )`)
+
+  // 创建索引（提升按 user_id 查询作品、按分类查询模板的性能）
+  posterDb.run("CREATE INDEX IF NOT EXISTS idx_poster_works_user_id ON poster_works(user_id)")
+  posterDb.run("CREATE INDEX IF NOT EXISTS idx_poster_templates_category ON poster_templates(category_id, is_active)")
 
   savePosterDatabase()
 }
@@ -135,279 +142,7 @@ function requireWorkOwner(req, res, next) {
 
 // ============ Seed 25 poster templates ============
 function generateTemplateConfig(t) {
-  const configs = {
-    // Wedding
-    'tpl_wedding_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: 'WEDDING', x: 60, y: 120, width: 630, height: 80, fontSize: 52, color: '#ffffff', align: 'center', bold: true },
-        { id: 'name1', type: 'text', label: '新郎', defaultText: '新郎姓名', x: 120, y: 340, width: 220, height: 60, fontSize: 36, color: '#333333', align: 'center' },
-        { id: 'name2', type: 'text', label: '新娘', defaultText: '新娘姓名', x: 410, y: 340, width: 220, height: 60, fontSize: 36, color: '#333333', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年10月1日', x: 60, y: 500, width: 630, height: 50, fontSize: 28, color: '#666666', align: 'center' },
-        { id: 'photo', type: 'image', label: '新人照片', x: 200, y: 620, width: 350, height: 350, borderRadius: 16 },
-        { id: 'blessing', type: 'text', label: '祝福语', defaultText: '执子之手，与子偕老', x: 60, y: 1040, width: 630, height: 50, fontSize: 26, color: '#999999', align: 'center' },
-      ],
-    },
-    'tpl_wedding_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '囍', x: 60, y: 80, width: 630, height: 100, fontSize: 64, color: '#c0392b', align: 'center', bold: true },
-        { id: 'name1', type: 'text', label: '新郎', defaultText: '新郎', x: 60, y: 280, width: 630, height: 50, fontSize: 34, color: '#8b0000', align: 'center' },
-        { id: 'name2', type: 'text', label: '新娘', defaultText: '新娘', x: 60, y: 350, width: 630, height: 50, fontSize: 34, color: '#8b0000', align: 'center' },
-        { id: 'date', type: 'text', label: '婚期', defaultText: '二〇二六年 十月一日', x: 60, y: 480, width: 630, height: 50, fontSize: 26, color: '#666', align: 'center' },
-        { id: 'photo', type: 'image', label: '婚纱照', x: 150, y: 580, width: 450, height: 450, borderRadius: 12 },
-        { id: 'address', type: 'text', label: '地址', defaultText: 'XX酒店 宴会厅', x: 60, y: 1100, width: 630, height: 50, fontSize: 28, color: '#333', align: 'center' },
-      ],
-    },
-    'tpl_wedding_3': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: 'Forest Wedding', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#2d5a27', align: 'center', bold: true },
-        { id: 'names', type: 'text', label: '姓名', defaultText: 'Jack & Rose', x: 60, y: 260, width: 630, height: 60, fontSize: 38, color: '#3d7a37', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.10.01', x: 60, y: 380, width: 630, height: 45, fontSize: 26, color: '#5a8a4a', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 180, y: 500, width: 390, height: 390, borderRadius: 20 },
-        { id: 'quote', type: 'text', label: '引言', defaultText: '在这片森林里，许下永恒誓言', x: 60, y: 960, width: 630, height: 50, fontSize: 24, color: '#6a9a5a', align: 'center' },
-      ],
-    },
-    'tpl_wedding_4': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: 'SAVE THE DATE', x: 60, y: 140, width: 630, height: 60, fontSize: 40, color: '#333', align: 'center' },
-        { id: 'names', type: 'text', label: '姓名', defaultText: '张先生 & 李女士', x: 60, y: 280, width: 630, height: 55, fontSize: 36, color: '#222', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.10.01', x: 60, y: 400, width: 630, height: 45, fontSize: 30, color: '#666', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 100, y: 520, width: 550, height: 550, borderRadius: 8 },
-        { id: 'address', type: 'text', label: '地址', defaultText: 'XX酒店 · 宴会厅', x: 60, y: 1140, width: 630, height: 45, fontSize: 26, color: '#888', align: 'center' },
-      ],
-    },
-    'tpl_wedding_5': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: 'ROYAL WEDDING', x: 60, y: 100, width: 630, height: 70, fontSize: 44, color: '#d4af37', align: 'center', bold: true },
-        { id: 'names', type: 'text', label: '姓名', defaultText: 'William & Catherine', x: 60, y: 260, width: 630, height: 60, fontSize: 38, color: '#c5a028', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.10.01', x: 60, y: 390, width: 630, height: 45, fontSize: 28, color: '#b8941e', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 140, y: 500, width: 470, height: 470, borderRadius: 16 },
-        { id: 'venue', type: 'text', label: '地点', defaultText: 'THE GRAND BALLROOM', x: 60, y: 1040, width: 630, height: 45, fontSize: 26, color: '#a08020', align: 'center' },
-        { id: 'footer', type: 'text', label: '底部文字', defaultText: '诚邀您的光临', x: 60, y: 1120, width: 630, height: 40, fontSize: 24, color: '#999', align: 'center' },
-      ],
-    },
-    // Engagement
-    'tpl_engagement_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '我们订婚啦', x: 60, y: 120, width: 630, height: 70, fontSize: 46, color: '#e84a6e', align: 'center', bold: true },
-        { id: 'names', type: 'text', label: '姓名', defaultText: '小明 & 小红', x: 60, y: 280, width: 630, height: 55, fontSize: 36, color: '#d43d5e', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年8月8日', x: 60, y: 390, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 170, y: 500, width: 410, height: 410, borderRadius: 50 },
-        { id: 'message', type: 'text', label: '留言', defaultText: '从今天起，许你一生一世', x: 60, y: 980, width: 630, height: 50, fontSize: 24, color: '#aaa', align: 'center' },
-      ],
-    },
-    'tpl_engagement_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: 'ENGAGEMENT', x: 60, y: 100, width: 630, height: 65, fontSize: 42, color: '#f0a0b0', align: 'center', bold: true },
-        { id: 'names', type: 'text', label: '姓名', defaultText: 'Tom & Jerry', x: 60, y: 250, width: 630, height: 55, fontSize: 36, color: '#e090a0', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.08.08', x: 60, y: 370, width: 630, height: 45, fontSize: 26, color: '#999', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 150, y: 480, width: 450, height: 450, borderRadius: 16 },
-        { id: 'quote', type: 'text', label: '引言', defaultText: 'A journey of a thousand miles begins with a single step', x: 40, y: 1000, width: 670, height: 60, fontSize: 22, color: '#bbb', align: 'center' },
-      ],
-    },
-    // Baby
-    'tpl_baby_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '宝宝满月啦', x: 60, y: 100, width: 630, height: 70, fontSize: 46, color: '#ff9800', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '宝宝名字', defaultText: '小宝贝', x: 60, y: 260, width: 630, height: 55, fontSize: 38, color: '#f57c00', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年9月9日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '宝宝照片', x: 140, y: 480, width: 470, height: 470, borderRadius: 20 },
-        { id: 'message', type: 'text', label: '祝福', defaultText: '健康快乐成长', x: 60, y: 1020, width: 630, height: 45, fontSize: 26, color: '#aaa', align: 'center' },
-      ],
-    },
-    'tpl_baby_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '百日宴', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#e91e63', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '宝宝名字', defaultText: '小可爱', x: 60, y: 260, width: 630, height: 55, fontSize: 38, color: '#d81b60', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年10月10日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '宝宝照片', x: 130, y: 480, width: 490, height: 490, borderRadius: 24 },
-        { id: 'address', type: 'text', label: '地址', defaultText: 'XX酒店 3楼宴会厅', x: 60, y: 1040, width: 630, height: 45, fontSize: 26, color: '#888', align: 'center' },
-      ],
-    },
-    'tpl_baby_3': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '周岁快乐', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#ff5722', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '名字', defaultText: '小公主', x: 60, y: 260, width: 630, height: 55, fontSize: 38, color: '#e64a19', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年11月11日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 160, y: 480, width: 430, height: 430, borderRadius: 50 },
-        { id: 'message', type: 'text', label: '祝福', defaultText: '抓周快乐，健康成长', x: 60, y: 980, width: 630, height: 45, fontSize: 26, color: '#999', align: 'center' },
-      ],
-    },
-    // Birthday
-    'tpl_birthday_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: 'HAPPY BIRTHDAY', x: 60, y: 100, width: 630, height: 70, fontSize: 44, color: '#9c27b0', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '寿星', defaultText: '亲爱的', x: 60, y: 260, width: 630, height: 55, fontSize: 36, color: '#7b1fa2', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年7月15日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 150, y: 480, width: 450, height: 450, borderRadius: 16 },
-        { id: 'message', type: 'text', label: '祝福', defaultText: '愿你所有愿望都实现', x: 60, y: 1000, width: 630, height: 45, fontSize: 26, color: '#999', align: 'center' },
-      ],
-    },
-    'tpl_birthday_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '生日快乐', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#ff4081', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '寿星', defaultText: '我的好朋友', x: 60, y: 260, width: 630, height: 55, fontSize: 36, color: '#f50057', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.07.15', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 130, y: 480, width: 490, height: 490, borderRadius: 12 },
-        { id: 'quote', type: 'text', label: '引言', defaultText: '又长大一岁，愿你永远年轻', x: 60, y: 1040, width: 630, height: 45, fontSize: 24, color: '#aaa', align: 'center' },
-      ],
-    },
-    'tpl_birthday_3': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '成人礼', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#1a237e', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '名字', defaultText: '少年', x: 60, y: 260, width: 630, height: 55, fontSize: 38, color: '#283593', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.07.15', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 150, y: 480, width: 450, height: 450, borderRadius: 8 },
-        { id: 'message', type: 'text', label: '寄语', defaultText: '十八而志，青春万岁', x: 60, y: 1000, width: 630, height: 45, fontSize: 26, color: '#5c6bc0', align: 'center' },
-      ],
-    },
-    // House
-    'tpl_house_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '乔迁之喜', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#e65100', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '主人', defaultText: '王先生 敬邀', x: 60, y: 260, width: 630, height: 55, fontSize: 34, color: '#bf360c', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年9月9日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '新家照片', x: 140, y: 480, width: 470, height: 400, borderRadius: 12 },
-        { id: 'address', type: 'text', label: '地址', defaultText: 'XX小区 3栋 502室', x: 60, y: 940, width: 630, height: 45, fontSize: 28, color: '#555', align: 'center' },
-        { id: 'message', type: 'text', label: '邀请语', defaultText: '备薄酒一杯，恭候大驾光临', x: 60, y: 1020, width: 630, height: 45, fontSize: 26, color: '#888', align: 'center' },
-      ],
-    },
-    'tpl_house_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '新居入伙', x: 60, y: 100, width: 630, height: 70, fontSize: 46, color: '#d84315', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '主人', defaultText: '李女士 敬邀', x: 60, y: 260, width: 630, height: 55, fontSize: 34, color: '#bf360c', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年9月9日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '新家照片', x: 140, y: 480, width: 470, height: 400, borderRadius: 12 },
-        { id: 'address', type: 'text', label: '地址', defaultText: 'XX花园 8栋 1201室', x: 60, y: 940, width: 630, height: 45, fontSize: 28, color: '#555', align: 'center' },
-        { id: 'note', type: 'text', label: '备注', defaultText: '备有茶点，欢迎光临', x: 60, y: 1020, width: 630, height: 40, fontSize: 24, color: '#999', align: 'center' },
-      ],
-    },
-    // Parents
-    'tpl_parents_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '感恩父母', x: 60, y: 100, width: 630, height: 70, fontSize: 46, color: '#6d4c41', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '父母名字', defaultText: '父亲 · 母亲', x: 60, y: 260, width: 630, height: 55, fontSize: 36, color: '#5d4037', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年10月1日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 150, y: 480, width: 450, height: 450, borderRadius: 12 },
-        { id: 'message', type: 'text', label: '感恩语', defaultText: '养育之恩，永生难忘', x: 60, y: 1000, width: 630, height: 45, fontSize: 26, color: '#8d6e63', align: 'center' },
-      ],
-    },
-    'tpl_parents_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '寿宴请柬', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#b71c1c', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '寿星', defaultText: '父亲大人 七十大寿', x: 60, y: 260, width: 630, height: 55, fontSize: 34, color: '#c62828', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年10月1日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 160, y: 480, width: 430, height: 430, borderRadius: 12 },
-        { id: 'address', type: 'text', label: '地址', defaultText: 'XX酒楼 牡丹厅', x: 60, y: 980, width: 630, height: 45, fontSize: 28, color: '#555', align: 'center' },
-        { id: 'footer', type: 'text', label: '底部文字', defaultText: '敬请光临', x: 60, y: 1060, width: 630, height: 40, fontSize: 24, color: '#999', align: 'center' },
-      ],
-    },
-    // Study
-    'tpl_study_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '升学宴', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#1565c0', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '名字', defaultText: '同学', x: 60, y: 260, width: 630, height: 55, fontSize: 38, color: '#1976d2', align: 'center' },
-        { id: 'school', type: 'text', label: '学校', defaultText: 'XX大学 录取', x: 60, y: 340, width: 630, height: 45, fontSize: 30, color: '#42a5f5', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年8月18日', x: 60, y: 430, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 160, y: 540, width: 430, height: 400, borderRadius: 12 },
-        { id: 'message', type: 'text', label: '寄语', defaultText: '金榜题名，前程似锦', x: 60, y: 1000, width: 630, height: 45, fontSize: 26, color: '#1e88e5', align: 'center' },
-      ],
-    },
-    'tpl_study_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '谢师宴', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#00695c', align: 'center', bold: true },
-        { id: 'name', type: 'text', label: '名字', defaultText: 'XX班全体同学', x: 60, y: 260, width: 630, height: 55, fontSize: 34, color: '#00796b', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年8月18日', x: 60, y: 370, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 140, y: 480, width: 470, height: 400, borderRadius: 12 },
-        { id: 'message', type: 'text', label: '感谢语', defaultText: '师恩难忘，桃李芬芳', x: 60, y: 940, width: 630, height: 45, fontSize: 26, color: '#00897b', align: 'center' },
-        { id: 'address', type: 'text', label: '地址', defaultText: 'XX酒店 3楼宴会厅', x: 60, y: 1020, width: 630, height: 40, fontSize: 26, color: '#555', align: 'center' },
-      ],
-    },
-    // Poster
-    'tpl_poster_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '活动主题', x: 60, y: 100, width: 630, height: 80, fontSize: 52, color: '#ffffff', align: 'center', bold: true },
-        { id: 'subtitle', type: 'text', label: '副标题', defaultText: '精彩不容错过', x: 60, y: 220, width: 630, height: 50, fontSize: 30, color: '#e0e0e0', align: 'center' },
-        { id: 'date', type: 'text', label: '时间', defaultText: '2026年10月1日 14:00', x: 60, y: 340, width: 630, height: 45, fontSize: 28, color: '#ffffff', align: 'center' },
-        { id: 'photo', type: 'image', label: '主图', x: 100, y: 440, width: 550, height: 400, borderRadius: 16 },
-        { id: 'address', type: 'text', label: '地点', defaultText: 'XX会展中心', x: 60, y: 900, width: 630, height: 45, fontSize: 28, color: '#ffffff', align: 'center' },
-        { id: 'contact', type: 'text', label: '联系方式', defaultText: '联系电话: 138-0000-0000', x: 60, y: 980, width: 630, height: 40, fontSize: 24, color: '#ccc', align: 'center' },
-      ],
-    },
-    'tpl_poster_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '新品发布', x: 60, y: 80, width: 630, height: 75, fontSize: 50, color: '#fff', align: 'center', bold: true },
-        { id: 'subtitle', type: 'text', label: '副标题', defaultText: '颠覆你的想象', x: 60, y: 200, width: 630, height: 45, fontSize: 28, color: '#ddd', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.10.01', x: 60, y: 310, width: 630, height: 40, fontSize: 26, color: '#fff', align: 'center' },
-        { id: 'photo', type: 'image', label: '产品图', x: 80, y: 400, width: 590, height: 500, borderRadius: 12 },
-        { id: 'cta', type: 'text', label: '行动号召', defaultText: '立即预约', x: 150, y: 960, width: 450, height: 60, fontSize: 32, color: '#fff', align: 'center', bold: true },
-      ],
-    },
-    'tpl_poster_3': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '商务会议', x: 60, y: 100, width: 630, height: 70, fontSize: 44, color: '#1a237e', align: 'center', bold: true },
-        { id: 'subtitle', type: 'text', label: '副标题', defaultText: '2026年度战略峰会', x: 60, y: 210, width: 630, height: 45, fontSize: 28, color: '#283593', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026年10月1日', x: 60, y: 310, width: 630, height: 40, fontSize: 26, color: '#666', align: 'center' },
-        { id: 'photo', type: 'image', label: '图片', x: 120, y: 400, width: 510, height: 400, borderRadius: 8 },
-        { id: 'address', type: 'text', label: '地点', defaultText: 'XX国际会议中心', x: 60, y: 860, width: 630, height: 45, fontSize: 28, color: '#333', align: 'center' },
-        { id: 'speaker', type: 'text', label: '嘉宾', defaultText: '主讲嘉宾：待定', x: 60, y: 940, width: 630, height: 40, fontSize: 24, color: '#888', align: 'center' },
-        { id: 'contact', type: 'text', label: '联系方式', defaultText: '报名热线: 400-000-0000', x: 60, y: 1020, width: 630, height: 40, fontSize: 24, color: '#999', align: 'center' },
-      ],
-    },
-    // Creative
-    'tpl_creative_1': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '创意无限', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#fff', align: 'center', bold: true },
-        { id: 'subtitle', type: 'text', label: '副标题', defaultText: 'DESIGN YOUR LIFE', x: 60, y: 210, width: 630, height: 45, fontSize: 26, color: '#ddd', align: 'center' },
-        { id: 'photo', type: 'image', label: '主图', x: 80, y: 320, width: 590, height: 590, borderRadius: 16 },
-        { id: 'message', type: 'text', label: '描述', defaultText: '用设计改变世界', x: 60, y: 970, width: 630, height: 45, fontSize: 28, color: '#fff', align: 'center' },
-        { id: 'cta', type: 'text', label: '行动号召', defaultText: '了解更多', x: 200, y: 1060, width: 350, height: 50, fontSize: 28, color: '#ffd54f', align: 'center' },
-      ],
-    },
-    'tpl_creative_2': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '艺术海报', x: 60, y: 100, width: 630, height: 70, fontSize: 44, color: '#333', align: 'center', bold: true },
-        { id: 'artist', type: 'text', label: '艺术家', defaultText: 'Artist Name', x: 60, y: 210, width: 630, height: 45, fontSize: 28, color: '#888', align: 'center' },
-        { id: 'photo', type: 'image', label: '作品图', x: 80, y: 320, width: 590, height: 550, borderRadius: 8 },
-        { id: 'desc', type: 'text', label: '描述', defaultText: 'Art is not what you see, but what you make others see', x: 40, y: 930, width: 670, height: 60, fontSize: 22, color: '#666', align: 'center' },
-        { id: 'date', type: 'text', label: '日期', defaultText: '2026.10.01 - 2026.12.31', x: 60, y: 1040, width: 630, height: 40, fontSize: 24, color: '#aaa', align: 'center' },
-      ],
-    },
-    'tpl_creative_3': {
-      width: 750, height: 1334,
-      editableAreas: [
-        { id: 'title', type: 'text', label: '标题', defaultText: '个性定制', x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#fff', align: 'center', bold: true },
-        { id: 'subtitle', type: 'text', label: '副标题', defaultText: 'YOUR STYLE', x: 60, y: 210, width: 630, height: 45, fontSize: 26, color: '#ddd', align: 'center' },
-        { id: 'photo', type: 'image', label: '照片', x: 100, y: 320, width: 550, height: 550, borderRadius: 20 },
-        { id: 'name', type: 'text', label: '名字', defaultText: '你的名字', x: 60, y: 940, width: 630, height: 50, fontSize: 36, color: '#fff', align: 'center' },
-        { id: 'message', type: 'text', label: '个性签名', defaultText: '做最真实的自己', x: 60, y: 1030, width: 630, height: 45, fontSize: 24, color: '#ccc', align: 'center' },
-      ],
-    },
-  }
-  return configs[t.id] || {
+  return POSTER_TEMPLATE_CONFIGS[t.id] || {
     width: 750, height: 1334,
     editableAreas: [
       { id: 'title', type: 'text', label: '标题', defaultText: t.name, x: 60, y: 100, width: 630, height: 70, fontSize: 48, color: '#333', align: 'center', bold: true },
@@ -417,7 +152,6 @@ function generateTemplateConfig(t) {
     ],
   }
 }
-
 function seedPosterTemplates() {
   const check = posterDb.exec("SELECT COUNT(*) as c FROM poster_templates")
   if (check.length && check[0].values[0][0] > 0) return
@@ -602,10 +336,34 @@ router.get('/works', (req, res) => {
     if (!userId) {
       return res.status(401).json({ success: false, error: '请先登录' })
     }
-    const result = posterDb.exec(
-      "SELECT * FROM poster_works WHERE user_id = ? ORDER BY created_at DESC",
-      [userId]
-    )
+    const sql = "SELECT * FROM poster_works WHERE user_id = ? ORDER BY created_at DESC"
+    const params = [userId]
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    // 有分页参数时返回分页格式
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM poster_works WHERE user_id = ?"
+      const countResult = posterDb.exec(countSql, [userId])
+      const total = countResult.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = posterDb.exec(paginatedSql, paginatedParams)
+      const works = resultToArray(result)
+
+      return res.json({
+        success: true,
+        data: works,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    // 无分页参数时保持原有行为（返回全部）
+    const result = posterDb.exec(sql, params)
     const works = resultToArray(result)
     res.json({ success: true, data: works, total: works.length })
   } catch (e) {
