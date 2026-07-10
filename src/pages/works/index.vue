@@ -251,7 +251,7 @@ const onImageError = () => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--color-bg-page);
 }
 
 .not-login {

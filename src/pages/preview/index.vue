@@ -571,12 +571,14 @@ function getFlipPageBgStyle(page: any): Record<string, string> {
 
 function getFlipElementStyle(el: any): Record<string, string> {
   const cs = editorStore.canvasSize
+  const w = cs.width || 1
+  const h = cs.height || 1
   return {
     position: 'absolute',
-    left: (el.x / cs.width * 100) + '%',
-    top: (el.y / cs.height * 100) + '%',
-    width: (el.width / cs.width * 100) + '%',
-    height: (el.height / cs.height * 100) + '%',
+    left: (el.x / w * 100) + '%',
+    top: (el.y / h * 100) + '%',
+    width: (el.width / w * 100) + '%',
+    height: (el.height / h * 100) + '%',
     transform: `rotate(${el.rotation || 0}deg)`,
     opacity: el.opacity ?? 1,
     zIndex: el.zIndex || 1,
@@ -834,7 +836,7 @@ const onImageError = () => {
 }
 
 .flip-swiper :deep(.uni-swiper-dot-active),
-.flip-swiper :deep(.wx-swiper-dots-active) {
+.flip-swiper :deep(.wx-swiper-dot-active) {
   width: 36rpx;
   height: 12rpx;
   border-radius: 6rpx;
@@ -1222,7 +1224,7 @@ const onImageError = () => {
   font-weight: 700;
 }
 
-/* VIP 提示条：精致金色渐变 + 光泽扫过动画 */
+/* VIP 提示条：精致金色渐变 */
 .vip-bar {
   padding: 20rpx 32rpx;
   background: linear-gradient(135deg, #ffe5a0 0%, #ffd700 30%, #f5b800 70%, #e6a800 100%);
@@ -1234,30 +1236,25 @@ const onImageError = () => {
   position: relative;
   overflow: hidden;
   box-shadow: 0 6rpx 24rpx rgba(255, 183, 0, 0.28);
-  animation: vipGradient 3s ease-in-out infinite;
 }
 
-@keyframes vipGradient {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-/* 光泽扫过动画 */
+/* 光泽扫过动画 - 使用 transform 代替 left 以优化性能 */
 .vip-bar::before {
   content: '';
   position: absolute;
   top: 0;
-  left: -100%;
+  left: 0;
   width: 60%;
   height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-170%);
   animation: vipGloss 3.5s ease-in-out infinite;
   pointer-events: none;
 }
 
 @keyframes vipGloss {
-  0% { left: -60%; }
-  60%, 100% { left: 100%; }
+  0% { transform: translateX(-170%); }
+  60%, 100% { transform: translateX(170%); }
 }
 
 .vip-bar .vip-icon {

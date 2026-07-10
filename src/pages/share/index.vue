@@ -320,7 +320,7 @@ function goToMall() {
 <style lang="scss" scoped>
 .share-page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--color-bg-page);
   display: flex;
   flex-direction: column;
 }

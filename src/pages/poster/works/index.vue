@@ -217,6 +217,10 @@ async function onDeleteWork(work: PosterWork) {
 function onShareWork() {
   if (!previewWork.value) return
   // #ifdef MP-WEIXIN
+  // 微信小程序不支持 uni.share，使用页面级分享
+  showToast('点击右上角「···」分享给好友')
+  // #endif
+  // #ifndef MP-WEIXIN
   uni.share({
     provider: 'weixin',
     scene: 'WXSceneSession',
@@ -225,9 +229,6 @@ function onShareWork() {
     success: () => showToast('分享成功'),
     fail: () => showToast('分享取消'),
   })
-  // #endif
-  // #ifndef MP-WEIXIN
-  showToast('请在微信小程序中使用分享功能')
   // #endif
 }
 

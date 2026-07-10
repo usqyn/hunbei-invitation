@@ -97,7 +97,7 @@ onMounted(() => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--color-bg-page);
   padding-bottom: constant(safe-area-inset-bottom);
   padding-bottom: env(safe-area-inset-bottom);
 }

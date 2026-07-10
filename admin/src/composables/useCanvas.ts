@@ -1117,7 +1117,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.renderAll()
   }
 
-  function loadDraft(draft: CanvasDraft, opts?: { resetHistory?: boolean }) {
+  function loadDraft(draft: CanvasDraft, loadOpts?: { resetHistory?: boolean }) {
     const canvas = fabricCanvas.value
     if (!canvas) return
 
@@ -1135,7 +1135,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.setDimensions({ width: draft.canvasSize.width, height: draft.canvasSize.height })
     background.value = { ...draft.background }
     applyBackground(draft.background)
-    opts.onBackgroundChange?.(draft.background)
+    opts?.onBackgroundChange?.(draft.background)
 
     elements.value = []
     selectedId.value = null
@@ -1204,7 +1204,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.renderAll()
 
     // 默认清空历史栈并推入初始记录；undo/redo 调用时传入 resetHistory:false 以保留历史
-    if (opts?.resetHistory !== false) {
+    if (loadOpts?.resetHistory !== false) {
       history.value = []
       historyIdx.value = -1
       suppressHistory = false

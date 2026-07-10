@@ -327,19 +327,13 @@ function handlePaidCardClick(card: any) {
   uni.showModal({
     title: card.name,
     content: `${card.subtitle || ''}\n价格：${card.price}元`,
-    confirmText: '立即使用',
+    confirmText: '去开通VIP',
     cancelText: '关闭',
     success: (res) => {
       if (res.confirm) {
-        if (!isPurchased.value) {
-          uni.navigateTo({
-            url: `/pages/template/index?filter=paid`,
-          })
-        } else {
-          uni.navigateTo({
-            url: `/pages/editor/index?templateId=${card.id}`,
-          })
-        }
+        uni.navigateTo({
+          url: '/pages/vip/index',
+        })
       }
     },
   })

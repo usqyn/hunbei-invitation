@@ -158,12 +158,25 @@ function onSelectCategory(catId: string) {
 }
 
 function onSelectTemplate(template: PosterTemplate) {
-  if (!template.is_free && template.is_vip) {
-    if (!userStore.isVip()) {
+  if (!template.is_free) {
+    if (template.is_vip && !userStore.isVip()) {
       uni.showModal({
         title: 'VIP 专属',
         content: '该模板为 VIP 专属模板，开通 VIP 即可使用',
         confirmText: '去开通',
+        success: (res) => {
+          if (res.confirm) {
+            uni.navigateTo({ url: '/pages/vip/index' })
+          }
+        },
+      })
+      return
+    }
+    if (!template.is_vip) {
+      uni.showModal({
+        title: '付费模板',
+        content: '该模板需要付费后才能使用',
+        confirmText: '去了解',
         success: (res) => {
           if (res.confirm) {
             uni.navigateTo({ url: '/pages/vip/index' })

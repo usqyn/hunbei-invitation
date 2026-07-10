@@ -274,11 +274,11 @@ async function loadTemplates() {
     loadError.value = true
   }
 
-  // 合并 API 模板 + 本地模板（不重复）
+  // 合并 API 模板 + 本地模板（不重复），深拷贝避免污染静态导入数据
   const existingIds = new Set(allTemplates.value.map(t => t.id))
   TEMPLATE_LIST.forEach(t => {
     if (!existingIds.has(t.id)) {
-      allTemplates.value.push(t)
+      allTemplates.value.push({ ...t })
       existingIds.add(t.id)
     }
   })
