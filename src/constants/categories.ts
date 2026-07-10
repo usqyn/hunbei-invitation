@@ -16,14 +16,14 @@ export interface PosterCategory {
 
 export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 1, name: '新婚', image: '/static/images/categories/wedding.jpg', bgColor: '#ffe4e8', categoryId: 'wedding' },
-  { id: 2, name: '求婚', image: '/static/images/categories/proposal.jpg', bgColor: '#f0e6ff', categoryId: 'proposal' },
-  { id: 3, name: '商量茶', image: '/static/images/categories/consultation-tea.jpg', bgColor: '#e6f7ff', categoryId: 'consultation-tea' },
-  { id: 4, name: '割礼', image: '/static/images/categories/ceremony.jpg', bgColor: '#e8f5e9', categoryId: 'festival' },
-  { id: 5, name: '耳环礼', image: '/static/images/categories/earring.jpg', bgColor: '#fce4ec', categoryId: 'business' },
+  { id: 2, name: '求婚', image: '/static/images/categories/proposal.jpg', bgColor: '#f0e6ff', categoryId: 'engagement' },
+  { id: 3, name: '商量茶', image: '/static/images/categories/consultation-tea.jpg', bgColor: '#e6f7ff', categoryId: 'creative' },
+  { id: 4, name: '割礼', image: '/static/images/categories/ceremony.jpg', bgColor: '#e8f5e9', categoryId: 'birthday' },
+  { id: 5, name: '耳环礼', image: '/static/images/categories/earring.jpg', bgColor: '#fce4ec', categoryId: 'poster' },
   { id: 6, name: '周岁宴', image: '/static/images/categories/baby.jpg', bgColor: '#ffeaa7', categoryId: 'baby' },
-  { id: 7, name: '升学宴', image: '/static/images/categories/graduation.jpg', bgColor: '#fff3e0', categoryId: 'graduation' },
-  { id: 8, name: '节日请柬', image: '/static/images/categories/festival-invitation.jpg', bgColor: '#fef3e2', categoryId: 'festival-invitation' },
-  { id: 9, name: '乔迁', image: '/static/images/categories/housewarming.jpg', bgColor: '#fff7e6', categoryId: 'housewarming' },
+  { id: 7, name: '升学宴', image: '/static/images/categories/graduation.jpg', bgColor: '#fff3e0', categoryId: 'study' },
+  { id: 8, name: '节日请柬', image: '/static/images/categories/festival-invitation.jpg', bgColor: '#fef3e2', categoryId: 'creative' },
+  { id: 9, name: '乔迁', image: '/static/images/categories/housewarming.jpg', bgColor: '#fff7e6', categoryId: 'house' },
 ]
 
 // 海报分类 - 与后端 poster_templates.category_id 一致

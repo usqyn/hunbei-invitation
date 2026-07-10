@@ -67,9 +67,9 @@
               <text class="action-icon">👁</text>
               <text class="action-label">预览</text>
             </view>
-            <view class="work-action-btn danger" @click="onDeleteWork(work)">
+            <view class="work-action-btn danger" :class="{ 'work-action-btn--disabled': deleting }" @click="onDeleteWork(work)">
               <text class="action-icon">🗑</text>
-              <text class="action-label">删除</text>
+              <text class="action-label">{{ deleting ? '删除中' : '删除' }}</text>
             </view>
           </view>
         </view>
@@ -101,7 +101,7 @@
         </scroll-view>
         <view class="preview-footer">
           <button class="preview-btn secondary" @click="onShareWork">分享好友</button>
-          <button class="preview-btn primary" @click="onEditWork(previewWork!)">编辑</button>
+          <button class="preview-btn primary" @click="onEditWork(previewWork)">编辑</button>
         </view>
       </view>
     </view>
@@ -116,16 +116,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getPosterWorks, deletePosterWork } from '@/api/index'
-import { API_BASE } from '@/config'
-
-interface PosterWork {
-  id: string
-  template_id: string
-  template_name?: string
-  cover_url?: string
-  content?: any
-  created_at: string
-}
+import { resolveUrl } from '@/utils/url'
+import type { PosterWork } from '@/types/poster'
 
 const works = ref<PosterWork[]>([])
 const loading = ref(true)
@@ -134,6 +126,7 @@ const previewVisible = ref(false)
 const previewWork = ref<PosterWork | null>(null)
 const toastVisible = ref(false)
 const toastMsg = ref('')
+const deleting = ref(false)
 let toastTimer: any = null
 
 function showToast(msg: string) {
@@ -141,12 +134,6 @@ function showToast(msg: string) {
   toastVisible.value = true
   if (toastTimer) clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toastVisible.value = false }, 2000)
-}
-
-function resolveUrl(url: string): string {
-  if (!url) return ''
-  if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url
-  return API_BASE + url
 }
 
 function formatDate(iso: string): string {
@@ -166,8 +153,6 @@ async function loadWorks() {
     const data = await getPosterWorks()
     if (data && Array.isArray(data)) {
       works.value = data
-    } else if (data && (data as any).data) {
-      works.value = (data as any).data
     } else {
       works.value = []
     }
@@ -179,8 +164,8 @@ async function loadWorks() {
   }
 }
 
-function onRefresh() {
-  loadWorks()
+async function onRefresh() {
+  await loadWorks()
   showToast('已刷新')
 }
 
@@ -191,7 +176,8 @@ function onPullRefresh() {
   })
 }
 
-function onEditWork(work: PosterWork) {
+function onEditWork(work: PosterWork | null) {
+  if (!work) return
   uni.navigateTo({
     url: `/pages/poster/editor/index?id=${work.template_id}&workId=${work.id}`,
   })
@@ -215,6 +201,7 @@ async function onDeleteWork(work: PosterWork) {
   })
   if (!res) return
 
+  deleting.value = true
   try {
     await deletePosterWork(work.id)
     works.value = works.value.filter(w => w.id !== work.id)
@@ -222,6 +209,8 @@ async function onDeleteWork(work: PosterWork) {
   } catch (e) {
     console.warn('删除失败:', e)
     showToast('删除失败')
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -474,6 +463,11 @@ onMounted(() => {
 }
 
 .work-action-btn.danger .action-label { color: #e84a6e; }
+
+.work-action-btn--disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
 
 /* 底部 */
 .page-bottom {

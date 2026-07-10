@@ -1,3 +1,4 @@
+/** 可编辑区域 — 模板定义时的基础属性 */
 export interface PosterEditableArea {
   id: string
   type: 'text' | 'image'
@@ -10,10 +11,13 @@ export interface PosterEditableArea {
   defaultImage?: string
   fontSize?: number
   color?: string
-  align?: string
+  align?: 'left' | 'center' | 'right'
   bold?: boolean
   borderRadius?: number
-  // runtime state
+}
+
+/** 可编辑区域 — 运行时编辑状态（继承基础属性） */
+export interface PosterEditableAreaRuntime extends PosterEditableArea {
   _x?: number
   _y?: number
   _w?: number
@@ -28,7 +32,6 @@ export interface PosterEditableArea {
   _scale?: number
   _fontFamily?: string
 }
-
 export interface PosterTemplate {
   id: string
   name: string
@@ -40,10 +43,13 @@ export interface PosterTemplate {
     height: number
     editableAreas: PosterEditableArea[]
   }
-  is_free: number
-  is_vip: number
+  is_free: boolean
+  is_vip: boolean
   like_count: number
+  use_count?: number
+  is_active?: boolean
   category_name?: string
+  created_at?: string
 }
 
 export interface PosterWork {
@@ -54,7 +60,14 @@ export interface PosterWork {
   cover_url?: string
   poster_url?: string
   content: {
-    editableAreas: PosterEditableArea[]
+    editableAreas: PosterEditableAreaRuntime[]
   }
   created_at: string
+  updated_at?: string
+}
+
+export interface StickerItem {
+  id: string
+  name: string
+  url: string
 }

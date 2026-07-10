@@ -253,8 +253,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import axios from 'axios'
-import { API_BASE, initApi } from '../composables/useApi'
+import { api, API_BASE, initApi } from '../composables/useApi'
 import { CATEGORIES } from '../types/template'
 
 // ============ 类型定义 ============
@@ -363,7 +362,7 @@ function areaStyle(area: EditableArea): Record<string, string> {
 async function fetchTemplates() {
   loading.value = true
   try {
-    const res = await axios.get(`${API_BASE}/api/poster/templates`, {
+    const res = await api.get('/api/poster/templates', {
       params: { limit: 100 },
     })
     if (res.data.success !== false) {
@@ -379,7 +378,7 @@ async function fetchTemplates() {
 
 async function fetchStats() {
   try {
-    const res = await axios.get(`${API_BASE}/api/poster/stats`)
+    const res = await api.get('/api/poster/stats')
     if (res.data.success !== false && res.data.data) {
       stats.totalTemplates = res.data.data.totalTemplates ?? templates.value.length
       stats.categoryCount = res.data.data.categoryCount ?? Object.keys(res.data.data.byCategory || {}).length
@@ -401,7 +400,17 @@ function computeLocalStats() {
 }
 
 function normalizeTemplate(raw: any): PosterTemplateRaw {
-  const config = typeof raw.config === 'string' ? JSON.parse(raw.config || '{}') : (raw.config || {})
+  let config: any = {}
+  if (typeof raw.config === 'string') {
+    try {
+      config = JSON.parse(raw.config || '{}')
+    } catch {
+      console.warn('Failed to parse template config:', raw.config)
+      config = {}
+    }
+  } else {
+    config = raw.config || {}
+  }
   const areas = config.editableAreas || []
   return {
     id: raw.id || raw._id,
@@ -475,9 +484,9 @@ async function saveTemplate() {
 
     let res: any
     if (editingId.value) {
-      res = await axios.put(`${API_BASE}/api/poster/templates/${editingId.value}`, payload)
+      res = await api.put(`/api/poster/templates/${editingId.value}`, payload)
     } else {
-      res = await axios.post(`${API_BASE}/api/poster/templates`, payload)
+      res = await api.post('/api/poster/templates', payload)
     }
     if (res.data && res.data.success === false) {
       throw new Error(res.data.error || '保存失败')
@@ -495,7 +504,7 @@ async function saveTemplate() {
 async function onDeleteTemplate(tpl: PosterTemplateRaw) {
   if (!confirm(`确定删除模板「${tpl.name}」？此操作不可撤销。`)) return
   try {
-    await axios.delete(`${API_BASE}/api/poster/templates/${tpl.id}`)
+    await api.delete(`/api/poster/templates/${tpl.id}`)
     templates.value = templates.value.filter(t => t.id !== tpl.id)
     computeLocalStats()
     await fetchStats()

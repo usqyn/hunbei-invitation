@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { request } from '@/utils/request'
-import { API_BASE } from '@/config'
-import type { PosterTemplate, PosterEditableArea } from '@/types/poster'
+import { resolveUrl } from '@/utils/url'
+import type { PosterTemplate, PosterEditableAreaRuntime, StickerItem } from '@/types/poster'
 
 const MAX_HISTORY = 30
 
@@ -19,19 +19,13 @@ export const COLOR_OPTIONS = [
   '#27ae60', '#1abc9c', '#3498db', '#9b59b6', '#c0392b', '#7f8c8d',
 ]
 
-interface StickerItem {
-  id: string
-  name: string
-  url: string
-}
-
 export const usePosterStore = defineStore('poster', () => {
   // ---- state ----
   const currentTemplate = ref<PosterTemplate | null>(null)
-  const editableAreas = reactive<PosterEditableArea[]>([])
+  const editableAreas = ref<PosterEditableAreaRuntime[]>([])
   const selectedAreaId = ref<string | null>(null)
 
-  const history = ref<PosterEditableArea[][]>([])
+  const history = ref<PosterEditableAreaRuntime[][]>([])
   const historyIndex = ref(-1)
 
   const scale = ref(1)
@@ -55,19 +49,12 @@ export const usePosterStore = defineStore('poster', () => {
   const colorOptions = COLOR_OPTIONS
 
   // ---- helpers ----
-  function resolveUrl(url: string): string {
-    if (!url) return url
-    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('wxfile://')) return url
-    if (url.startsWith('/uploads/')) return API_BASE + url
-    return url
+  function cloneAreas(): PosterEditableAreaRuntime[] {
+    return editableAreas.value.map(a => ({ ...a }))
   }
 
-  function cloneAreas(): PosterEditableArea[] {
-    return editableAreas.map(a => ({ ...a }))
-  }
-
-  function getArea(id: string): PosterEditableArea | undefined {
-    return editableAreas.find(a => a.id === id)
+  function getArea(id: string): PosterEditableAreaRuntime | undefined {
+    return editableAreas.value.find(a => a.id === id)
   }
 
   // ---- actions ----
@@ -93,22 +80,22 @@ export const usePosterStore = defineStore('poster', () => {
       width: template.config.width,
       height: template.config.height,
     }
-    editableAreas.splice(0, editableAreas.length)
+    editableAreas.value.splice(0, editableAreas.value.length)
     if (template.config.editableAreas && Array.isArray(template.config.editableAreas)) {
       template.config.editableAreas.forEach(area => {
-        editableAreas.push({
+        editableAreas.value.push({
           ...area,
-          label: (area as any).label || '',
-          defaultImage: (area as any).defaultImage ? resolveUrl((area as any).defaultImage) : undefined,
+          label: area.label || '',
+          defaultImage: area.defaultImage ? resolveUrl(area.defaultImage) : undefined,
           _x: area.x,
           _y: area.y,
           _w: area.width,
           _h: area.height,
           _text: area.type === 'text' ? (area.defaultText || '') : undefined,
-          _src: area.type === 'image' ? ((area as any).defaultImage ? resolveUrl((area as any).defaultImage) : '') : undefined,
+          _src: area.type === 'image' ? (area.defaultImage ? resolveUrl(area.defaultImage) : '') : undefined,
           _fontSize: area.fontSize || 28,
           _color: area.color || '#333333',
-          _align: (area as any).align || 'center',
+          _align: area.align || 'center',
           _bold: area.bold || false,
           _rotate: 0,
           _scale: 1,
@@ -122,10 +109,10 @@ export const usePosterStore = defineStore('poster', () => {
   }
 
   /** Restore editable areas from saved work content */
-  function restoreFromWork(areas: any[]) {
-    editableAreas.splice(0, editableAreas.length)
+  function restoreFromWork(areas: PosterEditableAreaRuntime[]) {
+    editableAreas.value.splice(0, editableAreas.value.length)
     areas.forEach(a => {
-      editableAreas.push({
+      editableAreas.value.push({
         id: a.id,
         type: a.type,
         label: a.label || '',
@@ -137,7 +124,7 @@ export const usePosterStore = defineStore('poster', () => {
         defaultImage: a.defaultImage,
         fontSize: a._fontSize,
         color: a._color,
-        align: a._align,
+        align: a._align as PosterEditableAreaRuntime['align'],
         bold: a._bold,
         borderRadius: a.borderRadius,
         _x: a._x,
@@ -178,10 +165,12 @@ export const usePosterStore = defineStore('poster', () => {
     }
   }
 
-  function updateStyle(id: string, field: string, value: any) {
+  type StyleField = 'fontSize' | 'color' | 'align' | 'bold' | 'rotate' | 'scale' | 'fontFamily' | 'x' | 'y' | 'w' | 'h'
+
+  function updateStyle(id: string, field: StyleField, value: string | number | boolean) {
     const area = getArea(id)
     if (!area) return
-    const map: Record<string, keyof PosterEditableArea> = {
+    const map: Record<StyleField, keyof PosterEditableAreaRuntime> = {
       fontSize: '_fontSize',
       color: '_color',
       align: '_align',
@@ -194,8 +183,8 @@ export const usePosterStore = defineStore('poster', () => {
       w: '_w',
       h: '_h',
     }
-    const key = map[field] || field
-    ;(area as any)[key] = value
+    const key = map[field]
+    ;(area as unknown as Record<string, unknown>)[key] = value
   }
 
   function pushHistory() {
@@ -203,10 +192,10 @@ export const usePosterStore = defineStore('poster', () => {
       history.value = history.value.slice(0, historyIndex.value + 1)
     }
     history.value.push(cloneAreas())
+    historyIndex.value++
     if (history.value.length > MAX_HISTORY) {
       history.value.shift()
-    } else {
-      historyIndex.value++
+      historyIndex.value--
     }
   }
 
@@ -225,8 +214,8 @@ export const usePosterStore = defineStore('poster', () => {
   function restoreFromHistory() {
     const snapshot = history.value[historyIndex.value]
     if (!snapshot) return
-    editableAreas.splice(0, editableAreas.length)
-    snapshot.forEach(a => editableAreas.push({ ...a }))
+    editableAreas.value.splice(0, editableAreas.value.length)
+    snapshot.forEach(a => editableAreas.value.push({ ...a }))
   }
 
   function canUndo() {
@@ -245,10 +234,10 @@ export const usePosterStore = defineStore('poster', () => {
     area._w = area.width
     area._h = area.height
     area._text = area.defaultText || ''
-    area._src = (area as any).defaultImage ? resolveUrl((area as any).defaultImage) : ''
+    area._src = area.defaultImage ? resolveUrl(area.defaultImage) : ''
     area._fontSize = area.fontSize || 28
     area._color = area.color || '#333333'
-    area._align = (area as any).align || 'center'
+    area._align = area.align || 'center'
     area._bold = area.bold || false
     area._rotate = 0
     area._scale = 1
@@ -270,7 +259,7 @@ export const usePosterStore = defineStore('poster', () => {
     await drawImageToCanvas(canvas, ctx, bgUrl, 0, 0, cw, ch)
 
     // editable areas
-    for (const area of editableAreas) {
+    for (const area of editableAreas.value) {
       const ax = area._x ?? area.x
       const ay = area._y ?? area.y
       const aw = (area._w ?? area.width) * (area._scale ?? 1)
@@ -320,7 +309,7 @@ export const usePosterStore = defineStore('poster', () => {
         canvas,
         success: (res: any) => resolve(res.tempFilePath),
         fail: () => resolve(''),
-      })
+      } as any)
       // #endif
       // #ifndef MP-WEIXIN
       try {
@@ -408,10 +397,10 @@ export const usePosterStore = defineStore('poster', () => {
         template_name: currentTemplate.value.name,
         cover_url: currentTemplate.value.cover_url,
         content: {
-          editableAreas: editableAreas.map(a => ({
+          editableAreas: editableAreas.value.map(a => ({
             id: a.id,
             type: a.type,
-            label: (a as any).label || '',
+            label: a.label || '',
             _x: a._x,
             _y: a._y,
             _w: a._w,
@@ -473,11 +462,10 @@ export const usePosterStore = defineStore('poster', () => {
       console.warn('loadStickers failed:', e)
     }
   }
-
   function insertSticker(src: string) {
     const id = `sticker_${Date.now()}`
     const stickerSize = canvasSize.value.width * 0.2
-    const newArea: PosterEditableArea = {
+    const newArea: PosterEditableAreaRuntime = {
       id,
       type: 'image',
       label: '贴纸',
@@ -495,7 +483,7 @@ export const usePosterStore = defineStore('poster', () => {
       _rotate: 0,
       _scale: 1,
     }
-    editableAreas.push(newArea)
+    editableAreas.value.push(newArea)
     selectedAreaId.value = id
     pushHistory()
   }
@@ -524,25 +512,25 @@ export const usePosterStore = defineStore('poster', () => {
 
   // ---- layer management ----
   function moveLayer(idx: number, direction: string) {
-    if (idx < 0 || idx >= editableAreas.length) return
+    if (idx < 0 || idx >= editableAreas.value.length) return
     let newIdx = idx
     switch (direction) {
       case 'up': newIdx = idx - 1; break
       case 'down': newIdx = idx + 1; break
       case 'top': newIdx = 0; break
-      case 'bottom': newIdx = editableAreas.length - 1; break
+      case 'bottom': newIdx = editableAreas.value.length - 1; break
     }
-    if (newIdx === idx || newIdx < 0 || newIdx >= editableAreas.length) return
+    if (newIdx === idx || newIdx < 0 || newIdx >= editableAreas.value.length) return
 
-    const item = editableAreas.splice(idx, 1)[0]
-    editableAreas.splice(newIdx, 0, item)
+    const item = editableAreas.value.splice(idx, 1)[0]
+    editableAreas.value.splice(newIdx, 0, item)
     pushHistory()
   }
 
   function deleteElement(idx: number) {
-    if (idx < 0 || idx >= editableAreas.length) return
-    const areaId = editableAreas[idx].id
-    editableAreas.splice(idx, 1)
+    if (idx < 0 || idx >= editableAreas.value.length) return
+    const areaId = editableAreas.value[idx].id
+    editableAreas.value.splice(idx, 1)
     if (selectedAreaId.value === areaId) {
       selectedAreaId.value = null
     }

@@ -1,4 +1,5 @@
 import { request } from '@/utils/request'
+import type { PosterTemplate, PosterWork, PosterEditableAreaRuntime, StickerItem } from '@/types/poster'
 
 // ========== 用户相关 ==========
 export function fetchUserInfo() {
@@ -107,41 +108,41 @@ export function permanentDelete(workId: string) {
 
 // ========== 海报模板相关 ==========
 export function getPosterTemplates(params?: { category_id?: string; is_free?: number; page?: number; size?: number; limit?: number }) {
-  return request<{ list: any[]; total: number }>({ url: '/api/poster/templates', data: params })
+  return request<PosterTemplate[]>({ url: '/api/poster/templates', data: params })
 }
 
 export function getPosterTemplateDetail(id: string) {
-  return request<any>({ url: `/api/poster/templates/${id}` })
+  return request<PosterTemplate>({ url: `/api/poster/templates/${id}` })
 }
 
 export function getPosterHotTemplates(limit?: number) {
-  return request<any[]>({ url: '/api/poster/templates/hot', data: { limit } })
+  return request<PosterTemplate[]>({ url: '/api/poster/templates/hot', data: { limit } })
 }
 
 // ========== 海报作品相关 ==========
 export function getPosterWorks(params?: { page?: number; size?: number }) {
-  return request<{ list: any[]; total: number }>({ url: '/api/poster/works', data: params })
+  return request<PosterWork[]>({ url: '/api/poster/works', data: params })
 }
 
-export function savePosterWork(data: { template_id: string; template_name?: string; cover_url?: string; content: { editableAreas: any[] } }) {
+export function savePosterWork(data: { template_id: string; template_name?: string; cover_url?: string; content: { editableAreas: PosterEditableAreaRuntime[] } }) {
   return request<{ id: string }>({ url: '/api/poster/works', method: 'POST', data })
 }
 
 export function getPosterWorkDetail(id: string) {
-  return request<any>({ url: `/api/poster/works/${id}` })
+  return request<PosterWork>({ url: `/api/poster/works/${id}` })
 }
 
 export function deletePosterWork(id: string) {
-  return request({ url: `/api/poster/works/${id}`, method: 'DELETE' })
+  return request<{ success: boolean }>({ url: `/api/poster/works/${id}`, method: 'DELETE' })
 }
 
-export function updatePosterWork(id: string, data: { template_name?: string; cover_url?: string; content?: { editableAreas: any[] } }) {
-  return request({ url: `/api/poster/works/${id}`, method: 'PUT', data })
+export function updatePosterWork(id: string, data: { template_name?: string; cover_url?: string; content?: { editableAreas: PosterEditableAreaRuntime[] } }) {
+  return request<PosterWork>({ url: `/api/poster/works/${id}`, method: 'PUT', data })
 }
 
 // ========== 海报素材 ==========
 export function getPosterStickers() {
-  return request<string[]>({ url: '/api/poster/stickers' })
+  return request<StickerItem[]>({ url: '/api/poster/stickers' })
 }
 
 export function uploadPosterWorkImage(workId: string, imageBase64: string) {

@@ -55,6 +55,16 @@ function savePosterDatabase() {
   fs.writeFileSync(POSTER_DB_PATH, Buffer.from(data))
 }
 
+// 延迟批量保存：避免频繁写磁盘（如 use_count 更新）
+let saveTimer = null
+function scheduleSave() {
+  if (saveTimer) return
+  saveTimer = setTimeout(() => {
+    saveTimer = null
+    try { savePosterDatabase() } catch (e) { console.error('poster db save failed:', e) }
+  }, 5000)
+}
+
 // ============ Helper: convert sql.js result to array of objects ============
 function resultToArray(result) {
   if (!result.length || !result[0].values.length) return []
@@ -90,7 +100,39 @@ function requireAdmin(req, res, next) {
   return res.status(403).json({ success: false, error: '无管理员权限' })
 }
 
-// ============ Seed 25 poster templates ============
+// 获取用户 ID：优先使用 JWT 解析的 phone，不接受可伪造的 x-user-id header
+function getUserId(req) {
+  const auth = req.headers.authorization
+  if (auth && auth.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(auth.slice(7), JWT_SECRET)
+      return decoded.phone || ''
+    } catch (_) {}
+  }
+  // 兼容旧前端：仅在开发环境接受 x-user-id
+  if (process.env.NODE_ENV !== 'production') {
+    return req.headers['x-user-id'] || ''
+  }
+  return ''
+}
+
+// 作品所有权校验中间件
+function requireWorkOwner(req, res, next) {
+  const userId = getUserId(req)
+  if (!userId) {
+    return res.status(401).json({ success: false, error: '请先登录' })
+  }
+  const result = posterDb.exec("SELECT user_id FROM poster_works WHERE id = ?", [req.params.id])
+  if (!result.length || !result[0].values.length) {
+    return res.status(404).json({ success: false, error: '作品不存在' })
+  }
+  const workUserId = result[0].values[0][0]
+  if (workUserId !== userId) {
+    return res.status(403).json({ success: false, error: '无权操作他人作品' })
+  }
+  next()
+}
+
 // ============ Seed 25 poster templates ============
 function generateTemplateConfig(t) {
   const configs = {
@@ -462,8 +504,10 @@ router.get('/templates', (req, res) => {
       params.push(category_id)
     }
     if (keyword) {
-      sql += " AND name LIKE ?"
-      params.push(`%${keyword}%`)
+      sql += " AND name LIKE ? ESCAPE '\\'"
+      // 转义 LIKE 通配符
+      const escaped = keyword.replace(/([%_\\])/g, '\\$1')
+      params.push(`%${escaped}%`)
     }
     sql += " ORDER BY use_count DESC, like_count DESC"
 
@@ -487,7 +531,7 @@ router.get('/templates', (req, res) => {
       hasMore: offset + templates.length < total,
     })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
@@ -502,7 +546,7 @@ router.get('/templates/hot', (req, res) => {
     const templates = resultToArray(result)
     res.json({ success: true, data: templates })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
@@ -514,21 +558,22 @@ router.get('/templates/:id', (req, res) => {
     if (!template) {
       return res.status(404).json({ success: false, error: '模板不存在' })
     }
-    // Increment use_count
+    // Increment use_count (不立即写磁盘，避免频繁 I/O)
     posterDb.run("UPDATE poster_templates SET use_count = use_count + 1 WHERE id = ?", [req.params.id])
-    savePosterDatabase()
+    // 延迟保存：标记需要保存，由定时器批量写入
+    scheduleSave()
     res.json({ success: true, data: template })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
 // POST /works — save work
 router.post('/works', (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || req.user?.phone || ''
+    const userId = getUserId(req)
     if (!userId) {
-      return res.status(401).json({ success: false, error: '缺少 X-User-Id 头' })
+      return res.status(401).json({ success: false, error: '请先登录' })
     }
     const { template_id, template_name, cover_url, content, poster_url } = req.body
     const id = uuidv4()
@@ -546,16 +591,16 @@ router.post('/works', (req, res) => {
     const work = resultToObject(result)
     res.json({ success: true, data: work })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
-// GET /works — list works (by X-User-Id header)
+// GET /works — list works (requires auth)
 router.get('/works', (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || req.user?.phone || ''
+    const userId = getUserId(req)
     if (!userId) {
-      return res.json({ success: true, data: [], total: 0 })
+      return res.status(401).json({ success: false, error: '请先登录' })
     }
     const result = posterDb.exec(
       "SELECT * FROM poster_works WHERE user_id = ? ORDER BY created_at DESC",
@@ -564,12 +609,12 @@ router.get('/works', (req, res) => {
     const works = resultToArray(result)
     res.json({ success: true, data: works, total: works.length })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
-// GET /works/:id — work detail
-router.get('/works/:id', (req, res) => {
+// GET /works/:id — work detail (requires ownership)
+router.get('/works/:id', requireWorkOwner, (req, res) => {
   try {
     const result = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [req.params.id])
     const work = resultToObject(result)
@@ -578,12 +623,12 @@ router.get('/works/:id', (req, res) => {
     }
     res.json({ success: true, data: work })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
-// PUT /works/:id — update work
-router.put('/works/:id', (req, res) => {
+// PUT /works/:id — update work (requires ownership)
+router.put('/works/:id', requireWorkOwner, (req, res) => {
   try {
     const result = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [req.params.id])
     const existing = resultToObject(result)
@@ -612,14 +657,13 @@ router.put('/works/:id', (req, res) => {
     const updated = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [req.params.id])
     res.json({ success: true, data: resultToObject(updated) })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
-// POST /works/:id/upload — upload work poster image
-router.post('/works/:id/upload', (req, res) => {
+// POST /works/:id/upload — upload work poster image (requires ownership)
+router.post('/works/:id/upload', requireWorkOwner, (req, res) => {
   try {
-    // Handle multipart upload - check if multer is configured
     if (!req.files && !req.file && !req.body.image) {
       return res.status(400).json({ success: false, error: '请上传图片文件' })
     }
@@ -630,14 +674,18 @@ router.post('/works/:id/upload', (req, res) => {
       return res.status(404).json({ success: false, error: '作品不存在' })
     }
 
-    // For base64 image upload
+    // For base64 image upload — 限制 10MB
     if (req.body.image) {
       const matches = req.body.image.match(/^data:image\/(png|jpg|jpeg|webp);base64,(.+)$/)
       if (!matches) {
         return res.status(400).json({ success: false, error: '图片格式不支持，请使用 PNG/JPG/WebP' })
       }
-      const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
       const data = Buffer.from(matches[2], 'base64')
+      // SEC-6: 限制图片大小 10MB
+      if (data.length > 10 * 1024 * 1024) {
+        return res.status(413).json({ success: false, error: '图片大小不能超过 10MB' })
+      }
+      const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
       const filename = `${workId}.${ext}`
       const filepath = path.join(__dirname, '..', 'uploads', 'poster', 'works', filename)
       fs.writeFileSync(filepath, data)
@@ -651,12 +699,12 @@ router.post('/works/:id/upload', (req, res) => {
 
     return res.status(400).json({ success: false, error: '请提供 base64 编码的图片数据' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
-// DELETE /works/:id — delete work
-router.delete('/works/:id', (req, res) => {
+// DELETE /works/:id — delete work (requires ownership)
+router.delete('/works/:id', requireWorkOwner, (req, res) => {
   try {
     const result = posterDb.exec("SELECT id FROM poster_works WHERE id = ?", [req.params.id])
     if (!result.length || !result[0].values.length) {
@@ -666,7 +714,7 @@ router.delete('/works/:id', (req, res) => {
     savePosterDatabase()
     res.json({ success: true, message: '删除成功' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
@@ -686,7 +734,7 @@ router.get('/stickers', (req, res) => {
     }
     res.json({ success: true, data: stickers, total: stickers.length })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
@@ -721,7 +769,7 @@ router.post('/templates', requireAdmin, (req, res) => {
     const result = posterDb.exec("SELECT * FROM poster_templates WHERE id = ?", [id])
     res.json({ success: true, data: resultToObject(result) })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
@@ -761,7 +809,7 @@ router.put('/templates/:id', requireAdmin, (req, res) => {
     const result = posterDb.exec("SELECT * FROM poster_templates WHERE id = ?", [req.params.id])
     res.json({ success: true, data: resultToObject(result) })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
@@ -776,7 +824,7 @@ router.delete('/templates/:id', requireAdmin, (req, res) => {
     savePosterDatabase()
     res.json({ success: true, message: '删除成功' })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 
@@ -825,7 +873,7 @@ router.get('/stats', requireAdmin, (req, res) => {
       },
     })
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message })
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
 })
 

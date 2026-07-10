@@ -36,10 +36,9 @@
         <button class="empty-btn" @click="goToTemplates">去挑选模板</button>
       </view>
       <!-- 画布 -->
-      <scroll-view v-else class="canvas-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+      <scroll-view v-else class="canvas-scroll" scroll-y enhanced :show-scrollbar="false">
         <view class="canvas-wrapper" :style="canvasWrapperStyle">
           <image
-            v-if="posterStore.currentTemplate"
             class="canvas-bg"
             :src="resolvedBgUrl"
             mode="aspectFill"
@@ -74,10 +73,12 @@
               <text class="placeholder-label">点击换图</text>
             </view>
             <!-- 选中手柄 -->
-            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--tl"></view>
-            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--tr"></view>
-            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--bl"></view>
-            <view v-if="posterStore.selectedAreaId === area.id" class="area-handle area-handle--br"></view>
+            <template v-if="posterStore.selectedAreaId === area.id">
+              <view class="area-handle area-handle--tl"></view>
+              <view class="area-handle area-handle--tr"></view>
+              <view class="area-handle area-handle--bl"></view>
+              <view class="area-handle area-handle--br"></view>
+            </template>
           </view>
         </view>
       </scroll-view>
@@ -96,16 +97,17 @@
         <text class="panel-title">编辑文字</text>
         <view class="panel-close" @click="posterStore.selectArea(null)">✕</view>
       </view>
-      <scroll-view class="panel-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+      <scroll-view class="panel-scroll" scroll-y enhanced :show-scrollbar="false">
         <view class="panel-content">
           <!-- 文字内容 -->
           <view class="form-item">
             <textarea
               class="form-textarea"
-              v-model="selectedArea._text"
+              :value="selectedArea._text"
               placeholder="输入文字内容"
               auto-height
               @input="onTextInput"
+              @blur="onTextBlur"
             />
           </view>
           <!-- 字号 -->
@@ -124,7 +126,7 @@
           <!-- 颜色 -->
           <view class="form-row">
             <text class="form-label">颜色</text>
-            <scroll-view class="color-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+            <scroll-view class="color-scroll" scroll-x enhanced :show-scrollbar="false">
               <view class="color-list">
                 <view
                   v-for="color in posterStore.colorOptions"
@@ -168,7 +170,7 @@
           <!-- 字体 -->
           <view class="form-row">
             <text class="form-label">字体</text>
-            <scroll-view class="font-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+            <scroll-view class="font-scroll" scroll-x enhanced :show-scrollbar="false">
               <view class="font-list">
                 <view
                   v-for="font in posterStore.fontOptions"
@@ -209,7 +211,7 @@
         <text class="panel-title">编辑图片</text>
         <view class="panel-close" @click="posterStore.selectArea(null)">✕</view>
       </view>
-      <scroll-view class="panel-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+      <scroll-view class="panel-scroll" scroll-y enhanced :show-scrollbar="false">
         <view class="panel-content">
           <view class="form-item">
             <view class="image-action-row">
@@ -311,7 +313,7 @@
           <text>选择模板</text>
           <view class="bottom-sheet-close" @click="posterStore.showTemplatePicker = false">✕</view>
         </view>
-        <scroll-view class="bottom-sheet-body" scroll-y enhanced show-scrollbar="{{false}}">
+        <scroll-view class="bottom-sheet-body" scroll-y enhanced :show-scrollbar="false">
           <view class="picker-grid">
             <view
               v-for="tpl in posterStore.relatedTemplates"
@@ -339,7 +341,7 @@
           <text>图层管理</text>
           <view class="bottom-sheet-close" @click="posterStore.showLayerPanel = false">✕</view>
         </view>
-        <scroll-view class="bottom-sheet-body" scroll-y enhanced show-scrollbar="{{false}}">
+        <scroll-view class="bottom-sheet-body" scroll-y enhanced :show-scrollbar="false">
           <view v-if="posterStore.editableAreas.length === 0" class="layer-empty">
             <text class="layer-empty-text">暂无元素</text>
           </view>
@@ -371,7 +373,7 @@
           <text>素材库</text>
           <view class="bottom-sheet-close" @click="posterStore.showStickerPanel = false">✕</view>
         </view>
-        <scroll-view class="bottom-sheet-body" scroll-y enhanced show-scrollbar="{{false}}">
+        <scroll-view class="bottom-sheet-body" scroll-y enhanced :show-scrollbar="false">
           <view class="sticker-grid" v-if="posterStore.stickers.length > 0">
             <view
               v-for="(sticker, idx) in posterStore.stickers"
@@ -398,12 +400,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { usePosterStore } from '@/stores/poster'
 import { useGoBack } from '@/composables/useGoBack'
-import { API_BASE } from '@/config'
+import { resolveUrl } from '@/utils/url'
 import { request } from '@/utils/request'
-import type { PosterEditableArea } from '@/types/poster'
+import type { PosterEditableAreaRuntime, PosterWork } from '@/types/poster'
 
 const posterStore = usePosterStore()
 const goBack = useGoBack()
@@ -412,7 +414,7 @@ const alignOptions = [
   { value: 'left', icon: '⬅' },
   { value: 'center', icon: '⬌' },
   { value: 'right', icon: '➡' },
-]
+] as const
 
 const toastVisible = ref(false)
 const toastMsg = ref('')
@@ -446,12 +448,6 @@ const canvasWrapperStyle = computed(() => {
   }
 })
 
-function resolveUrl(url: string): string {
-  if (!url) return url
-  if (url.startsWith('/uploads/')) return API_BASE + url
-  return url
-}
-
 const selectedArea = computed(() => {
   if (!posterStore.selectedAreaId) return null
   return posterStore.editableAreas.find(a => a.id === posterStore.selectedAreaId) || null
@@ -460,7 +456,7 @@ const selectedArea = computed(() => {
 const canUndo = computed(() => posterStore.canUndo())
 const canRedo = computed(() => posterStore.canRedo())
 
-function getAreaStyle(area: PosterEditableArea): Record<string, string> {
+function getAreaStyle(area: PosterEditableAreaRuntime): Record<string, string> {
   const cw = canvasSize.value.width
   const ch = canvasSize.value.height
   const x = (area._x ?? area.x) / cw * 100
@@ -480,7 +476,7 @@ function getAreaStyle(area: PosterEditableArea): Record<string, string> {
   }
 }
 
-function getTextStyle(area: PosterEditableArea): Record<string, string> {
+function getTextStyle(area: PosterEditableAreaRuntime): Record<string, string> {
   const cw = canvasSize.value.width
   const fontSizePx = (area._fontSize || 28) / cw * 100
   return {
@@ -501,16 +497,31 @@ function getTextStyle(area: PosterEditableArea): Record<string, string> {
   }
 }
 
-function onAreaClick(area: PosterEditableArea) {
+function onAreaClick(area: PosterEditableAreaRuntime) {
   posterStore.selectArea(area.id)
 }
 
 // ---- text editing ----
+let textInputTimer: any = null
+
 function onTextInput(e: any) {
   if (!selectedArea.value) return
   const text = e.detail.value
   posterStore.updateText(selectedArea.value.id, text)
-  posterStore.pushHistory()
+  // 防抖：连续输入时只在停顿后记录一次历史
+  if (textInputTimer) clearTimeout(textInputTimer)
+  textInputTimer = setTimeout(() => {
+    posterStore.pushHistory()
+    textInputTimer = null
+  }, 800)
+}
+
+function onTextBlur() {
+  if (textInputTimer) {
+    clearTimeout(textInputTimer)
+    textInputTimer = null
+    posterStore.pushHistory()
+  }
 }
 
 function onFontSizeChange(e: any) {
@@ -773,6 +784,21 @@ function goToTemplates() {
 
 // ---- template picker ----
 async function onSwitchTemplate(id: string) {
+  if (id === posterStore.currentTemplate?.id) {
+    posterStore.showTemplatePicker = false
+    return
+  }
+  const confirm = await new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '切换模板',
+      content: '切换模板将替换当前编辑内容，确定继续吗？',
+      confirmText: '切换',
+      cancelText: '取消',
+      confirmColor: '#e84a6e',
+      success: (r) => resolve(r.confirm),
+    })
+  })
+  if (!confirm) return
   await posterStore.switchTemplate(id)
   showToast('模板已切换')
 }
@@ -808,7 +834,7 @@ onMounted(async () => {
   if (workId) {
     posterStore.setWorkId(workId)
     try {
-      const workData = await request<{ template_id: string; template_name?: string; cover_url?: string; content: any }>({
+      const workData = await request<PosterWork>({
         url: `/api/poster/works/${workId}`,
         hideLoading: true,
       })
@@ -831,11 +857,22 @@ onMounted(async () => {
   } else if (templateId) {
     await posterStore.loadTemplate(templateId)
   } else {
-    posterStore.loadRelatedTemplates()
     posterStore.showTemplatePicker = true
   }
 
+  // 加载关联模板用于"换模板"面板
   posterStore.loadRelatedTemplates()
+})
+
+onUnmounted(() => {
+  if (toastTimer) {
+    clearTimeout(toastTimer)
+    toastTimer = null
+  }
+  if (textInputTimer) {
+    clearTimeout(textInputTimer)
+    textInputTimer = null
+  }
 })
 </script>
 

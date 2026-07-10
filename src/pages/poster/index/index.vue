@@ -50,7 +50,7 @@
           <!-- 模板封面图 -->
           <image
             class="template-cover"
-            :src="template.cover_url"
+            :src="resolveUrl(template.cover_url)"
             mode="aspectFill"
             @error="onImageError($event, template)"
           ></image>
@@ -87,6 +87,7 @@
 import { ref, onMounted } from 'vue'
 import { POSTER_CATEGORIES } from '@/constants/categories'
 import { request } from '@/utils/request'
+import { resolveUrl } from '@/utils/url'
 import type { PosterTemplate } from '@/types'
 
 // ============ 状态 ============
@@ -115,13 +116,11 @@ async function loadPosterTemplates() {
   loadError.value = false
 
   try {
-    let url = '/api/poster/templates'
-    const params: string[] = []
-    if (activeCategory.value !== 'all') {
-      params.push(`category_id=${activeCategory.value}`)
-    }
-    if (params.length) url += '?' + params.join('&')
-    const data = await request<PosterTemplate[]>({ url, hideLoading: true })
+    const data = await request<PosterTemplate[]>({
+      url: '/api/poster/templates',
+      data: activeCategory.value !== 'all' ? { category_id: activeCategory.value } : undefined,
+      hideLoading: true,
+    })
     if (data && Array.isArray(data)) {
       posterTemplates.value = data
     }
@@ -136,6 +135,7 @@ async function loadPosterTemplates() {
 function onSelectCategory(catId: string) {
   if (activeCategory.value === catId) return
   activeCategory.value = catId
+  // 切换分类时显示 loading 覆盖层
   loadPosterTemplates()
 }
 
@@ -145,19 +145,22 @@ function onSelectTemplate(template: PosterTemplate) {
   })
 }
 
-function formatLikes(num: number): string {
-  if (!num) return '0'
+function formatLikes(num: number | undefined): string {
+  if (!num || num <= 0) return '0'
   if (num >= 10000) return (num / 10000).toFixed(2) + 'w'
   if (num >= 1000) return (num / 1000).toFixed(1) + 'k'
   return String(num)
 }
 
 function onImageError(e: any, template: PosterTemplate) {
-  template.cover_url = '/static/images/templates/wedding-1.svg'
+  const idx = posterTemplates.value.findIndex(t => t.id === template.id)
+  if (idx >= 0) {
+    posterTemplates.value[idx] = { ...posterTemplates.value[idx], cover_url: '/static/images/templates/wedding-1.svg' }
+  }
 }
 
 function loadMore() {
-  // 预留分页加载
+  // TODO: 后端支持分页后实现无限滚动加载
 }
 
 function onBack() {
