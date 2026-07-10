@@ -172,6 +172,17 @@
                     <span class="pm-area-label">{{ area.type === 'text' ? 'T' : '🖼' }}</span>
                     <span class="pm-area-content" v-if="area.type === 'text'">{{ area.defaultText || area.label }}</span>
                     <button class="pm-area-del" @click.stop="removeArea(idx)">×</button>
+                    <!-- 8方向 resize 手柄（仅选中时显示） -->
+                    <template v-if="selectedAreaIdx === idx">
+                      <span class="pm-rz-hdl nw" @mousedown.stop.prevent="startResize($event, idx, 'nw')"></span>
+                      <span class="pm-rz-hdl n"  @mousedown.stop.prevent="startResize($event, idx, 'n')"></span>
+                      <span class="pm-rz-hdl ne" @mousedown.stop.prevent="startResize($event, idx, 'ne')"></span>
+                      <span class="pm-rz-hdl e"  @mousedown.stop.prevent="startResize($event, idx, 'e')"></span>
+                      <span class="pm-rz-hdl se" @mousedown.stop.prevent="startResize($event, idx, 'se')"></span>
+                      <span class="pm-rz-hdl s"  @mousedown.stop.prevent="startResize($event, idx, 's')"></span>
+                      <span class="pm-rz-hdl sw" @mousedown.stop.prevent="startResize($event, idx, 'sw')"></span>
+                      <span class="pm-rz-hdl w"  @mousedown.stop.prevent="startResize($event, idx, 'w')"></span>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -594,10 +605,91 @@ function onDragEnd() {
   window.removeEventListener('mouseup', onDragEnd)
 }
 
+// ============ Resize（缩放）逻辑 ============
+type ResizeDir = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+let resizeState: {
+  idx: number
+  dir: ResizeDir
+  startX: number
+  startY: number
+  origX: number
+  origY: number
+  origW: number
+  origH: number
+} | null = null
+
+function startResize(e: MouseEvent, idx: number, dir: ResizeDir) {
+  e.preventDefault()
+  e.stopPropagation()
+  selectedAreaIdx.value = idx
+  const area = form.editableAreas[idx]
+  resizeState = {
+    idx,
+    dir,
+    startX: e.clientX,
+    startY: e.clientY,
+    origX: area.x,
+    origY: area.y,
+    origW: area.width,
+    origH: area.height,
+  }
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', onResizeEnd)
+}
+
+function onResizeMove(e: MouseEvent) {
+  if (!resizeState || !canvasWrapRef.value) return
+  const rect = canvasWrapRef.value.getBoundingClientRect()
+  const scaleX = 750 / rect.width
+  const scaleY = 1334 / rect.height
+  const area = form.editableAreas[resizeState.idx]
+  const dx = (e.clientX - resizeState.startX) * scaleX
+  const dy = (e.clientY - resizeState.startY) * scaleY
+  const minW = 20
+  const minH = 20
+
+  let { origX, origY, origW, origH } = resizeState
+  let newW = origW
+  let newH = origH
+  let newX = origX
+  let newY = origY
+
+  // 水平方向
+  if (resizeState.dir.includes('e')) {
+    newW = Math.max(minW, Math.min(750 - origX, origW + dx))
+  } else if (resizeState.dir.includes('w')) {
+    newW = Math.max(minW, origW - dx)
+    newX = origX + (origW - newW)
+    if (newX < 0) { newW = origW + origX; newX = 0 }
+  }
+
+  // 垂直方向
+  if (resizeState.dir.includes('s')) {
+    newH = Math.max(minH, Math.min(1334 - origY, origH + dy))
+  } else if (resizeState.dir.includes('n')) {
+    newH = Math.max(minH, origH - dy)
+    newY = origY + (origH - newH)
+    if (newY < 0) { newH = origH + origY; newY = 0 }
+  }
+
+  area.width = Math.round(newW)
+  area.height = Math.round(newH)
+  area.x = Math.round(newX)
+  area.y = Math.round(newY)
+}
+
+function onResizeEnd() {
+  resizeState = null
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', onResizeEnd)
+}
+
 // 组件卸载时清理拖拽监听器，避免拖拽过程中卸载导致监听器残留
 onBeforeUnmount(() => {
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragEnd)
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', onResizeEnd)
 })
 
 // ============ 初始化 ============
@@ -895,6 +987,24 @@ onMounted(async () => {
   opacity: 0; transition: opacity 0.15s;
 }
 .pm-area:hover .pm-area-del, .pm-area.selected .pm-area-del { opacity: 1; }
+
+/* resize 手柄 */
+.pm-rz-hdl {
+  position: absolute;
+  width: 10px; height: 10px;
+  background: #fff;
+  border: 2px solid #e84a6e;
+  border-radius: 50%;
+  z-index: 10;
+}
+.pm-rz-hdl.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.pm-rz-hdl.n  { top: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.pm-rz-hdl.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.pm-rz-hdl.e  { top: 50%; right: -5px; transform: translateY(-50%); cursor: ew-resize; }
+.pm-rz-hdl.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.pm-rz-hdl.s  { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.pm-rz-hdl.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.pm-rz-hdl.w  { top: 50%; left: -5px; transform: translateY(-50%); cursor: ew-resize; }
 
 .pm-area-props { background: #f8f9fb; border: 1px solid #e8eaed; border-radius: 10px; padding: 16px; }
 .pm-area-hint { text-align: center; padding: 20px; color: #999; font-size: 13px; background: #f8f9fb; border-radius: 10px; }
