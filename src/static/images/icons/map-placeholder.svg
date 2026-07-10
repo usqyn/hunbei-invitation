@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120">
+  <rect width="200" height="120" fill="#f0f4f8"/>
+  <path d="M20 100 L40 80 L60 90 L80 70 L100 75 L120 60 L140 65 L160 50 L180 55" stroke="#cbd5e0" stroke-width="2" fill="none"/>
+  <path d="M0 110 L200 110" stroke="#cbd5e0" stroke-width="1"/>
+  <circle cx="100" cy="60" r="8" fill="#e84a6e" opacity="0.8"/>
+  <circle cx="100" cy="60" r="14" fill="none" stroke="#e84a6e" stroke-width="1.5" opacity="0.4"/>
+  <text x="100" y="92" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#999">点击设置位置</text>
+</svg>

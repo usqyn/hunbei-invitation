@@ -10,6 +10,7 @@ export interface WorkEditorData {
   templateData?: TemplateData
   basicInfo?: BasicInfo
   settings?: TemplateSettings
+  currentFlipPageIndex?: number
 }
 
 export interface Work {

@@ -12,6 +12,8 @@ const { requireAuth, requireAdmin, isRequestFromAdmin } = require('./middleware/
 const { runTransaction } = require('./middleware/db')
 
 const app = express()
+// 信任反向代理（Nginx 等）的第一层代理，确保 req.ip / req.protocol 能正确获取真实客户端信息
+app.set('trust proxy', 1)
 const PORT = process.env.PORT || 3001
 const JWT_SECRET = process.env.JWT_SECRET
 if (!JWT_SECRET) {
@@ -473,7 +475,10 @@ app.post('/api/sms/send', rateLimit(), (req, res) => {
   }
   const code = String(Math.floor(100000 + Math.random() * 900000))
   smsCodes[phone] = { code, time: Date.now() }
-  console.log(`\n📱 [验证码] ${phone} → ${code}\n`)
+  // 仅在非生产环境打印验证码，且只显示手机号后4位，避免明文泄露
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n📱 [验证码] ${phone.slice(-4)} → ${code}\n`)
+  }
   res.json({ success: true, message: '验证码已发送' })
 })
 
@@ -681,8 +686,8 @@ app.get('/api/templates', (req, res) => {
     const params = []
     const conditions = []
 
-    // 默认只返回已发布的模板；admin 传 ?all=true 返回全部
-    if (!req.query.all) {
+    // 默认只返回已发布的模板；admin 传 ?all=true 且通过管理员鉴权时返回全部
+    if (!(req.query.all && isRequestFromAdmin(req))) {
       conditions.push("status = 'published'")
     }
     // 支持 is_paid=1 只返回付费模板；?includePaid=1 返回全部；默认只返回免费模板
@@ -891,7 +896,13 @@ app.get('/api/fonts', (req, res) => {
     const mapPath = path.join(FONTS_DIR, 'font-map.json')
     let fontMap = {}
     if (fs.existsSync(mapPath)) fontMap = JSON.parse(fs.readFileSync(mapPath, 'utf-8'))
-    res.json({ success: true, data: fontMap })
+    // 将对象 { name: url } 转为数组 [{ filename, url, size }]，与 Admin 端期望格式一致
+    const fontList = Object.entries(fontMap).map(([name, url]) => ({
+      filename: name,
+      url: url,
+      size: 0,
+    }))
+    res.json({ success: true, data: fontList })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1973,14 +1984,19 @@ async function start() {
 
   const shutdown = (signal) => {
     console.log(`\n${signal} received, shutting down gracefully...`)
+    // 关闭 HTTP 服务前先保存数据库，避免数据丢失
+    console.log('正在保存数据库...')
+    try { saveDatabase() } catch (e) { console.error('saveDatabase failed:', e) }
+    try { posterRouter.savePosterDatabase() } catch (e) { console.error('savePosterDatabase failed:', e) }
     server.close(() => {
       console.log('Server closed')
       process.exit(0)
     })
+    // 5秒超时强制退出，防止 server.close 长时间挂起
     setTimeout(() => {
-      console.error('Forced shutdown after 10s')
+      console.error('Forced shutdown after 5s')
       process.exit(1)
-    }, 10000)
+    }, 5000)
   }
 
   process.on('SIGTERM', () => shutdown('SIGTERM'))

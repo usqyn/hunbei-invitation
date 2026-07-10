@@ -66,6 +66,9 @@ export const useEditorStore = defineStore('editor', () => {
       history.value.shift()
       historyIndex.value = history.value.length - 1
     }
+    // 每次编辑操作后持久化模板数据，确保编辑内容不丢失
+    // pushHistory 不在 touchmove 热路径中，仅在操作结束时调用，调用 setStorageSync 是安全的
+    persistTemplate()
   }
 
   function resetHistory() {
@@ -171,6 +174,7 @@ export const useEditorStore = defineStore('editor', () => {
       rotation: el.rotation,
       opacity: el.opacity,
       editable: el.editable,
+      isPremium: el.isPremium,
     }
   }
 
@@ -305,7 +309,7 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
-  function restoreTemplate() {
+  async function restoreTemplate() {
     const savedId = getStorage<string>(STORAGE_KEY_TEMPLATE, '')
     const templateId = savedId || DEFAULT_TEMPLATE_ID
     try {
@@ -349,7 +353,7 @@ export const useEditorStore = defineStore('editor', () => {
     } catch (e) {
       console.warn('restoreTemplate data failed, falling back to loadTemplateById:', e)
     }
-    loadTemplateById(templateId)
+    return await loadTemplateById(templateId)
   }
 
   /** 从已保存的作品数据恢复编辑状态（编辑已有作品时调用） */
@@ -374,6 +378,10 @@ export const useEditorStore = defineStore('editor', () => {
     // 恢复音乐选择
     if (musicId) {
       templateStore.selectedMusicId = musicId
+    }
+    // 恢复翻页模式当前页码
+    if (data.currentFlipPageIndex != null && data.currentFlipPageIndex < flipPages.length) {
+      currentFlipPageIndex.value = data.currentFlipPageIndex
     }
     // 作品编辑后渲染图需重新生成
     renderedImage.value = ''
@@ -517,7 +525,6 @@ export const useEditorStore = defineStore('editor', () => {
     }
     pushHistory()
     selectedElement.value = null
-    uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
   function setCurrentWorkId(id: string | null) {

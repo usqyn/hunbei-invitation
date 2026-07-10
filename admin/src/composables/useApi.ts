@@ -19,7 +19,13 @@ api.interceptors.response.use(
       const msg = error.response.data?.error || error.response.data?.message || ''
       console.error(`[API Error] ${status}: ${msg}`, error.config?.url)
       if (status === 401) {
-        console.error('[API Error] Token expired or invalid, please re-login')
+        // Token 过期或无效：清除本地登录信息并刷新页面以触发重新登录
+        console.error('[API Error] Token expired or invalid, clearing session and reloading')
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_phone')
+        // 刷新页面，App.vue onMounted 会因无 token 而显示登录界面
+        window.location.reload()
+        return Promise.reject(error)
       }
     } else if (error.request) {
       console.error('[API Error] No response received:', error.config?.url)

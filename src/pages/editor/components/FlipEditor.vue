@@ -113,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useCanvasRender } from '@/composables/useCanvasRender'
@@ -314,6 +314,11 @@ function deleteFlipPage() {
 function onPageNameBlur() {
   editorStore.pushHistory()
 }
+
+// 组件卸载时清理定时器，防止内存泄漏
+onUnmounted(() => {
+  if (textInputTimer) clearTimeout(textInputTimer)
+})
 </script>
 
 <style lang="scss" scoped>

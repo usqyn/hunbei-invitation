@@ -22,14 +22,17 @@ export function checkVipStatus() {
 /** 上传图片到服务器，返回永久 URL */
 export function uploadImage(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    const token = uni.getStorageSync('token') || ''
     uni.uploadFile({
       url: `${API_BASE}/api/upload/image`,
       filePath,
       name: 'image',
+      header: token ? { Authorization: `Bearer ${token}` } : {},
       success: (res) => {
         try {
           const data = JSON.parse(res.data)
-          if (data.url) resolve(data.url)
+          if (data.success && data.url) resolve(data.url)
+          else if (data.data && data.data.url) resolve(data.data.url)
           else reject(new Error(data.error || '上传失败'))
         } catch {
           reject(new Error('上传响应解析失败'))

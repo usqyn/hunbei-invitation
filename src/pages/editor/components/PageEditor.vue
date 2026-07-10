@@ -24,7 +24,7 @@
             <template v-else-if="sec.type === 'image'">
               <image
                 class="section-image"
-                :src="sec.image || '/static/images/icons/img-placeholder.png'"
+                :src="sec.image || '/static/images/icons/img-placeholder.svg'"
                 mode="aspectFit"
                 @error="onImageError"
               />
@@ -62,7 +62,7 @@
               <view class="map-section">
                 <image
                   class="map-image"
-                  src="https://neeko-copilot.bytedance.net/api/text_to_image?prompt=map%20location%20marker%20illustration&image_size=landscape_16_9"
+                  src="/static/images/icons/map-placeholder.svg"
                   mode="aspectFit"
                 />
                 <text class="map-address">{{ sec.text || '请输入地址' }}</text>
@@ -145,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { uploadImage } from '@/api'

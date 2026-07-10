@@ -977,9 +977,10 @@ async function onLoadTemplate(id: string) {
     currentTemplateTags.value = tpl.tags || []
     currentTemplateLikes.value = tpl.likes ?? 100
     currentTemplatePageCount.value = tpl.pageCount ?? 10
-    currentTemplateIsPaid.value = !!tpl.isPaid
+    // 读取 snake_case 字段，与 Server 端数据库列名一致
+    currentTemplateIsPaid.value = !!tpl.is_paid
     currentTemplatePrice.value = tpl.price ?? 3
-    currentTemplateIsPremium.value = !!tpl.isPremium
+    currentTemplateIsPremium.value = !!tpl.is_premium
   } catch (e) {
     alert('加载模板失败：' + (e as Error).message)
   }
@@ -1048,9 +1049,10 @@ async function onCloneTemplate(tpl: any) {
     currentTemplateTags.value = fetchedTpl.tags || tpl.tags || []
     currentTemplateLikes.value = fetchedTpl.likes ?? tpl.likes ?? 100
     currentTemplatePageCount.value = fetchedTpl.pageCount ?? tpl.pageCount ?? 10
-    currentTemplateIsPaid.value = !!(fetchedTpl.isPaid || tpl.isPaid)
+    // 读取 snake_case 字段，与 Server 端数据库列名一致
+    currentTemplateIsPaid.value = !!(fetchedTpl.is_paid || tpl.is_paid)
     currentTemplatePrice.value = fetchedTpl.price ?? tpl.price ?? 3
-    currentTemplateIsPremium.value = !!(fetchedTpl.isPremium || tpl.isPremium)
+    currentTemplateIsPremium.value = !!(fetchedTpl.is_premium || tpl.is_premium)
     historyVersions.value = []
     pushHistory('clone template')
     showToast('模板克隆成功 ✅')
@@ -1274,9 +1276,10 @@ async function saveToServer() {
       likes: currentTemplateLikes.value,
       pageCount: resolvedPageCount,
       status: 'draft',
-      isPaid: currentTemplateIsPaid.value,
+      // 字段名使用 snake_case，与 Server 端数据库列名一致
+      is_paid: currentTemplateIsPaid.value,
       price: currentTemplateIsPaid.value ? currentTemplatePrice.value : 0,
-      isPremium: currentTemplateIsPremium.value,
+      is_premium: currentTemplateIsPremium.value,
       renderedImage: await generateRenderedImage(),
       orientation: cSize.width > cSize.height ? 'landscape' : 'portrait',
       templateType: isFlipMode ? 'flip' : 'canvas',

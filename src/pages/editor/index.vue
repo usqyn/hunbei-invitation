@@ -193,12 +193,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, nextTick, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
 import { useUserStore } from '@/stores/user'
-import { DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { loadFontsForElements } from '@/utils/font-loader'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
@@ -281,6 +280,7 @@ function onUnifiedEditCancel() {
     editorStore.editableElements.splice(0, editorStore.editableElements.length, ...formSnapshot.elements)
     editorStore.pageSections.splice(0, editorStore.pageSections.length, ...formSnapshot.pageSections)
     editorStore.flipPages.splice(0, editorStore.flipPages.length, ...formSnapshot.flipPages)
+    renderedImageStale.value = formSnapshot._stale || false
     formSnapshot = null
   }
   editorStore.closeBasicInfoEditor()
@@ -427,8 +427,11 @@ function onResizeHandleTouchMove(e: any) {
   const newHeight = Math.max(20, newWidth * aspect)
   const cw = editorStore.canvasSize.width
   const ch = editorStore.canvasSize.height
-  el.width = Math.min(newWidth, cw - (el.x || 0))
-  el.height = Math.min(newHeight, ch - (el.y || 0))
+  // 先裁剪宽度到画布边界，再根据裁剪后的宽度计算高度，保持宽高比
+  const clampedWidth = Math.min(newWidth, cw - (el.x || 0))
+  const clampedHeight = Math.min(clampedWidth * aspect, ch - (el.y || 0))
+  el.width = clampedWidth
+  el.height = clampedHeight
   ds.moved = true
 }
 
@@ -620,6 +623,7 @@ function openUnifiedEdit() {
     pageSections: editorStore.pageSections,
     flipPages: editorStore.flipPages,
     templateData: templateStore.templateData,
+    _stale: renderedImageStale.value,
   }))
   editorStore.showBasicInfoEditor = true
 }
@@ -685,12 +689,26 @@ function handleMore() {
 }
 
 function handleSettings() {
+  const settingItems = [
+    { name: '礼物相册', key: 'giftAlbum' },
+    { name: '礼物购买', key: 'giftBuy' },
+    { name: '礼金功能', key: 'moneyGift' },
+    { name: '点赞功能', key: 'like' },
+    { name: '弹幕功能', key: 'danmaku' },
+    { name: '相册功能', key: 'album' },
+  ]
   uni.showActionSheet({
-    itemList: ['礼物功能', '礼金功能', '点赞功能', '相册功能'],
+    itemList: settingItems.map(s => {
+      const enabled = (templateStore.settings as any)[s.key]
+      return `${s.name}${enabled ? ' ✓' : ''}`
+    }),
     success: (res: any) => {
-      const keys = ['giftAlbum', 'moneyGift', 'like', 'album']
-      const key = keys[res.tapIndex]
-      if (key) toggleSetting(key)
+      const item = settingItems[res.tapIndex]
+      if (item) {
+        toggleSetting(item.key)
+        const enabled = (templateStore.settings as any)[item.key]
+        uni.showToast({ title: `${item.name}已${enabled ? '开启' : '关闭'}`, icon: 'none' })
+      }
     },
   })
 }
@@ -722,6 +740,7 @@ async function handleSave() {
     templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
     basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
     settings: JSON.parse(JSON.stringify(templateStore.settings)),
+    currentFlipPageIndex: editorStore.currentFlipPageIndex,
   }
   const musicId = templateStore.selectedMusicId
   if (editorStore.currentWorkId) {
@@ -811,18 +830,44 @@ async function doExport(options: { watermark: boolean; quality: string }) {
   try {
     const res = await exportInvitation(editorStore.currentWorkId, options)
     uni.hideLoading()
-    uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
-    uni.downloadFile({ url: res.url, success: (r) => {
-      uni.saveImageToPhotosAlbum({ filePath: r.tempFilePath })
-    }})
+    // 下载并保存到相册，处理可能的失败
+    uni.downloadFile({
+      url: res.url,
+      success: (r) => {
+        uni.saveImageToPhotosAlbum({
+          filePath: r.tempFilePath,
+          success: () => {
+            uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
+          },
+          fail: (err) => {
+            // 用户可能未授权相册权限
+            if (err.errMsg?.includes('auth')) {
+              uni.showModal({
+                title: '提示',
+                content: '需要相册权限才能保存图片，请在设置中开启',
+                confirmText: '去设置',
+                success: (res) => {
+                  if (res.confirm) uni.openSetting({})
+                },
+              })
+            } else {
+              uni.showToast({ title: '保存到相册失败', icon: 'none' })
+            }
+          },
+        })
+      },
+      fail: () => {
+        uni.showToast({ title: '下载文件失败', icon: 'none' })
+      },
+    })
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: '导出失败', icon: 'none' })
   }
 }
 
-function handleShare() {
-  handleSave()
+async function handleShare() {
+  await handleSave()
   const templateId = editorStore.currentTemplateId
   if (templateId) {
     uni.navigateTo({ url: `/pages/share/index?templateId=${templateId}` })
@@ -880,7 +925,7 @@ onMounted(async () => {
       }
       track('edit_start', { template_id: templateId, work_id: workId })
     } else {
-      editorStore.restoreTemplate()
+      await editorStore.restoreTemplate()
       track('edit_start', { template_id: editorStore.currentTemplateId })
     }
   } else {
@@ -889,7 +934,7 @@ onMounted(async () => {
       await editorStore.loadTemplateById(templateId)
       track('edit_start', { template_id: templateId })
     } else {
-      editorStore.restoreTemplate()
+      await editorStore.restoreTemplate()
       track('edit_start', { template_id: editorStore.currentTemplateId })
     }
   }
@@ -907,7 +952,14 @@ watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     nextTick(() => {
       setTimeout(() => updateCardSize(), 100)
-      loadFontsForElements(editorStore.editableElements as any)
+      // 根据模板类型加载对应模式的元素字体
+      if (editorStore.templateType === 'flip') {
+        editorStore.flipPages.forEach(p => loadFontsForElements(p.elements as any))
+      } else if (editorStore.templateType === 'page') {
+        loadFontsForElements(editorStore.pageSections as any)
+      } else {
+        loadFontsForElements(editorStore.editableElements as any)
+      }
     })
   }
 })
@@ -919,6 +971,11 @@ watch(() => editorStore.editableElements.length, () => {
 watch(() => editorStore.editableElements, () => {
   editProgress.value = calculateProgress()
 }, { deep: true })
+
+// 组件卸载时清理定时器，防止内存泄漏
+onUnmounted(() => {
+  if (smartEditTimer) clearTimeout(smartEditTimer)
+})
 </script>
 
 <style lang="scss" scoped>

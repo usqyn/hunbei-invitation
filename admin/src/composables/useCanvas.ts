@@ -1,6 +1,6 @@
 import * as fabric from 'fabric'
 import { loadSVGFromString, util as fabricUtil } from 'fabric'
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import type {
   AnyCanvasElement,
   TextElement,
@@ -58,6 +58,9 @@ export function useCanvas(opts: UseCanvasOptions) {
   const history = ref<CanvasDraft[]>([])
   const historyIdx = ref(-1)
   let suppressHistory = false
+  // loadDraft 期间阻止历史记录：图片异步加载完成时 suppressHistory 可能已恢复为 false，
+  // 此标志确保 loadDraft 的所有异步任务结束前都不记录多余历史
+  let isLoadDrafting = false
 
   // 复制缓冲区
   const clipboard = ref<AnyCanvasElement | null>(null)
@@ -1116,6 +1119,10 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
 
     suppressHistory = true
+    // loadDraft 期间阻止异步图片加载触发多余历史记录
+    isLoadDrafting = true
+    // 收集所有异步图片加载 Promise，待全部完成后再恢复历史记录
+    const imagePromises: Promise<void>[] = []
 
     // 清空
     canvas.getObjects().forEach(o => canvas.remove(o))
@@ -1160,7 +1167,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       } else if (el.type === 'image') {
         const ie = el as ImageElement
         addTasks.push(() => {
-          fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
+          const p = fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
             if (!fabricCanvas.value) return
             const sx = ie.width / (img.width || 1)
             const sy = ie.height / (img.height || 1)
@@ -1180,6 +1187,7 @@ export function useCanvas(opts: UseCanvasOptions) {
           }).catch(() => {
             // loadDraft 时图片加载失败不中断其他元素
           })
+          imagePromises.push(p)
         })
       }
       elements.value.push(el)
@@ -1198,6 +1206,17 @@ export function useCanvas(opts: UseCanvasOptions) {
     } else {
       // undo/redo 场景：保留历史栈，仅恢复 suppressHistory 状态
       suppressHistory = false
+    }
+
+    // 等待所有异步图片加载完成后，关闭 isLoadDrafting 标志
+    // 避免图片加载完成时 object:added 事件触发多余的历史记录
+    if (imagePromises.length > 0) {
+      Promise.all(imagePromises).finally(() => {
+        isLoadDrafting = false
+      })
+    } else {
+      // 无异步图片任务，立即关闭标志
+      isLoadDrafting = false
     }
   }
 
@@ -1219,7 +1238,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   // throttle：避免高频事件每一次都压栈
   let pushTimer: ReturnType<typeof setTimeout> | null = null
   function pushHistoryIfNeeded() {
-    if (suppressHistory) return
+    if (suppressHistory || isLoadDrafting) return
     if (pushTimer) clearTimeout(pushTimer)
     pushTimer = setTimeout(() => {
       pushHistory('modify')
@@ -1370,6 +1389,13 @@ export function useCanvas(opts: UseCanvasOptions) {
 
   // 组件挂载/卸载钩子
   onMounted(() => init())
+  // 监听 canvasRef：登录成功后 canvas DOM 才出现，此时需重新触发 init()
+  // （onMounted 在登录界面显示时执行，canvasRef 为空，init 会提前返回）
+  watch(opts.canvasRef, (el) => {
+    if (el && !fabricCanvas.value) {
+      nextTick(() => init())
+    }
+  })
   onBeforeUnmount(() => dispose())
 
   return {

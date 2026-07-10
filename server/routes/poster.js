@@ -3,8 +3,8 @@ const path = require('path')
 const fs = require('fs')
 const { v4: uuidv4 } = require('uuid')
 const initSqlJs = require('sql.js')
-// 公共鉴权中间件（requireAdmin 已包含 role 校验）
-const { requireAdmin } = require('../middleware/auth')
+// 公共鉴权中间件（requireAdmin 已包含 role 校验，isRequestFromAdmin 用于非强制鉴权场景的管理员判断）
+const { requireAdmin, isRequestFromAdmin } = require('../middleware/auth')
 // 数据库事务辅助函数（多步操作保证原子性）
 const { runTransaction } = require('../middleware/db')
 
@@ -226,7 +226,8 @@ router.get('/templates', (req, res) => {
     const offset = (page - 1) * limit
 
     // all=true 时返回所有模板（含下架），供管理后台使用；默认仅返回上架模板
-    const showAll = all === 'true' || all === '1'
+    // 非管理员即使传 all=true 也无法查看下架模板
+    const showAll = (all === 'true' || all === '1') && isRequestFromAdmin(req)
     const whereClause = showAll ? "1=1" : "is_active = 1"
     let sql = `SELECT * FROM poster_templates WHERE ${whereClause}`
     let countSql = `SELECT COUNT(*) as total FROM poster_templates WHERE ${whereClause}`
@@ -292,6 +293,10 @@ router.get('/templates/:id', (req, res) => {
     const result = posterDb.exec("SELECT * FROM poster_templates WHERE id = ?", [req.params.id])
     const template = resultToObject(result)
     if (!template) {
+      return res.status(404).json({ success: false, error: '模板不存在' })
+    }
+    // 非管理员不能查看已下架模板
+    if (!template.is_active && !isRequestFromAdmin(req)) {
       return res.status(404).json({ success: false, error: '模板不存在' })
     }
     res.json({ success: true, data: template })
@@ -372,6 +377,115 @@ router.get('/works', (req, res) => {
     const result = posterDb.exec(sql, params)
     const works = resultToArray(result)
     res.json({ success: true, data: works, total: works.length })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ success: false, error: '服务器错误' })
+  }
+})
+
+// GET /works/recycle — list recycled works
+// 注意：此静态路径必须注册在 GET /works/:id 之前，否则 /works/recycle 会被
+// /works/:id 匹配（id='recycle'），导致回收站接口无法访问
+router.get('/works/recycle', (req, res) => {
+  try {
+    const userId = getUserId(req)
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    const sql = "SELECT * FROM recycle_bin WHERE user_id = ? ORDER BY deleted_at DESC"
+    const params = [userId]
+
+    const page = parseInt(req.query.page, 10)
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
+
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM recycle_bin WHERE user_id = ?"
+      const countResult = posterDb.exec(countSql, [userId])
+      const total = countResult.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = posterDb.exec(paginatedSql, paginatedParams)
+      const items = resultToArray(result).map(item => {
+        try {
+          item.work_data = JSON.parse(item.work_data)
+        } catch (_) {}
+        return item
+      })
+
+      return res.json({
+        success: true,
+        data: items,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    const result = posterDb.exec(sql, params)
+    const items = resultToArray(result).map(item => {
+      try {
+        item.work_data = JSON.parse(item.work_data)
+      } catch (_) {}
+      return item
+    })
+    res.json({ success: true, data: items })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ success: false, error: '服务器错误' })
+  }
+})
+
+// PUT /works/:id/restore — restore work from recycle bin
+// 注意：放在 /works/:id 相关路由附近，确保路由注册顺序清晰
+router.put('/works/:id/restore', (req, res) => {
+  try {
+    const userId = getUserId(req)
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    const result = posterDb.exec("SELECT * FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, userId])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '记录不存在' })
+    }
+    const item = resultToObject(result)
+    let workData
+    try {
+      workData = JSON.parse(item.work_data)
+    } catch (_) {
+      return res.status(500).json({ success: false, error: '数据损坏' })
+    }
+
+    // 使用事务：恢复作品 + 删除回收站记录，保证原子性
+    runTransaction(posterDb, () => {
+      posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+        workData.id, workData.user_id, workData.template_id || '',
+        workData.template_name || '', workData.cover_url || '',
+        workData.content || '{}', workData.poster_url || '',
+        workData.created_at || new Date().toISOString(),
+      ])
+      posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+    })
+    savePosterDatabase()
+    res.json({ success: true, message: '已恢复' })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ success: false, error: '服务器错误' })
+  }
+})
+
+// DELETE /works/:id/permanent — permanently delete from recycle bin
+// 注意：放在 /works/:id 相关路由附近，确保路由注册顺序清晰
+router.delete('/works/:id/permanent', (req, res) => {
+  try {
+    const userId = getUserId(req)
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    posterDb.run("DELETE FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, userId])
+    savePosterDatabase()
+    res.json({ success: true, message: '已永久删除' })
   } catch (e) {
     console.error(e)
     res.status(500).json({ success: false, error: '服务器错误' })
@@ -478,111 +592,6 @@ router.delete('/works/:id', requireWorkOwner, (req, res) => {
     })
     savePosterDatabase()
     res.json({ success: true, message: '删除成功，已移入回收站' })
-  } catch (e) {
-    console.error(e)
-    res.status(500).json({ success: false, error: '服务器错误' })
-  }
-})
-
-// GET /works/recycle — list recycled works
-router.get('/works/recycle', (req, res) => {
-  try {
-    const userId = getUserId(req)
-    if (!userId) {
-      return res.status(401).json({ success: false, error: '请先登录' })
-    }
-    const sql = "SELECT * FROM recycle_bin WHERE user_id = ? ORDER BY deleted_at DESC"
-    const params = [userId]
-
-    const page = parseInt(req.query.page, 10)
-    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
-
-    if (page > 0 && limit > 0) {
-      const countSql = "SELECT COUNT(*) as total FROM recycle_bin WHERE user_id = ?"
-      const countResult = posterDb.exec(countSql, [userId])
-      const total = countResult.length ? countResult[0].values[0][0] : 0
-      const totalPages = Math.ceil(total / limit)
-      const offset = (page - 1) * limit
-
-      const paginatedSql = sql + " LIMIT ? OFFSET ?"
-      const paginatedParams = [...params, limit, offset]
-      const result = posterDb.exec(paginatedSql, paginatedParams)
-      const items = resultToArray(result).map(item => {
-        try {
-          item.work_data = JSON.parse(item.work_data)
-        } catch (_) {}
-        return item
-      })
-
-      return res.json({
-        success: true,
-        data: items,
-        pagination: { page, limit, total, totalPages },
-      })
-    }
-
-    const result = posterDb.exec(sql, params)
-    const items = resultToArray(result).map(item => {
-      try {
-        item.work_data = JSON.parse(item.work_data)
-      } catch (_) {}
-      return item
-    })
-    res.json({ success: true, data: items })
-  } catch (e) {
-    console.error(e)
-    res.status(500).json({ success: false, error: '服务器错误' })
-  }
-})
-
-// PUT /works/:id/restore — restore work from recycle bin
-router.put('/works/:id/restore', (req, res) => {
-  try {
-    const userId = getUserId(req)
-    if (!userId) {
-      return res.status(401).json({ success: false, error: '请先登录' })
-    }
-    const result = posterDb.exec("SELECT * FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, userId])
-    if (!result.length || !result[0].values.length) {
-      return res.status(404).json({ success: false, error: '记录不存在' })
-    }
-    const item = resultToObject(result)
-    let workData
-    try {
-      workData = JSON.parse(item.work_data)
-    } catch (_) {
-      return res.status(500).json({ success: false, error: '数据损坏' })
-    }
-
-    // 使用事务：恢复作品 + 删除回收站记录，保证原子性
-    runTransaction(posterDb, () => {
-      posterDb.run(`INSERT INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
-        workData.id, workData.user_id, workData.template_id || '',
-        workData.template_name || '', workData.cover_url || '',
-        workData.content || '{}', workData.poster_url || '',
-        workData.created_at || new Date().toISOString(),
-      ])
-      posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
-    })
-    savePosterDatabase()
-    res.json({ success: true, message: '已恢复' })
-  } catch (e) {
-    console.error(e)
-    res.status(500).json({ success: false, error: '服务器错误' })
-  }
-})
-
-// DELETE /works/:id/permanent — permanently delete from recycle bin
-router.delete('/works/:id/permanent', (req, res) => {
-  try {
-    const userId = getUserId(req)
-    if (!userId) {
-      return res.status(401).json({ success: false, error: '请先登录' })
-    }
-    posterDb.run("DELETE FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, userId])
-    savePosterDatabase()
-    res.json({ success: true, message: '已永久删除' })
   } catch (e) {
     console.error(e)
     res.status(500).json({ success: false, error: '服务器错误' })
@@ -811,3 +820,5 @@ const posterReady = init()
 
 module.exports = router
 module.exports.posterReady = posterReady
+// 导出 savePosterDatabase 供 graceful shutdown 时调用，确保进程退出前数据落盘
+module.exports.savePosterDatabase = savePosterDatabase
