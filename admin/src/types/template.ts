@@ -133,47 +133,6 @@ export interface EditorState {
   isSaving: boolean
 }
 
-// 默认空模板
-export const DEFAULT_TEMPLATE_DATA: TemplateData = {
-  coverImage: '',
-  coverTitle: '我们的婚礼',
-  coverSubtitle: 'Our Wedding',
-  photo1: '',
-  photo2: '',
-  photo3: '',
-  photo4: '',
-  photoTitle: '婚礼邀请函',
-  photoSubtitle: 'Welcome to our wedding',
-  footerText: '我们曾各自奔赴人海，直到目光交汇的那一刻\n才懂归属感的意义\n诚邀生命中重要的你\n共同见证这场"双向奔赴"的圆满',
-  footerSubText: 'GROOM',
-  inviter: '',
-  invitee: '',
-  date: '',
-  time: '',
-  location: '',
-  address: '',
-  phone: '',
-}
-
-export const DEFAULT_ELEMENT_STYLE: ElementStyle = {
-  font: '思源宋体',
-  color: '#333333',
-  fontSize: 28,
-  spacing: 2,
-  lineHeight: 2,
-}
-
-export const FONT_LIST = [
-  '思源宋体', '思源黑体', '华文楷体', '华文行楷', '华文隶书', 'Arial', 'Georgia',
-  'KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq',
-]
-
-export const COLOR_LIST = [
-  '#333333', '#666666', '#999999', '#e84a6e', '#ff6b8a',
-  '#c0392b', '#e67e22', '#f1c40f', '#2ecc71', '#3498db',
-  '#9b59b6', '#1abc9c', '#ffffff',
-]
-
 export const CATEGORIES = [
   { id: 'wedding', name: '新婚', icon: '💒' },
   { id: 'proposal', name: '求婚', icon: '💍' },

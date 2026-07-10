@@ -179,4 +179,8 @@ export interface TemplateItem {
   tags?: string[]
   // 渲染图（admin 发布时生成的高清截图）
   renderedImage?: string
+  // 付费相关字段
+  is_paid?: boolean
+  price?: number
+  vip_free?: boolean
 }

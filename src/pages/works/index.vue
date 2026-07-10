@@ -142,15 +142,15 @@ const handleLogin = () => {
 }
 
 const handleWorkClick = (work: any) => {
-  uni.navigateTo({ url: `/pages/preview/index?id=${work.id}` })
+  uni.navigateTo({ url: `/pages/preview/index?templateId=${work.id}` })
 }
 
 const handleDraftClick = (draft: any) => {
-  uni.navigateTo({ url: `/pages/editor/index?id=${draft.id}` })
+  uni.navigateTo({ url: `/pages/editor/index?templateId=${draft.id}` })
 }
 
 const handlePreview = (work: any) => {
-  uni.navigateTo({ url: `/pages/preview/index?id=${work.id}` })
+  uni.navigateTo({ url: `/pages/preview/index?templateId=${work.id}` })
 }
 
 const handleShare = (work: any) => {
@@ -161,7 +161,7 @@ const handleShare = (work: any) => {
 }
 
 const handleEdit = (draft: any) => {
-  uni.navigateTo({ url: `/pages/editor/index?id=${draft.id}` })
+  uni.navigateTo({ url: `/pages/editor/index?templateId=${draft.id}` })
 }
 
 const handleDelete = (draft: any) => {

@@ -160,6 +160,7 @@
       :elementCount="elements.length"
       :getDraft="getDraft"
       :getCanvasEl="getCanvasEl"
+      :getFabricCanvas="() => fabricCanvas.value"
       :pageMode="pageMode"
       :getFlipPages="() => flipPages"
       @close="showPublishWizard = false"
@@ -169,8 +170,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useCanvas } from './composables/useCanvas'
+import { useFlipPages } from './composables/useFlipPages'
+import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
+import { useAutoSave } from './composables/useAutoSave'
 import {
   uploadImages,
   uploadFonts,
@@ -212,10 +216,8 @@ watch(dateValues, (val) => {
 const uploadedFontNames = ref<string[]>([])
 const fontList = computed(() => [...uploadedFontNames.value, ...fontListBase])
 
-async function onFontUpload(e: Event) {
-  const input = e.target as HTMLInputElement
-  const files = input.files
-  if (!files?.length) return
+async function onFontUpload(files: FileList) {
+  if (!files || files.length === 0) return
   try {
     const fileList = Array.from(files)
     await uploadFonts(fileList)
@@ -224,7 +226,6 @@ async function onFontUpload(e: Event) {
   } catch (err: any) {
     alert('字体上传失败: ' + (err.message || err))
   }
-  input.value = ''
 }
 
 async function loadUploadedFonts() {
@@ -261,16 +262,6 @@ const leftTab = ref<'material' | 'layers' | 'templates' | 'pages'>('material')
 const currentView = ref<'editor' | 'poster'>('editor')
 const sizeLabel = ref('375 × 667')
 const pageMode = ref<PageMode>('single')
-
-// 翻页模式状态
-const flipPages = ref<Array<{
-  id: string
-  name: string
-  pageType: string
-  background: any
-  elements: any[]
-}>>([])
-const currentFlipPageIndex = ref(0)
 
 // 背景 UI 状态
 const bgType = ref<'solid' | 'linear-gradient' | 'radial-gradient' | 'image'>('solid')
@@ -325,12 +316,12 @@ const {
   clearCanvas,
   dispose,
   refreshDatePlaceholders,
+  fabricCanvas,
 } = useCanvas({
   canvasRef,
   initialSize: { ...DEFAULT_CANVAS_SIZE },
   onSelectionChange: (el) => {
     // 选中元素时，同步 UI 状态到画布
-    console.log('selected:', el?.id)
   },
   onBackgroundChange: (bg) => {
     // 同步 App.vue 本地背景状态
@@ -345,6 +336,45 @@ const {
 
 // 图层：按 zIndex 降序显示（最上层排第一）
 const layers = computed(() => [...elements.value].sort((a, b) => b.zIndex - a.zIndex))
+
+// ============ 翻页模式 ============
+const {
+  flipPages,
+  currentFlipPageIndex,
+  initFlipPages,
+  selectFlipPage,
+  prevFlipPage,
+  nextFlipPage,
+  loadCurrentFlipPage,
+} = useFlipPages({
+  pageMode,
+  background,
+  elements,
+  canvasSize,
+  setBackground,
+  clearCanvas,
+  addImage: canvasAddImage,
+  addText: canvasAddText,
+})
+
+// ============ 键盘快捷键 ============
+const { onKeyDown } = useKeyboardShortcuts({
+  selectedId,
+  undo,
+  redo,
+  copySelected,
+  pasteFromClipboard,
+  saveToServer,
+  deleteSelected,
+  nudgeElement,
+  duplicateSelected,
+})
+
+// ============ 自动保存 ============
+const { saveDraftToLocal, restoreDraftFromLocal, startAutoSave } = useAutoSave({
+  getDraft,
+  loadDraft,
+})
 
 // ============ Phase 2: 素材库 ============
 const materialCategories = getMaterialCategories()
@@ -420,7 +450,6 @@ const currentTemplateCategory = ref('wedding')
 const currentTemplateSubtitle = ref('')
 const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
-const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
 // 起始模板
 const activePresetCat = ref('scene')
@@ -662,10 +691,10 @@ function applyTextFx(type: string) {
 
 // 从画布生成高清渲染图（2x 分辨率）
 async function generateRenderedImage(): Promise<string> {
-  const canvas = getCanvasEl()
-  if (!canvas) return ''
+  const fCanvas = fabricCanvas.value
+  if (!fCanvas) return ''
   try {
-    const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
+    const dataUrl = fCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
     const res = await fetch(dataUrl)
     const blob = await res.blob()
     const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })
@@ -761,36 +790,6 @@ function onTemplatePublished(templateId: string) {
   loadTemplateList()
   currentTemplateId.value = templateId
 }
-
-// ============ 本地草稿自动保存 ============
-const DRAFT_KEY = 'hunbei-draft-v1'
-const AUTO_SAVE_INTERVAL = 30_000 // 30 秒
-
-function saveDraftToLocal() {
-  try {
-    const draft = getDraft()
-    draft._savedAt = Date.now()
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
-  } catch (_) {}
-}
-
-function restoreDraftFromLocal() {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY)
-    if (!raw) return false
-    const draft = JSON.parse(raw)
-    if (draft && Array.isArray(draft.elements)) {
-      loadDraft(draft)
-      return true
-    }
-  } catch (_) {}
-  return false
-}
-
-onBeforeUnmount(() => {
-  if (autoSaveTimer.value) clearInterval(autoSaveTimer.value)
-  saveDraftToLocal()
-})
 
 // ============ 事件处理 ============
 
@@ -932,163 +931,6 @@ watch(pageMode, async () => {
   }
 })
 
-// ============ 翻页模式方法 ============
-function initFlipPages() {
-  flipPages.value = [
-    { id: 'flip-p1', name: '封面', pageType: 'cover', background: { type: 'solid', color1: '#ffffff' }, elements: [] },
-    { id: 'flip-p2', name: '照片', pageType: 'photo', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
-    { id: 'flip-p3', name: '邀请', pageType: 'invitation', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
-    { id: 'flip-p4', name: '时间地点', pageType: 'info', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
-    { id: 'flip-p5', name: '照片', pageType: 'photo', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
-    { id: 'flip-p6', name: '倒计时', pageType: 'countdown', background: { type: 'linear-gradient', color1: '#fff3e0', color2: '#ffe0b2', angle: 180 }, elements: [] },
-    { id: 'flip-p7', name: '照片', pageType: 'photo', background: { type: 'solid', color1: '#faf6f3' }, elements: [] },
-    { id: 'flip-p8', name: '尾页', pageType: 'ending', background: { type: 'solid', color1: '#ffffff' }, elements: [] },
-  ]
-  currentFlipPageIndex.value = 0
-}
-
-function selectFlipPage(idx: number) {
-  if (idx < 0 || idx >= flipPages.value.length) return
-  saveCurrentFlipPage()
-  currentFlipPageIndex.value = idx
-  loadCurrentFlipPage()
-}
-
-function prevFlipPage() {
-  if (currentFlipPageIndex.value > 0) {
-    selectFlipPage(currentFlipPageIndex.value - 1)
-  }
-}
-
-function nextFlipPage() {
-  if (currentFlipPageIndex.value < flipPages.value.length - 1) {
-    selectFlipPage(currentFlipPageIndex.value + 1)
-  }
-}
-
-function saveCurrentFlipPage() {
-  if (pageMode.value !== 'flip') return
-  const page = flipPages.value[currentFlipPageIndex.value]
-  if (page) {
-    page.background = { ...background.value }
-    page.elements = elements.value.map(el => {
-      const textEl = el as TextElement
-      const imgEl = el as ImageElement
-      return {
-        id: el.id,
-        type: el.type,
-        text: el.type === 'image' ? imgEl.src : textEl.content,
-        dataKey: (el as any).dataKey,
-        label: el.name || '元素',
-        x: el.x,
-        y: el.y,
-        width: el.width,
-        height: el.height,
-        zIndex: el.zIndex,
-        rotation: el.rotation,
-        opacity: el.opacity,
-        editable: el.editable !== false,
-        fontFamily: textEl.fontFamily,
-        fontSize: textEl.fontSize,
-        fontWeight: textEl.fontWeight,
-        fontStyle: textEl.fontStyle,
-        color: textEl.color,
-        textAlign: textEl.textAlign,
-        lineHeight: textEl.lineHeight,
-        letterSpacing: textEl.letterSpacing,
-        strokeColor: textEl.strokeColor,
-        strokeWidth: textEl.strokeWidth,
-        shadowColor: textEl.shadowColor,
-        shadowOffsetX: textEl.shadowOffsetX,
-        shadowOffsetY: textEl.shadowOffsetY,
-        shadowBlur: textEl.shadowBlur,
-        textDecoration: textEl.textDecoration,
-        direction: textEl.direction,
-        src: imgEl.src,
-        scale: imgEl.scale,
-        mask: imgEl.mask,
-        borderRadius: imgEl.borderRadius,
-        borderColor: imgEl.borderColor,
-        borderWidth: imgEl.borderWidth,
-        brightness: imgEl.brightness,
-        contrast: imgEl.contrast,
-        blur: imgEl.blur,
-        grayscale: imgEl.grayscale,
-        saturate: imgEl.saturate,
-      }
-    })
-  }
-}
-
-function loadCurrentFlipPage() {
-  if (pageMode.value !== 'flip') return
-  const page = flipPages.value[currentFlipPageIndex.value]
-  if (page) {
-    setBackground(page.background)
-    clearCanvas()
-    const cSize = canvasSize.value
-    const pxToRpx = 750 / cSize.width
-    page.elements.forEach(el => {
-      if (el.type === 'image') {
-        canvasAddImage(el.text || el.src, {
-          id: el.id,
-          x: el.x,
-          y: el.y,
-          width: el.width,
-          height: el.height,
-          rotation: el.rotation ?? 0,
-          opacity: el.opacity ?? 1,
-          zIndex: el.zIndex ?? 0,
-          src: el.text || el.src || '',
-          scale: el.scale || 'cover',
-          mask: el.mask || 'rect',
-          borderRadius: el.borderRadius || 0,
-          borderColor: el.borderColor || 'transparent',
-          borderWidth: el.borderWidth || 0,
-          brightness: el.brightness ?? 100,
-          contrast: el.contrast ?? 0,
-          blur: el.blur ?? 0,
-          grayscale: el.grayscale ?? 0,
-          saturate: el.saturate ?? 100,
-          dataKey: el.dataKey,
-          editable: el.editable !== false,
-        } as any)
-      } else {
-        const fontSize = el.fontSize != null ? Math.round(el.fontSize / pxToRpx) : 24
-        canvasAddText({
-          id: el.id,
-          x: el.x,
-          y: el.y,
-          width: el.width,
-          height: el.height,
-          rotation: el.rotation ?? 0,
-          opacity: el.opacity ?? 1,
-          zIndex: el.zIndex ?? 0,
-          content: el.text || '',
-          fontFamily: el.fontFamily || '思源宋体, serif',
-          fontSize: fontSize,
-          fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
-          fontStyle: el.fontStyle || 'normal',
-          color: el.color || '#333333',
-          textAlign: el.textAlign || 'center',
-          lineHeight: el.lineHeight || 1.5,
-          letterSpacing: el.letterSpacing || 2,
-          strokeColor: el.strokeColor || 'transparent',
-          strokeWidth: el.strokeWidth || 0,
-          shadowColor: el.shadowColor || 'transparent',
-          shadowOffsetX: el.shadowOffsetX || 0,
-          shadowOffsetY: el.shadowOffsetY || 0,
-          shadowBlur: el.shadowBlur || 0,
-          textDecoration: el.textDecoration || 'none',
-          direction: el.direction || 'auto',
-          dataKey: el.dataKey,
-          editable: el.editable !== false,
-        } as any)
-      }
-    })
-  }
-}
-
 function onManualSize(payload: { e: Event; side: 'width' | 'height' }) {
   const value = Number((payload.e.target as HTMLInputElement).value)
   if (!value || value < 50) return
@@ -1109,70 +951,6 @@ function onFontStyleChange(val: string) {
   updateSelected(patch as any)
 }
 
-// ============ 键盘 ============
-function onKeyDown(e: KeyboardEvent) {
-  // 仅当焦点不在输入框里时响应快捷键
-  const target = e.target as HTMLElement
-  if (
-    target &&
-    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' ||
-      target.isContentEditable)
-  ) {
-    // 允许 Ctrl+A 之类，这里我们不拦截
-    return
-  }
-
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
-    e.preventDefault()
-    undo()
-    return
-  }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
-    e.preventDefault()
-    redo()
-    return
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
-    e.preventDefault()
-    redo()
-    return
-  }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
-    e.preventDefault()
-    copySelected()
-    return
-  }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
-    e.preventDefault()
-    pasteFromClipboard()
-    return
-  }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-    e.preventDefault()
-    saveToServer()
-    return
-  }
-  if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (selectedId.value) {
-      e.preventDefault()
-      deleteSelected()
-    }
-    return
-  }
-  // 方向键精确移动
-  const step = e.shiftKey ? 10 : 1
-  if (e.key === 'ArrowLeft' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, -step, 0) }
-  if (e.key === 'ArrowRight' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, step, 0) }
-  if (e.key === 'ArrowUp' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, 0, -step) }
-  if (e.key === 'ArrowDown' && selectedId.value) { e.preventDefault(); nudgeElement(selectedId.value, 0, step) }
-  // Ctrl+D 原地复制
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
-    e.preventDefault()
-    duplicateSelected()
-    return
-  }
-}
-
 // 滚轮缩放
 function onWheel(e: WheelEvent) {
   if (e.ctrlKey || e.metaKey) {
@@ -1189,7 +967,7 @@ onMounted(async () => {
   if (!restoreDraftFromLocal()) {
     pushHistory('init')
   }
-  autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
+  startAutoSave()
   loadTemplateList()
   loadUploadedFonts()
   window.addEventListener('publish-success', () => showToast('模板发布成功！'))

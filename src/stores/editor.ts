@@ -3,7 +3,7 @@ import { ref, reactive } from 'vue'
 import { useTemplateStore } from './template'
 import { DEFAULT_ELEMENT_STYLE, MATERIAL_LIST } from '@/constants/editor'
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
-import { resolveImageUrl } from '@/utils/image'
+import { resolveUrl } from '@/utils/url'
 import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage } from '@/types'
 import { request } from '@/utils/request'
 import { getStorage, setStorage } from '@/utils/storage'
@@ -18,7 +18,7 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedElement = ref<number | null>(null)
   const editingText = ref('')
   const currentTemplateId = ref<string>(DEFAULT_TEMPLATE_ID)
-  const currentWorkId = ref<number | null>(null)
+  const currentWorkId = ref<string | null>(null)
   const templateLoading = ref(false)
 
   const currentFont = ref<string>('思源宋体')
@@ -100,7 +100,7 @@ export const useEditorStore = defineStore('editor', () => {
   function mapTemplateElement(el: any): EditableElement {
     return {
       type: el.type,
-      text: el.type === 'image' ? resolveImageUrl(el.text) : el.text,
+      text: el.type === 'image' ? resolveUrl(el.text) : el.text,
       dataKey: el.dataKey,
       label: el.label,
       style: el.style ? { ...el.style } : undefined,
@@ -136,7 +136,7 @@ export const useEditorStore = defineStore('editor', () => {
         label: sec.label,
         placeholder: sec.placeholder,
         text: sec.text,
-        image: sec.image ? resolveImageUrl(sec.image) : undefined,
+        image: sec.image ? resolveUrl(sec.image) : undefined,
         dataKey: sec.dataKey,
         style: sec.style ? { ...sec.style } : undefined,
         editable: sec.editable,
@@ -156,7 +156,7 @@ export const useEditorStore = defineStore('editor', () => {
           color1: page.background?.color1 || '#ffffff',
           color2: page.background?.color2,
           angle: page.background?.angle,
-          imageUrl: page.background?.imageUrl ? resolveImageUrl(page.background.imageUrl) : undefined,
+          imageUrl: page.background?.imageUrl ? resolveUrl(page.background.imageUrl) : undefined,
           imageScale: page.background?.imageScale,
           imageOpacity: page.background?.imageOpacity,
         },
@@ -181,7 +181,7 @@ export const useEditorStore = defineStore('editor', () => {
       }
       // 补全背景图相对路径
       if (bg.image) {
-        bg.image = resolveImageUrl(bg.image)
+        bg.image = resolveUrl(bg.image)
       }
       background.value = bg
     } else {
@@ -189,7 +189,7 @@ export const useEditorStore = defineStore('editor', () => {
     }
 
     // 同步渲染图
-    renderedImage.value = resolveImageUrl(template.renderedImage || '')
+    renderedImage.value = resolveUrl(template.renderedImage || '')
 
     // 同步到 TemplateStore（只覆盖有实际值的字段，保留非空默认值）
     const templateStore = useTemplateStore()
@@ -203,7 +203,7 @@ export const useEditorStore = defineStore('editor', () => {
         if (incoming || !current) {
           // 对图片类型的 data 字段补全相对路径
           const imageKeys = ['coverImage', 'photo1', 'photo2', 'photo3', 'photo4']
-          templateStore.templateData[k] = imageKeys.includes(k) ? resolveImageUrl(incoming) : incoming
+          templateStore.templateData[k] = imageKeys.includes(k) ? resolveUrl(incoming) : incoming
         }
       }
     })
@@ -389,7 +389,7 @@ export const useEditorStore = defineStore('editor', () => {
     uni.showToast({ title: '图片已替换', icon: 'success' })
   }
 
-  function setCurrentWorkId(id: number | null) {
+  function setCurrentWorkId(id: string | null) {
     currentWorkId.value = id
   }
 

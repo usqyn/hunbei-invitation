@@ -132,11 +132,11 @@ export function useCanvas(opts: UseCanvasOptions) {
       // 画布中心对齐
       if (Math.abs(cx - w / 2) < threshold) {
         target.set({ left: w / 2 - (target.width * (target.scaleX || 1)) / 2 })
-        guides.push(new fabric.Line([w / 2, 0, w / 2, h], { stroke: '#e84a6e', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.8 } as any))
+        guides.push(new fabric.Line([w / 2, 0, w / 2, h], { stroke: '#e84a6e', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.8 }))
       }
       if (Math.abs(cy - h / 2) < threshold) {
         target.set({ top: h / 2 - (target.height * (target.scaleY || 1)) / 2 })
-        guides.push(new fabric.Line([0, h / 2, w, h / 2], { stroke: '#e84a6e', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.8 } as any))
+        guides.push(new fabric.Line([0, h / 2, w, h / 2], { stroke: '#e84a6e', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.8 }))
       }
 
       // 与其他对象边缘对齐
@@ -155,19 +155,19 @@ export function useCanvas(opts: UseCanvasOptions) {
 
         if (Math.abs(tLeft - oLeft) < threshold) {
           target.set({ left: oLeft })
-          guides.push(new fabric.Line([oLeft, 0, oLeft, h], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+          guides.push(new fabric.Line([oLeft, 0, oLeft, h], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 }))
         }
         if (Math.abs(tRight - oRight) < threshold) {
           target.set({ left: oRight - (target.width * (target.scaleX || 1)) })
-          guides.push(new fabric.Line([oRight, 0, oRight, h], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+          guides.push(new fabric.Line([oRight, 0, oRight, h], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 }))
         }
         if (Math.abs(tTop - oTop) < threshold) {
           target.set({ top: oTop })
-          guides.push(new fabric.Line([0, oTop, w, oTop], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+          guides.push(new fabric.Line([0, oTop, w, oTop], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 }))
         }
         if (Math.abs(tBottom - oBottom) < threshold) {
           target.set({ top: oBottom - (target.height * (target.scaleY || 1)) })
-          guides.push(new fabric.Line([0, oBottom, w, oBottom], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 } as any))
+          guides.push(new fabric.Line([0, oBottom, w, oBottom], { stroke: '#42a5f5', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.6 }))
         }
       })
 
@@ -237,7 +237,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     // 纯色
     if (bg.type === 'solid') {
       canvas.backgroundColor = bg.color1
-      canvas.set('backgroundImage' as any, null)
+      canvas.backgroundImage = null
       canvas.renderAll()
       return
     }
@@ -262,10 +262,10 @@ export function useCanvas(opts: UseCanvasOptions) {
           { offset: 0, color: bg.color1 },
           { offset: 1, color: bg.color2 || bg.color1 },
         ],
-      } as any)
+      })
 
-      canvas.backgroundColor = gradient as any
-      canvas.set('backgroundImage' as any, null)
+      canvas.backgroundColor = gradient
+      canvas.backgroundImage = null
       canvas.renderAll()
       return
     }
@@ -356,8 +356,8 @@ export function useCanvas(opts: UseCanvasOptions) {
       originY: 'center',
       fontFamily: el.fontFamily,
       fontSize: el.fontSize,
-      fontWeight: el.fontWeight as any,
-      fontStyle: el.fontStyle as any,
+      fontWeight: el.fontWeight,
+      fontStyle: el.fontStyle,
       fill: el.color,
       textAlign: el.textAlign,
       lineHeight: el.lineHeight,
@@ -672,7 +672,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         left: newEl.x, top: newEl.y,
         originX: 'center', originY: 'center',
         fontFamily: newEl.fontFamily, fontSize: newEl.fontSize,
-        fontWeight: newEl.fontWeight as any, fontStyle: newEl.fontStyle as any,
+        fontWeight: newEl.fontWeight, fontStyle: newEl.fontStyle,
         fill: newEl.color, textAlign: newEl.textAlign,
         lineHeight: newEl.lineHeight,
         charSpacing: resolvedDirectionPaste === 'rtl' ? 0 : newEl.letterSpacing * 10,
@@ -848,19 +848,19 @@ export function useCanvas(opts: UseCanvasOptions) {
         text: patch.content ?? t.content,
         fontFamily: patch.fontFamily ?? t.fontFamily,
         fontSize: patch.fontSize ?? t.fontSize,
-        fontWeight: (patch.fontWeight ?? t.fontWeight) as any,
-        fontStyle: (patch.fontStyle ?? t.fontStyle) as any,
+        fontWeight: patch.fontWeight ?? t.fontWeight,
+        fontStyle: patch.fontStyle ?? t.fontStyle,
         fill: fillValue,
-        textAlign: (patch.textAlign ?? t.textAlign) as any,
+        textAlign: patch.textAlign ?? t.textAlign,
         lineHeight: patch.lineHeight ?? t.lineHeight,
         charSpacing: resolvedDirectionUpdate === 'rtl' ? 0 : (patch.letterSpacing ?? t.letterSpacing) * 10,
         stroke: patch.strokeColor ?? t.strokeColor,
         strokeWidth: patch.strokeWidth ?? t.strokeWidth,
         opacity: patch.opacity ?? t.opacity,
         angle: patch.rotation ?? t.rotation,
-        textDecoration: patch.textDecoration ?? t.textDecoration as any,
+        textDecoration: patch.textDecoration ?? t.textDecoration,
         direction: resolvedDirectionUpdate,
-      } as any)
+      })
 
       // 阴影
       if (patch.shadowColor !== undefined || patch.shadowBlur !== undefined || patchAny.longShadow) {
@@ -869,22 +869,22 @@ export function useCanvas(opts: UseCanvasOptions) {
           const lsColor = patchAny.longShadowColor || t.color
           const lsBlur = patchAny.longShadowBlur || 0
           const lsLen = patchAny.longShadowLength || 8
-          ;(textObj as any).set('shadow', new fabric.Shadow({
+          textObj.set('shadow', new fabric.Shadow({
             color: lsColor, blur: lsBlur, offsetX: lsLen, offsetY: lsLen,
           }))
         } else if (t.shadowColor && t.shadowColor !== 'transparent' && t.shadowBlur > 0) {
-          ;(textObj as any).set('shadow', new fabric.Shadow({
+          textObj.set('shadow', new fabric.Shadow({
             color: t.shadowColor, blur: t.shadowBlur, offsetX: t.shadowOffsetX, offsetY: t.shadowOffsetY,
           }))
         } else {
-          ;(textObj as any).set('shadow', null)
+          textObj.set('shadow', null)
         }
       }
 
       // 霓虹发光：双层描边+外发光
       if (patchAny.neonGlow) {
         const neonColor = patchAny.neonColor || t.color
-        ;(textObj as any).set('shadow', new fabric.Shadow({
+        textObj.set('shadow', new fabric.Shadow({
           color: neonColor, blur: 15, offsetX: 0, offsetY: 0,
         }))
       }
@@ -895,7 +895,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       obj.set({
         opacity: (patch as Partial<ImageElement>).opacity ?? img.opacity,
         angle: (patch as Partial<ImageElement>).rotation ?? img.rotation,
-      } as any)
+      })
       // 应用图片滤镜（CSS filter 方式）
       const brightness = patch.brightness ?? img.brightness
       const contrast = patch.contrast ?? img.contrast
@@ -928,7 +928,7 @@ export function useCanvas(opts: UseCanvasOptions) {
           ry: br,
           originX: 'left',
           originY: 'top',
-        } as any))
+        }))
       } else {
         ;(obj as any).set('clipPath' as any, null)
       }
@@ -1046,7 +1046,7 @@ export function useCanvas(opts: UseCanvasOptions) {
           left: el.x, top: el.y,
           originX: 'center', originY: 'center',
           fontFamily: el.fontFamily, fontSize: el.fontSize,
-          fontWeight: el.fontWeight as any, fontStyle: el.fontStyle as any,
+          fontWeight: el.fontWeight, fontStyle: el.fontStyle,
           fill: el.color, textAlign: el.textAlign,
           lineHeight: el.lineHeight, charSpacing: resolvedDirectionDraft === 'rtl' ? 0 : el.letterSpacing * 10,
           stroke: el.strokeColor, strokeWidth: el.strokeWidth,
@@ -1080,7 +1080,7 @@ export function useCanvas(opts: UseCanvasOptions) {
           })
         })
       }
-      elements.value.push(el as any)
+      elements.value.push(el)
     })
 
     addTasks.forEach(fn => fn())
@@ -1188,10 +1188,10 @@ export function useCanvas(opts: UseCanvasOptions) {
     const gs = gridSize.value
     const lines: fabric.Line[] = []
     for (let x = gs; x < w; x += gs) {
-      lines.push(new fabric.Line([x, 0, x, h], { stroke: 'rgba(0,0,0,0.05)', strokeWidth: 1, selectable: false, evented: false } as any))
+      lines.push(new fabric.Line([x, 0, x, h], { stroke: 'rgba(0,0,0,0.05)', strokeWidth: 1, selectable: false, evented: false }))
     }
     for (let y = gs; y < h; y += gs) {
-      lines.push(new fabric.Line([0, y, w, y], { stroke: 'rgba(0,0,0,0.05)', strokeWidth: 1, selectable: false, evented: false } as any))
+      lines.push(new fabric.Line([0, y, w, y], { stroke: 'rgba(0,0,0,0.05)', strokeWidth: 1, selectable: false, evented: false }))
     }
     lines.forEach((l: any) => { l.isGrid = true })
     canvas.add(...lines)

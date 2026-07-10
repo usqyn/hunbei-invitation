@@ -3,3 +3,8 @@ npm-debug.log
 .git
 .gitignore
 *.md
+data.db
+poster.db
+data.json
+uploads/
+*.py

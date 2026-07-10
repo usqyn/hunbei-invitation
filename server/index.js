@@ -8,7 +8,7 @@ const initSqlJs = require('sql.js')
 const jwt = require('jsonwebtoken')
 
 const app = express()
-const PORT = 3001
+const PORT = process.env.PORT || 3001
 const JWT_SECRET = process.env.JWT_SECRET
 if (!JWT_SECRET) {
   console.error('\n❌ 错误: 请设置环境变量 JWT_SECRET')
@@ -173,6 +173,16 @@ async function initDatabase() {
   db.run("CREATE INDEX IF NOT EXISTS idx_feedback_phone ON feedback(phone)")
   db.run("CREATE INDEX IF NOT EXISTS idx_recycle_bin_phone ON recycle_bin(phone)")
   db.run("CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_templates_status ON templates(status)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_templates_is_paid ON templates(is_paid)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_templates_updatedAt ON templates(updatedAt)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_orders_createdAt ON orders(createdAt)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_favorites_phone_createdAt ON favorites(phone, createdAt)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_footprints_phone_timestamp ON footprints(phone, timestamp)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_notifications_phone_createdAt ON notifications(phone, createdAt)")
 
   saveDatabase()
 }
@@ -274,7 +284,10 @@ function rateLimit(req, res, next) {
   const now = Date.now()
   if (!loginAttempts[ip]) loginAttempts[ip] = []
   loginAttempts[ip] = loginAttempts[ip].filter(t => now - t < 60000)
-  if (loginAttempts[ip].length >= 10) {
+  if (loginAttempts[ip].length === 0) {
+    delete loginAttempts[ip]
+  }
+  if (loginAttempts[ip] && loginAttempts[ip].length >= 10) {
     return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试' })
   }
   loginAttempts[ip].push(now)
@@ -493,7 +506,7 @@ app.post('/api/user/login', rateLimit, (req, res) => {
 })
 
 // 事件追踪
-app.post('/api/track', (req, res) => {
+app.post('/api/track', requireAuth, (req, res) => {
   try {
     const { event, params, platform, version } = req.body
     if (!event) {
@@ -769,11 +782,40 @@ app.get('/api/music', (req, res) => {
   try {
     let sql = "SELECT id, name, tag, src, hot FROM music"
     const params = []
+    const conditions = []
     if (req.query.tag && req.query.tag !== '全部') {
-      sql += " WHERE tag = ?"
+      conditions.push("tag = ?")
       params.push(req.query.tag)
     }
+    if (conditions.length) {
+      sql += " WHERE " + conditions.join(" AND ")
+    }
     sql += " ORDER BY hot DESC, id ASC"
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM music" + (conditions.length ? " WHERE " + conditions.join(" AND ") : "")
+      const countResult = db.exec(countSql, [...params])
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const list = result.length ? result[0].values.map(row => ({
+        id: row[0], name: row[1], tag: row[2], src: row[3], hot: !!row[4],
+      })) : []
+
+      return res.json({
+        success: true,
+        data: list,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
     const result = db.exec(sql, params)
     const list = result.length ? result[0].values.map(row => ({
       id: row[0], name: row[1], tag: row[2], src: row[3], hot: !!row[4],
@@ -908,7 +950,7 @@ app.delete('/api/templates/:id', requireAdmin, (req, res) => {
 // ============ 订单 API ============
 
 // 创建订单
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', requireAuth, (req, res) => {
   try {
     const { items, totalAmount, contactName, contactPhone, address, note } = req.body
     if (!items || !items.length) {
@@ -930,13 +972,13 @@ app.post('/api/orders', (req, res) => {
 })
 
 // 获取用户订单列表（支持分页 ?page=1&limit=20）
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     let sql = "SELECT * FROM orders"
     const conditions = []
     const params = []
-    if (phone && phone !== 'wechat_user') {
+    if (phone) {
       conditions.push("phone = ?")
       params.push(phone)
     }
@@ -985,7 +1027,7 @@ app.get('/api/orders', (req, res) => {
 })
 
 // 更新订单状态
-app.put('/api/orders/:id/status', (req, res) => {
+app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
   try {
     const { status } = req.body
     const validStatuses = ['pending', 'paid', 'shipped', 'completed', 'cancelled']
@@ -1154,6 +1196,12 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     if (!phone) {
       return res.status(401).json({ success: false, error: '请先登录' })
     }
+    // TODO: 接入真实支付回调验证
+    // 当前为演示，实际应验证支付状态
+    // 临时方案：检查是否有 payment_id 参数
+    if (!req.body.payment_id) {
+      return res.status(400).json({ success: false, error: '缺少支付凭证' })
+    }
     const { plan, price } = req.body
     const planDuration = { monthly: 30, quarterly: 90, yearly: 365 }
     const days = planDuration[plan] || 30
@@ -1308,7 +1356,7 @@ app.post('/api/export/poster', (req, res) => {
 })
 
 // ========== 支付订单 ==========
-app.post('/api/orders/:id/pay', (req, res) => {
+app.post('/api/orders/:id/pay', requireAuth, (req, res) => {
   try {
     const existing = db.exec("SELECT id FROM orders WHERE id = ?", [req.params.id])
     if (!existing.length || !existing[0].values.length) {
@@ -1451,7 +1499,43 @@ app.get('/api/works/recycle', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.json({ success: true, data: [] })
-    const result = db.exec("SELECT * FROM recycle_bin WHERE phone = ? ORDER BY deletedAt DESC", [phone])
+    const sql = "SELECT * FROM recycle_bin WHERE phone = ? ORDER BY deletedAt DESC"
+    const params = [phone]
+
+    const page = parseInt(req.query.page, 10)
+    const limit = parseInt(req.query.limit, 10)
+
+    if (page > 0 && limit > 0) {
+      const countSql = "SELECT COUNT(*) as total FROM recycle_bin WHERE phone = ?"
+      const countResult = db.exec(countSql, [phone])
+      const total = countResult.length && countResult[0].values.length ? countResult[0].values[0][0] : 0
+      const totalPages = Math.ceil(total / limit)
+      const offset = (page - 1) * limit
+
+      const paginatedSql = sql + " LIMIT ? OFFSET ?"
+      const paginatedParams = [...params, limit, offset]
+      const result = db.exec(paginatedSql, paginatedParams)
+      const items = result.length ? result[0].values.map(row => {
+        const cols = result[0].columns
+        const obj = {}
+        row.forEach((val, i) => {
+          if (cols[i] === 'work_data') {
+            try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+          } else {
+            obj[cols[i]] = val
+          }
+        })
+        return obj
+      }) : []
+
+      return res.json({
+        success: true,
+        data: items,
+        pagination: { page, limit, total, totalPages },
+      })
+    }
+
+    const result = db.exec(sql, params)
     const items = result.length ? result[0].values.map(row => {
       const cols = result[0].columns
       const obj = {}
@@ -1499,11 +1583,14 @@ app.delete('/api/works/:id', requireAuth, (req, res) => {
 })
 
 // ========== 批量事件追踪 ==========
-app.post('/api/track/batch', (req, res) => {
+app.post('/api/track/batch', requireAuth, (req, res) => {
   try {
     const { events } = req.body
     if (!events || !Array.isArray(events)) {
       return res.status(400).json({ success: false, error: '缺少 events 数组' })
+    }
+    if (events.length > 100) {
+      return res.status(400).json({ success: false, error: '单次上报事件数不能超过 100 条' })
     }
     const sessionId = req.headers['x-session-id'] || req.headers['session-id'] || uuidv4()
     const userId = req.user?.phone || ''

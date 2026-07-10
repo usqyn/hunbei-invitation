@@ -1,3 +1,4 @@
+// TODO: fetchMusicFromApi 是网络请求函数，应迁移到 api/index.ts 或 utils/request.ts 中
 import type { Music } from '@/types'
 import { API_BASE } from '@/config'
 

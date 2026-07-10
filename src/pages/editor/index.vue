@@ -488,7 +488,7 @@ function handleSave() {
       return
     }
   }
-  const id = editorStore.currentWorkId || Date.now()
+  const id = editorStore.currentWorkId || String(Date.now())
   if (!editorStore.currentWorkId) {
     editorStore.setCurrentWorkId(id)
   }
@@ -525,7 +525,7 @@ function handleExport() {
             success: (r) => {
               if (r.confirm) {
                 // TODO: 调用微信支付
-                doExport({ watermark: false, quality: 'high' })
+                uni.showToast({ title: '微信支付功能开发中', icon: 'none' })
               }
             }
           })
@@ -539,9 +539,10 @@ function handleExport() {
 }
 
 async function doExport(options: { watermark: boolean; quality: string }) {
+  if (!editorStore.currentWorkId) return
   uni.showLoading({ title: '导出中...' })
   try {
-    const res = await exportInvitation(String(editorStore.currentWorkId), options)
+    const res = await exportInvitation(editorStore.currentWorkId, options)
     uni.hideLoading()
     uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
     // 可以下载图片
@@ -610,9 +611,10 @@ onMounted(() => {
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
 
-  if (options.templateId) {
-    editorStore.loadTemplateById(options.templateId)
-    track('edit_start', { template_id: options.templateId })
+  const templateId = options.templateId || options.id
+  if (templateId) {
+    editorStore.loadTemplateById(templateId)
+    track('edit_start', { template_id: templateId })
   } else {
     editorStore.restoreTemplate()
     track('edit_start', { template_id: editorStore.currentTemplateId })

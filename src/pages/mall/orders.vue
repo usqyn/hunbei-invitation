@@ -55,6 +55,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { fetchOrders } from '@/api'
 
 interface Order {
   orderNo: string
@@ -84,7 +85,18 @@ const totalCount = (order: Order) => {
   return order.items.reduce((sum, item) => sum + item.quantity, 0)
 }
 
-const loadOrders = () => {
+const loadOrders = async () => {
+  try {
+    const res = await fetchOrders()
+    if (res && res.length > 0) {
+      orders.value = res.sort((a: Order, b: Order) => {
+        return (b.createTime || '').localeCompare(a.createTime || '')
+      })
+      return
+    }
+  } catch (e) {
+    // TODO: 后端 API 未就绪时 fallback 本地存储
+  }
   try {
     const savedOrders = uni.getStorageSync('mall_orders') || []
     orders.value = savedOrders.sort((a: Order, b: Order) => {

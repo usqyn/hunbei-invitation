@@ -5,7 +5,7 @@
       <view class="header-back" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
-      <text class="header-title">toy tamaxia</text>
+      <text class="header-title">分享请柬</text>
       <view class="header-right"></view>
     </view>
 
@@ -230,9 +230,11 @@ function onSelectTemplate(item: string) {
 
 // 分享渠道
 async function onShareMoments() {
+  const workId = editorStore.currentWorkId
+  if (!workId) return
   uni.showLoading({ title: '生成海报中...' })
   try {
-    const res = await generatePoster(String(editorStore.currentWorkId))
+    const res = await generatePoster(workId)
     uni.hideLoading()
     uni.downloadFile({
       url: res.url,
@@ -252,9 +254,11 @@ async function onShareMoments() {
 }
 
 async function onSharePoster() {
+  const workId = editorStore.currentWorkId
+  if (!workId) return
   uni.showLoading({ title: '生成海报中...' })
   try {
-    const res = await generatePoster(String(editorStore.currentWorkId))
+    const res = await generatePoster(workId)
     uni.hideLoading()
     uni.showModal({
       title: '分享海报',

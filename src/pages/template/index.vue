@@ -120,6 +120,11 @@ import { useUserStore } from '@/stores/user'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
 
+const isPurchased = computed(() => {
+  // TODO: 从用户订单状态获取真实购买状态
+  return userStore.isVip()
+})
+
 // 分类列表（静态配置，可根据 API 动态拉取）
 const STATIC_CATEGORIES = [
   { id: 'wedding', name: '婚礼请柬', icon: '/static/images/categories/wedding.jpg' },
@@ -287,8 +292,7 @@ function formatLikes(num: number): string {
 function onSelectTemplate(template: TemplateItem) {
   if (template.is_paid) {
     const isVip = userStore.isVip()
-    const isPurchased = false // TODO: 从用户状态获取
-    if (!isVip && !isPurchased) {
+    if (!isVip && !isPurchased.value) {
       uni.showModal({
         title: '付费模板',
         content: `该模板需要支付 ${template.price || 0} 元，或开通VIP免费使用`,

@@ -379,9 +379,9 @@
               v-for="(sticker, idx) in posterStore.stickers"
               :key="idx"
               class="sticker-item"
-              @click="onInsertSticker(sticker)"
+              @click="onInsertSticker(sticker.url)"
             >
-              <image class="sticker-img" :src="sticker" mode="aspectFit" />
+              <image class="sticker-img" :src="sticker.url" mode="aspectFit" />
             </view>
           </view>
           <view v-else class="sticker-empty">

@@ -106,6 +106,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { fetchProducts } from '@/api'
 
 interface Product {
   id: number
@@ -124,7 +125,7 @@ interface Product {
 
 const categories = ['全部', '婚礼饰品', '气球装饰', '请柬设计', '婚礼策划', '摄影跟拍']
 
-const products: Product[] = [
+const fallbackProducts: Product[] = [
   {
     id: 1, name: '哈萨克风格耳环', slogan: '【手工刺绣】', spec: '纯银耳钩+哈萨克刺绣',
     image: '/static/images/categories/earring.jpg', badge: '爆款', promo: '限时包邮', price: '188', originalPrice: '268',
@@ -211,6 +212,8 @@ const products: Product[] = [
   }
 ]
 
+const products = ref<Product[]>([])
+
 const activeCategory = ref(0)
 const searchText = ref('')
 const showDetail = ref(false)
@@ -219,9 +222,23 @@ const cartCount = ref(0)
 const cartTotal = ref('0.00')
 
 const filteredProducts = computed(() => {
-  if (activeCategory.value === 0) return products
-  return products.filter(p => p.category === activeCategory.value)
+  if (activeCategory.value === 0) return products.value
+  return products.value.filter(p => p.category === activeCategory.value)
 })
+
+const loadProducts = async () => {
+  try {
+    const res = await fetchProducts()
+    if (res && res.list && res.list.length > 0) {
+      products.value = res.list
+    } else {
+      products.value = fallbackProducts
+    }
+  } catch (e) {
+    // TODO: 后端 API 未就绪时 fallback 本地数据
+    products.value = fallbackProducts
+  }
+}
 
 const updateCartInfo = () => {
   try {
@@ -304,6 +321,7 @@ const goCheckout = () => {
 
 onShow(() => {
   updateCartInfo()
+  loadProducts()
 })
 </script>
 

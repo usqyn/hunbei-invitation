@@ -226,7 +226,7 @@ import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
-import { exportInvitation, addFavorite, removeFavorite, fetchSimilarTemplates } from '@/api'
+import { exportInvitation, addFavorite, removeFavorite, fetchSimilarTemplates, fetchRecommendProducts } from '@/api'
 import type { EditableElement } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -251,7 +251,7 @@ const displayTitle = computed(() => {
   const b = templateStore.basicInfo.brideName
   if (g && b) return g + ' · ' + b
   if (g || b) return g || b
-  return 'toy tamaxia'
+  return '婚贝请柬'
 })
 
 const templateId = ref('')
@@ -259,12 +259,24 @@ const templateId = ref('')
 const watermarkedPreview = computed(() => editorStore.renderedImage || '')
 const hdPreview = computed(() => editorStore.renderedImage || '')
 
-const recommendProducts = ref([
+const fallbackRecommendProducts = [
   { id: 1, name: '哈萨克风格耳环', price: 188, image: '/static/images/categories/earring.jpg' },
   { id: 2, name: '气球拱门定制', price: 688, image: '/static/images/mall/banner1.jpg' },
   { id: 3, name: '新娘手捧花定制', price: 398, image: '/static/images/mall/banner2.jpg' },
   { id: 4, name: '婚车装饰定制', price: 888, image: '/static/images/mall/banner2.jpg' },
-])
+]
+const recommendProducts = ref<any[]>([...fallbackRecommendProducts])
+
+async function loadRecommendProducts() {
+  try {
+    const data = await fetchRecommendProducts('wedding')
+    if (data && Array.isArray(data) && data.length > 0) {
+      recommendProducts.value = data
+    }
+  } catch (e) {
+    console.warn('加载推荐商品失败:', e)
+  }
+}
 
 function resolveText(text: string): string {
   return resolveDatePlaceholders(text, templateStore.templateData)
@@ -289,15 +301,17 @@ onMounted(() => {
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
-  if (options.templateId) {
-    templateId.value = options.templateId
-    editorStore.loadTemplateById(options.templateId)
+  const id = options.templateId || options.id
+  if (id) {
+    templateId.value = id
+    editorStore.loadTemplateById(id)
   }
   track('preview_view', { template_id: templateId.value })
   nextTick(() => {
     setTimeout(() => updateCardSize(), 100)
   })
   loadSimilarTemplates()
+  loadRecommendProducts()
 })
 
 watch(() => editorStore.templateLoading, (loading) => {
@@ -340,13 +354,14 @@ const handleShare = () => {
 const isFavorited = ref(false)
 
 async function toggleFavorite() {
+  if (!editorStore.currentWorkId) return
   try {
     if (isFavorited.value) {
-      await removeFavorite(String(editorStore.currentWorkId))
+      await removeFavorite(editorStore.currentWorkId)
       isFavorited.value = false
       uni.showToast({ title: '已取消收藏', icon: 'none' })
     } else {
-      await addFavorite(String(editorStore.currentWorkId))
+      await addFavorite(editorStore.currentWorkId)
       isFavorited.value = true
       uni.showToast({ title: '已收藏', icon: 'success' })
     }
@@ -379,9 +394,10 @@ const goToVip = () => {
 }
 
 async function exportFree() {
+  if (!editorStore.currentWorkId) return
   uni.showLoading({ title: '导出中...' })
   try {
-    const res = await exportInvitation(String(editorStore.currentWorkId), { watermark: true, quality: 'normal' })
+    const res = await exportInvitation(editorStore.currentWorkId, { watermark: true, quality: 'normal' })
     uni.hideLoading()
     uni.showToast({ title: '已导出', icon: 'success' })
   } catch (e) {
@@ -425,10 +441,10 @@ function getFlipElementStyle(el: any): Record<string, string> {
   const cs = editorStore.canvasSize
   return {
     position: 'absolute',
-    left: el.x + '%',
-    top: el.y + '%',
-    width: el.width + '%',
-    height: el.height + '%',
+    left: (el.x / cs.width * 100) + '%',
+    top: (el.y / cs.height * 100) + '%',
+    width: (el.width / cs.width * 100) + '%',
+    height: (el.height / cs.height * 100) + '%',
     transform: `rotate(${el.rotation || 0}deg)`,
     opacity: el.opacity ?? 1,
     zIndex: el.zIndex || 1,
@@ -437,7 +453,6 @@ function getFlipElementStyle(el: any): Record<string, string> {
 
 function getFlipTextStyle(el: any): Record<string, string> {
   const style = el.style || {}
-  const cs = editorStore.canvasSize
   return {
     fontFamily: style.font || 'sans-serif',
     fontSize: (style.fontSize || 28) + 'rpx',

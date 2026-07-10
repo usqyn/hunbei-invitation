@@ -237,6 +237,7 @@ const props = defineProps<{
   elementCount: number
   getDraft: () => any
   getCanvasEl: () => HTMLCanvasElement | null
+  getFabricCanvas?: () => any
   pageMode: string
   getFlipPages?: () => any[]
 }>()
@@ -426,10 +427,10 @@ async function doPublish() {
 
     // 生成 2x 渲染图
     let renderedImageUrl = ''
-    const canvas = props.getCanvasEl()
-    if (canvas) {
+    const fCanvas = props.getFabricCanvas?.()
+    if (fCanvas) {
       try {
-        const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
+        const dataUrl = fCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
         const res = await fetch(dataUrl)
         const blob = await res.blob()
         const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })

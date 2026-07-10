@@ -44,7 +44,10 @@ const handleClearCache = () => {
     content: '确定要清除缓存吗？',
     success: (res) => {
       if (res.confirm) {
-        uni.clearStorage()
+        // 只清除应用缓存，保留登录态
+        uni.removeStorageSync('hunbei_drafts')
+        uni.removeStorageSync('hunbei_works')
+        uni.removeStorageSync('hunbei_current_template')
         uni.showToast({ title: '缓存已清除', icon: 'success' })
       }
     }

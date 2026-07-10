@@ -1,5 +1,5 @@
 export interface Work {
-  id: number
+  id: string
   title: string
   date: string
   image: string

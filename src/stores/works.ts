@@ -42,7 +42,7 @@ export const useWorksStore = defineStore('works', () => {
     persist()
   }
 
-  function updateWork(id: number, data: Partial<Work>) {
+  function updateWork(id: string, data: Partial<Work>) {
     const idx = works.value.findIndex(w => w.id === id)
     if (idx !== -1) {
       works.value[idx] = { ...works.value[idx], ...data }
@@ -50,7 +50,7 @@ export const useWorksStore = defineStore('works', () => {
     }
   }
 
-  function deleteWork(id: number) {
+  function deleteWork(id: string) {
     works.value = works.value.filter(w => w.id !== id)
     drafts.value = drafts.value.filter(w => w.id !== id)
     favorites.value = favorites.value.filter(w => w.id !== id)
@@ -62,7 +62,7 @@ export const useWorksStore = defineStore('works', () => {
     persist()
   }
 
-  function toggleFavorite(id: number) {
+  function toggleFavorite(id: string) {
     const idx = favorites.value.findIndex(f => f.id === id)
     if (idx !== -1) {
       favorites.value.splice(idx, 1)
@@ -73,7 +73,7 @@ export const useWorksStore = defineStore('works', () => {
     persist()
   }
 
-  function isFavorite(id: number): boolean {
+  function isFavorite(id: string): boolean {
     return favorites.value.some(f => f.id === id)
   }
 

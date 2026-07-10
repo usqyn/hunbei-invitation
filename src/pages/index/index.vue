@@ -199,6 +199,10 @@ const activeTab = ref(HOME_CONFIG.defaultTab)
 const paidTemplates = ref<any[]>([])
 const posterTemplates = ref<any[]>([])
 const userStore = useUserStore()
+const isPurchased = computed(() => {
+  // TODO: 从用户订单状态获取真实购买状态
+  return userStore.isVip()
+})
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
@@ -327,8 +331,7 @@ function handlePaidCardClick(card: any) {
     cancelText: '关闭',
     success: (res) => {
       if (res.confirm) {
-        const isPurchased = false // TODO: 从用户状态获取
-        if (!isPurchased) {
+        if (!isPurchased.value) {
           uni.navigateTo({
             url: `/pages/template/index?filter=paid`,
           })

@@ -1,8 +1,6 @@
-import { API_BASE } from '@/config'
+import { resolveUrl } from './url'
 
-/** 补全 /uploads/ 开头的相对路径为完整 URL */
+/** @deprecated 使用 resolveUrl 替代 */
 export function resolveImageUrl(url: string): string {
-  if (!url) return url
-  if (url.startsWith('/uploads/')) return API_BASE + url
-  return url
+  return resolveUrl(url)
 }
