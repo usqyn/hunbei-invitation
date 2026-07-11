@@ -2,6 +2,9 @@ import { API_BASE } from '@/config'
 
 let loadingCount = 0
 
+// 防止多个 401 响应触发多次 reLaunch 重定向
+let _isRedirecting = false
+
 function showLoadingSafe(title = '加载中...') {
   loadingCount++
   if (loadingCount === 1) uni.showLoading({ title, mask: true })
@@ -48,8 +51,16 @@ export function request<T = any>(options: string | {
             resolve(body as any as T)
           }
         } else if (res.statusCode === 401) {
-          try { uni.removeStorageSync('token') } catch {}
-          uni.reLaunch({ url: '/pages/login/index' })
+          if (!_isRedirecting) {
+            _isRedirecting = true
+            try { uni.removeStorageSync('token') } catch {}
+            uni.reLaunch({
+              url: '/pages/login/index',
+              complete: () => {
+                _isRedirecting = false
+              }
+            })
+          }
           reject(new Error('登录已过期'))
         } else reject(new Error(`请求失败: ${res.statusCode}`))
       },

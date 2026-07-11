@@ -181,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useWorksStore } from '@/stores/works'
@@ -196,6 +196,15 @@ const editorStore = useEditorStore()
 const templateStore = useTemplateStore()
 const worksStore = useWorksStore()
 const goBack = useGoBack()
+
+// 组件挂载状态标记，用于异步操作中判断组件是否已卸载
+let _isMounted = true
+onUnmounted(() => {
+  _isMounted = false
+})
+
+// 统一编辑前的快照，取消编辑时回滚
+let _snapshotBeforeEdit: { pageSections: PageSection[] } | null = null
 
 const { canvasBackgroundStyle, getTextStyle } = useCanvasRender({
   getElements: () => [],
@@ -249,9 +258,9 @@ function chooseImage(sectionId: string) {
     } catch (e) {
       console.warn('图片上传失败:', e)
       editorStore.updatePageSectionImage(sectionId, tempPath)
-      uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
+      if (_isMounted) uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
     } finally {
-      uni.hideLoading()
+      if (_isMounted) uni.hideLoading()
     }
   }
 
@@ -294,6 +303,10 @@ function onTextEditorConfirm() {
 }
 
 function openUnifiedEdit() {
+  // 创建快照用于取消时回滚
+  _snapshotBeforeEdit = JSON.parse(JSON.stringify({
+    pageSections: editorStore.pageSections,
+  }))
   editorStore.showBasicInfoEditor = true
 }
 
@@ -304,6 +317,11 @@ function onUnifiedEditConfirm() {
 
 function onUnifiedEditCancel() {
   editorStore.closeBasicInfoEditor()
+  // 取消时回滚到编辑前的快照
+  if (_snapshotBeforeEdit) {
+    editorStore.pageSections = _snapshotBeforeEdit.pageSections
+    _snapshotBeforeEdit = null
+  }
 }
 
 function onSmartFieldUpdate(key: string, value: string) {
@@ -451,10 +469,8 @@ function handleSave() {
   uni.showToast({ title: '已保存', icon: 'success' })
 }
 
-function handleShare() {
-  if (!editorStore.currentWorkId) {
-    handleSave()
-  }
+async function handleShare() {
+  await handleSave()
   uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
 }
 

@@ -301,6 +301,8 @@ function onUnifiedEditCancel() {
 
 // 智能字段更新后标记过期（输入时防抖记录历史）
 let smartEditTimer: any = null
+// 跟踪 onMounted 与 templateLoading watcher 中的 setTimeout，卸载时统一清理
+let _mountTimers: ReturnType<typeof setTimeout>[] = []
 function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
   renderedImageStale.value = true
@@ -959,7 +961,7 @@ onMounted(async () => {
   }
 
   nextTick(() => {
-    setTimeout(() => updateCardSize(), 100)
+    _mountTimers.push(setTimeout(() => updateCardSize(), 100))
   })
 })
 
@@ -970,7 +972,7 @@ watch(isLandscape, () => {
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     nextTick(() => {
-      setTimeout(() => updateCardSize(), 100)
+      _mountTimers.push(setTimeout(() => updateCardSize(), 100))
       // 根据模板类型加载对应模式的元素字体
       if (editorStore.templateType === 'flip') {
         editorStore.flipPages.forEach(p => loadFontsForElements(p.elements as any))
@@ -994,6 +996,8 @@ watch(() => editorStore.editableElements.length, () => {
 // 组件卸载时清理定时器，防止内存泄漏
 onUnmounted(() => {
   if (smartEditTimer) clearTimeout(smartEditTimer)
+  _mountTimers.forEach(t => clearTimeout(t))
+  _mountTimers = []
 })
 </script>
 

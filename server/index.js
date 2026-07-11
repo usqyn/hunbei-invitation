@@ -289,8 +289,22 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   next()
 })
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
-app.use('/uploads/music', express.static(path.join(__dirname, 'music')))
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  maxAge: '7d',
+  setHeaders: (res, path) => {
+    if (path.match(/\.(jpg|jpeg|png|gif|webp|mp3|wav|ogg|ttf|otf|woff|woff2)$/i)) {
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable')
+    }
+  }
+}))
+app.use('/uploads/music', express.static(path.join(__dirname, 'music'), {
+  maxAge: '7d',
+  setHeaders: (res, path) => {
+    if (path.match(/\.(mp3|wav|ogg|aac)$/i)) {
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable')
+    }
+  }
+}))
 
 // ============ Poster uploads static serving ============
 const POSTER_UPLOADS_DIR = path.join(__dirname, 'uploads', 'poster')
@@ -314,7 +328,14 @@ if (fs.existsSync(ROOT_POSTER_DIR)) {
   try { syncDir(ROOT_POSTER_DIR, POSTER_UPLOADS_DIR) } catch (e) { console.warn('同步poster资源:', e.message) }
 }
 
-app.use('/uploads/poster', express.static(POSTER_UPLOADS_DIR))
+app.use('/uploads/poster', express.static(POSTER_UPLOADS_DIR, {
+  maxAge: '7d',
+  setHeaders: (res, path) => {
+    if (path.match(/\.(jpg|jpeg|png|gif|webp|mp3|wav|ogg|ttf|otf|woff|woff2)$/i)) {
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable')
+    }
+  }
+}))
 
 // ============ 慢请求日志中间件（仅记录 >1s 的请求） ============
 // 必须在所有路由挂载之前注册，否则挂载在它之前的路由（如 poster）不会被记录
@@ -376,6 +397,11 @@ function rateLimit({ max = 10, windowMs = 60000 } = {}) {
   }
 }
 
+// 敏感接口的限流器：上传/支付/创建类操作分别使用独立限流计数，避免互相干扰
+const uploadLimiter = rateLimit({ max: 20, windowMs: 60000 })  // 20 uploads/min
+const payLimiter = rateLimit({ max: 10, windowMs: 60000 })    // 10 payments/min
+const createLimiter = rateLimit({ max: 30, windowMs: 60000 }) // 30 creates/min
+
 // withTransaction 已被导入的 runTransaction 替代（见文件顶部，从 ./middleware/db 导入）
 
 // ============ 文件上传配置 ============
@@ -395,9 +421,11 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.aac', '.ttf', '.otf', '.woff', '.woff2']
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.aac', '.ttf', '.otf', '.woff', '.woff2']
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/aac', 'font/ttf', 'font/otf', 'font/woff', 'font/woff2', 'application/octet-stream']
     const ext = path.extname(file.originalname).toLowerCase()
-    if (allowed.includes(ext)) {
+    const mime = file.mimetype || ''
+    if (allowedExts.includes(ext) && (allowedMimes.includes(mime) || !mime)) {
       cb(null, true)
     } else {
       cb(new Error('不支持的文件格式'))
@@ -927,7 +955,7 @@ app.get('/api/templates/:id', (req, res) => {
 })
 
 // 上传文件
-app.post('/api/upload', requireAuth, upload.array('images', 10), (req, res) => {
+app.post('/api/upload', uploadLimiter, requireAuth, upload.array('images', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
@@ -942,7 +970,7 @@ app.post('/api/upload', requireAuth, upload.array('images', 10), (req, res) => {
 })
 
 // 上传单张图片（小程序编辑器专用）
-app.post('/api/upload/image', requireAuth, upload.single('image'), (req, res) => {
+app.post('/api/upload/image', uploadLimiter, requireAuth, upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: '未收到图片文件' })
@@ -978,7 +1006,7 @@ const fontUpload = multer({
   },
 })
 
-app.post('/api/fonts/upload', requireAuth, fontUpload.array('fonts', 10), (req, res) => {
+app.post('/api/fonts/upload', uploadLimiter, requireAuth, fontUpload.array('fonts', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
@@ -1040,7 +1068,7 @@ const musicUpload = multer({
   },
 })
 
-app.post('/api/music/upload', requireAuth, musicUpload.array('music', 10), (req, res) => {
+app.post('/api/music/upload', uploadLimiter, requireAuth, musicUpload.array('music', 10), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
@@ -1338,7 +1366,7 @@ app.get('/api/works/:id', requireAuth, (req, res) => {
 })
 
 // 创建作品
-app.post('/api/works', requireAuth, (req, res) => {
+app.post('/api/works', createLimiter, requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
@@ -1484,7 +1512,9 @@ app.get('/api/orders', requireAuth, (req, res) => {
       const result = db.exec(paginatedSql, paginatedParams)
       const orders = result.length ? result[0].values.map(row => {
         const obj = rowToObject([{ columns: result[0].columns, values: [row] }])
-        if (obj && typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
+        if (obj && typeof obj.items === 'string') {
+          try { obj.items = JSON.parse(obj.items) } catch (_) { obj.items = [] }
+        }
         return obj
       }) : []
 
@@ -1500,7 +1530,9 @@ app.get('/api/orders', requireAuth, (req, res) => {
     const result = db.exec(sql, params)
     const orders = result.length ? result[0].values.map(row => {
       const obj = rowToObject([{ columns: result[0].columns, values: [row] }])
-      if (obj && typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
+      if (obj && typeof obj.items === 'string') {
+        try { obj.items = JSON.parse(obj.items) } catch (_) { obj.items = [] }
+      }
       return obj
     }) : []
     res.json({ success: true, data: orders })
@@ -1680,7 +1712,7 @@ app.get('/api/vip/status', requireAuth, (req, res) => {
   }
 })
 
-app.post('/api/vip/order', requireAuth, (req, res) => {
+app.post('/api/vip/order', payLimiter, requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) {
@@ -1818,7 +1850,7 @@ app.get('/api/favorites', requireAuth, (req, res) => {
 })
 
 // ========== 导出系统 ==========
-app.post('/api/export', requireAuth, (req, res) => {
+app.post('/api/export', createLimiter, requireAuth, (req, res) => {
   try {
     const { workId, watermark, quality } = req.body
     if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
@@ -1897,7 +1929,7 @@ app.post('/api/export/poster', requireAuth, (req, res) => {
 })
 
 // ========== 支付订单 ==========
-app.post('/api/orders/:id/pay', requireAuth, (req, res) => {
+app.post('/api/orders/:id/pay', payLimiter, requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone || ''
     const existing = db.exec("SELECT id, status, items FROM orders WHERE id = ? AND phone = ?", [req.params.id, phone])
@@ -2079,7 +2111,9 @@ app.get('/api/orders/:id', requireAuth, (req, res) => {
       return res.status(404).json({ success: false, error: '订单不存在' })
     }
     const obj = rowToObject(result)
-    if (obj && typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
+    if (obj && typeof obj.items === 'string') {
+      try { obj.items = JSON.parse(obj.items) } catch (_) { obj.items = [] }
+    }
     res.json({ success: true, data: obj })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -2090,7 +2124,7 @@ app.get('/api/orders/:id', requireAuth, (req, res) => {
 app.get('/api/feedback', requireAdmin, (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
-    const limit = parseInt(req.query.limit) || 20
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100)
     const offset = (page - 1) * limit
     const countResult = db.exec("SELECT COUNT(*) as c FROM feedback")
     const total = countResult.length ? countResult[0].values[0][0] : 0
@@ -2214,7 +2248,7 @@ app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
 })
 
 // ========== 反馈系统 ==========
-app.post('/api/feedback', requireAuth, (req, res) => {
+app.post('/api/feedback', createLimiter, requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone || ''
     const { content, contact } = req.body
@@ -2474,8 +2508,8 @@ app.use((err, req, res, next) => {
   }
 
   // 自定义业务错误：返回对应状态码和错误信息
-  if (err.statusCode) {
-    return res.status(err.statusCode).json({ success: false, error: err.message || '请求错误' })
+  if (err.statusCode || err.status) {
+    return res.status(err.statusCode || err.status).json({ success: false, error: err.message || '请求错误' })
   }
 
   // 其他错误：返回 500 + 通用信息（不泄露内部细节）
@@ -2483,57 +2517,30 @@ app.use((err, req, res, next) => {
 })
 
 // ============ 启动 ============
-async function start() {
-  await initDatabase()
-  await seedData()
-  // Wait for poster database to be ready before serving requests
-  await posterRouter.posterReady
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🟢 婚贝 API 服务已启动`)
-    console.log(`   本地地址: http://localhost:${PORT}`)
-    console.log(`   数据库: ${DB_PATH}`)
-    console.log(`   上传目录: ${path.join(__dirname, 'uploads')}`)
-    console.log(`   音乐目录: ${MUSIC_DIR}`)
-    console.log(`   JWT 认证: 已启用 (公开路由除外)\n`)
-  })
+let server
 
-  // 定期清理过期数据
-  setInterval(() => {
-    try {
-      const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000
-      const ninetyDaysAgoIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
-      // 清理30天前的事件（timestamp 为毫秒数值）
-      db.run("DELETE FROM events WHERE timestamp < ?", [thirtyDaysAgoMs])
-      // 清理30天前的足迹（timestamp 为毫秒数值）
-      db.run("DELETE FROM footprints WHERE timestamp < ?", [thirtyDaysAgoMs])
-      // 清理90天前已读通知（createdAt 为 ISO 字符串）
-      db.run("DELETE FROM notifications WHERE read = 1 AND createdAt < ?", [ninetyDaysAgoIso])
-      // VACUUM 压缩数据库
-      db.run("VACUUM")
-      saveDatabase()
-      console.log('[清理] 数据库清理完成')
-    } catch (e) {
-      console.error('[清理] 数据库清理失败:', e)
-    }
-  }, 24 * 60 * 60 * 1000) // 每24小时执行一次
-
-  const shutdown = (signal) => {
-    console.log(`\n${signal} received, shutting down gracefully...`)
-    // 关闭 HTTP 服务前先保存数据库，避免数据丢失
-    console.log('正在保存数据库...')
-    try { saveDatabase() } catch (e) { console.error('saveDatabase failed:', e) }
-    try { posterRouter.savePosterDatabase() } catch (e) { console.error('savePosterDatabase failed:', e) }
+const shutdown = (signal) => {
+  console.log(`\n${signal} received, shutting down gracefully...`)
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null }
+  try { posterRouter.clearPosterSaveTimer() } catch (e) { console.error('clearPosterSaveTimer failed:', e) }
+  try { saveDatabase() } catch (e) { console.error('saveDatabase failed:', e) }
+  try { posterRouter.savePosterDatabase() } catch (e) { console.error('savePosterDatabase failed:', e) }
+  if (server) {
     server.close(() => {
       console.log('Server closed')
       process.exit(0)
     })
-    // 5秒超时强制退出，防止 server.close 长时间挂起
-    setTimeout(() => {
-      console.error('Forced shutdown after 5s')
-      process.exit(1)
-    }, 5000)
+  } else {
+    process.exit(0)
   }
+  setTimeout(() => {
+    console.error('Forced shutdown after 5s')
+    process.exit(1)
+  }, 5000)
+}
 
+async function start() {
+  // 信号处理与兜底异常处理：在 initDatabase 之前注册，确保启动过程中异常也能触发 graceful shutdown
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))
 
@@ -2546,7 +2553,50 @@ async function start() {
   })
   process.on('unhandledRejection', (reason) => {
     console.error('unhandledRejection:', reason)
+    try { saveDatabase() } catch (e) { console.error('saveDatabase failed:', e) }
+    try { posterRouter.savePosterDatabase() } catch (e) { console.error('savePosterDatabase failed:', e) }
+    process.exit(1)
   })
+
+  await initDatabase()
+  await seedData()
+  // Wait for poster database to be ready before serving requests
+  await posterRouter.posterReady
+  server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🟢 婚贝 API 服务已启动`)
+    console.log(`   本地地址: http://localhost:${PORT}`)
+    console.log(`   数据库: ${DB_PATH}`)
+    console.log(`   上传目录: ${path.join(__dirname, 'uploads')}`)
+    console.log(`   音乐目录: ${MUSIC_DIR}`)
+    console.log(`   JWT 认证: 已启用 (公开路由除外)\n`)
+  })
+
+  // 定期清理过期数据
+  setInterval(() => {
+    try {
+      const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const thirtyDaysAgoIso = new Date(thirtyDaysAgoMs).toISOString()
+      const ninetyDaysAgoIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+      // 清理30天前的事件（timestamp 为毫秒数值）
+      db.run("DELETE FROM events WHERE timestamp < ?", [thirtyDaysAgoMs])
+      // 清理30天前的足迹（timestamp 为毫秒数值）
+      db.run("DELETE FROM footprints WHERE timestamp < ?", [thirtyDaysAgoMs])
+      // 清理90天前已读通知（createdAt 为 ISO 字符串）
+      db.run("DELETE FROM notifications WHERE read = 1 AND createdAt < ?", [ninetyDaysAgoIso])
+      // 清理回收站30天前的数据
+      db.run("DELETE FROM recycle_bin WHERE deleted_at < ?", [thirtyDaysAgoIso])
+      // 清理反馈90天前的数据
+      db.run("DELETE FROM feedback WHERE created_at < ?", [ninetyDaysAgoIso])
+      // 清理 poster 数据库中的过期数据
+      try { posterRouter.cleanupPosterTables() } catch (e) { console.error('poster cleanup failed:', e) }
+      // VACUUM 压缩数据库
+      db.run("VACUUM")
+      saveDatabase()
+      console.log('[清理] 数据库清理完成')
+    } catch (e) {
+      console.error('[清理] 数据库清理失败:', e)
+    }
+  }, 24 * 60 * 60 * 1000) // 每24小时执行一次
 }
 
 start().catch(e => {

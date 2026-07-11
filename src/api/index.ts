@@ -31,26 +31,29 @@ function normalizeImageUrl(url: string): string {
 
 /** 上传图片到服务器，返回永久 URL */
 export function uploadImage(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const token = uni.getStorageSync('token') || ''
-    uni.uploadFile({
-      url: `${API_BASE}/api/upload/image`,
-      filePath,
-      name: 'image',
-      header: token ? { Authorization: `Bearer ${token}` } : {},
-      success: (res) => {
-        try {
-          const data = JSON.parse(res.data)
-          if (data.success && data.url) resolve(normalizeImageUrl(data.url))
-          else if (data.data && data.data.url) resolve(normalizeImageUrl(data.data.url))
-          else reject(new Error(data.error || '上传失败'))
-        } catch {
-          reject(new Error('上传响应解析失败'))
-        }
-      },
-      fail: (err) => reject(err),
-    })
-  })
+  return Promise.race([
+    new Promise<string>((resolve, reject) => {
+      const token = uni.getStorageSync('token') || ''
+      uni.uploadFile({
+        url: `${API_BASE}/api/upload/image`,
+        filePath,
+        name: 'image',
+        header: token ? { Authorization: `Bearer ${token}` } : {},
+        success: (res) => {
+          try {
+            const data = JSON.parse(res.data)
+            if (data.success && data.url) resolve(normalizeImageUrl(data.url))
+            else if (data.data && data.data.url) resolve(normalizeImageUrl(data.data.url))
+            else reject(new Error(data.error || '上传失败'))
+          } catch {
+            reject(new Error('上传响应解析失败'))
+          }
+        },
+        fail: (err) => reject(err),
+      })
+    }),
+    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('上传超时')), 30000)),
+  ])
 }
 
 // ========== 模板相关 ==========

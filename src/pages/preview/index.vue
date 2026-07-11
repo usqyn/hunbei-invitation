@@ -238,7 +238,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { onShareAppMessage } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
@@ -256,6 +256,19 @@ const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const userStore = useUserStore()
 const worksStore = useWorksStore()
+
+// 跟踪所有 setTimeout，组件卸载时统一清理，防止内存泄漏
+let _timers: ReturnType<typeof setTimeout>[] = []
+function trackTimer(fn: () => void, ms: number) {
+  const t = setTimeout(fn, ms)
+  _timers.push(t)
+  return t
+}
+
+onUnmounted(() => {
+  _timers.forEach(t => clearTimeout(t))
+  _timers = []
+})
 
 const {
   isCanvasMode,
@@ -361,7 +374,7 @@ onMounted(async () => {
       if (id) {
         templateId.value = id
         if (editorStore.currentTemplateId !== id) {
-          editorStore.loadTemplateById(id)
+          await editorStore.loadTemplateById(id)
         }
       }
     }
@@ -370,14 +383,14 @@ onMounted(async () => {
     if (id) {
       templateId.value = id
       if (editorStore.currentTemplateId !== id) {
-        editorStore.loadTemplateById(id)
+        await editorStore.loadTemplateById(id)
       }
     }
   }
   track('preview_view', { template_id: templateId.value })
   nextTick(() => {
-    setTimeout(() => updateCardSize(), 100)
-    setTimeout(() => measureZoomHeight(), 150)
+    trackTimer(() => updateCardSize(), 100)
+    trackTimer(() => measureZoomHeight(), 150)
   })
   loadSimilarTemplates()
   loadRecommendProducts()
@@ -387,15 +400,15 @@ watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     loadFontsForElements(editorStore.editableElements as any)
     nextTick(() => {
-      setTimeout(() => updateCardSize(), 100)
-      setTimeout(() => measureZoomHeight(), 150)
+      trackTimer(() => updateCardSize(), 100)
+      trackTimer(() => measureZoomHeight(), 150)
     })
   }
 })
 
 watch(() => editorStore.currentTemplateId, () => {
   previewScale.value = 1
-  nextTick(() => setTimeout(() => measureZoomHeight(), 150))
+  nextTick(() => trackTimer(() => measureZoomHeight(), 150))
 })
 
 watch(() => editorStore.editableElements.length, () => {

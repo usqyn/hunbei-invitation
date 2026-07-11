@@ -541,10 +541,8 @@ function handleSave() {
   uni.showToast({ title: '已保存', icon: 'success' })
 }
 
-function handleShare() {
-  if (!editorStore.currentWorkId) {
-    handleSave()
-  }
+async function handleShare() {
+  await handleSave()
   uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
 }
 

@@ -85,6 +85,24 @@ function savePosterDatabaseDebounced() {
   }, 500)
 }
 
+// 清除 poster 防抖保存定时器（供 graceful shutdown 调用，避免定时器在进程退出时仍挂起）
+function clearPosterSaveTimer() {
+  if (_posterSaveTimer) { clearTimeout(_posterSaveTimer); _posterSaveTimer = null }
+}
+
+// 清理 poster 数据库中的过期数据：回收站30天前的数据 + 已软删除的孤立作品
+function cleanupPosterTables() {
+  try {
+    const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    posterDb.run("DELETE FROM poster_recycle_bin WHERE deleted_at < ?", [thirtyDaysAgoIso])
+    // Clean up orphaned poster works that are soft-deleted
+    posterDb.run("DELETE FROM poster_works WHERE deleted_at IS NOT NULL AND deleted_at < ?", [thirtyDaysAgoIso])
+    savePosterDatabase()
+  } catch (e) {
+    console.error('poster table cleanup failed:', e)
+  }
+}
+
 // ============ Helper: convert sql.js result to array of objects ============
 function resultToArray(result) {
   if (!result.length || !result[0].values.length) return []
@@ -119,20 +137,25 @@ function getUserId(req) {
 
 // 作品所有权校验中间件
 function requireWorkOwner(req, res, next) {
-  const userId = getUserId(req)
-  if (!userId) {
-    return res.status(401).json({ success: false, error: '请先登录' })
+  try {
+    const userId = getUserId(req)
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '请先登录' })
+    }
+    const result = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [req.params.id])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '作品不存在' })
+    }
+    const work = resultToObject(result)
+    if (work.user_id !== userId) {
+      return res.status(403).json({ success: false, error: '无权操作他人作品' })
+    }
+    req.work = work
+    next()
+  } catch (e) {
+    console.error('requireWorkOwner error:', e)
+    res.status(500).json({ success: false, error: '服务器错误' })
   }
-  const result = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [req.params.id])
-  if (!result.length || !result[0].values.length) {
-    return res.status(404).json({ success: false, error: '作品不存在' })
-  }
-  const work = resultToObject(result)
-  if (work.user_id !== userId) {
-    return res.status(403).json({ success: false, error: '无权操作他人作品' })
-  }
-  req.work = work
-  next()
 }
 
 // ============ Seed 25 poster templates ============
@@ -539,7 +562,7 @@ router.put('/works/:id', requireWorkOwner, (req, res) => {
 })
 
 // POST /works/:id/upload — upload work poster image (requires ownership)
-router.post('/works/:id/upload', posterJsonParser, requireWorkOwner, (req, res) => {
+router.post('/works/:id/upload', posterJsonParser, requireWorkOwner, async (req, res) => {
   try {
     if (!req.body.image) {
       return res.status(400).json({ success: false, error: '请上传图片文件' })
@@ -559,9 +582,10 @@ router.post('/works/:id/upload', posterJsonParser, requireWorkOwner, (req, res) 
         return res.status(413).json({ success: false, error: '图片大小不能超过 10MB' })
       }
       const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
-      const filename = `${workId}.${ext}`
+      const safeWorkId = path.basename(workId)  // prevent path traversal
+      const filename = `${safeWorkId}.${ext}`
       const filepath = path.join(__dirname, '..', 'uploads', 'poster', 'works', filename)
-      fs.writeFileSync(filepath, data)
+      await fs.promises.writeFile(filepath, data)
 
       const posterUrl = `/uploads/poster/works/${filename}`
       posterDb.run("UPDATE poster_works SET poster_url = ? WHERE id = ?", [posterUrl, workId])
@@ -822,5 +846,9 @@ module.exports = router
 module.exports.posterReady = posterReady
 // 导出 savePosterDatabase 供 graceful shutdown 时调用，确保进程退出前数据落盘
 module.exports.savePosterDatabase = savePosterDatabase
+// 导出 clearPosterSaveTimer 供 graceful shutdown 时清除防抖定时器
+module.exports.clearPosterSaveTimer = clearPosterSaveTimer
+// 导出 cleanupPosterTables 供主进程定期清理 poster 数据库过期数据
+module.exports.cleanupPosterTables = cleanupPosterTables
 // 导出 getPosterDb 供 index.js 访问 poster 数据库实例（恢复/删除等跨库操作）
 module.exports.getPosterDb = () => posterDb

@@ -12,6 +12,9 @@ export const useWorksStore = defineStore('works', () => {
   const favorites = ref<Work[]>([])
   const loading = ref(false)
 
+  // 防止并发收藏切换的锁
+  let _togglingFavorites = new Set<string>()
+
   function persist() {
     try {
       uni.setStorageSync(STORAGE_KEY, {
@@ -44,6 +47,7 @@ export const useWorksStore = defineStore('works', () => {
   }
 
   async function loadAll() {
+    if (loading.value) return  // 防止并发加载
     loading.value = true
     restore()
     const userStore = useUserStore()
@@ -204,35 +208,41 @@ export const useWorksStore = defineStore('works', () => {
   }
 
   async function toggleFavorite(id: string) {
-    const userStore = useUserStore()
-    const isCurrentlyFavorite = isFavorite(id)
+    if (_togglingFavorites.has(id)) return  // 防止并发切换
+    _togglingFavorites.add(id)
+    try {
+      const userStore = useUserStore()
+      const isCurrentlyFavorite = isFavorite(id)
 
-    if (isCurrentlyFavorite) {
-      favorites.value = favorites.value.filter(f => f.id !== id)
-    } else {
-      const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
-      if (work) favorites.value.unshift(work)
-    }
-    debouncedPersist()
-
-    if (userStore.isLoggedIn) {
-      try {
-        if (isCurrentlyFavorite) {
-          await removeFavorite(id)
-        } else {
-          await addFavorite(id)
-        }
-      } catch (e) {
-        console.warn('favorite api failed', e)
-        if (isCurrentlyFavorite) {
-          const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
-          if (work) favorites.value.unshift(work)
-        } else {
-          favorites.value = favorites.value.filter(f => f.id !== id)
-        }
-        debouncedPersist()
-        uni.showToast({ title: '操作失败，请重试', icon: 'none' })
+      if (isCurrentlyFavorite) {
+        favorites.value = favorites.value.filter(f => f.id !== id)
+      } else {
+        const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
+        if (work) favorites.value.unshift(work)
       }
+      debouncedPersist()
+
+      if (userStore.isLoggedIn) {
+        try {
+          if (isCurrentlyFavorite) {
+            await removeFavorite(id)
+          } else {
+            await addFavorite(id)
+          }
+        } catch (e) {
+          console.warn('favorite api failed', e)
+          if (isCurrentlyFavorite) {
+            const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
+            if (work) favorites.value.unshift(work)
+          } else {
+            favorites.value = favorites.value.filter(f => f.id !== id)
+          }
+          debouncedPersist()
+          uni.showToast({ title: '操作失败，请重试', icon: 'none' })
+        }
+      }
+    } finally {
+      _togglingFavorites.delete(id)
     }
   }
 

@@ -22,9 +22,17 @@ function getUserId(): string {
   }
 }
 
+let _platformCache: string | null = null
 function getPlatform(): string {
-  // @ts-ignore
-  return uni.getSystemInfoSync().uniPlatform || 'unknown'
+  if (_platformCache !== null) return _platformCache
+  try {
+    const sysInfo = uni.getSystemInfoSync()
+    // @ts-ignore
+    _platformCache = sysInfo.uniPlatform || 'unknown'
+  } catch (e) {
+    _platformCache = 'unknown'
+  }
+  return _platformCache
 }
 
 /**
