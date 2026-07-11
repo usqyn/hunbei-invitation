@@ -144,7 +144,7 @@
             class="scroll-card poster-card"
             @click="handlePosterClick(poster)"
           >
-            <image class="card-image poster-card-image" lazy-load :src="poster.cover_url" mode="aspectFill" @error="onImageError" />
+            <image class="card-image poster-card-image" lazy-load :src="resolveUrl(poster.cover_url)" mode="aspectFill" @error="onImageError" />
             <view class="card-info">
               <text class="card-title">{{ poster.name }}</text>
               <text class="card-sub">{{ poster.category_name }}</text>
@@ -191,6 +191,7 @@ import { ref, computed, onMounted } from 'vue'
 import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
+import { resolveUrl } from '@/utils/url'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 
