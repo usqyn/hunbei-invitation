@@ -182,16 +182,6 @@ export const useEditorStore = defineStore('editor', () => {
   function applyTemplateData(template: TemplateItem) {
     if (!template) return
 
-    console.log('[applyTemplateData] 模板数据:', {
-      id: template.id,
-      templateType: template.templateType,
-      elementsCount: template.elements?.length || 0,
-      pagesCount: template.pages?.length || 0,
-      sectionsCount: template.sections?.length || 0,
-      hasRenderedImage: !!template.renderedImage,
-      canvasSize: template.canvasSize,
-    })
-
     // 设置模板类型
     templateType.value = template.templateType || 'canvas'
 
@@ -329,19 +319,46 @@ export const useEditorStore = defineStore('editor', () => {
         const templateStore = useTemplateStore()
         templateType.value = savedData.templateType || 'canvas'
         if (savedData.elements && Array.isArray(savedData.elements)) {
+          // 对缓存中的图片元素做 URL 归一化
+          savedData.elements.forEach((el: any) => {
+            if (el.type === 'image' && el.text) {
+              el.text = resolveUrl(el.text)
+            }
+          })
           editableElements.splice(0, editableElements.length, ...savedData.elements)
         }
         if (savedData.pageSections && Array.isArray(savedData.pageSections)) {
+          savedData.pageSections.forEach((sec: any) => {
+            if (sec.type === 'image' && sec.content) {
+              sec.content = resolveUrl(sec.content)
+            }
+          })
           pageSections.splice(0, pageSections.length, ...savedData.pageSections)
         }
         if (savedData.flipPages && Array.isArray(savedData.flipPages)) {
+          savedData.flipPages.forEach((page: any) => {
+            if (page.background?.image) {
+              page.background.image = resolveUrl(page.background.image)
+            }
+            (page.elements || []).forEach((el: any) => {
+              if (el.type === 'image' && el.text) {
+                el.text = resolveUrl(el.text)
+              }
+            })
+          })
           flipPages.splice(0, flipPages.length, ...savedData.flipPages)
+        }
+        if (savedData.background) {
+          const bg = { ...savedData.background }
+          if (bg.image) bg.image = resolveUrl(bg.image)
+          if (bg.imageUrl) bg.imageUrl = resolveUrl(bg.imageUrl)
+          background.value = bg
         }
         if (savedData.canvasSize) {
           canvasSize.value = { ...savedData.canvasSize }
         }
-        if (savedData.background) {
-          background.value = { ...savedData.background }
+        if (savedData.renderedImage) {
+          renderedImage.value = resolveUrl(savedData.renderedImage)
         }
         if (savedData.templateData) {
           Object.assign(templateStore.templateData, savedData.templateData)

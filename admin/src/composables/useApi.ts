@@ -90,7 +90,10 @@ export async function uploadImages(files: File[]): Promise<string[]> {
   const formData = new FormData()
   files.forEach(f => formData.append('images', f))
   const res = await axios.post(`${API_BASE}/api/upload`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      Authorization: `Bearer ${getAdminToken()}`,
+    },
     timeout: 60000,
   })
   if (!res.data.success) throw new Error(res.data.error)
@@ -113,7 +116,10 @@ export async function uploadFonts(files: File[]): Promise<Array<{ filename: stri
     formData.append('names', name)
   })
   const res = await axios.post(`${API_BASE}/api/fonts/upload`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      Authorization: `Bearer ${getAdminToken()}`,
+    },
     timeout: 60000,
   })
   if (!res.data.success) throw new Error(res.data.error)

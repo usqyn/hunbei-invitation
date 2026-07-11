@@ -563,7 +563,12 @@ async function doPublish() {
     uploadProgress.value = 100
     publishSuccess.value = true
     publishDone.value = true
-    emit('published', result.id)
+    emit('published', {
+      id: result.id,
+      name: form.name,
+      category: form.category,
+      subtitle: form.subtitle,
+    })
     window.dispatchEvent(new CustomEvent('publish-success'))
   } catch (e: any) {
     publishSuccess.value = false

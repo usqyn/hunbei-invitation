@@ -185,6 +185,7 @@ const { getTextStyle } = useCanvasRender({
 
 const activeElementIndex = ref(-1)
 const selectedElement = ref<any>(null)
+let _formSnapshot: any = null
 
 const currentPage = computed(() => {
   return editorStore.flipPages[editorStore.currentFlipPageIndex]
@@ -377,6 +378,8 @@ function deleteFlipPage() {
 }
 
 function openUnifiedEdit() {
+  // 保存当前快照，取消编辑时回滚
+  _formSnapshot = JSON.parse(JSON.stringify(templateStore.basicInfo))
   editorStore.showBasicInfoEditor = true
 }
 
@@ -386,6 +389,10 @@ function onUnifiedEditConfirm() {
 }
 
 function onUnifiedEditCancel() {
+  // 回滚 smart field 修改
+  if (_formSnapshot) {
+    Object.assign(templateStore.basicInfo, _formSnapshot)
+  }
   editorStore.closeBasicInfoEditor()
 }
 

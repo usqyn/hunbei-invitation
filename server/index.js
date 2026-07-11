@@ -212,7 +212,11 @@ let _saveTimer = null
 function saveDatabaseDebounced() {
   if (_saveTimer) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => {
-    saveDatabase()
+    try {
+      saveDatabase()
+    } catch (e) {
+      console.error('saveDatabase 失败:', e)
+    }
     _saveTimer = null
   }, 500)
 }
@@ -256,6 +260,11 @@ app.use((req, res, next) => {
       req.user = jwt.verify(auth.slice(7), JWT_SECRET)
     } catch (_) {}
   }
+  next()
+})
+// 静态文件安全头
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
   next()
 })
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
@@ -1262,8 +1271,8 @@ app.get('/api/orders', requireAuth, (req, res) => {
       const paginatedParams = [...params, limit, offset]
       const result = db.exec(paginatedSql, paginatedParams)
       const orders = result.length ? result[0].values.map(row => {
-        const obj = rowToObject({ ...result, values: [row] })
-        if (typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
+        const obj = rowToObject([{ columns: result[0].columns, values: [row] }])
+        if (obj && typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
         return obj
       }) : []
 
@@ -1278,8 +1287,8 @@ app.get('/api/orders', requireAuth, (req, res) => {
     sql += whereClause + " ORDER BY createdAt DESC"
     const result = db.exec(sql, params)
     const orders = result.length ? result[0].values.map(row => {
-      const obj = rowToObject({ ...result, values: [row] })
-      if (typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
+      const obj = rowToObject([{ columns: result[0].columns, values: [row] }])
+      if (obj && typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
       return obj
     }) : []
     res.json({ success: true, data: orders })
@@ -1327,7 +1336,7 @@ app.get('/api/products/recommend', (req, res) => {
       const cols = result[0].columns
       const obj = {}
       row.forEach((val, i) => {
-        if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background') {
+        if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background' || cols[i] === 'pages') {
           try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
         } else {
           obj[cols[i]] = val
@@ -1617,7 +1626,7 @@ app.get('/api/favorites', requireAuth, (req, res) => {
 })
 
 // ========== 导出系统 ==========
-app.post('/api/export', (req, res) => {
+app.post('/api/export', requireAuth, (req, res) => {
   try {
     const { workId, watermark, quality } = req.body
     if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
@@ -1633,7 +1642,7 @@ app.post('/api/export', (req, res) => {
   }
 })
 
-app.post('/api/export/poster', (req, res) => {
+app.post('/api/export/poster', requireAuth, (req, res) => {
   try {
     const { workId } = req.body
     if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
@@ -1810,7 +1819,7 @@ app.get('/api/notifications', requireAuth, (req, res) => {
 
 app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
   try {
-    db.run("UPDATE notifications SET read = 1 WHERE id = ?", [req.params.id])
+    db.run("UPDATE notifications SET read = 1 WHERE id = ? AND phone = ?", [req.params.id, req.user.phone])
     saveDatabaseDebounced()
     res.json({ success: true, message: '已标记已读' })
   } catch (e) {
@@ -2077,6 +2086,17 @@ async function start() {
 
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))
+
+  // 兜底：未捕获异常时先保存数据库再退出
+  process.on('uncaughtException', (err) => {
+    console.error('uncaughtException:', err)
+    try { saveDatabase() } catch (e) { console.error('saveDatabase failed:', e) }
+    try { posterRouter.savePosterDatabase() } catch (e) { console.error('savePosterDatabase failed:', e) }
+    process.exit(1)
+  })
+  process.on('unhandledRejection', (reason) => {
+    console.error('unhandledRejection:', reason)
+  })
 }
 
 start().catch(e => {

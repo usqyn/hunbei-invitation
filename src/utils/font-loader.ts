@@ -62,12 +62,12 @@ function loadCustomFont(fontFamily: string) {
 
   // #ifndef MP-WEIXIN
   try {
-    ;(wx as any).loadFontFace({
+    uni.loadFontFace({
       family: fontFamily,
       source: `url("${fullUrl}")`,
-      success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`) },
+      success: () => { loadedFonts.add(fontFamily) },
       fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err) },
-    })
+    } as any)
   } catch (e) { console.warn(`[FontLoader] Error: ${fontFamily}`, e) }
   // #endif
 }

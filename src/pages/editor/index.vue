@@ -830,10 +830,12 @@ async function doExport(options: { watermark: boolean; quality: string }) {
     })
     if (confirmed) {
       await handleSave()
-      // 保存成功后自动重试导出
+      // 保存成功后自动重试一次导出（防止无限递归）
       if (editorStore.currentWorkId) {
         return doExport(options)
       }
+      // 保存后仍无 workId，提示用户
+      uni.showToast({ title: '保存失败，请重试', icon: 'none' })
     }
     return
   }

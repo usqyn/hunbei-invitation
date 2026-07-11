@@ -1950,7 +1950,12 @@ onMounted(async () => {
   autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
   loadTemplateList()
   loadUploadedFonts()
-  window.addEventListener('publish-success', () => showToast('模板发布成功！'))
+  const onPublishSuccess = () => showToast('模板发布成功！')
+  window.addEventListener('publish-success', onPublishSuccess)
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('publish-success', onPublishSuccess)
+  })
 })
 </script>
 

@@ -289,8 +289,8 @@ function chooseImage(sectionId: string) {
 }
 
 function onTextEditorConfirm() {
+  // confirmTextEdit 内部已调用 pushHistory，无需重复
   editorStore.confirmTextEdit()
-  editorStore.pushHistory()
 }
 
 function openUnifiedEdit() {
