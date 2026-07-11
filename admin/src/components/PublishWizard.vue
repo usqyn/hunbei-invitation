@@ -228,7 +228,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { CATEGORIES } from '../types/template'
-import { createTemplate, fetchVersion, API_BASE, uploadImages } from '../composables/useApi'
+import { createTemplate, updateTemplate, fetchVersion, API_BASE, uploadImages } from '../composables/useApi'
 import { serializeElement } from '../utils/element-serializer'
 
 const props = defineProps<{
@@ -241,6 +241,7 @@ const props = defineProps<{
   pageMode: string
   getFlipPages?: () => any[]
   saveCurrentFlipPage?: () => void
+  currentTemplateId?: string
 }>()
 
 const emit = defineEmits<{
@@ -474,7 +475,22 @@ async function doPublish() {
     }
 
     uploadProgress.value = 40
-    uploadProgressText.value = '上传模板数据...'
+    uploadProgressText.value = '上传封面与模板数据...'
+
+    // 封面图：若为 base64 则先上传为文件，得到可访问 URL
+    let coverUrl = ''
+    if (coverPreview.value && coverPreview.value.startsWith('data:')) {
+      try {
+        const blob = await (await fetch(coverPreview.value)).blob()
+        const file = new File([blob], `cover_${Date.now()}.jpg`, { type: 'image/jpeg' })
+        const urls = await uploadImages([file])
+        coverUrl = urls[0] || ''
+      } catch (e) {
+        console.warn('封面上传失败，使用base64', e)
+      }
+    } else if (coverPreview.value) {
+      coverUrl = coverPreview.value
+    }
 
     // 构建 payload
     const cSize = draft?.canvasSize || { width: 375, height: 667 }
@@ -486,7 +502,7 @@ async function doPublish() {
       subtitle: form.subtitle,
       category: form.category,
       tags: form.tags,
-      cover: coverPreview.value || '',
+      cover: coverUrl || coverPreview.value || '',
       primaryColor: '#e84a6e',
       likes: form.likes,
       pageCount: isFlipMode ? flipPages.length : form.pageCount,
@@ -498,7 +514,7 @@ async function doPublish() {
       orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
       templateType: isFlipMode ? 'flip' : 'canvas',
       data: {
-        coverImage: coverPreview.value || '',
+        coverImage: coverUrl || coverPreview.value || '',
         coverTitle: form.name,
         coverSubtitle: form.subtitle,
         photo1: '',
@@ -552,7 +568,13 @@ async function doPublish() {
     uploadProgress.value = 50
     uploadProgressText.value = '保存到服务器...'
 
-    const result = await createTemplate(payload)
+    // 若当前正在编辑已有模板，则更新（PUT），否则新建（POST）
+    let result
+    if (props.currentTemplateId) {
+      result = await updateTemplate(props.currentTemplateId, payload)
+    } else {
+      result = await createTemplate(payload)
+    }
 
     uploadProgress.value = 90
     uploadProgressText.value = '完成！'

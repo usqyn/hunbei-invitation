@@ -10,7 +10,7 @@ export function fetchUserInfo() {
 
 // ========== VIP 相关 ==========
 export function createVipOrder(plan: string, price: number) {
-  return request<{ orderId: string; prepayId: string }>({ url: '/api/vip/order', method: 'POST', data: { plan, price } })
+  return request<{ orderId: string; prepayId: string; nonceStr?: string; paySign?: string }>({ url: '/api/vip/order', method: 'POST', data: { plan, price } })
 }
 
 /** @deprecated 死代码，暂未使用 */
@@ -66,6 +66,23 @@ export function fetchSimilarTemplates(templateId: string) {
 /** @deprecated 死代码，暂未使用 */
 export function fetchTemplateDetail(id: string) {
   return request<any>({ url: `/api/templates/${id}` })
+}
+
+// ========== 作品相关 ==========
+export function saveWorkApi(work: any) {
+  return request({ url: '/api/works', method: 'POST', data: work })
+}
+
+export function updateWorkApi(id: string, work: any) {
+  return request({ url: `/api/works/${id}`, method: 'PUT', data: work })
+}
+
+export function fetchWorksApi() {
+  return request({ url: '/api/works', method: 'GET' })
+}
+
+export function deleteWorkApi(id: string) {
+  return request({ url: `/api/works/${id}`, method: 'DELETE' })
 }
 
 // ========== 收藏相关 ==========

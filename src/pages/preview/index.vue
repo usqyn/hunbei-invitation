@@ -246,7 +246,7 @@ import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts } from '@/api'
-import type { EditableElement } from '@/types'
+import type { EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
@@ -317,15 +317,57 @@ function updateCardSize() {
   })
 }
 
-onMounted(() => {
+// 查找作品：优先从 store，回退到本地存储
+function findWork(workId: string): Work | undefined {
+  const fromStore = worksStore.works.find(w => w.id === workId) || worksStore.drafts.find(w => w.id === workId)
+  if (fromStore) return fromStore
+  try {
+    const saved = uni.getStorageSync('hunbei_works')
+    if (saved) {
+      const all = [...(saved.works || []), ...(saved.drafts || [])]
+      return all.find((w: Work) => w.id === workId)
+    }
+  } catch (e) { /* ignore */ }
+  return undefined
+}
+
+onMounted(async () => {
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
-  const id = options.templateId || options.id
-  if (id) {
-    templateId.value = id
-    if (editorStore.currentTemplateId !== id) {
-      editorStore.loadTemplateById(id)
+
+  const workId = options.workId
+  if (workId) {
+    // 通过 workId 加载对应作品数据
+    const work = findWork(workId)
+    if (work) {
+      editorStore.setCurrentWorkId(work.id)
+      const id = work.templateType || options.templateId || options.id
+      if (id) {
+        templateId.value = id
+        if (editorStore.currentTemplateId !== id) {
+          await editorStore.loadTemplateById(id)
+        }
+      }
+      if (work.data) {
+        editorStore.restoreFromWorkData(work.data, work.musicId)
+      }
+    } else {
+      const id = options.templateId || options.id
+      if (id) {
+        templateId.value = id
+        if (editorStore.currentTemplateId !== id) {
+          editorStore.loadTemplateById(id)
+        }
+      }
+    }
+  } else {
+    const id = options.templateId || options.id
+    if (id) {
+      templateId.value = id
+      if (editorStore.currentTemplateId !== id) {
+        editorStore.loadTemplateById(id)
+      }
     }
   }
   track('preview_view', { template_id: templateId.value })

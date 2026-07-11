@@ -148,7 +148,7 @@ const handleLogin = () => {
 }
 
 const handleWorkClick = (work: any) => {
-  uni.navigateTo({ url: `/pages/preview/index?templateId=${work.id}` })
+  uni.navigateTo({ url: `/pages/preview/index?workId=${work.id}&templateId=${work.templateType}` })
 }
 
 const handleDraftClick = (draft: any) => {
@@ -157,7 +157,7 @@ const handleDraftClick = (draft: any) => {
 }
 
 const handlePreview = (work: any) => {
-  uni.navigateTo({ url: `/pages/preview/index?templateId=${work.id}` })
+  uni.navigateTo({ url: `/pages/preview/index?workId=${work.id}&templateId=${work.templateType}` })
 }
 
 const handleShare = (work: any) => {

@@ -822,3 +822,5 @@ module.exports = router
 module.exports.posterReady = posterReady
 // 导出 savePosterDatabase 供 graceful shutdown 时调用，确保进程退出前数据落盘
 module.exports.savePosterDatabase = savePosterDatabase
+// 导出 getPosterDb 供 index.js 访问 poster 数据库实例（恢复/删除等跨库操作）
+module.exports.getPosterDb = () => posterDb

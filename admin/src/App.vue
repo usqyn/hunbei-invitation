@@ -888,7 +888,11 @@
       :elementCount="elements.length"
       :getDraft="getDraft"
       :getCanvasEl="getCanvasEl"
+      :getFabricCanvas="() => fabricCanvas.value"
+      :getFlipPages="() => flipPages.value"
+      :saveCurrentFlipPage="() => {}"
       :pageMode="pageMode"
+      :currentTemplateId="currentTemplateId || ''"
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
@@ -1156,6 +1160,7 @@ const {
   clearCanvas,
   dispose,
   refreshDatePlaceholders,
+  fabricCanvas,
 } = useCanvas({
   canvasRef,
   initialSize: { ...DEFAULT_CANVAS_SIZE },
@@ -1252,6 +1257,9 @@ const currentTemplateSubtitle = ref('')
 const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
+
+// 翻页模式：从模板加载的翻页数据（在缺少独立翻页编辑器时暂存，发布时使用）
+const flipPages = ref<Array<{ id: string; name: string; pageType: string; background: any; elements: any[] }>>([])
 
 function onTemplateNameBlur() {
   if (currentTemplateName.value.trim()) return
@@ -1350,6 +1358,22 @@ async function onLoadTemplate(id: string) {
     currentTemplateName.value = tpl.name || ''
     currentTemplateCategory.value = tpl.category || 'wedding'
     currentTemplateSubtitle.value = tpl.subtitle || ''
+
+    // 翻页模板：恢复 pages 数据并切换到翻页模式
+    if (tpl.templateType === 'flip' && Array.isArray(tpl.pages) && tpl.pages.length > 0) {
+      flipPages.value = tpl.pages.map((p: any, idx: number) => ({
+        id: p.id || `page_${idx}_${Date.now().toString(36)}`,
+        name: p.name || `第 ${idx + 1} 页`,
+        pageType: p.pageType || 'custom',
+        background: p.background || { type: 'solid', color1: '#ffffff' },
+        elements: Array.isArray(p.elements) ? p.elements : [],
+      }))
+      if (pageMode.value !== 'flip') {
+        pageMode.value = 'flip'
+      }
+    } else {
+      flipPages.value = []
+    }
   } catch (e) {
     alert('加载模板失败：' + (e as Error).message)
   }
@@ -1388,6 +1412,8 @@ function createNewFromCanvas() {
   currentTemplateName.value = ''
   currentTemplateCategory.value = 'wedding'
   currentTemplateSubtitle.value = ''
+  flipPages.value = []
+  if (pageMode.value !== 'single') pageMode.value = 'single'
   clearCanvas()
   historyVersions.value = []
   pushHistory('new')
@@ -1399,6 +1425,8 @@ function loadPreset(preset: TemplatePreset) {
   currentTemplateName.value = ''
   currentTemplateCategory.value = 'wedding'
   currentTemplateSubtitle.value = ''
+  flipPages.value = []
+  if (pageMode.value !== 'single') pageMode.value = 'single'
   loadDraft(preset.draft)
   historyVersions.value = []
   pushHistory('load preset: ' + preset.name)

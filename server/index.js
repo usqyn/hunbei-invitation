@@ -3,6 +3,7 @@ const cors = require('cors')
 const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 const { v4: uuidv4 } = require('uuid')
 const initSqlJs = require('sql.js')
 const jwt = require('jsonwebtoken')
@@ -157,6 +158,20 @@ async function initDatabase() {
     deletedAt TEXT NOT NULL
   )`)
 
+  // 作品表
+  db.run(`CREATE TABLE IF NOT EXISTS works (
+    id TEXT PRIMARY KEY,
+    phone TEXT NOT NULL,
+    template_id TEXT DEFAULT '',
+    template_type TEXT DEFAULT 'canvas',
+    title TEXT DEFAULT '',
+    data TEXT DEFAULT '{}',
+    music_id TEXT DEFAULT '',
+    cover TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
+
   // 迁移：为旧数据库添加 status 和 renderedImage 列
   try { db.run("ALTER TABLE templates ADD COLUMN status TEXT DEFAULT 'draft'") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN renderedImage TEXT DEFAULT ''") } catch (_) {}
@@ -183,6 +198,7 @@ async function initDatabase() {
   db.run("CREATE INDEX IF NOT EXISTS idx_notifications_phone ON notifications(phone)")
   db.run("CREATE INDEX IF NOT EXISTS idx_feedback_phone ON feedback(phone)")
   db.run("CREATE INDEX IF NOT EXISTS idx_recycle_bin_phone ON recycle_bin(phone)")
+  db.run("CREATE INDEX IF NOT EXISTS idx_works_phone ON works(phone)")
   db.run("CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone)")
   db.run("CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)")
   db.run("CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id)")
@@ -310,6 +326,10 @@ app.use((req, res, next) => {
 // ============ Poster routes ============
 const posterRouter = require('./routes/poster')
 app.use('/api/poster', posterRouter)
+// 获取 poster 数据库实例（用于跨库的回收站恢复/永久删除操作）
+function getPosterDb() {
+  return posterRouter.getPosterDb ? posterRouter.getPosterDb() : null
+}
 
 // ============ 鉴权中间件 ============
 // requireAuth / requireAdmin / isRequestFromAdmin 已从 ./middleware/auth 导入（见文件顶部）
@@ -538,18 +558,25 @@ app.post('/api/user/login', rateLimit(), (req, res) => {
     recentWxLogins.push(nowMs)
     wxLoginIpCounter[clientIp] = recentWxLogins
 
-    // 演示环境直接放行，每次登录生成唯一标识（模拟 openid 隔离）
-    const wechatPhone = 'wx_' + uuidv4()
-    const token = jwt.sign({ phone: wechatPhone, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
+    // 用 encryptedData 的 hash 作为稳定标识，避免每次登录创建新用户
+    const wechatId = 'wx_' + crypto.createHash('md5').update(encryptedData).digest('hex').slice(0, 16)
+    const existingUser = db.exec("SELECT id, nickname, vip_status, vip_expire_at FROM users WHERE phone = ?", [wechatId])
+    if (existingUser.length && existingUser[0].values.length) {
+      // 已有用户，直接签发token
+      const token = jwt.sign({ phone: wechatId, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
+      return res.json({ success: true, data: { token, nickname: existingUser[0].values[0][1], phone: wechatId, vip_status: existingUser[0].values[0][2], vip_expire_at: existingUser[0].values[0][3] } })
+    }
+    // 新用户才 INSERT
+    const token = jwt.sign({ phone: wechatId, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
     const now = new Date().toISOString()
     db.run(`INSERT INTO users (id, phone, nickname, avatar, vip_status, createdAt, updatedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?)`, [
-      uuidv4(), wechatPhone, '微信用户', '', 0, now, now,
+      uuidv4(), wechatId, '微信用户', '', 0, now, now,
     ])
     db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
-      [wechatPhone, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
+      [wechatId, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
     saveDatabaseDebounced()
-    return res.json({ success: true, data: { token, nickname: '微信用户', phone: wechatPhone } })
+    return res.json({ success: true, data: { token, nickname: '微信用户', phone: wechatId, vip_status: 0, vip_expire_at: null } })
   }
 
   // 手机号+验证码登录
@@ -584,12 +611,21 @@ app.post('/api/user/login', rateLimit(), (req, res) => {
         [phone, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
       saveDatabaseDebounced()
     }
+    // 查询用户 VIP 状态并返回
+    let vipStatus = 0, vipExpireAt = null
+    const vipResult = db.exec("SELECT vip_status, vip_expire_at FROM users WHERE phone = ?", [phone])
+    if (vipResult.length && vipResult[0].values.length) {
+      vipStatus = vipResult[0].values[0][0]
+      vipExpireAt = vipResult[0].values[0][1]
+    }
     return res.json({
       success: true,
       data: {
         token,
         nickname: phone.substring(0, 3) + '****' + phone.substring(7),
         phone,
+        vip_status: vipStatus,
+        vip_expire_at: vipExpireAt,
       },
     })
   }
@@ -816,6 +852,38 @@ function recordFootprint(phone, templateId, templateName, templateCover) {
   saveDatabaseDebounced()
   return true
 }
+
+// ========== 相似模板 ==========
+// 注意：此路由必须注册在 /api/templates/:id 之前，否则 'similar' 会被当作 :id 参数匹配
+app.get('/api/templates/similar', (req, res) => {
+  try {
+    const { templateId } = req.query
+    if (!templateId) {
+      return res.json({ success: true, data: [] })
+    }
+    const tmplResult = db.exec("SELECT category FROM templates WHERE id = ?", [templateId])
+    const category = tmplResult.length && tmplResult[0].values.length ? tmplResult[0].values[0][0] : ''
+    const result = db.exec(
+      "SELECT * FROM templates WHERE status = 'published' AND id != ? AND category = ? ORDER BY likes DESC LIMIT 6",
+      [templateId, category]
+    )
+    const templates = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => {
+        if (['data', 'elements', 'tags', 'canvasSize', 'background', 'pages'].includes(cols[i])) {
+          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+        } else {
+          obj[cols[i]] = val
+        }
+      })
+      return obj
+    }) : []
+    res.json({ success: true, data: templates })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
 
 // 获取单个模板
 app.get('/api/templates/:id', (req, res) => {
@@ -1207,33 +1275,162 @@ app.delete('/api/templates/:id', requireAdmin, (req, res) => {
   }
 })
 
+// ============ 作品 CRUD API ============
+
+// 获取当前用户作品列表
+app.get('/api/works', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.json({ success: true, data: [] })
+    const result = db.exec("SELECT * FROM works WHERE phone = ? ORDER BY updated_at DESC", [phone])
+    const works = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => {
+        if (cols[i] === 'data') {
+          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+        } else {
+          obj[cols[i]] = val
+        }
+      })
+      return obj
+    }) : []
+    res.json({ success: true, data: works })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 获取作品详情
+app.get('/api/works/:id', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const result = db.exec("SELECT * FROM works WHERE id = ? AND phone = ?", [req.params.id, phone])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '作品不存在' })
+    }
+    const row = result[0].values[0]
+    const cols = result[0].columns
+    const obj = {}
+    row.forEach((val, i) => {
+      if (cols[i] === 'data') {
+        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+      } else {
+        obj[cols[i]] = val
+      }
+    })
+    res.json({ success: true, data: obj })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 创建作品
+app.post('/api/works', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const { id, templateId, templateType, title, data, musicId, cover } = req.body
+    const workId = id || uuidv4()
+    const now = new Date().toISOString()
+    db.run(`INSERT OR REPLACE INTO works (id, phone, template_id, template_type, title, data, music_id, cover, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      workId, phone, templateId || '', templateType || 'canvas', title || '',
+      JSON.stringify(data || {}), musicId || '', cover || '', now, now,
+    ])
+    saveDatabaseDebounced()
+    const result = db.exec("SELECT * FROM works WHERE id = ?", [workId])
+    const row = result[0].values[0]
+    const cols = result[0].columns
+    const obj = {}
+    row.forEach((val, i) => {
+      if (cols[i] === 'data') {
+        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+      } else {
+        obj[cols[i]] = val
+      }
+    })
+    res.json({ success: true, data: obj })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 更新作品
+app.put('/api/works/:id', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const existing = db.exec("SELECT id FROM works WHERE id = ? AND phone = ?", [req.params.id, phone])
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ success: false, error: '作品不存在' })
+    }
+    const { templateId, templateType, title, data, musicId, cover } = req.body
+    const fields = []
+    const params = []
+    if (templateId !== undefined) { fields.push("template_id = ?"); params.push(templateId) }
+    if (templateType !== undefined) { fields.push("template_type = ?"); params.push(templateType) }
+    if (title !== undefined) { fields.push("title = ?"); params.push(title) }
+    if (data !== undefined) { fields.push("data = ?"); params.push(JSON.stringify(data)) }
+    if (musicId !== undefined) { fields.push("music_id = ?"); params.push(musicId) }
+    if (cover !== undefined) { fields.push("cover = ?"); params.push(cover) }
+    fields.push("updated_at = ?")
+    params.push(new Date().toISOString())
+    params.push(req.params.id)
+    db.run(`UPDATE works SET ${fields.join(', ')} WHERE id = ?`, params)
+    saveDatabaseDebounced()
+    const result = db.exec("SELECT * FROM works WHERE id = ?", [req.params.id])
+    const row = result[0].values[0]
+    const cols = result[0].columns
+    const obj = {}
+    row.forEach((val, i) => {
+      if (cols[i] === 'data') {
+        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
+      } else {
+        obj[cols[i]] = val
+      }
+    })
+    res.json({ success: true, data: obj })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
 // ============ 订单 API ============
 
 // 创建订单
 app.post('/api/orders', requireAuth, (req, res) => {
   try {
-    const { items, totalAmount, contactName, contactPhone, address, note } = req.body
+    const { items, contactName, contactPhone, address, note } = req.body
     if (!items || !items.length) {
       return res.status(400).json({ success: false, error: '订单商品不能为空' })
     }
+    // 服务端计算订单金额：根据 items 中的 templateId 查询模板真实价格并累加
+    let serverTotal = 0
     for (const item of items) {
       if (item.templateId) {
-        const tplResult = db.exec("SELECT id FROM templates WHERE id = ? AND status = 'published'", [item.templateId])
+        const tplResult = db.exec("SELECT id, price, is_paid FROM templates WHERE id = ? AND status = 'published'", [item.templateId])
         if (!tplResult.length || !tplResult[0].values.length) {
           return res.status(400).json({ success: false, error: `模板 ${item.templateId} 不存在` })
         }
+        const [tplId, tplPrice, isPaid] = tplResult[0].values[0]
+        if (isPaid === 1) {
+          serverTotal += parseFloat(tplPrice) || 0
+        }
       }
     }
+    const totalAmount = String(serverTotal)
     const id = uuidv4()
     const now = new Date().toISOString()
     const phone = req.user?.phone || ''
     db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt)
       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`, [
-      id, phone, JSON.stringify(items), totalAmount || '0',
+      id, phone, JSON.stringify(items), totalAmount,
       contactName || '', contactPhone || '', address || '', note || '', now, now,
     ])
     db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
-      [phone, '订单创建成功', `您的订单已创建，金额 ¥${totalAmount || '0'}，请尽快完成支付。`, 'order', now])
+      [phone, '订单创建成功', `您的订单已创建，金额 ¥${totalAmount}，请尽快完成支付。`, 'order', now])
     saveDatabaseDebounced()
     const order = db.exec("SELECT * FROM orders WHERE id = ?", [id])
     res.json({ success: true, data: rowToObject(order) })
@@ -1450,8 +1647,15 @@ app.get('/api/vip/status', requireAuth, (req, res) => {
     }
     const result = db.exec("SELECT vip_status, vip_expire_at, vip_plan FROM users WHERE phone = ?", [phone])
     if (result.length && result[0].values.length) {
-      const [status, expireAt, plan] = result[0].values[0]
-      const isVip = status === 1 && expireAt && Date.now() < expireAt
+      let [status, expireAt, plan] = result[0].values[0]
+      // 与 user/info 一致的过期清理逻辑：VIP 已过期则更新状态
+      if (status === 1 && expireAt && Date.now() > parseInt(expireAt, 10)) {
+        db.run("UPDATE users SET vip_status = 0, updatedAt = ? WHERE phone = ?",
+          [new Date().toISOString(), phone])
+        saveDatabaseDebounced()
+        status = 0
+      }
+      const isVip = status === 1 && expireAt && Date.now() < parseInt(expireAt, 10)
       res.json({ success: true, data: { isVip: !!isVip, expireAt: expireAt || null, plan: plan || null } })
     } else {
       res.json({ success: true, data: { isVip: false, expireAt: null, plan: null } })
@@ -1467,17 +1671,21 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     if (!phone) {
       return res.status(401).json({ success: false, error: '请先登录' })
     }
-    if (!req.body.payment_id) {
-      return res.status(400).json({ success: false, error: '缺少支付凭证' })
-    }
-    const { plan, price } = req.body
+    const { plan } = req.body
     const planDuration = { monthly: 30, quarterly: 90, yearly: 365 }
-    const days = planDuration[plan] || 30
+    // 套餐合法性校验
+    if (!planDuration[plan]) {
+      return res.status(400).json({ success: false, error: '无效的套餐' })
+    }
+    // 服务端定价：不信任客户端传入的价格
+    const PRICES = { monthly: 9.9, quarterly: 19.9, yearly: 58.0 }
+    const price = PRICES[plan]
+    const days = planDuration[plan]
     const now = Date.now()
     const orderId = uuidv4()
     const nowStr = new Date().toISOString()
 
-    const orderItems = [{ type: 'vip', plan, days, price: price || 0 }]
+    const orderItems = [{ type: 'vip', plan, days, price }]
 
     const userResult = db.exec("SELECT vip_status, vip_expire_at, vip_plan FROM users WHERE phone = ?", [phone])
     let currentExpire = 0
@@ -1494,7 +1702,7 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     runTransaction(db, () => {
       db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt, paid_at)
         VALUES (?, ?, ?, ?, 'paid', '', '', '', ?, ?, ?, ?)`, [
-        orderId, phone, JSON.stringify(orderItems), String(price || 0), '', nowStr, nowStr, nowStr,
+        orderId, phone, JSON.stringify(orderItems), String(price), '', nowStr, nowStr, nowStr,
       ])
       db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
         [String(newExpireAt), plan, nowStr, phone])
@@ -1502,37 +1710,6 @@ app.post('/api/vip/order', requireAuth, (req, res) => {
     saveDatabaseDebounced()
 
     res.json({ success: true, data: { orderId, prepayId: `prepay_${orderId}`, expireAt: newExpireAt } })
-  } catch (e) {
-    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
-  }
-})
-
-// ========== 相似模板 ==========
-app.get('/api/templates/similar', (req, res) => {
-  try {
-    const { templateId } = req.query
-    if (!templateId) {
-      return res.json({ success: true, data: [] })
-    }
-    const tmplResult = db.exec("SELECT category FROM templates WHERE id = ?", [templateId])
-    const category = tmplResult.length && tmplResult[0].values.length ? tmplResult[0].values[0][0] : ''
-    const result = db.exec(
-      "SELECT * FROM templates WHERE status = 'published' AND id != ? AND category = ? ORDER BY likes DESC LIMIT 6",
-      [templateId, category]
-    )
-    const templates = result.length ? result[0].values.map(row => {
-      const cols = result[0].columns
-      const obj = {}
-      row.forEach((val, i) => {
-        if (['data', 'elements', 'tags', 'canvasSize', 'background'].includes(cols[i])) {
-          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
-        } else {
-          obj[cols[i]] = val
-        }
-      })
-      return obj
-    }) : []
-    res.json({ success: true, data: templates })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1630,13 +1807,47 @@ app.post('/api/export', requireAuth, (req, res) => {
   try {
     const { workId, watermark, quality } = req.body
     if (!workId) return res.status(400).json({ success: false, error: '缺少 workId' })
-    const result = db.exec("SELECT renderedImage FROM templates WHERE id = ?", [workId])
-    let url = ''
-    if (result.length && result[0].values.length && result[0].values[0][0]) {
-      url = result[0].values[0][0]
+
+    // VIP 状态检查：非 VIP 用户只能带水印导出
+    const phone = req.user?.phone
+    let isVip = false
+    if (phone) {
+      const vipResult = db.exec("SELECT vip_status, vip_expire_at FROM users WHERE phone = ?", [phone])
+      if (vipResult.length && vipResult[0].values.length) {
+        const [status, expireAt] = vipResult[0].values[0]
+        isVip = status === 1 && expireAt && Date.now() < parseInt(expireAt, 10)
+      }
     }
+    const forceWatermark = !isVip
+
+    // 修复 workId 查询：从 works 表获取关联的 template_id，再查询模板的 renderedImage
+    let url = ''
+    const workResult = db.exec("SELECT template_id FROM works WHERE id = ? AND phone = ?", [workId, phone])
+    if (workResult.length && workResult[0].values.length) {
+      const templateId = workResult[0].values[0][0]
+      if (templateId) {
+        const tplResult = db.exec("SELECT renderedImage FROM templates WHERE id = ? AND status != 'deleted'", [templateId])
+        if (tplResult.length && tplResult[0].values.length && tplResult[0].values[0][0]) {
+          url = tplResult[0].values[0][0]
+        }
+      }
+    } else {
+      // 兼容：直接作为模板 ID 查询
+      const result = db.exec("SELECT renderedImage FROM templates WHERE id = ?", [workId])
+      if (result.length && result[0].values.length && result[0].values[0][0]) {
+        url = result[0].values[0][0]
+      }
+    }
+
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
-    res.json({ success: true, data: { url: url || '/static/images/placeholder.png', expiresAt } })
+    res.json({
+      success: true,
+      data: {
+        url: url || '/static/images/placeholder.png',
+        expiresAt,
+        watermark: forceWatermark || watermark,
+      },
+    })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1655,17 +1866,42 @@ app.post('/api/export/poster', requireAuth, (req, res) => {
 // ========== 支付订单 ==========
 app.post('/api/orders/:id/pay', requireAuth, (req, res) => {
   try {
-    const existing = db.exec("SELECT id, status FROM orders WHERE id = ? AND phone = ?", [req.params.id, req.user?.phone || ''])
+    const phone = req.user?.phone || ''
+    const existing = db.exec("SELECT id, status, items FROM orders WHERE id = ? AND phone = ?", [req.params.id, phone])
     if (!existing.length || !existing[0].values.length) {
       return res.status(404).json({ success: false, error: '订单不存在' })
     }
-    const status = existing[0].values[0][1]
-    if (status === 'paid') {
-      return res.status(400).json({ success: false, error: '订单已支付' })
+    const [orderId, status, itemsJson] = existing[0].values[0]
+    // 状态校验：只有 pending 状态才能支付
+    if (status !== 'pending') {
+      return res.status(400).json({ success: false, error: `订单状态为 ${status}，无法支付` })
     }
     const now = new Date().toISOString()
     db.run("UPDATE orders SET status = 'paid', paid_at = ?, updatedAt = ? WHERE id = ?",
       [now, now, req.params.id])
+
+    // 支付后如果 items 含 vip 类型，发放 VIP 权益
+    let items = []
+    try { items = JSON.parse(itemsJson) } catch (_) {}
+    const vipItem = items.find(it => it.type === 'vip')
+    if (vipItem) {
+      const planDuration = { monthly: 30, quarterly: 90, yearly: 365 }
+      const days = planDuration[vipItem.plan] || 30
+      const nowMs = Date.now()
+      const userResult = db.exec("SELECT vip_status, vip_expire_at FROM users WHERE phone = ?", [phone])
+      let currentExpire = 0
+      if (userResult.length && userResult[0].values.length) {
+        const [vStatus, expireAt] = userResult[0].values[0]
+        if (vStatus === 1 && expireAt) {
+          currentExpire = parseInt(expireAt, 10) || 0
+        }
+      }
+      const baseExpire = Math.max(currentExpire, nowMs)
+      const newExpireAt = baseExpire + days * 24 * 60 * 60 * 1000
+      db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
+        [String(newExpireAt), vipItem.plan, now, phone])
+    }
+
     saveDatabaseDebounced()
     const prepayId = `prepay_${req.params.id}`
     res.json({ success: true, data: { prepayId, status: 'paid' } })
@@ -1738,6 +1974,116 @@ app.get('/api/footprints', requireAuth, (req, res) => {
       return obj
     }) : []
     res.json({ success: true, data: footprints })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// ========== 补充 API ==========
+
+// 删除通知（加 phone 条件防越权）
+app.delete('/api/notifications/:id', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    db.run("DELETE FROM notifications WHERE id = ? AND phone = ?", [req.params.id, phone])
+    saveDatabaseDebounced()
+    res.json({ success: true, message: '已删除' })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 批量标记通知已读
+app.put('/api/notifications/read-all', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    db.run("UPDATE notifications SET read = 1 WHERE phone = ? AND read = 0", [phone])
+    saveDatabaseDebounced()
+    res.json({ success: true, message: '已全部标记已读' })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 更新用户昵称/头像
+app.put('/api/user/profile', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const { nickname, avatar } = req.body
+    const fields = []
+    const params = []
+    if (nickname !== undefined) { fields.push("nickname = ?"); params.push(nickname) }
+    if (avatar !== undefined) { fields.push("avatar = ?"); params.push(avatar) }
+    if (fields.length === 0) {
+      return res.status(400).json({ success: false, error: '没有需要更新的字段' })
+    }
+    fields.push("updatedAt = ?")
+    params.push(new Date().toISOString())
+    params.push(phone)
+    db.run(`UPDATE users SET ${fields.join(', ')} WHERE phone = ?`, params)
+    saveDatabaseDebounced()
+    const result = db.exec("SELECT id, phone, nickname, avatar, vip_status, vip_expire_at, vip_plan FROM users WHERE phone = ?", [phone])
+    const row = result[0].values[0]
+    const cols = result[0].columns
+    const obj = {}
+    row.forEach((val, i) => { obj[cols[i]] = val })
+    res.json({ success: true, data: obj })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 获取订单详情
+app.get('/api/orders/:id', requireAuth, (req, res) => {
+  try {
+    const phone = req.user?.phone
+    if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
+    const result = db.exec("SELECT * FROM orders WHERE id = ? AND phone = ?", [req.params.id, phone])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '订单不存在' })
+    }
+    const obj = rowToObject(result)
+    if (obj && typeof obj.items === 'string') obj.items = JSON.parse(obj.items)
+    res.json({ success: true, data: obj })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 获取反馈列表（管理员）
+app.get('/api/feedback', requireAdmin, (req, res) => {
+  try {
+    const result = db.exec("SELECT * FROM feedback ORDER BY createdAt DESC")
+    const feedback = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns
+      const obj = {}
+      row.forEach((val, i) => { obj[cols[i]] = val })
+      return obj
+    }) : []
+    res.json({ success: true, data: feedback })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 更新反馈状态（管理员）
+app.put('/api/feedback/:id', requireAdmin, (req, res) => {
+  try {
+    const { status } = req.body
+    const validStatuses = ['pending', 'processing', 'resolved', 'closed']
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, error: '无效的状态' })
+    }
+    const existing = db.exec("SELECT id FROM feedback WHERE id = ?", [req.params.id])
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ success: false, error: '反馈不存在' })
+    }
+    db.run("UPDATE feedback SET status = ? WHERE id = ?", [status, req.params.id])
+    saveDatabaseDebounced()
+    res.json({ success: true, message: '状态已更新' })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1872,7 +2218,8 @@ app.get('/api/works/recycle', requireAuth, (req, res) => {
     const limit = Math.min(100, parseInt(req.query.limit, 10) || 20)
 
     const mainItems = queryRecycleBin(phone, db, false)
-    const posterItems = posterDb ? queryRecycleBin(phone, posterDb, true) : []
+    const _posterDb = getPosterDb()
+    const posterItems = _posterDb ? queryRecycleBin(phone, _posterDb, true) : []
 
     let allItems = [...mainItems, ...posterItems].sort((a, b) => {
       const timeA = a.deletedAt || a.deleted_at || ''
@@ -1911,16 +2258,27 @@ app.put('/api/works/:id/restore', requireAuth, (req, res) => {
     if (mainResult.length && mainResult[0].values.length) {
       workData = JSON.parse(mainResult[0].values[0][0])
       db.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+      // 将 work_data 恢复回 works 表
+      const now = new Date().toISOString()
+      db.run(`INSERT OR REPLACE INTO works (id, phone, template_id, template_type, title, data, music_id, cover, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [workData.id, phone, workData.templateId || '', workData.templateType || 'canvas', workData.title || '', JSON.stringify(workData.data || {}), workData.musicId || '', workData.cover || '', workData.createdAt || now, now])
       saveDatabaseDebounced()
       found = true
-    } else if (posterDb) {
-      const posterResult = posterDb.exec("SELECT work_data FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, phone])
-      if (posterResult.length && posterResult[0].values.length) {
-        workData = JSON.parse(posterResult[0].values[0][0])
-        posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
-        const { savePosterDatabase } = require('./routes/poster')
-        savePosterDatabase()
-        found = true
+    } else {
+      const _posterDb = getPosterDb()
+      if (_posterDb) {
+        const posterResult = _posterDb.exec("SELECT work_data FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, phone])
+        if (posterResult.length && posterResult[0].values.length) {
+          workData = JSON.parse(posterResult[0].values[0][0])
+          _posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+          // poster库同理恢复到poster_works表
+          _posterDb.run(`INSERT OR REPLACE INTO poster_works (id, user_id, template_id, template_name, cover_url, content, poster_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [workData.id, workData.user_id || phone, workData.template_id || '', workData.template_name || '', workData.cover_url || '', workData.content || '{}', workData.poster_url || '', workData.created_at || new Date().toISOString()])
+          const { savePosterDatabase } = require('./routes/poster')
+          savePosterDatabase()
+          found = true
+        }
       }
     }
 
@@ -1939,28 +2297,58 @@ app.delete('/api/works/:id', requireAuth, (req, res) => {
     const phone = req.user?.phone
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
 
-    let deleted = false
-
-    const mainResult = db.exec("SELECT id FROM recycle_bin WHERE id = ? AND phone = ?", [req.params.id, phone])
-    if (mainResult.length && mainResult[0].values.length) {
-      db.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+    // 软删除：先检查 works 表有没有，有则移到 recycle_bin
+    const workResult = db.exec("SELECT * FROM works WHERE id = ? AND phone = ?", [req.params.id, phone])
+    if (workResult.length && workResult[0].values.length) {
+      const cols = workResult[0].columns
+      const row = workResult[0].values[0]
+      const colIdx = {}
+      cols.forEach((c, i) => { colIdx[c] = i })
+      // 转换为 camelCase 格式存储，与恢复逻辑的字段名一致
+      const workObj = {
+        id: row[colIdx.id],
+        phone: row[colIdx.phone],
+        templateId: row[colIdx.template_id] || '',
+        templateType: row[colIdx.template_type] || 'canvas',
+        title: row[colIdx.title] || '',
+        data: (() => { try { return JSON.parse(row[colIdx.data] || '{}') } catch { return {} } })(),
+        musicId: row[colIdx.music_id] || '',
+        cover: row[colIdx.cover] || '',
+        createdAt: row[colIdx.created_at] || '',
+        updatedAt: row[colIdx.updated_at] || '',
+      }
+      const now = new Date().toISOString()
+      // 使用事务：移入回收站 + 删除作品，保证原子性
+      runTransaction(db, () => {
+        db.run("INSERT INTO recycle_bin (phone, work_id, work_data, deletedAt) VALUES (?, ?, ?, ?)",
+          [phone, req.params.id, JSON.stringify(workObj), now])
+        db.run("DELETE FROM works WHERE id = ?", [req.params.id])
+      })
       saveDatabaseDebounced()
-      deleted = true
-    } else if (posterDb) {
-      const posterResult = posterDb.exec("SELECT id FROM recycle_bin WHERE id = ? AND user_id = ?", [req.params.id, phone])
+      return res.json({ success: true, message: '已移入回收站' })
+    }
+
+    // 没有在 works 表：检查 recycle_bin 永久删除（兼容 work_id 和 recycle_bin 自增 id）
+    const recycleResult = db.exec("SELECT id FROM recycle_bin WHERE (work_id = ? OR id = ?) AND phone = ?", [req.params.id, req.params.id, phone])
+    if (recycleResult.length && recycleResult[0].values.length) {
+      db.run("DELETE FROM recycle_bin WHERE (work_id = ? OR id = ?) AND phone = ?", [req.params.id, req.params.id, phone])
+      saveDatabaseDebounced()
+      return res.json({ success: true, message: '已永久删除' })
+    }
+
+    // 检查 poster 回收站
+    const _posterDb = getPosterDb()
+    if (_posterDb) {
+      const posterResult = _posterDb.exec("SELECT id FROM recycle_bin WHERE (work_id = ? OR id = ?) AND user_id = ?", [req.params.id, req.params.id, phone])
       if (posterResult.length && posterResult[0].values.length) {
-        posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
+        _posterDb.run("DELETE FROM recycle_bin WHERE (work_id = ? OR id = ?) AND user_id = ?", [req.params.id, req.params.id, phone])
         const { savePosterDatabase } = require('./routes/poster')
         savePosterDatabase()
-        deleted = true
+        return res.json({ success: true, message: '已永久删除' })
       }
     }
 
-    if (!deleted) {
-      return res.status(404).json({ success: false, error: '记录不存在' })
-    }
-
-    res.json({ success: true, message: '已永久删除' })
+    res.status(404).json({ success: false, error: '记录不存在' })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }

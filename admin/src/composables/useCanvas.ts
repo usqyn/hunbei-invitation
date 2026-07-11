@@ -284,10 +284,11 @@ export function useCanvas(opts: UseCanvasOptions) {
     }
 
     // 图片背景
-    if (bg.type === 'image' && bg.imageUrl) {
+    if (bg.type === 'image' && (bg.image || bg.imageUrl)) {
+      const imgSrc = bg.image || bg.imageUrl as string
       const imgEl = new Image()
       imgEl.crossOrigin = 'anonymous'
-      imgEl.src = bg.imageUrl
+      imgEl.src = imgSrc
       imgEl.onload = () => {
         const img = new fabric.FabricImage(imgEl)
         const w = canvasSize.value.width
@@ -313,7 +314,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         canvas.renderAll()
       }
       imgEl.onerror = () => {
-        console.error('Background image failed to load:', bg.imageUrl?.slice(0, 80))
+        console.error('Background image failed to load:', imgSrc.slice(0, 80))
       }
     }
   }

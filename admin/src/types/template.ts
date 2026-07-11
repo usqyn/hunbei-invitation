@@ -113,7 +113,7 @@ export interface TemplateItem {
 export interface Category {
   id: string
   name: string
-  icon: string
+  icon?: string
   count?: number
 }
 
@@ -133,15 +133,14 @@ export interface EditorState {
   isSaving: boolean
 }
 
-// 分类（id 与 poster.js 种子数据的 category_id 保持一致）
-export const CATEGORIES = [
-  { id: 'wedding', name: '新婚', icon: '💒' },
-  { id: 'engagement', name: '订婚', icon: '💍' },
-  { id: 'baby', name: '宝宝宴', icon: '🎉' },
-  { id: 'birthday', name: '生日', icon: '🎂' },
-  { id: 'house', name: '乔迁', icon: '🏠' },
-  { id: 'parents', name: '感恩父母', icon: '👨‍👩‍👧' },
-  { id: 'study', name: '升学宴', icon: '🎓' },
-  { id: 'poster', name: '海报', icon: '📊' },
-  { id: 'creative', name: '创意设计', icon: '🎨' },
+// 分类（id 与服务端、小程序保持一致）
+export const CATEGORIES: Category[] = [
+  { id: 'wedding', name: '婚礼请柬' },
+  { id: 'proposal', name: '订婚请柬' },
+  { id: 'baby', name: '宝宝请柬' },
+  { id: 'graduation', name: '毕业请柬' },
+  { id: 'festival', name: '节日请柬' },
+  { id: 'business', name: '商务请柬' },
+  { id: 'housewarming', name: '乔迁请柬' },
+  { id: 'consultation', name: '满月酒' },
 ]

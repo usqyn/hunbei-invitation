@@ -468,12 +468,29 @@ function handleChangeTemplate() {
   })
 }
 
-function handleExport() {
-  uni.showToast({ title: '导出功能开发中', icon: 'none' })
+async function handleExport() {
+  // 与主编辑器一致：导出前确保作品已保存，再跳转预览页进行导出
+  if (!editorStore.currentWorkId) {
+    const confirmed = await new Promise<boolean>((resolve) => {
+      uni.showModal({
+        title: '提示',
+        content: '请先保存作品再导出',
+        confirmText: '去保存',
+        success: (res) => resolve(res.confirm || false),
+      })
+    })
+    if (!confirmed) return
+    handleSave()
+  }
+  if (editorStore.currentWorkId) {
+    uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
+  } else {
+    uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+  }
 }
 
 function handleLocation() {
-  uni.showToast({ title: '定位功能开发中', icon: 'none' })
+  uni.showToast({ title: '该功能仅支持单页模式', icon: 'none' })
 }
 
 function handleSave() {
@@ -525,7 +542,10 @@ function handleSave() {
 }
 
 function handleShare() {
-  uni.showToast({ title: '预览分享功能开发中', icon: 'none' })
+  if (!editorStore.currentWorkId) {
+    handleSave()
+  }
+  uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
 }
 
 onUnmounted(() => {

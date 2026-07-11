@@ -18,7 +18,8 @@ export interface CanvasBackground {
   color1: string
   color2?: string
   angle?: number
-  imageUrl?: string
+  image?: string    // 标准字段，与服务端/小程序保持一致
+  imageUrl?: string // 保留向后兼容
   imageScale?: 'contain' | 'cover' | 'fill' | 'none'
   imageOpacity?: number
 }

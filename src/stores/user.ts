@@ -7,19 +7,33 @@ const STORAGE_KEY = 'hunbei_user'
 export const useUserStore = defineStore('user', () => {
   const isLoggedIn = ref(false)
   const nickname = ref('')
+  const avatar = ref('')
   const phone = ref('')
   const token = ref('')
   const vipStatus = ref(0)
   const vipExpireAt = ref(0)
   const vipPlan = ref('')
 
-  function isVip(): boolean {
+  /** 纯函数：判断是否为 VIP，不修改任何状态 */
+  function checkVip(): boolean {
     if (vipStatus.value !== 1) return false
     if (vipExpireAt.value && vipExpireAt.value < Date.now()) {
-      vipStatus.value = 0
       return false
     }
     return true
+  }
+
+  /** 判断当前是否为 VIP（纯查询，不产生副作用） */
+  function isVip(): boolean {
+    return checkVip()
+  }
+
+  /** 清理已过期的 VIP 状态（应在 fetchUserInfo 等显式时机调用） */
+  function clearExpiredVip() {
+    if (vipStatus.value === 1 && vipExpireAt.value && vipExpireAt.value < Date.now()) {
+      vipStatus.value = 0
+      persist()
+    }
   }
 
   function persist() {
@@ -27,6 +41,7 @@ export const useUserStore = defineStore('user', () => {
       uni.setStorageSync(STORAGE_KEY, {
         isLoggedIn: isLoggedIn.value,
         nickname: nickname.value,
+        avatar: avatar.value,
         phone: phone.value,
         token: token.value,
         vipStatus: vipStatus.value,
@@ -43,6 +58,7 @@ export const useUserStore = defineStore('user', () => {
       if (saved) {
         isLoggedIn.value = saved.isLoggedIn || false
         nickname.value = saved.nickname || ''
+        avatar.value = saved.avatar || ''
         phone.value = saved.phone || ''
         token.value = saved.token || ''
         vipStatus.value = saved.vipStatus || 0
@@ -69,6 +85,7 @@ export const useUserStore = defineStore('user', () => {
   function logout() {
     isLoggedIn.value = false
     nickname.value = ''
+    avatar.value = ''
     phone.value = ''
     token.value = ''
     vipStatus.value = 0
@@ -111,10 +128,13 @@ export const useUserStore = defineStore('user', () => {
         vip_plan?: string
       }>({ url: '/api/user/info', method: 'GET' })
       nickname.value = res.nickname
+      avatar.value = res.avatar || ''
       phone.value = res.phone
       if (res.vip_status !== undefined) vipStatus.value = res.vip_status
       if (res.vip_expire_at !== undefined) vipExpireAt.value = res.vip_expire_at
       if (res.vip_plan !== undefined) vipPlan.value = res.vip_plan
+      // 拉取最新用户信息后，清理已过期的 VIP 状态（统一在此处做副作用清理）
+      clearExpiredVip()
       persist()
     } catch (e) { console.error('fetchUserInfo failed', e) }
   }
@@ -127,5 +147,5 @@ export const useUserStore = defineStore('user', () => {
 
   restore()
 
-  return { isLoggedIn, nickname, phone, token, vipStatus, vipExpireAt, vipPlan, isVip, setLogin, logout, doLogin, fetchUserInfo, requireLogin }
+  return { isLoggedIn, nickname, avatar, phone, token, vipStatus, vipExpireAt, vipPlan, isVip, checkVip, setLogin, logout, doLogin, fetchUserInfo, requireLogin }
 })

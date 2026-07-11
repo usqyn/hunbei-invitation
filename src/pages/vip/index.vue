@@ -99,7 +99,11 @@ async function handlePay() {
     uni.hideLoading()
     uni.requestPayment({
       provider: 'wxpay',
-      orderInfo: { prepayId: order.prepayId },
+      timeStamp: String(Math.floor(Date.now() / 1000)),
+      nonceStr: order.nonceStr || Math.random().toString(36).slice(2),
+      package: `prepay_id=${order.prepayId}`,
+      signType: 'MD5',
+      paySign: order.paySign || 'DEV_SIGN',
       success: async () => {
         uni.showLoading({ title: '验证中...' })
         try {

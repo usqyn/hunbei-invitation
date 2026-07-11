@@ -2,8 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Work } from '@/types'
 import { useUserStore } from './user'
-import { addFavorite, removeFavorite, fetchFavorites } from '@/api'
-import { request } from '@/utils/request'
+import { addFavorite, removeFavorite, fetchFavorites, saveWorkApi, updateWorkApi, fetchWorksApi, deleteWorkApi } from '@/api'
 
 const STORAGE_KEY = 'hunbei_works'
 
@@ -39,6 +38,12 @@ export const useWorksStore = defineStore('works', () => {
     restore()
     const userStore = useUserStore()
     if (userStore.isLoggedIn) {
+      // 先从服务器拉取作品列表，再合并本地数据
+      try {
+        await syncWorksFromServer()
+      } catch (e) {
+        console.warn('sync works from server failed', e)
+      }
       try {
         await syncFavoritesFromServer()
       } catch (e) {
@@ -46,6 +51,49 @@ export const useWorksStore = defineStore('works', () => {
       }
     }
     loading.value = false
+  }
+
+  /** 从服务器拉取作品列表并合并到本地 */
+  async function syncWorksFromServer() {
+    try {
+      const data = await fetchWorksApi()
+      if (data && Array.isArray(data) && data.length > 0) {
+        const localIds = new Set(works.value.map(w => w.id))
+        data.forEach((serverWork: any) => {
+          const id = serverWork.id
+          if (!id) return
+          const existing = works.value.find(w => w.id === id)
+          if (existing) {
+            // 合并：本地未保存到服务器的修改优先（updatedAt 较新者胜出）
+            const serverUpdatedAt = serverWork.updatedAt ? new Date(serverWork.updatedAt).getTime() : 0
+            const localUpdatedAt = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0
+            if (serverUpdatedAt > localUpdatedAt) {
+              Object.assign(existing, serverWork)
+            }
+          } else if (!localIds.has(id)) {
+            // 服务器有但本地没有的作品，加入本地
+            works.value.push(serverWork as Work)
+          }
+        })
+        persist()
+      }
+    } catch (e) {
+      console.warn('sync works from server failed', e)
+    }
+  }
+
+  /** 遍历本地作品，异步同步到服务器 */
+  async function syncWorksToServer() {
+    const userStore = useUserStore()
+    if (!userStore.isLoggedIn) return
+    const allWorks = [...works.value]
+    for (const work of allWorks) {
+      try {
+        await saveWorkApi(work)
+      } catch (e) {
+        console.warn('sync work to server failed:', work.id, e)
+      }
+    }
   }
 
   async function syncFavoritesFromServer() {
@@ -101,15 +149,12 @@ export const useWorksStore = defineStore('works', () => {
   async function deleteWork(id: string) {
     const userStore = useUserStore()
     if (userStore.isLoggedIn) {
+      // 先尝试调服务器删除接口，无论成功失败都清理本地数据
+      // （因为作品可能只存在于本地，API 删除失败不应阻塞本地清理）
       try {
-        await request({
-          url: `/api/works/${id}`,
-          method: 'DELETE',
-        })
+        await deleteWorkApi(id)
       } catch (e) {
         console.warn('delete work from server failed:', e)
-        uni.showToast({ title: '删除失败，请重试', icon: 'none' })
-        return
       }
     }
     works.value = works.value.filter(w => w.id !== id)
@@ -173,12 +218,30 @@ export const useWorksStore = defineStore('works', () => {
       drafts.value.splice(draftIdx, 1)
     }
     persist()
+
+    // 本地保存成功后，登录用户异步同步到服务器
+    const userStore = useUserStore()
+    if (userStore.isLoggedIn) {
+      const isNew = !existing
+      // 异步同步，不阻塞本地流程
+      ;(async () => {
+        try {
+          if (isNew) {
+            await saveWorkApi(work)
+          } else {
+            await updateWorkApi(work.id, work)
+          }
+        } catch (e) {
+          console.warn('sync work to server failed:', work.id, e)
+        }
+      })()
+    }
   }
 
   return {
     works, drafts, favorites, loading,
     addWork, updateWork, renameWork, deleteWork, addDraft,
     toggleFavorite, isFavorite, saveAsWork, loadAll,
-    syncFavoritesFromServer,
+    syncFavoritesFromServer, syncWorksFromServer, syncWorksToServer,
   }
 })
