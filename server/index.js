@@ -164,6 +164,9 @@ async function initDatabase() {
   try { db.run("ALTER TABLE templates ADD COLUMN is_paid INTEGER DEFAULT 0") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN price INTEGER DEFAULT 0") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN is_premium INTEGER DEFAULT 0") } catch (_) {}
+  // 迁移：添加 templateType 和 pages 字段，支持翻页模式模板
+  try { db.run("ALTER TABLE templates ADD COLUMN templateType TEXT DEFAULT 'canvas'") } catch (_) {}
+  try { db.run("ALTER TABLE templates ADD COLUMN pages TEXT DEFAULT '[]'") } catch (_) {}
   // 迁移：为 orders 表添加 paid_at 字段
   try { db.run("ALTER TABLE orders ADD COLUMN paid_at TEXT") } catch (_) {}
   // 已有模板全部标记为 published
@@ -733,7 +736,7 @@ app.get('/api/templates', (req, res) => {
         const cols = result[0].columns
         const obj = {}
         row.forEach((val, i) => {
-          if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background') {
+          if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background' || cols[i] === 'pages') {
             try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
           } else {
             obj[cols[i]] = val
@@ -755,7 +758,7 @@ app.get('/api/templates', (req, res) => {
       const cols = result[0].columns
       const obj = {}
       row.forEach((val, i) => {
-        if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background') {
+        if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background' || cols[i] === 'pages') {
           try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
         } else {
           obj[cols[i]] = val
@@ -801,7 +804,7 @@ app.get('/api/templates/:id', (req, res) => {
     const cols = result[0].columns
     const obj = {}
     row.forEach((val, i) => {
-      if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background') {
+      if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background' || cols[i] === 'pages') {
         try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
       } else {
         obj[cols[i]] = val
@@ -1034,8 +1037,8 @@ app.post('/api/templates', requireAdmin, (req, res) => {
     }
 
     db.run(`INSERT INTO templates
-      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, is_paid, price, is_premium, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, is_paid, price, is_premium, templateType, pages, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       id,
       body.name,
       body.subtitle || '',
@@ -1052,9 +1055,11 @@ app.post('/api/templates', requireAdmin, (req, res) => {
       body.tags ? JSON.stringify(body.tags) : null,
       body.status || 'draft',
       body.renderedImage || '',
-      body.is_paid || 0,
+      body.is_paid || body.isPaid || 0,
       body.price || 0,
-      body.is_premium || 0,
+      body.is_premium || body.isPremium || 0,
+      body.templateType || 'canvas',
+      JSON.stringify(body.pages || []),
       new Date().toISOString(),
       new Date().toISOString(),
     ])
@@ -1102,13 +1107,22 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
     }
 
     // 移除统计字段（likes、pageCount），管理员编辑不应直接篡改统计数据
-    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium']
+    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium', 'templateType']
     allowedFields.forEach(f => {
       if (body[f] !== undefined) {
         fields.push(`${f} = ?`)
         params.push(body[f])
       }
     })
+    // 兼容 camelCase 的付费字段
+    if (body.isPaid !== undefined) {
+      fields.push("is_paid = ?")
+      params.push(body.isPaid)
+    }
+    if (body.isPremium !== undefined) {
+      fields.push("is_premium = ?")
+      params.push(body.isPremium)
+    }
     if (body.data !== undefined) {
       fields.push("data = ?")
       params.push(JSON.stringify(body.data))
@@ -1128,6 +1142,10 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
     if (body.tags !== undefined) {
       fields.push("tags = ?")
       params.push(JSON.stringify(body.tags))
+    }
+    if (body.pages !== undefined) {
+      fields.push("pages = ?")
+      params.push(JSON.stringify(body.pages))
     }
     fields.push("updatedAt = ?")
     params.push(new Date().toISOString())
@@ -1970,7 +1988,7 @@ function rowToObject(result) {
   const cols = result[0].columns
   const obj = {}
   row.forEach((val, i) => {
-    if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background') {
+    if (cols[i] === 'data' || cols[i] === 'elements' || cols[i] === 'tags' || cols[i] === 'canvasSize' || cols[i] === 'background' || cols[i] === 'pages') {
       try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
     } else {
       obj[cols[i]] = val

@@ -36,6 +36,7 @@
                 :src="editorStore.renderedImage"
                 mode="widthFix"
                 @load="onRenderedImageLoad"
+                @error="onRenderedImageError"
               />
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="idx"
@@ -238,6 +239,11 @@ function onRenderedImageLoad(e: any) {
     renderedImageWidth.value = e.detail.width
     renderedImageHeight.value = e.detail.height
   }
+}
+
+function onRenderedImageError() {
+  console.warn('renderedImage 加载失败，回退到百分比定位渲染')
+  renderedImageStale.value = true
 }
 
 // 交互层元素定位：基于 renderedImage 实际显示尺寸，将 Admin px 值转为百分比
