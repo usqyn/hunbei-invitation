@@ -15,7 +15,8 @@ const router = express.Router()
 
 // ============ Poster Database (separate SQLite file) ============
 let SQL, posterDb
-const POSTER_DB_PATH = path.join(__dirname, '..', 'poster.db')
+// 允许通过环境变量覆盖 poster 数据库路径（测试时指向临时文件，避免污染真实 poster.db）
+const POSTER_DB_PATH = process.env.POSTER_DB_PATH || path.join(__dirname, '..', 'poster.db')
 
 async function initPosterDatabase() {
   SQL = await initSqlJs()

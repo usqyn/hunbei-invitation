@@ -8,3 +8,10 @@ poster.db
 data.json
 uploads/
 *.py
+tests/
+vitest.config.js
+.nyc_output
+coverage
+.env
+.env.*
+.DS_Store

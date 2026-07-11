@@ -24,7 +24,8 @@ if (!JWT_SECRET) {
 }
 
 let SQL, db
-const DB_PATH = path.join(__dirname, 'data.db')
+// 允许通过环境变量覆盖数据库路径（测试时指向临时文件，避免污染真实 data.db）
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data.db')
 
 async function initDatabase() {
   SQL = await initSqlJs()
@@ -532,9 +533,9 @@ async function seedData() {
 
 // ============ API 路由 ============
 
-// 健康检查
+// 健康检查（放在所有路由之前，不受鉴权中间件影响，便于容器/Docker 健康探测）
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, status: 'ok', time: new Date().toISOString() })
+  res.json({ success: true, status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() })
 })
 
 // 短信验证码存储（生产环境应使用 Redis）
@@ -2599,9 +2600,17 @@ async function start() {
   }, 24 * 60 * 60 * 1000) // 每24小时执行一次
 }
 
-start().catch(e => {
-  console.error('启动失败:', e)
-  process.exit(1)
-})
+// ============ 启动 ============
+// 仅当作为主模块直接运行时才启动服务；被 require 引入（如测试）时不自动监听端口，
+// 以便调用方复用 app 实例并自行初始化数据库。
+if (require.main === module) {
+  start().catch(e => {
+    console.error('启动失败:', e)
+    process.exit(1)
+  })
+}
+
+// 导出 app 与数据库初始化函数，供集成测试（vitest + supertest）复用
+module.exports = { app, start, initDatabase, seedData }
 
 // MONETIZATION-PHASE1-COMPLETE

@@ -2,20 +2,25 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+ENV NODE_ENV=production
+ENV PORT=3001
+
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY . .
 
-# 确保上传目录存在并由 node 用户拥有
-RUN mkdir -p /app/uploads && chown -R node:node /app
+# Ensure directories exist
+RUN mkdir -p /app/uploads/fonts /app/uploads/poster/templates /app/uploads/poster/stickers /app/uploads/poster/works && \
+    chown -R node:node /app
 
-# 声明数据卷以持久化数据库与上传文件
 VOLUME ["/app/data.db", "/app/poster.db", "/app/uploads"]
 
-# 切换非 root 用户运行
 USER node
 
 EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
 CMD ["node", "index.js"]
