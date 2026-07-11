@@ -9,5 +9,6 @@ unpackage/
 *.err
 *.db
 server/data.json
+server/uploads/
 monetization-funnel/_shared/fonts/
 monetization-funnel/_shared/js/

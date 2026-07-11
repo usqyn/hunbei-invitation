@@ -228,10 +228,10 @@ function setVersion(v) {
 // ============ 中间件 ============
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
-  : ['http://localhost:5172', 'http://localhost:5173']
+  : ['http://localhost:5172', 'http://localhost:5173', 'http://127.0.0.1:5172', 'http://127.0.0.1:5173']
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || corsOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+    if (!origin || corsOrigins.includes(origin) || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
