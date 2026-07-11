@@ -579,16 +579,30 @@ async function exportFree() {
   uni.showLoading({ title: '导出中...' })
   try {
     const res = await exportInvitation(editorStore.currentWorkId, { watermark: true, quality: 'normal' })
-    uni.hideLoading()
     if (res && res.url) {
-      // 保存到相册
-      uni.saveImageToPhotosAlbum({
-        filePath: res.url,
-        success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
-        fail: () => uni.showToast({ title: '保存失败，请授权相册权限', icon: 'none' }),
+      // 先下载到本地临时文件
+      uni.downloadFile({
+        url: res.url,
+        success: (downloadRes) => {
+          uni.hideLoading()
+          if (downloadRes.statusCode === 200) {
+            uni.saveImageToPhotosAlbum({
+              filePath: downloadRes.tempFilePath,
+              success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
+              fail: () => uni.showToast({ title: '保存失败，请授权相册权限', icon: 'none' }),
+            })
+          } else {
+            uni.showToast({ title: '下载失败', icon: 'none' })
+          }
+        },
+        fail: () => {
+          uni.hideLoading()
+          uni.showToast({ title: '下载失败', icon: 'none' })
+        }
       })
     } else {
-      uni.showToast({ title: '已导出', icon: 'success' })
+      uni.hideLoading()
+      uni.showToast({ title: '导出失败', icon: 'none' })
     }
   } catch (e) {
     uni.hideLoading()

@@ -927,6 +927,7 @@ import type { TemplatePreset } from './constants/presets'
 import { GRADIENT_CATEGORIES, GRADIENT_PRESETS, getGradientsByCategory } from './constants/gradients'
 import { COLOR_SCHEMES } from './constants/colorSchemes'
 import type { ColorScheme } from './constants/colorSchemes'
+import { serializeElement } from './utils/element-serializer'
 
 // 模板数据字段（用于 dataKey 绑定）
 const TEMPLATE_DATA_KEYS = [
@@ -1261,6 +1262,10 @@ const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 // 翻页模式：从模板加载的翻页数据（在缺少独立翻页编辑器时暂存，发布时使用）
 const flipPages = ref<Array<{ id: string; name: string; pageType: string; background: any; elements: any[] }>>([])
 
+// 快速保存（saveToServer，status=draft）时的付费设置默认值。
+// 发布向导 PublishWizard 拥有独立的 form 来设置付费；此处保存为草稿，默认免费。
+const form = reactive({ isPaid: 0, isPremium: 0, price: 0 })
+
 function onTemplateNameBlur() {
   if (currentTemplateName.value.trim()) return
   // 如果为空则恢复默认
@@ -1587,6 +1592,10 @@ async function saveToServer() {
       likes: 0,
       pageCount: 10,
       status: 'draft',
+      templateType: pageMode.value === 'flip' ? 'flip' : 'canvas',
+      isPaid: form.isPaid || 0,
+      isPremium: form.isPremium || 0,
+      price: form.price || 0,
       renderedImage: await generateRenderedImage(),
       orientation: cSize.width > cSize.height ? 'landscape' : 'portrait',
       data: {
@@ -1602,44 +1611,20 @@ async function saveToServer() {
       },
       canvasSize: cSize,
       background: draft?.background || { type: 'solid', color1: '#ffffff' },
-      elements: (draft?.elements || []).map((el: any) => ({
-        id: el.id,
-        type: el.type === 'sticker' ? 'image' : el.type,
-        text: el.content || el.src || '',
-        dataKey: el.dataKey,
-        label: el.name,
-        x: el.x - (el.width || 0) / 2,
-        y: el.y - (el.height || 0) / 2,
-        width: el.width || 0,
-        height: el.height || 0,
-        zIndex: el.zIndex ?? 0,
-        rotation: el.rotation ?? 0,
-        opacity: el.opacity ?? 1,
-        editable: el.editable !== false,
-        style: el.type === 'text' ? {
-          font: el.fontFamily,
-          color: el.color,
-          fontSize: el.fontSize != null ? Math.round(el.fontSize * 750 / cSize.width) : 28,
-          spacing: el.letterSpacing ?? 2,
-          lineHeight: el.lineHeight ?? 1.5,
-          fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
-          fontStyle: el.fontStyle ?? 'normal',
-          textAlign: el.textAlign || 'center',
-          direction: el.direction || 'auto',
-          strokeColor: el.strokeColor || 'transparent',
-          strokeWidth: el.strokeWidth ?? 0,
-          shadowColor: el.shadowColor || 'transparent',
-          shadowOffsetX: el.shadowOffsetX ?? 0,
-          shadowOffsetY: el.shadowOffsetY ?? 0,
-          shadowBlur: el.shadowBlur ?? 0,
-          textDecoration: el.textDecoration || 'none',
-        } : el.type === 'image' ? {
-          font: '', color: '', spacing: 0,
-          borderRadius: el.borderRadius ?? 0,
-          borderColor: el.borderColor || 'transparent',
-          borderWidth: el.borderWidth ?? 0,
-        } as any : undefined,
-      })),
+      elements: (draft?.elements || [])
+        .map((el: any) => serializeElement(el, { canvasWidth: cSize.width }))
+        .filter(Boolean),
+      pages: pageMode.value === 'flip'
+        ? (flipPages.value || []).map((page: any) => ({
+            id: page.id,
+            name: page.name,
+            pageType: page.pageType,
+            background: page.background,
+            elements: (page.elements || [])
+              .map((el: any) => serializeElement(el, { canvasWidth: cSize.width }))
+              .filter(Boolean),
+          }))
+        : [],
     }
 
     let resultId: string

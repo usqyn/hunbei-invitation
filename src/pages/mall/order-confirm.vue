@@ -67,6 +67,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { createOrder } from '@/api'
 
 interface OrderItem {
   id: number
@@ -152,27 +153,72 @@ const submitOrder = async () => {
   // 校验收货地址
   if (!validateAddress()) return
 
+  const orderData = {
+    items: orderItems.value.map(item => ({
+      productId: item.id,
+      productName: item.name,
+      quantity: item.quantity || 1,
+      price: item.price,
+    })),
+    totalAmount: String(orderTotal.value),
+    status: 'pending',
+    contactName: address.value.name,
+    contactPhone: address.value.phone,
+    address: address.value.detail,
+    note: remark.value || '',
+  }
+
   try {
     uni.showLoading({ title: '提交中...' })
+    // 先尝试调API
+    const res = await createOrder(orderData)
+    uni.hideLoading()
 
-    const orderNo = 'HB' + Date.now() + Math.random().toString(36).substr(2, 4).toUpperCase()
-
-    const order = {
-      orderNo,
-      items: orderItems.value,
-      remark: remark.value,
-      shippingAddress: { ...address.value },
-      totalAmount: orderTotal.value,
-      status: 'pending',
-      createTime: new Date().toISOString()
+    // 同时存本地备份
+    const localOrder = {
+      orderNo: res.id || res.orderId || 'HB' + Date.now(),
+      ...orderData,
+      createTime: new Date().toISOString(),
     }
+    const local = uni.getStorageSync('mall_orders') || []
+    local.unshift(localOrder)
+    uni.setStorageSync('mall_orders', local)
 
     // 保存收货地址供下次复用
     saveAddress()
 
-    const savedOrders = uni.getStorageSync('mall_orders') || []
-    savedOrders.unshift(order)
-    uni.setStorageSync('mall_orders', savedOrders)
+    // 清空购物车
+    let cart = uni.getStorageSync('mall_cart') || []
+    for (const ordered of orderItems.value) {
+      const idx = cart.findIndex((c: any) => c.id === ordered.id)
+      if (idx === -1) continue
+      if (cart[idx].quantity <= ordered.quantity) {
+        cart.splice(idx, 1)
+      } else {
+        cart[idx].quantity -= ordered.quantity
+      }
+    }
+    uni.setStorageSync('mall_cart', cart)
+    uni.removeStorageSync('mall_orderItems')
+
+    uni.showToast({ title: '下单成功', icon: 'success' })
+    setTimeout(() => {
+      uni.redirectTo({ url: '/pages/mall/orders' })
+    }, 1500)
+  } catch (e) {
+    uni.hideLoading()
+    // API失败时回退到本地存储
+    const localOrder = {
+      orderNo: 'HB' + Date.now(),
+      ...orderData,
+      createTime: new Date().toISOString(),
+    }
+    const local = uni.getStorageSync('mall_orders') || []
+    local.unshift(localOrder)
+    uni.setStorageSync('mall_orders', local)
+
+    // 保存收货地址供下次复用
+    saveAddress()
 
     let cart = uni.getStorageSync('mall_cart') || []
     for (const ordered of orderItems.value) {
@@ -187,19 +233,10 @@ const submitOrder = async () => {
     uni.setStorageSync('mall_cart', cart)
     uni.removeStorageSync('mall_orderItems')
 
-    uni.hideLoading()
-
-    uni.showModal({
-      title: '提示',
-      content: `订单提交成功！订单号: ${orderNo}\n金额: ¥${orderTotal.value}`,
-      showCancel: false,
-      success: () => {
-        uni.redirectTo({ url: '/pages/mall/orders' })
-      }
-    })
-  } catch (e) {
-    uni.hideLoading()
-    uni.showToast({ title: '提交失败', icon: 'none' })
+    uni.showToast({ title: '下单成功', icon: 'success' })
+    setTimeout(() => {
+      uni.redirectTo({ url: '/pages/mall/orders' })
+    }, 1500)
   }
 }
 

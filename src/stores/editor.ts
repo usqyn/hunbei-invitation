@@ -389,16 +389,38 @@ export const useEditorStore = defineStore('editor', () => {
     if (!data) return
     if (data.templateType) templateType.value = data.templateType
     if (data.elements && Array.isArray(data.elements)) {
-      editableElements.splice(0, editableElements.length, ...JSON.parse(JSON.stringify(data.elements)))
+      const elements = JSON.parse(JSON.stringify(data.elements))
+      elements.forEach((el: any) => {
+        if (el.type === 'image' && el.text) {
+          el.text = resolveUrl(el.text)
+        }
+      })
+      editableElements.splice(0, editableElements.length, ...elements)
     }
     if (data.pageSections && Array.isArray(data.pageSections)) {
       pageSections.splice(0, pageSections.length, ...JSON.parse(JSON.stringify(data.pageSections)))
     }
     if (data.flipPages && Array.isArray(data.flipPages)) {
-      flipPages.splice(0, flipPages.length, ...JSON.parse(JSON.stringify(data.flipPages)))
+      const pages = JSON.parse(JSON.stringify(data.flipPages))
+      pages.forEach((page: any) => {
+        if (page.background?.image) page.background.image = resolveUrl(page.background.image)
+        if (page.background?.imageUrl) page.background.imageUrl = resolveUrl(page.background.imageUrl)
+        if (page.elements && Array.isArray(page.elements)) {
+          page.elements.forEach((el: any) => {
+            if (el.type === 'image' && el.text) el.text = resolveUrl(el.text)
+          })
+        }
+      })
+      flipPages.splice(0, flipPages.length, ...pages)
     }
     if (data.canvasSize) canvasSize.value = { ...data.canvasSize }
-    if (data.background) background.value = { ...data.background }
+    if (data.background) {
+      const bg = { ...data.background }
+      if (bg.imageUrl && !bg.image) bg.image = bg.imageUrl
+      if (bg.image) bg.image = resolveUrl(bg.image)
+      if (bg.imageUrl) bg.imageUrl = resolveUrl(bg.imageUrl)
+      background.value = bg
+    }
     const templateStore = useTemplateStore()
     if (data.templateData) Object.assign(templateStore.templateData, data.templateData)
     if (data.basicInfo) Object.assign(templateStore.basicInfo, data.basicInfo)
@@ -411,8 +433,12 @@ export const useEditorStore = defineStore('editor', () => {
     if (data.currentFlipPageIndex != null && data.currentFlipPageIndex < flipPages.length) {
       currentFlipPageIndex.value = data.currentFlipPageIndex
     }
-    // 作品编辑后渲染图需重新生成
-    renderedImage.value = ''
+    // 恢复渲染图（补全相对路径）；无渲染图时清空以触发重新生成
+    if (data.renderedImage) {
+      renderedImage.value = resolveUrl(data.renderedImage)
+    } else {
+      renderedImage.value = ''
+    }
     selectedElement.value = null
     activeSectionId.value = null
     // 重置历史，以当前作品状态为基线

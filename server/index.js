@@ -1277,24 +1277,35 @@ app.delete('/api/templates/:id', requireAdmin, (req, res) => {
 
 // ============ 作品 CRUD API ============
 
+// 将 works 表行数据转换为 camelCase 字段对象（与服务端列名对齐）
+// snake_case 列名 → camelCase：template_id→templateId, template_type→templateType,
+// music_id→musicId, created_at→createdAt, updated_at→updatedAt；cover/id/phone/title/data 保持原名
+function mapWorkRow(row, cols) {
+  const obj = {}
+  row.forEach((val, i) => {
+    const col = cols[i]
+    let key = col
+    if (col === 'template_id') key = 'templateId'
+    else if (col === 'template_type') key = 'templateType'
+    else if (col === 'music_id') key = 'musicId'
+    else if (col === 'created_at') key = 'createdAt'
+    else if (col === 'updated_at') key = 'updatedAt'
+    if (col === 'data') {
+      try { obj[key] = JSON.parse(val) } catch { obj[key] = val }
+    } else {
+      obj[key] = val
+    }
+  })
+  return obj
+}
+
 // 获取当前用户作品列表
 app.get('/api/works', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.json({ success: true, data: [] })
     const result = db.exec("SELECT * FROM works WHERE phone = ? ORDER BY updated_at DESC", [phone])
-    const works = result.length ? result[0].values.map(row => {
-      const cols = result[0].columns
-      const obj = {}
-      row.forEach((val, i) => {
-        if (cols[i] === 'data') {
-          try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
-        } else {
-          obj[cols[i]] = val
-        }
-      })
-      return obj
-    }) : []
+    const works = result.length ? result[0].values.map(row => mapWorkRow(row, result[0].columns)) : []
     res.json({ success: true, data: works })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -1310,16 +1321,7 @@ app.get('/api/works/:id', requireAuth, (req, res) => {
     if (!result.length || !result[0].values.length) {
       return res.status(404).json({ success: false, error: '作品不存在' })
     }
-    const row = result[0].values[0]
-    const cols = result[0].columns
-    const obj = {}
-    row.forEach((val, i) => {
-      if (cols[i] === 'data') {
-        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
-      } else {
-        obj[cols[i]] = val
-      }
-    })
+    const obj = mapWorkRow(result[0].values[0], result[0].columns)
     res.json({ success: true, data: obj })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -1331,7 +1333,9 @@ app.post('/api/works', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.status(401).json({ success: false, error: '请先登录' })
-    const { id, templateId, templateType, title, data, musicId, cover } = req.body
+    const { id, templateId, templateType, title, data, musicId, cover, image } = req.body
+    // 兼容：如果 body 中有 image 但没有 cover，用 image 作为 cover 的值
+    const coverValue = cover || image || ''
     const workId = id || uuidv4()
     const now = new Date().toISOString()
     // 如果指定了 id，先检查是否已存在且属于当前用户
@@ -1344,20 +1348,11 @@ app.post('/api/works', requireAuth, (req, res) => {
     db.run(`INSERT OR REPLACE INTO works (id, phone, template_id, template_type, title, data, music_id, cover, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       workId, phone, templateId || '', templateType || 'canvas', title || '',
-      JSON.stringify(data || {}), musicId || '', cover || '', now, now,
+      JSON.stringify(data || {}), musicId || '', coverValue, now, now,
     ])
     saveDatabaseDebounced()
     const result = db.exec("SELECT * FROM works WHERE id = ?", [workId])
-    const row = result[0].values[0]
-    const cols = result[0].columns
-    const obj = {}
-    row.forEach((val, i) => {
-      if (cols[i] === 'data') {
-        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
-      } else {
-        obj[cols[i]] = val
-      }
-    })
+    const obj = mapWorkRow(result[0].values[0], result[0].columns)
     res.json({ success: true, data: obj })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -1373,7 +1368,9 @@ app.put('/api/works/:id', requireAuth, (req, res) => {
     if (!existing.length || !existing[0].values.length) {
       return res.status(404).json({ success: false, error: '作品不存在' })
     }
-    const { templateId, templateType, title, data, musicId, cover } = req.body
+    const { templateId, templateType, title, data, musicId, cover, image } = req.body
+    // 兼容：如果 body 中有 image 但没有 cover，用 image 作为 cover 的值
+    const coverValue = cover !== undefined ? cover : image
     const fields = []
     const params = []
     if (templateId !== undefined) { fields.push("template_id = ?"); params.push(templateId) }
@@ -1381,23 +1378,14 @@ app.put('/api/works/:id', requireAuth, (req, res) => {
     if (title !== undefined) { fields.push("title = ?"); params.push(title) }
     if (data !== undefined) { fields.push("data = ?"); params.push(JSON.stringify(data)) }
     if (musicId !== undefined) { fields.push("music_id = ?"); params.push(musicId) }
-    if (cover !== undefined) { fields.push("cover = ?"); params.push(cover) }
+    if (coverValue !== undefined) { fields.push("cover = ?"); params.push(coverValue) }
     fields.push("updated_at = ?")
     params.push(new Date().toISOString())
     params.push(req.params.id)
     db.run(`UPDATE works SET ${fields.join(', ')} WHERE id = ?`, params)
     saveDatabaseDebounced()
     const result = db.exec("SELECT * FROM works WHERE id = ?", [req.params.id])
-    const row = result[0].values[0]
-    const cols = result[0].columns
-    const obj = {}
-    row.forEach((val, i) => {
-      if (cols[i] === 'data') {
-        try { obj[cols[i]] = JSON.parse(val) } catch { obj[cols[i]] = val }
-      } else {
-        obj[cols[i]] = val
-      }
-    })
+    const obj = mapWorkRow(result[0].values[0], result[0].columns)
     res.json({ success: true, data: obj })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -1827,22 +1815,40 @@ app.post('/api/export', requireAuth, (req, res) => {
     }
     const forceWatermark = !isVip
 
-    // 修复 workId 查询：从 works 表获取关联的 template_id，再查询模板的 renderedImage
+    // 修复导出逻辑：优先用 works 表的 template_id 查模板 renderedImage
     let url = ''
-    const workResult = db.exec("SELECT template_id FROM works WHERE id = ? AND phone = ?", [workId, phone])
+    let templateId = ''
+    let workData = null
+
+    // 1. 先从 works 表查 template_id（修复后应有值），同时取出 data 用于兜底
+    const workResult = db.exec("SELECT template_id, data FROM works WHERE id = ? AND phone = ?", [workId, phone])
     if (workResult.length && workResult[0].values.length) {
-      const templateId = workResult[0].values[0][0]
-      if (templateId) {
-        const tplResult = db.exec("SELECT renderedImage FROM templates WHERE id = ? AND status != 'deleted'", [templateId])
-        if (tplResult.length && tplResult[0].values.length && tplResult[0].values[0][0]) {
-          url = tplResult[0].values[0][0]
-        }
+      templateId = workResult[0].values[0][0] || ''
+      try { workData = JSON.parse(workResult[0].values[0][1]) } catch (_) { workData = null }
+    }
+
+    // 2. template_id 不为空，用其查 templates 表的 renderedImage
+    if (!url && templateId) {
+      const tplResult = db.exec("SELECT renderedImage FROM templates WHERE id = ? AND status != 'deleted'", [templateId])
+      if (tplResult.length && tplResult[0].values.length && tplResult[0].values[0][0]) {
+        url = tplResult[0].values[0][0]
       }
-    } else {
-      // 兼容：直接作为模板 ID 查询
+    }
+
+    // 3. template_id 为空，直接用 workId 作为 templateId 查询（兼容旧数据）
+    if (!url && !templateId) {
       const result = db.exec("SELECT renderedImage FROM templates WHERE id = ?", [workId])
       if (result.length && result[0].values.length && result[0].values[0][0]) {
         url = result[0].values[0][0]
+      }
+    }
+
+    // 4. 都查不到，检查作品 data 中是否有 renderedImage
+    if (!url && workData) {
+      if (workData.renderedImage) {
+        url = workData.renderedImage
+      } else if (workData.templateData && workData.templateData.renderedImage) {
+        url = workData.templateData.renderedImage
       }
     }
 

@@ -58,6 +58,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { fetchOrders, payOrder as requestPayOrder } from '@/api'
 
 interface Order {
+  id?: string
   orderNo: string
   items: Array<{ id: number; name: string; image: string; price: string; quantity: number }>
   totalAmount: string
@@ -65,6 +66,9 @@ interface Order {
   createTime: string
   shippingAddress?: { name: string; phone: string; detail: string }
   remark?: string
+  contactName?: string
+  contactPhone?: string
+  address?: string
 }
 
 const statusMap: Record<string, string> = {
@@ -90,8 +94,21 @@ const totalCount = (order: Order) => {
 const loadOrders = async () => {
   try {
     const res = await fetchOrders()
-    if (res && res.length > 0) {
-      orders.value = res.sort((a: Order, b: Order) => {
+    if (res && Array.isArray(res)) {
+      const data = res.map((order: any) => ({
+        id: order.id,
+        orderNo: order.id || order.orderNo,
+        items: typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []),
+        totalAmount: order.totalAmount || order.total_amount || '0',
+        status: order.status || 'pending',
+        createTime: order.createdAt || order.created_at || order.createTime || '',
+        contactName: order.contactName || order.contact_name || '',
+        contactPhone: order.contactPhone || order.contact_phone || '',
+        address: order.address || '',
+        remark: order.note || order.remark || '',
+        shippingAddress: order.shippingAddress || undefined,
+      }))
+      orders.value = data.sort((a: Order, b: Order) => {
         return (b.createTime || '').localeCompare(a.createTime || '')
       })
       return
@@ -130,7 +147,9 @@ const payOrder = async (order: Order) => {
   // 1. 尝试通过后端获取支付参数
   let payParams: any = null
   try {
-    payParams = await requestPayOrder(order.orderNo)
+    // 传 order.id（服务端UUID）而非 orderNo
+    const orderId = order.id || order.orderNo
+    payParams = await requestPayOrder(orderId)
   } catch (e) {
     payParams = null
   }

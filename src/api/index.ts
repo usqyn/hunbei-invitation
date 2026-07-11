@@ -123,16 +123,22 @@ export function fetchRecommendProducts(category: string) {
 }
 
 // ========== 订单相关 ==========
-/** @deprecated 死代码，暂未使用 */
-export function createOrder(items: any[]) {
-  return request<{ orderId: string; totalAmount: number }>({ url: '/api/orders', method: 'POST', data: { items } })
+export function createOrder(orderData: {
+  items: any[]
+  totalAmount: string
+  status: string
+  contactName: string
+  contactPhone: string
+  address: string
+  note: string
+}) {
+  return request({ url: '/api/orders', method: 'POST', data: orderData })
 }
 
 export function fetchOrders() {
   return request<any[]>({ url: '/api/orders' })
 }
 
-/** @deprecated 死代码，暂未使用 */
 export function payOrder(orderId: string) {
   return request<{ prepayId: string }>({ url: `/api/orders/${orderId}/pay`, method: 'POST' })
 }

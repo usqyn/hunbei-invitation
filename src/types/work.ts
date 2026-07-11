@@ -18,8 +18,10 @@ export interface Work {
   title: string
   date: string
   image: string
+  cover?: string
   status?: 'draft' | 'published'
   templateType?: string
+  templateId?: string
   musicId?: number | null
   updatedAt?: string
   data?: WorkEditorData

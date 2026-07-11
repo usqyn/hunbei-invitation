@@ -762,7 +762,9 @@ async function handleSave() {
       existing.title = templateStore.templateData.coverTitle || '未命名作品'
       existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
       existing.image = templateStore.templateData.coverImage
-      existing.templateType = editorStore.currentTemplateId
+      existing.cover = templateStore.templateData.coverImage
+      existing.templateId = editorStore.currentTemplateId
+      existing.templateType = editorStore.templateType
       existing.musicId = musicId
       existing.data = editorData
       existing.updatedAt = new Date().toISOString()
@@ -780,7 +782,9 @@ async function handleSave() {
     title: templateStore.templateData.coverTitle || '未命名作品',
     date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
     image: templateStore.templateData.coverImage,
-    templateType: editorStore.currentTemplateId,
+    cover: templateStore.templateData.coverImage,
+    templateId: editorStore.currentTemplateId,
+    templateType: editorStore.templateType,
     musicId,
     status: 'draft',
     data: editorData,

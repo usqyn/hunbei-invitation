@@ -68,17 +68,32 @@ export const useWorksStore = defineStore('works', () => {
             const serverUpdatedAt = serverWork.updatedAt || serverWork.updated_at ? new Date(serverWork.updatedAt || serverWork.updated_at).getTime() : 0
             const localUpdatedAt = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0
             if (serverUpdatedAt > localUpdatedAt) {
-              // 只同步 camelCase 字段，避免 snake_case 脏数据
+              // 统一做 snake_case → camelCase 转换，保证字段一致
+              existing.templateId = serverWork.templateId || serverWork.template_id || existing.templateId
+              existing.image = serverWork.cover || serverWork.image || existing.image
+              existing.cover = serverWork.cover || existing.cover
               existing.title = serverWork.title ?? existing.title
               existing.templateType = serverWork.templateType || serverWork.template_type || existing.templateType
               existing.data = serverWork.data || existing.data
               existing.musicId = serverWork.musicId || serverWork.music_id || existing.musicId
-              existing.cover = serverWork.cover ?? existing.cover
               existing.updatedAt = serverWork.updatedAt || serverWork.updated_at || existing.updatedAt
             }
           } else if (!localIds.has(id)) {
-            // 服务器有但本地没有的作品，加入本地
-            works.value.push(serverWork as Work)
+            // 服务器有但本地没有的作品，做字段转换后加入本地
+            const mappedWork: Work = {
+              id: serverWork.id,
+              title: serverWork.title || '未命名作品',
+              date: '',
+              image: serverWork.cover || serverWork.image || '',
+              cover: serverWork.cover || '',
+              templateType: serverWork.templateType || serverWork.template_type || 'canvas',
+              templateId: serverWork.templateId || serverWork.template_id || '',
+              musicId: serverWork.musicId || serverWork.music_id || '',
+              data: serverWork.data || {},
+              status: 'draft',
+              updatedAt: serverWork.updatedAt || serverWork.updated_at || new Date().toISOString(),
+            }
+            works.value.push(mappedWork)
           }
         })
         persist()
@@ -235,10 +250,17 @@ export const useWorksStore = defineStore('works', () => {
       // 异步同步，不阻塞本地流程
       ;(async () => {
         try {
+          // 构建发送给 API 的 work 对象，确保包含服务端需要的字段
+          const apiWork = {
+            ...work,
+            cover: work.cover || work.image,
+            templateId: work.templateId || '',
+            templateType: work.templateType || 'canvas',
+          }
           if (isNew) {
-            await saveWorkApi(work)
+            await saveWorkApi(apiWork)
           } else {
-            await updateWorkApi(work.id, work)
+            await updateWorkApi(work.id, apiWork)
           }
         } catch (e) {
           console.warn('sync work to server failed:', work.id, e)
