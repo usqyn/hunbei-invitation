@@ -152,6 +152,7 @@ const handleWorkClick = (work: any) => {
 }
 
 const handleDraftClick = (draft: any) => {
+  if (!userStore.requireLogin()) return
   uni.navigateTo({ url: `/pages/editor/index?workId=${draft.id}` })
 }
 
@@ -164,6 +165,7 @@ const handleShare = (work: any) => {
 }
 
 const handleEdit = (draft: any) => {
+  if (!userStore.requireLogin()) return
   uni.navigateTo({ url: `/pages/editor/index?workId=${draft.id}` })
 }
 
@@ -240,6 +242,7 @@ const handleRemoveFavorite = (fav: any) => {
 }
 
 const handleCreate = () => {
+  if (!userStore.requireLogin()) return
   uni.navigateTo({ url: '/pages/editor/index' })
 }
 

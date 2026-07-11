@@ -513,6 +513,7 @@ const handleMore = () => {
 }
 
 const handleCreate = () => {
+  if (!userStore.requireLogin()) return
   const templateId = editorStore.currentTemplateId
   if (templateId) {
     uni.navigateTo({ url: `/pages/editor/index?templateId=${templateId}` })

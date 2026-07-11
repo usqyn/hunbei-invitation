@@ -119,7 +119,13 @@ export const useUserStore = defineStore('user', () => {
     } catch (e) { console.error('fetchUserInfo failed', e) }
   }
 
+  function requireLogin(): boolean {
+    if (isLoggedIn.value) return true
+    uni.navigateTo({ url: '/pages/login/index' })
+    return false
+  }
+
   restore()
 
-  return { isLoggedIn, nickname, phone, token, vipStatus, vipExpireAt, vipPlan, isVip, setLogin, logout, doLogin, fetchUserInfo }
+  return { isLoggedIn, nickname, phone, token, vipStatus, vipExpireAt, vipPlan, isVip, setLogin, logout, doLogin, fetchUserInfo, requireLogin }
 })

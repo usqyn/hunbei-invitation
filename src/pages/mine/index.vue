@@ -161,6 +161,7 @@ const handleQuickAction = (item: any) => {
 
 const handleToolClick = (tool: any) => {
   if (tool.name === '一键成请柬') {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/editor/index' })
   } else if (tool.name === '婚礼文案') {
     uni.navigateTo({ url: '/pages/template/index' })
@@ -175,6 +176,7 @@ const handleToolClick = (tool: any) => {
   } else if (tool.name === '我的海报') {
     uni.navigateTo({ url: '/pages/poster/works/index' })
   } else if (tool.name === '一键出片') {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/editor/index' })
   }
 }
