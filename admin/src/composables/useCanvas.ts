@@ -55,7 +55,8 @@ export function useCanvas(opts: UseCanvasOptions) {
 
   // 内部 Fabric 实例（用 shallowRef，避免 Vue 响应式包装底层对象）
   const fabricCanvas = shallowRef<fabric.Canvas | null>(null)
-  const history = ref<CanvasDraft[]>([])
+  // history 改用 shallowRef：历史快照体积大且整体替换，无需深响应式
+  const history = shallowRef<CanvasDraft[]>([])
   const historyIdx = ref(-1)
   let suppressHistory = false
   // loadDraft 期间阻止历史记录：图片异步加载完成时 suppressHistory 可能已恢复为 false，
@@ -111,8 +112,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.on('object:removed', pushHistoryIfNeeded)
     canvas.on('object:modified', pushHistoryIfNeeded)
 
-    // 拖拽吸附 + 对齐参考线
-    canvas.on('object:moving', (e: any) => {
+    // 拖拽吸附 + 对齐参考线（节流：20fps 对齐检测，避免每次 mousemove 都计算）
+    function doAlignCheck(e: any) {
       const target = e.target
       if (!target) return
 
@@ -182,6 +183,18 @@ export function useCanvas(opts: UseCanvasOptions) {
         guideLines.value = guides
         canvas.renderAll()
       }
+    }
+
+    canvas.on('object:moving', (e: any) => {
+      pendingAlignEvent = e
+      if (alignCheckTimer) return
+      alignCheckTimer = setTimeout(() => {
+        alignCheckTimer = null
+        if (pendingAlignEvent) {
+          doAlignCheck(pendingAlignEvent)
+          pendingAlignEvent = null
+        }
+      }, 50) // 20fps 对齐检测
     })
 
     canvas.on('object:modified', () => {
@@ -1236,14 +1249,19 @@ export function useCanvas(opts: UseCanvasOptions) {
       history.value = history.value.slice(0, historyIdx.value + 1)
     }
 
-    history.value.push(draft)
-    if (history.value.length > MAX_HISTORY) history.value.shift()
+    // shallowRef 不会自动追踪数组方法，需用新数组整体替换以触发响应式
+    const newHistory = [...history.value, draft]
+    if (newHistory.length > MAX_HISTORY) newHistory.shift()
+    history.value = newHistory
     historyIdx.value = history.value.length - 1
     updateCanUndoRedo()
   }
 
   // throttle：避免高频事件每一次都压栈
   let pushTimer: ReturnType<typeof setTimeout> | null = null
+  // 对齐检测节流：限制参考线计算频率（20fps），避免每次 mousemove 都重算
+  let alignCheckTimer: ReturnType<typeof setTimeout> | null = null
+  let pendingAlignEvent: any = null
   function pushHistoryIfNeeded() {
     if (suppressHistory || isLoadDrafting) return
     if (pushTimer) clearTimeout(pushTimer)
@@ -1290,6 +1308,11 @@ export function useCanvas(opts: UseCanvasOptions) {
       fabricCanvas.value = null
     }
     if (pushTimer) clearTimeout(pushTimer)
+    if (alignCheckTimer) {
+      clearTimeout(alignCheckTimer)
+      alignCheckTimer = null
+    }
+    pendingAlignEvent = null
   }
 
   // ---- 清空画布（供外部调用）----

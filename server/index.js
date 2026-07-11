@@ -217,10 +217,16 @@ async function initDatabase() {
 }
 
 function saveDatabase() {
-  const data = db.export()
-  const tmpPath = DB_PATH + '.tmp'
-  fs.writeFileSync(tmpPath, Buffer.from(data))
-  fs.renameSync(tmpPath, DB_PATH)
+  try {
+    const data = db.export()
+    const buffer = Buffer.from(data)
+    // 先写入临时文件，再原子重命名
+    const tmpPath = DB_PATH + '.tmp'
+    fs.writeFileSync(tmpPath, buffer)
+    fs.renameSync(tmpPath, DB_PATH)
+  } catch (e) {
+    console.error('saveDatabase 失败:', e)
+  }
 }
 
 // 防抖保存：延迟 500ms，避免短时间内多次写操作重复保存文件
@@ -343,26 +349,29 @@ app.use('/uploads/fonts', express.static(FONTS_DIR))
 // 同一工厂产出的中间件各自维护独立计数，避免不同接口共享同一限流计数互相干扰
 function rateLimit({ max = 10, windowMs = 60000 } = {}) {
   const attempts = {}
-  // 过期 IP 清理阈值：超过 15 分钟未访问的 IP 条目直接删除，避免内存泄漏
-  const MAX_IDLE = 15 * 60 * 1000
+  let lastCleanup = Date.now()
+
   return function rateLimitMiddleware(req, res, next) {
     const ip = req.ip || (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || 'unknown'
     const now = Date.now()
-    // 每次调用时清理过期 IP 条目（最后一次访问超过 15 分钟的直接 delete）
-    Object.keys(attempts).forEach(key => {
-      const list = attempts[key]
-      if (!list || !list.length || now - list[list.length - 1] > MAX_IDLE) {
-        delete attempts[key]
-      }
-    })
+
+    // 惰性清理：每5分钟清理一次过期 IP 条目，避免每次请求都遍历所有 IP
+    if (now - lastCleanup > 5 * 60 * 1000) {
+      Object.keys(attempts).forEach(key => {
+        const list = attempts[key]
+        if (!list || !list.length || now - list[list.length - 1] > windowMs) {
+          delete attempts[key]
+        }
+      })
+      lastCleanup = now
+    }
+
     // 仅保留窗口期内的请求时间戳（先过滤，避免 delete 后再访问导致的 undefined.push 错误）
-    const recent = (attempts[ip] || []).filter(t => now - t < windowMs)
-    if (recent.length >= max) {
-      attempts[ip] = recent
+    attempts[ip] = (attempts[ip] || []).filter(t => now - t < windowMs)
+    if (attempts[ip].length >= max) {
       return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试' })
     }
-    recent.push(now)
-    attempts[ip] = recent
+    attempts[ip].push(now)
     next()
   }
 }
@@ -1401,17 +1410,28 @@ app.post('/api/orders', requireAuth, (req, res) => {
     if (!items || !items.length) {
       return res.status(400).json({ success: false, error: '订单商品不能为空' })
     }
-    // 服务端计算订单金额：根据 items 中的 templateId 查询模板真实价格并累加
+    // 服务端计算订单金额：根据 items 中的 templateId 批量查询模板真实价格并累加
     let serverTotal = 0
-    for (const item of items) {
-      if (item.templateId) {
-        const tplResult = db.exec("SELECT id, price, is_paid FROM templates WHERE id = ? AND status = 'published'", [item.templateId])
-        if (!tplResult.length || !tplResult[0].values.length) {
-          return res.status(400).json({ success: false, error: `模板 ${item.templateId} 不存在` })
-        }
-        const [tplId, tplPrice, isPaid] = tplResult[0].values[0]
-        if (isPaid === 1) {
-          serverTotal += parseFloat(tplPrice) || 0
+    const templateIds = items.map(item => item.templateId).filter(Boolean)
+    if (templateIds.length > 0) {
+      const placeholders = templateIds.map(() => '?').join(',')
+      const priceResults = db.exec(`SELECT id, price, is_paid FROM templates WHERE id IN (${placeholders}) AND status = 'published'`, templateIds)
+      const priceMap = {}
+      if (priceResults.length) {
+        priceResults[0].values.forEach(row => {
+          priceMap[row[0]] = { price: row[1], isPaid: row[2] }
+        })
+      }
+      // 使用 priceMap 计算总价，同时校验模板存在且已发布
+      for (const item of items) {
+        if (item.templateId) {
+          const tpl = priceMap[item.templateId]
+          if (!tpl) {
+            return res.status(400).json({ success: false, error: `模板 ${item.templateId} 不存在` })
+          }
+          if (tpl.isPaid === 1) {
+            serverTotal += parseFloat(tpl.price) || 0
+          }
         }
       }
     }
@@ -2069,14 +2089,21 @@ app.get('/api/orders/:id', requireAuth, (req, res) => {
 // 获取反馈列表（管理员）
 app.get('/api/feedback', requireAdmin, (req, res) => {
   try {
-    const result = db.exec("SELECT * FROM feedback ORDER BY createdAt DESC")
-    const feedback = result.length ? result[0].values.map(row => {
-      const cols = result[0].columns
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 20
+    const offset = (page - 1) * limit
+    const countResult = db.exec("SELECT COUNT(*) as c FROM feedback")
+    const total = countResult.length ? countResult[0].values[0][0] : 0
+    const result = db.exec("SELECT * FROM feedback ORDER BY createdAt DESC LIMIT ? OFFSET ?", [limit, offset])
+    const feedbacks = result.length ? result[0].values.map(row => {
       const obj = {}
-      row.forEach((val, i) => { obj[cols[i]] = val })
+      result[0].columns.forEach((col, i) => {
+        obj[col] = row[i]
+        if (col === 'params') { try { obj[col] = JSON.parse(row[i]) } catch {} }
+      })
       return obj
     }) : []
-    res.json({ success: true, data: feedback })
+    res.json({ success: true, data: feedbacks, pagination: { page, limit, total } })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -2379,14 +2406,16 @@ app.post('/api/track/batch', rateLimit({ max: 20, windowMs: 60000 }), (req, res)
     }
     const sessionId = req.headers['x-session-id'] || req.headers['session-id'] || uuidv4()
     const userId = req.user?.phone || null
-    events.forEach(evt => {
-      db.run(`INSERT INTO events (event, user_id, session_id, timestamp, params, platform, version)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+    // 批量插入事件（单条 SQL 替代循环逐条插入，减少 N+1 写入开销）
+    if (events.length > 0) {
+      const values = events.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(',')
+      const params = events.flatMap(evt => [
         evt.event || '', userId, sessionId, evt.timestamp || Date.now(),
         evt.params ? JSON.stringify(evt.params) : null,
         evt.platform || '', evt.version || '',
       ])
-    })
+      db.run(`INSERT INTO events (event, user_id, session_id, timestamp, params, platform, version) VALUES ${values}`, params)
+    }
     saveDatabaseDebounced()
     res.json({ success: true })
   } catch (e) {
@@ -2467,6 +2496,26 @@ async function start() {
     console.log(`   音乐目录: ${MUSIC_DIR}`)
     console.log(`   JWT 认证: 已启用 (公开路由除外)\n`)
   })
+
+  // 定期清理过期数据
+  setInterval(() => {
+    try {
+      const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const ninetyDaysAgoIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+      // 清理30天前的事件（timestamp 为毫秒数值）
+      db.run("DELETE FROM events WHERE timestamp < ?", [thirtyDaysAgoMs])
+      // 清理30天前的足迹（timestamp 为毫秒数值）
+      db.run("DELETE FROM footprints WHERE timestamp < ?", [thirtyDaysAgoMs])
+      // 清理90天前已读通知（createdAt 为 ISO 字符串）
+      db.run("DELETE FROM notifications WHERE read = 1 AND createdAt < ?", [ninetyDaysAgoIso])
+      // VACUUM 压缩数据库
+      db.run("VACUUM")
+      saveDatabase()
+      console.log('[清理] 数据库清理完成')
+    } catch (e) {
+      console.error('[清理] 数据库清理失败:', e)
+    }
+  }, 24 * 60 * 60 * 1000) // 每24小时执行一次
 
   const shutdown = (signal) => {
     console.log(`\n${signal} received, shutting down gracefully...`)

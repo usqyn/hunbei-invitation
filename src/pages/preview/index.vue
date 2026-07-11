@@ -34,6 +34,7 @@
                   <image
                     v-if="el.type === 'image'"
                     class="flip-image-el"
+                    lazy-load
                     :src="el.text"
                     mode="aspectFit"
                     @error="onImageError"
@@ -64,6 +65,7 @@
             <template v-else-if="sec.type === 'image'">
               <image
                 class="section-image"
+                lazy-load
                 :src="sec.image || ''"
                 mode="aspectFit"
                 @error="onImageError"
@@ -96,7 +98,7 @@
       <!-- 画布模式：绝对定位渲染 -->
       <template v-else-if="isCanvasMode">
         <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="canvasCardStyle">
-          <image class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" />
+          <image class="rendered-image" lazy-load :src="editorStore.renderedImage" mode="widthFix" />
         </view>
         <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
           <view
@@ -109,6 +111,7 @@
             <image
               v-if="el.type === 'image'"
               class="preview-image-el"
+              lazy-load
               :src="el.text"
               mode="aspectFit"
               @error="onImageError"
@@ -129,6 +132,7 @@
             <image
               v-if="el.type === 'image'"
               class="preview-section-image"
+              lazy-load
               :src="el.text"
               mode="aspectFill"
               @error="onImageError"
@@ -152,7 +156,7 @@
         <view class="similar-list">
           <view class="similar-item" v-for="(item, idx) in similarTemplates" :key="idx" @click="onSimilarClick(item)">
             <view class="similar-image-wrap">
-              <image class="similar-image" :src="item.image" mode="aspectFill" @error="onImageError"></image>
+              <image class="similar-image" lazy-load :src="item.image" mode="aspectFill" @error="onImageError"></image>
               <view class="similar-overlay">
                 <text class="similar-title">{{ item.title }}</text>
                 <text class="similar-sub">{{ item.subtitle }}</text>
@@ -172,12 +176,12 @@
         <view class="compare-row">
           <view class="compare-col">
             <view class="compare-label">免费导出</view>
-            <image class="compare-img" :src="watermarkedPreview" mode="aspectFill" />
+            <image class="compare-img" lazy-load :src="watermarkedPreview" mode="aspectFill" />
             <view class="compare-desc">带水印 · 720px</view>
           </view>
           <view class="compare-col compare-highlight">
             <view class="compare-label">高清导出</view>
-            <image class="compare-img" :src="hdPreview" mode="aspectFill" />
+            <image class="compare-img" lazy-load :src="hdPreview" mode="aspectFill" />
             <view class="compare-desc">无水印 · 1440px</view>
           </view>
         </view>
@@ -196,7 +200,7 @@
         <scroll-view class="shop-rec-scroll" scroll-x>
           <view class="shop-rec-list">
             <view v-for="p in recommendProducts" :key="p.id" class="shop-rec-card" @click="goToProduct(p)">
-              <image class="shop-rec-img" :src="p.image" mode="aspectFill" />
+              <image class="shop-rec-img" lazy-load :src="p.image" mode="aspectFill" />
               <text class="shop-rec-name">{{ p.name }}</text>
               <text class="shop-rec-price">{{ p.price }}元</text>
             </view>

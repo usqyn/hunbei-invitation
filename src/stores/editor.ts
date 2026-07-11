@@ -56,6 +56,16 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
+  // 防抖持久化：避免每次编辑都做深拷贝 + 同步 IO，合并 1 秒内的多次写入
+  let _persistTimer: ReturnType<typeof setTimeout> | null = null
+  function debouncedPersist() {
+    if (_persistTimer) clearTimeout(_persistTimer)
+    _persistTimer = setTimeout(() => {
+      persistTemplate()
+      _persistTimer = null
+    }, 1000)
+  }
+
   function pushHistory() {
     // 截断 redo 分支
     if (historyIndex.value < history.value.length - 1) {
@@ -68,8 +78,8 @@ export const useEditorStore = defineStore('editor', () => {
       historyIndex.value = history.value.length - 1
     }
     // 每次编辑操作后持久化模板数据，确保编辑内容不丢失
-    // pushHistory 不在 touchmove 热路径中，仅在操作结束时调用，调用 setStorageSync 是安全的
-    persistTemplate()
+    // 通过防抖合并频繁的同步 IO 写入，降低主线程开销
+    debouncedPersist()
   }
 
   function resetHistory() {

@@ -17,4 +17,16 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'fabric': ['fabric'],
+          'vue-vendor': ['vue'],
+          'axios': ['axios'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 })

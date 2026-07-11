@@ -14,6 +14,14 @@ function fetchFontMap(): Promise<void> {
       const check = setInterval(() => {
         if (fontMap !== null) { clearInterval(check); resolve() }
       }, 100)
+      // 10秒超时保护：避免请求卡住时无限轮询，超时后用空 map 兜底
+      setTimeout(() => {
+        if (fontMap === null) {
+          clearInterval(check)
+          fontMap = {}
+          resolve()
+        }
+      }, 10000)
       return
     }
     fontMapLoading = true

@@ -12,7 +12,7 @@
       indicator-active-color="#ffffff"
     >
       <swiper-item v-for="(banner, index) in homeConfig.banners" :key="index" @click="handleBannerClick(banner)">
-        <image :src="banner.image" mode="aspectFill" class="banner-image" />
+        <image lazy-load :src="banner.image" mode="aspectFill" class="banner-image" />
       </swiper-item>
     </swiper>
 
@@ -57,7 +57,7 @@
         @click="handleCategoryClick(item)"
       >
         <view class="category-icon" :style="{ background: getCategoryBg(item.categoryId) }">
-          <image class="icon-image-full" :src="item.image" mode="aspectFill" />
+          <image class="icon-image-full" lazy-load :src="item.image" mode="aspectFill" />
         </view>
         <text class="category-name">{{ item.name }}</text>
       </view>

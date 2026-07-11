@@ -1097,6 +1097,11 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
   toastTimer = setTimeout(() => { toast.visible = false }, 2500)
 }
 
+// 发布成功事件处理器（提升到组件作用域，便于 onBeforeUnmount 统一清理）
+function onPublishSuccess() {
+  showToast('模板发布成功！')
+}
+
 // ============ DOM refs ============
 const appRootRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -1692,7 +1697,9 @@ function restoreDraftFromLocal() {
 }
 
 onBeforeUnmount(() => {
-  if (autoSaveTimer.value) clearInterval(autoSaveTimer.value)
+  clearInterval(autoSaveTimer.value)
+  if (toastTimer) clearTimeout(toastTimer)
+  window.removeEventListener('publish-success', onPublishSuccess)
   saveDraftToLocal()
 })
 
@@ -1963,12 +1970,7 @@ onMounted(async () => {
   autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
   loadTemplateList()
   loadUploadedFonts()
-  const onPublishSuccess = () => showToast('模板发布成功！')
   window.addEventListener('publish-success', onPublishSuccess)
-
-  onBeforeUnmount(() => {
-    window.removeEventListener('publish-success', onPublishSuccess)
-  })
 })
 </script>
 

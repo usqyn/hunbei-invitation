@@ -23,7 +23,7 @@
           :key="item.id"
           class="recycle-item"
         >
-          <image class="recycle-image" :src="item.image" mode="aspectFill" />
+          <image class="recycle-image" lazy-load :src="item.image" mode="aspectFill" />
           <view class="recycle-info">
             <text class="recycle-title">{{ item.title }}</text>
             <text class="recycle-time">删除于 {{ item.deletedAt || item.deleted_at || '未知时间' }}</text>

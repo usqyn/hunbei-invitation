@@ -75,14 +75,14 @@ function savePosterDatabase() {
   fs.renameSync(tmpPath, POSTER_DB_PATH)
 }
 
-// 延迟批量保存：避免频繁写磁盘（如 use_count 更新）
-let saveTimer = null
-function scheduleSave() {
-  if (saveTimer) return
-  saveTimer = setTimeout(() => {
-    saveTimer = null
-    try { savePosterDatabase() } catch (e) { console.error('poster db save failed:', e) }
-  }, 5000)
+// 防抖保存：延迟 500ms，避免短时间内多次写操作重复保存文件
+let _posterSaveTimer = null
+function savePosterDatabaseDebounced() {
+  if (_posterSaveTimer) clearTimeout(_posterSaveTimer)
+  _posterSaveTimer = setTimeout(() => {
+    try { savePosterDatabase() } catch (e) { console.error('savePosterDatabase 失败:', e) }
+    _posterSaveTimer = null
+  }, 500)
 }
 
 // ============ Helper: convert sql.js result to array of objects ============
@@ -329,7 +329,7 @@ router.post('/works', (req, res) => {
         posterDb.run("UPDATE poster_templates SET use_count = use_count + 1 WHERE id = ?", [template_id])
       }
     })
-    savePosterDatabase()
+    savePosterDatabaseDebounced()
 
     const result = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [id])
     const work = resultToObject(result)
@@ -467,7 +467,7 @@ router.put('/works/:id/restore', (req, res) => {
       ])
       posterDb.run("DELETE FROM recycle_bin WHERE id = ?", [req.params.id])
     })
-    savePosterDatabase()
+    savePosterDatabaseDebounced()
     res.json({ success: true, message: '已恢复' })
   } catch (e) {
     console.error(e)
@@ -528,7 +528,7 @@ router.put('/works/:id', requireWorkOwner, (req, res) => {
 
     params.push(req.params.id)
     posterDb.run(`UPDATE poster_works SET ${fields.join(', ')} WHERE id = ?`, params)
-    savePosterDatabase()
+    savePosterDatabaseDebounced()
 
     const updated = posterDb.exec("SELECT * FROM poster_works WHERE id = ?", [req.params.id])
     res.json({ success: true, data: resultToObject(updated) })
@@ -565,7 +565,7 @@ router.post('/works/:id/upload', posterJsonParser, requireWorkOwner, (req, res) 
 
       const posterUrl = `/uploads/poster/works/${filename}`
       posterDb.run("UPDATE poster_works SET poster_url = ? WHERE id = ?", [posterUrl, workId])
-      savePosterDatabase()
+      savePosterDatabaseDebounced()
 
       return res.json({ success: true, data: { url: posterUrl } })
     }
@@ -657,7 +657,7 @@ router.post('/templates', requireAdmin, (req, res) => {
       is_active !== undefined ? is_active : 1,
       now,
     ])
-    savePosterDatabase()
+    savePosterDatabaseDebounced()
 
     const result = posterDb.exec("SELECT * FROM poster_templates WHERE id = ?", [id])
     res.json({ success: true, data: resultToObject(result) })
@@ -712,7 +712,7 @@ router.put('/templates/:id', requireAdmin, (req, res) => {
 
     params.push(req.params.id)
     posterDb.run(`UPDATE poster_templates SET ${fields.join(', ')} WHERE id = ?`, params)
-    savePosterDatabase()
+    savePosterDatabaseDebounced()
 
     const result = posterDb.exec("SELECT * FROM poster_templates WHERE id = ?", [req.params.id])
     res.json({ success: true, data: resultToObject(result) })

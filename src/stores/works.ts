@@ -22,6 +22,16 @@ export const useWorksStore = defineStore('works', () => {
     } catch (e) { console.error('works persist failed', e) }
   }
 
+  // 防抖持久化：合并 500ms 内的多次写入，减少同步 IO 开销
+  let _persistTimer: ReturnType<typeof setTimeout> | null = null
+  function debouncedPersist() {
+    if (_persistTimer) clearTimeout(_persistTimer)
+    _persistTimer = setTimeout(() => {
+      persist()
+      _persistTimer = null
+    }, 500)
+  }
+
   function restore() {
     try {
       const saved = uni.getStorageSync(STORAGE_KEY)
@@ -96,7 +106,7 @@ export const useWorksStore = defineStore('works', () => {
             works.value.push(mappedWork)
           }
         })
-        persist()
+        debouncedPersist()
       }
     } catch (e) {
       console.warn('sync works from server failed', e)
@@ -134,7 +144,7 @@ export const useWorksStore = defineStore('works', () => {
           }
         })
         favorites.value = [...serverFavorites, ...localOnlyFavorites]
-        persist()
+        debouncedPersist()
       }
     } catch (e) {
       console.warn('sync favorites from server failed', e)
@@ -143,14 +153,14 @@ export const useWorksStore = defineStore('works', () => {
 
   function addWork(work: Work) {
     works.value.unshift(work)
-    persist()
+    debouncedPersist()
   }
 
   function updateWork(id: string, data: Partial<Work>) {
     const idx = works.value.findIndex(w => w.id === id)
     if (idx !== -1) {
       works.value[idx] = { ...works.value[idx], ...data }
-      persist()
+      debouncedPersist()
     }
   }
 
@@ -167,7 +177,7 @@ export const useWorksStore = defineStore('works', () => {
     update(works.value)
     update(drafts.value)
     update(favorites.value)
-    persist()
+    debouncedPersist()
   }
 
   async function deleteWork(id: string) {
@@ -184,13 +194,13 @@ export const useWorksStore = defineStore('works', () => {
     works.value = works.value.filter(w => w.id !== id)
     drafts.value = drafts.value.filter(w => w.id !== id)
     favorites.value = favorites.value.filter(w => w.id !== id)
-    persist()
+    debouncedPersist()
     uni.showToast({ title: '删除成功', icon: 'success' })
   }
 
   function addDraft(draft: Work) {
     drafts.value.unshift(draft)
-    persist()
+    debouncedPersist()
   }
 
   async function toggleFavorite(id: string) {
@@ -203,7 +213,7 @@ export const useWorksStore = defineStore('works', () => {
       const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
       if (work) favorites.value.unshift(work)
     }
-    persist()
+    debouncedPersist()
 
     if (userStore.isLoggedIn) {
       try {
@@ -220,7 +230,7 @@ export const useWorksStore = defineStore('works', () => {
         } else {
           favorites.value = favorites.value.filter(f => f.id !== id)
         }
-        persist()
+        debouncedPersist()
         uni.showToast({ title: '操作失败，请重试', icon: 'none' })
       }
     }
@@ -241,7 +251,7 @@ export const useWorksStore = defineStore('works', () => {
     if (draftIdx !== -1) {
       drafts.value.splice(draftIdx, 1)
     }
-    persist()
+    debouncedPersist()
 
     // 本地保存成功后，登录用户异步同步到服务器
     const userStore = useUserStore()

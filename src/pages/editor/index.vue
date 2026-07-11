@@ -39,7 +39,7 @@
                 @error="onRenderedImageError"
               />
               <view
-                v-for="(el, idx) in editorStore.editableElements" :key="idx"
+                v-for="(el, idx) in editorStore.editableElements" :key="el.id || ('el-' + idx)"
                 class="rendered-overlay-element"
                 :class="{
                   'rendered-overlay-element--active': editorStore.selectedElement === idx,
@@ -73,7 +73,7 @@
             </view>
             <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
               <view
-                v-for="(el, idx) in editorStore.editableElements" :key="idx"
+                v-for="(el, idx) in editorStore.editableElements" :key="el.id || ('el-' + idx)"
                 class="canvas-element"
                 :class="{
                   'active-element': editorStore.selectedElement === idx,
@@ -987,9 +987,9 @@ watch(() => editorStore.editableElements.length, () => {
   nextTick(() => updateCardSize())
 })
 
-watch(() => editorStore.editableElements, () => {
+watch(() => editorStore.editableElements.length, () => {
   editProgress.value = calculateProgress()
-}, { deep: true })
+})
 
 // 组件卸载时清理定时器，防止内存泄漏
 onUnmounted(() => {
