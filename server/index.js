@@ -839,7 +839,10 @@ app.post('/api/upload/image', requireAuth, upload.single('image'), (req, res) =>
     if (!req.file) {
       return res.status(400).json({ success: false, error: '未收到图片文件' })
     }
-    res.json({ success: true, url: `/uploads/${req.file.filename}` })
+    const protocol = req.protocol
+    const host = req.get('host')
+    const fullUrl = `${protocol}://${host}/uploads/${req.file.filename}`
+    res.json({ success: true, url: fullUrl })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '图片上传失败' })
   }
@@ -2009,7 +2012,7 @@ async function start() {
   await seedData()
   // Wait for poster database to be ready before serving requests
   await posterRouter.posterReady
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🟢 婚贝 API 服务已启动`)
     console.log(`   本地地址: http://localhost:${PORT}`)
     console.log(`   数据库: ${DB_PATH}`)
