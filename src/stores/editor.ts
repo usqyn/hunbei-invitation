@@ -182,6 +182,16 @@ export const useEditorStore = defineStore('editor', () => {
   function applyTemplateData(template: TemplateItem) {
     if (!template) return
 
+    console.log('[applyTemplateData] 模板数据:', {
+      id: template.id,
+      templateType: template.templateType,
+      elementsCount: template.elements?.length || 0,
+      pagesCount: template.pages?.length || 0,
+      sectionsCount: template.sections?.length || 0,
+      hasRenderedImage: !!template.renderedImage,
+      canvasSize: template.canvasSize,
+    })
+
     // 设置模板类型
     templateType.value = template.templateType || 'canvas'
 

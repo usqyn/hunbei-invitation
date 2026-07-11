@@ -264,6 +264,25 @@ app.use('/uploads/music', express.static(path.join(__dirname, 'music')))
 // ============ Poster uploads static serving ============
 const POSTER_UPLOADS_DIR = path.join(__dirname, 'uploads', 'poster')
 if (!fs.existsSync(POSTER_UPLOADS_DIR)) fs.mkdirSync(POSTER_UPLOADS_DIR, { recursive: true })
+
+// 从项目根目录 uploads/poster/ 同步缺失的静态资源到 server/uploads/poster/
+const ROOT_POSTER_DIR = path.join(__dirname, '..', 'uploads', 'poster')
+if (fs.existsSync(ROOT_POSTER_DIR)) {
+  function syncDir(src, dest) {
+    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true })
+    fs.readdirSync(src).forEach(file => {
+      const srcPath = path.join(src, file)
+      const destPath = path.join(dest, file)
+      if (fs.statSync(srcPath).isDirectory()) {
+        syncDir(srcPath, destPath)
+      } else if (!fs.existsSync(destPath)) {
+        fs.copyFileSync(srcPath, destPath)
+      }
+    })
+  }
+  try { syncDir(ROOT_POSTER_DIR, POSTER_UPLOADS_DIR) } catch (e) { console.warn('同步poster资源:', e.message) }
+}
+
 app.use('/uploads/poster', express.static(POSTER_UPLOADS_DIR))
 
 // ============ 慢请求日志中间件（仅记录 >1s 的请求） ============

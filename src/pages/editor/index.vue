@@ -64,7 +64,12 @@
           </template>
           <!-- 无 renderedImage：回退到百分比定位渲染 -->
           <template v-else>
-            <view class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
+            <view v-if="editorStore.editableElements.length === 0" class="empty-template-hint">
+              <text class="empty-hint-icon">📋</text>
+              <text class="empty-hint-text">此模板暂无内容</text>
+              <text class="empty-hint-sub">请在 Admin 端重新发布模板</text>
+            </view>
+            <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="idx"
                 class="canvas-element"
@@ -1110,6 +1115,27 @@ onUnmounted(() => {
   border-radius: 0;
   overflow: hidden;
   margin: 0;
+}
+
+.empty-template-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 200rpx 40rpx;
+  gap: 16rpx;
+}
+.empty-hint-icon {
+  font-size: 80rpx;
+}
+.empty-hint-text {
+  font-size: 32rpx;
+  color: #999;
+  font-weight: 500;
+}
+.empty-hint-sub {
+  font-size: 26rpx;
+  color: #bbb;
 }
 
 .canvas-element {
