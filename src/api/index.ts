@@ -19,6 +19,16 @@ export function checkVipStatus() {
 }
 
 // ========== 图片上传 ==========
+function normalizeImageUrl(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  if (url.startsWith('/')) {
+    return `${API_BASE}${url}`
+  }
+  return `${API_BASE}/${url}`
+}
+
 /** 上传图片到服务器，返回永久 URL */
 export function uploadImage(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -31,8 +41,8 @@ export function uploadImage(filePath: string): Promise<string> {
       success: (res) => {
         try {
           const data = JSON.parse(res.data)
-          if (data.success && data.url) resolve(data.url)
-          else if (data.data && data.data.url) resolve(data.data.url)
+          if (data.success && data.url) resolve(normalizeImageUrl(data.url))
+          else if (data.data && data.data.url) resolve(normalizeImageUrl(data.data.url))
           else reject(new Error(data.error || '上传失败'))
         } catch {
           reject(new Error('上传响应解析失败'))
