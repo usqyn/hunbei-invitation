@@ -26,7 +26,7 @@
           <image class="recycle-image" :src="item.image" mode="aspectFill" />
           <view class="recycle-info">
             <text class="recycle-title">{{ item.title }}</text>
-            <text class="recycle-time">删除于 {{ item.deletedAt }}</text>
+            <text class="recycle-time">删除于 {{ item.deletedAt || item.deleted_at || '未知时间' }}</text>
           </view>
           <view class="recycle-actions">
             <view class="action-btn restore" @click="handleRestore(item)">恢复</view>
@@ -42,8 +42,10 @@
 import { ref, onMounted } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { fetchRecycleBin, restoreWork, permanentDelete } from '@/api'
+import { useWorksStore } from '@/stores/works'
 
 const goBack = useGoBack()
+const worksStore = useWorksStore()
 
 interface RecycleItem {
   id: string
@@ -77,6 +79,8 @@ const handleRestore = async (item: RecycleItem) => {
           await restoreWork(item.id)
           uni.showToast({ title: '已恢复', icon: 'success' })
           recycleList.value = recycleList.value.filter(i => i.id !== item.id)
+          // 刷新作品列表
+          worksStore.loadAll()
         } catch (e) {
           uni.showToast({ title: '恢复失败', icon: 'none' })
         }
@@ -95,6 +99,7 @@ const handlePermanentDelete = async (item: RecycleItem) => {
           await permanentDelete(item.id)
           uni.showToast({ title: '已彻底删除', icon: 'success' })
           recycleList.value = recycleList.value.filter(i => i.id !== item.id)
+          worksStore.loadAll()
         } catch (e) {
           uni.showToast({ title: '删除失败', icon: 'none' })
         }

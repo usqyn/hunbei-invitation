@@ -1334,6 +1334,13 @@ app.post('/api/works', requireAuth, (req, res) => {
     const { id, templateId, templateType, title, data, musicId, cover } = req.body
     const workId = id || uuidv4()
     const now = new Date().toISOString()
+    // 如果指定了 id，先检查是否已存在且属于当前用户
+    if (id) {
+      const existing = db.exec("SELECT phone FROM works WHERE id = ?", [id])
+      if (existing.length && existing[0].values.length && existing[0].values[0][0] !== phone) {
+        return res.status(403).json({ success: false, error: '无权操作此作品' })
+      }
+    }
     db.run(`INSERT OR REPLACE INTO works (id, phone, template_id, template_type, title, data, music_id, cover, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       workId, phone, templateId || '', templateType || 'canvas', title || '',

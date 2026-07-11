@@ -87,34 +87,50 @@
             class="template-cover"
             :src="getImageUrl(template)"
             mode="aspectFill"
+            lazy-load
             @error="onImageError($event, template)"
           ></image>
-          <view v-if="template.is_paid" class="price-tag">
-            <text>{{ template.price }}元</text>
-          </view>
 
-          <!-- 模板信息 -->
-          <view class="template-info">
-            <view class="template-header">
-              <text class="template-name">{{ template.name }}</text>
-              <view class="template-tag" :style="{ background: template.primaryColor || '#e84a6e' }">
-                <text class="tag-text">{{ getCategoryName(template.category) }}</text>
-              </view>
-              <view v-if="template.orientation === 'landscape' || (template.canvasSize && template.canvasSize.width > template.canvasSize.height)" class="template-tag landscape-tag">
-                <text class="tag-text">横版</text>
-              </view>
+          <!-- 封面图上的渐变遮罩 -->
+          <view class="cover-gradient"></view>
+
+          <!-- 左上角标签组 -->
+          <view class="tag-group">
+            <view class="template-tag" :style="{ background: template.primaryColor || '#e84a6e' }">
+              <text class="tag-text">{{ getCategoryName(template.category) }}</text>
             </view>
-            <text class="template-subtitle">{{ template.subtitle }}</text>
-            <view class="template-footer">
-              <text class="template-stats">{{ template.pageCount }}页</text>
-              <text class="template-divider">·</text>
-              <text class="template-stats">{{ formatLikes(template.likes) }}人喜欢</text>
+            <view v-if="template.orientation === 'landscape' || (template.canvasSize && template.canvasSize.width > template.canvasSize.height)" class="template-tag landscape-tag">
+              <text class="tag-text">横版</text>
             </view>
           </view>
 
-          <!-- 立即制作按钮 -->
+          <!-- 右上角价格/VIP标签 -->
+          <view class="price-badge-group">
+            <view v-if="template.is_paid && template.is_premium" class="vip-badge">
+              <text class="vip-badge-text">VIP</text>
+            </view>
+            <view v-else-if="template.is_paid" class="price-tag">
+              <text class="price-tag-text">¥{{ template.price }}</text>
+            </view>
+            <view v-else class="free-tag">
+              <text class="free-tag-text">免费</text>
+            </view>
+          </view>
+
+          <!-- 底部信息浮层 -->
+          <view class="cover-info">
+            <text class="cover-title">{{ template.name }}</text>
+            <text class="cover-subtitle">{{ template.subtitle }}</text>
+            <view class="cover-meta">
+              <text class="meta-text">{{ template.pageCount }}页</text>
+              <text class="meta-dot">·</text>
+              <text class="meta-text">{{ formatLikes(template.likes) }}人喜欢</text>
+            </view>
+          </view>
+
+          <!-- 悬浮制作按钮 -->
           <view class="template-select-btn">
-            <text class="select-btn-text">{{ pageConfig.selectBtnText }}</text>
+            <text class="select-btn-text">立即制作</text>
           </view>
         </view>
       </view>
@@ -653,117 +669,205 @@ function onBack() {
 }
 
 .template-grid {
-  padding: 30rpx 30rpx 0;
+  padding: 24rpx 24rpx 0;
   display: flex;
   flex-wrap: wrap;
 }
 
 .template-card {
-  width: calc(50% - 15rpx);
-  margin-bottom: 30rpx;
+  width: calc(50% - 12rpx);
+  margin-bottom: 24rpx;
   background: #ffffff;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   overflow: hidden;
-  box-shadow: 0 6rpx 24rpx rgba(20, 20, 40, 0.06);
+  box-shadow: 0 8rpx 32rpx rgba(20, 20, 40, 0.08);
   display: flex;
   flex-direction: column;
   position: relative;
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.28s ease;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
 
   &:active {
-    transform: translateY(-4rpx) scale(0.99);
-    box-shadow: 0 14rpx 36rpx rgba(232, 74, 110, 0.16);
+    transform: translateY(-6rpx) scale(0.98);
+    box-shadow: 0 16rpx 40rpx rgba(232, 74, 110, 0.18);
   }
 
   &:nth-child(odd) {
-    margin-right: 30rpx;
-  }
-
-  /* 封面渐变遮罩 - 底部到顶部暗色渐变 */
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 400rpx;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.42) 0%, rgba(0, 0, 0, 0.1) 40%, transparent 70%);
-    pointer-events: none;
-    z-index: 1;
+    margin-right: 24rpx;
   }
 }
 
+/* 封面图 */
 .template-cover {
   width: 100%;
-  height: 400rpx;
-  background: #ececf0;
+  height: 420rpx;
+  background: linear-gradient(135deg, #f0f0f5 0%, #e8e8f0 100%);
   display: block;
 }
 
-.template-info {
-  padding: 20rpx;
-  flex: 1;
-  position: relative;
+/* 渐变遮罩 - 底部到顶部 */
+.cover-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 420rpx;
+  background: linear-gradient(to bottom,
+    rgba(0, 0, 0, 0.18) 0%,
+    rgba(0, 0, 0, 0) 25%,
+    rgba(0, 0, 0, 0) 50%,
+    rgba(0, 0, 0, 0.5) 80%,
+    rgba(0, 0, 0, 0.75) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 左上角标签组 */
+.tag-group {
+  position: absolute;
+  top: 20rpx;
+  left: 20rpx;
+  display: flex;
+  gap: 8rpx;
   z-index: 2;
 }
 
-.template-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10rpx;
-}
-
-.template-name {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1a1a2e;
-  line-height: 1.2;
-}
-
 .template-tag {
-  padding: 6rpx 14rpx;
-  border-radius: 8rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 10rpx;
   flex-shrink: 0;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(12rpx);
+  -webkit-backdrop-filter: blur(12rpx);
+  background: rgba(232, 74, 110, 0.85);
+  box-shadow: 0 4rpx 14rpx rgba(0, 0, 0, 0.15);
+  border: 1rpx solid rgba(255, 255, 255, 0.2);
 }
 
 .template-tag.landscape-tag {
-  background: #8e24aa !important;
+  background: rgba(142, 36, 170, 0.85) !important;
 }
 
 .tag-text {
   font-size: 20rpx;
   color: #ffffff;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 1rpx;
 }
 
-.template-subtitle {
+/* 右上角价格/VIP标签 */
+.price-badge-group {
+  position: absolute;
+  top: 20rpx;
+  right: 20rpx;
+  z-index: 2;
+}
+
+.price-tag {
+  background: linear-gradient(135deg, #ff7a5c 0%, #e84a6e 55%, #c93660 100%);
+  padding: 8rpx 20rpx;
+  border-radius: 100rpx;
+  box-shadow: 0 6rpx 18rpx rgba(192, 54, 96, 0.45);
+  border: 1rpx solid rgba(255, 255, 255, 0.25);
+}
+
+.price-tag-text {
   font-size: 22rpx;
-  color: #6e6e80;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.vip-badge {
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 50%, #ff9f00 100%);
+  padding: 8rpx 20rpx;
+  border-radius: 100rpx;
+  box-shadow: 0 6rpx 18rpx rgba(255, 183, 0, 0.45);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.vip-badge-text {
+  font-size: 20rpx;
+  color: #5a3500;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+}
+
+.free-tag {
+  background: rgba(76, 175, 80, 0.9);
+  padding: 8rpx 18rpx;
+  border-radius: 100rpx;
+  backdrop-filter: blur(12rpx);
+  -webkit-backdrop-filter: blur(12rpx);
+  box-shadow: 0 4rpx 14rpx rgba(76, 175, 80, 0.3);
+  border: 1rpx solid rgba(255, 255, 255, 0.2);
+}
+
+.free-tag-text {
+  font-size: 20rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* 底部信息浮层 - 叠加在封面图上 */
+.cover-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24rpx 20rpx 20rpx;
+  z-index: 2;
+}
+
+.cover-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+  display: block;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-subtitle {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.82);
   line-height: 1.4;
-  margin-bottom: 16rpx;
+  margin-top: 4rpx;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.template-footer { display: flex; align-items: center; }
-.template-stats { font-size: 22rpx; color: #6e6e80; }
-.template-divider { margin: 0 10rpx; color: #c8c8d2; }
+.cover-meta {
+  display: flex;
+  align-items: center;
+  margin-top: 8rpx;
+}
 
+.meta-text {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.meta-dot {
+  margin: 0 8rpx;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* 制作按钮 */
 .template-select-btn {
   margin: 0 20rpx 20rpx;
-  padding: 18rpx 0;
+  padding: 20rpx 0;
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  border-radius: 40rpx;
+  border-radius: 44rpx;
   text-align: center;
-  box-shadow: 0 8rpx 20rpx rgba(232, 74, 110, 0.3);
+  box-shadow: 0 8rpx 22rpx rgba(232, 74, 110, 0.32);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 
   &:active {
-    transform: scale(0.96);
+    transform: scale(0.95);
     box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.24);
   }
 }
@@ -771,24 +875,8 @@ function onBack() {
 .select-btn-text {
   font-size: 26rpx;
   color: #ffffff;
-  font-weight: 500;
-  letter-spacing: 2rpx;
-}
-
-/* 价格标签 */
-.price-tag {
-  position: absolute;
-  top: 16rpx;
-  right: 16rpx;
-  background: linear-gradient(135deg, #ff7a5c 0%, #e84a6e 55%, #c93660 100%);
-  color: #ffffff;
-  font-size: 22rpx;
   font-weight: 600;
-  padding: 8rpx 18rpx;
-  border-radius: 100rpx;
-  box-shadow: 0 6rpx 16rpx rgba(192, 54, 96, 0.4);
-  z-index: 2;
-  letter-spacing: 1rpx;
+  letter-spacing: 3rpx;
 }
 
 /* 空状态 */

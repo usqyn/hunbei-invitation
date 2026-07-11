@@ -161,7 +161,7 @@ const handlePreview = (work: any) => {
 }
 
 const handleShare = (work: any) => {
-  uni.navigateTo({ url: `/pages/share/index?templateId=${work.id}` })
+  uni.navigateTo({ url: `/pages/share/index?workId=${work.id}&templateId=${work.templateType || ''}` })
 }
 
 const handleEdit = (draft: any) => {

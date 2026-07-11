@@ -65,9 +65,11 @@
           <!-- 无 renderedImage：回退到百分比定位渲染 -->
           <template v-else>
             <view v-if="editorStore.editableElements.length === 0" class="empty-template-hint">
-              <text class="empty-hint-icon">📋</text>
+              <view class="empty-hint-icon-wrap">
+                <text class="empty-hint-icon">📋</text>
+              </view>
               <text class="empty-hint-text">此模板暂无内容</text>
-              <text class="empty-hint-sub">请在 Admin 端重新发布模板</text>
+              <text class="empty-hint-sub">请在管理端重新发布模板</text>
             </view>
             <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
               <view
@@ -1124,20 +1126,34 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 200rpx 40rpx;
-  gap: 16rpx;
+  padding: 160rpx 40rpx;
+  gap: 20rpx;
 }
+
+.empty-hint-icon-wrap {
+  width: 120rpx;
+  height: 120rpx;
+  background: linear-gradient(135deg, #f0f0f5 0%, #e8e8f0 100%);
+  border-radius: 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8rpx;
+}
+
 .empty-hint-icon {
-  font-size: 80rpx;
+  font-size: 60rpx;
 }
+
 .empty-hint-text {
   font-size: 32rpx;
-  color: #999;
-  font-weight: 500;
+  color: #6e6e80;
+  font-weight: 600;
 }
+
 .empty-hint-sub {
   font-size: 26rpx;
-  color: #bbb;
+  color: #a8a8b4;
 }
 
 .canvas-element {

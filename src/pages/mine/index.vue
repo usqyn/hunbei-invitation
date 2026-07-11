@@ -168,7 +168,7 @@ const handleToolClick = (tool: any) => {
   } else if (tool.name === '婚礼MV') {
     uni.navigateTo({ url: '/pages/music/index' })
   } else if (tool.name === '收到的请柬') {
-    uni.switchTab({ url: '/pages/works/index' })
+    uni.navigateTo({ url: '/pages/footprint/index' })
   } else if (tool.name === '朋友圈图片') {
     uni.navigateTo({ url: '/pages/share/index' })
   } else if (tool.name === '迎宾海报') {

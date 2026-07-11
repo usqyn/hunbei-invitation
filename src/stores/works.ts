@@ -65,10 +65,16 @@ export const useWorksStore = defineStore('works', () => {
           const existing = works.value.find(w => w.id === id)
           if (existing) {
             // 合并：本地未保存到服务器的修改优先（updatedAt 较新者胜出）
-            const serverUpdatedAt = serverWork.updatedAt ? new Date(serverWork.updatedAt).getTime() : 0
+            const serverUpdatedAt = serverWork.updatedAt || serverWork.updated_at ? new Date(serverWork.updatedAt || serverWork.updated_at).getTime() : 0
             const localUpdatedAt = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0
             if (serverUpdatedAt > localUpdatedAt) {
-              Object.assign(existing, serverWork)
+              // 只同步 camelCase 字段，避免 snake_case 脏数据
+              existing.title = serverWork.title ?? existing.title
+              existing.templateType = serverWork.templateType || serverWork.template_type || existing.templateType
+              existing.data = serverWork.data || existing.data
+              existing.musicId = serverWork.musicId || serverWork.music_id || existing.musicId
+              existing.cover = serverWork.cover ?? existing.cover
+              existing.updatedAt = serverWork.updatedAt || serverWork.updated_at || existing.updatedAt
             }
           } else if (!localIds.has(id)) {
             // 服务器有但本地没有的作品，加入本地
@@ -102,14 +108,17 @@ export const useWorksStore = defineStore('works', () => {
       if (data && Array.isArray(data)) {
         const serverFavoriteIds = new Set(data.map((item: any) => item.workId || item.id))
         const allWorks = [...works.value, ...drafts.value]
-        const newFavorites: Work[] = []
+        // 保留本地未同步的收藏（不在服务端但本地有的）
+        const localOnlyFavorites = favorites.value.filter(w => !serverFavoriteIds.has(w.id))
+        // 添加服务端有且本地也能匹配到的收藏
+        const serverFavorites: Work[] = []
         serverFavoriteIds.forEach(id => {
           const work = allWorks.find(w => w.id === id)
           if (work) {
-            newFavorites.push(work)
+            serverFavorites.push(work)
           }
         })
-        favorites.value = newFavorites
+        favorites.value = [...serverFavorites, ...localOnlyFavorites]
         persist()
       }
     } catch (e) {

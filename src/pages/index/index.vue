@@ -26,18 +26,26 @@
       />
     </view>
 
-    <!-- 商城入口 -->
-    <view class="mall-entry-bar" @click="goToMall">
-      <text class="mall-entry-icon">&#128722;</text>
-      <text class="mall-entry-text">婚礼商城</text>
-      <text class="mall-entry-arrow">></text>
-    </view>
-
-    <!-- VIP入口 -->
-    <view class="vip-entry-bar" @click="goToVipPage">
-      <text class="vip-icon">&#9733;</text>
-      <text class="vip-text">开通VIP 全站免费</text>
-      <text class="vip-arrow">></text>
+    <!-- 双栏入口 -->
+    <view class="dual-entry">
+      <view class="entry-card mall-entry" @click="goToMall">
+        <view class="entry-icon-wrap">
+          <text class="entry-icon">&#128722;</text>
+        </view>
+        <view class="entry-text-wrap">
+          <text class="entry-title">婚礼商城</text>
+          <text class="entry-desc">精选好物</text>
+        </view>
+      </view>
+      <view class="entry-card vip-entry" @click="goToVipPage">
+        <view class="entry-icon-wrap">
+          <text class="entry-icon">&#9733;</text>
+        </view>
+        <view class="entry-text-wrap">
+          <text class="entry-title">开通VIP</text>
+          <text class="entry-desc">全站免费</text>
+        </view>
+      </view>
     </view>
 
     <!-- 分类网格 - 点击跳转到对应分类的模板列表 -->
@@ -48,7 +56,7 @@
         class="category-item"
         @click="handleCategoryClick(item)"
       >
-        <view class="category-icon" :style="{ background: item.bgColor }">
+        <view class="category-icon" :style="{ background: getCategoryBg(item.categoryId) }">
           <image class="icon-image-full" :src="item.image" mode="aspectFill" />
         </view>
         <text class="category-name">{{ item.name }}</text>
@@ -92,6 +100,7 @@
             @click="handleCardClick(card)"
           >
             <image class="card-image" lazy-load :src="card.image" mode="aspectFill" @error="onImageError" />
+            <view class="card-vip-tag">VIP</view>
             <view class="card-info">
               <text class="card-title">{{ card.title }}</text>
               <text class="card-date">{{ card.date }}</text>
@@ -209,6 +218,22 @@ const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
 const featuredCards = HOME_FEATURED_CARDS
 const homeConfig = HOME_CONFIG
+
+// 分类图标渐变背景色映射
+function getCategoryBg(id: string): string {
+  const bgMap: Record<string, string> = {
+    wedding: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+    engagement: 'linear-gradient(135deg, #fd79a8 0%, #e84393 100%)',
+    creative: 'linear-gradient(135deg, #a29bfe 0%, #dfe6e9 100%)',
+    birthday: 'linear-gradient(135deg, #fdcb6e 0%, #e17055 100%)',
+    poster: 'linear-gradient(135deg, #fd79a8 0%, #fab1a0 100%)',
+    baby: 'linear-gradient(135deg, #fdcb6e 0%, #f39c12 100%)',
+    study: 'linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%)',
+    festival: 'linear-gradient(135deg, #00b894 0%, #00cec9 100%)',
+    house: 'linear-gradient(135deg, #00cec9 0%, #55a3ff 100%)',
+  }
+  return bgMap[id] || 'linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%)'
+}
 
 // 全部分类 - 根据选中的 tab 标签筛选
 const allCategories = computed(() => {
@@ -630,10 +655,16 @@ onMounted(() => {
   width: 280rpx;
   border-radius: 24rpx;
   overflow: hidden;
-  background: #ffffff;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.08), 0 2rpx 6rpx rgba(0, 0, 0, 0.04);
+  background: linear-gradient(160deg, #ffffff 0%, #fafafa 100%);
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1), 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
   display: inline-block;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+
+  &:hover {
+    transform: translateY(-6rpx);
+    box-shadow: 0 16rpx 40rpx rgba(232, 74, 110, 0.18), 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+  }
 
   &:active {
     transform: scale(0.96);
@@ -647,20 +678,26 @@ onMounted(() => {
 }
 
 .card-info {
-  padding: 18rpx;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 40rpx 18rpx 18rpx;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.7) 100%);
 }
 
 .card-title {
   font-size: 26rpx;
-  color: #1c1c1e;
+  color: #ffffff;
   font-weight: 600;
   display: block;
   margin-bottom: 8rpx;
+  text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.3);
 }
 
 .card-date {
   font-size: 22rpx;
-  color: #8e8e93;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* 分类模板数量网格 */
@@ -703,116 +740,87 @@ onMounted(() => {
   color: #8e8e93;
 }
 
-/* VIP入口 */
-.vip-entry-bar {
+/* 双栏入口 */
+.dual-entry {
+  display: flex;
+  gap: 16rpx;
+  padding: 0 24rpx;
+  margin-top: 24rpx;
+}
+
+.entry-card {
+  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 28rpx 32rpx;
-  margin: 24rpx 24rpx 0;
-  background: linear-gradient(135deg, #ffd700 0%, #ffb700 60%, #ff9f00 100%);
+  padding: 24rpx 20rpx;
   border-radius: 24rpx;
-  box-shadow: 0 10rpx 28rpx rgba(255, 183, 0, 0.3), 0 2rpx 8rpx rgba(255, 159, 0, 0.2);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   position: relative;
   overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:active {
+    transform: scale(0.96);
+  }
 
   &::before {
     content: '';
     position: absolute;
-    top: -50%;
-    right: -20%;
-    width: 200rpx;
-    height: 200rpx;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 70%);
+    top: -30%;
+    right: -10%;
+    width: 160rpx;
+    height: 160rpx;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
     pointer-events: none;
   }
-
-  &:active {
-    transform: scale(0.97);
-    box-shadow: 0 6rpx 16rpx rgba(255, 183, 0, 0.32), 0 1rpx 4rpx rgba(255, 159, 0, 0.2);
-  }
 }
 
-.vip-icon {
-  font-size: 32rpx;
-  color: #fff;
-  margin-right: 12rpx;
-  position: relative;
-  z-index: 1;
-}
-
-.vip-text {
-  flex: 1;
-  font-size: 28rpx;
-  color: #fff;
-  font-weight: 600;
-  position: relative;
-  z-index: 1;
-  text-shadow: 0 1rpx 2rpx rgba(180, 120, 0, 0.3);
-}
-
-.vip-arrow {
-  font-size: 28rpx;
-  color: #fff;
-  position: relative;
-  z-index: 1;
-}
-
-/* 商城入口 */
-.mall-entry-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 28rpx 32rpx;
-  margin: 24rpx 24rpx 0;
+.mall-entry {
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 60%, #ff8fb1 100%);
-  border-radius: 24rpx;
-  box-shadow: 0 10rpx 28rpx rgba(232, 74, 110, 0.3), 0 2rpx 8rpx rgba(255, 107, 138, 0.2);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    right: -20%;
-    width: 200rpx;
-    height: 200rpx;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
-    pointer-events: none;
-  }
-
-  &:active {
-    transform: scale(0.97);
-    box-shadow: 0 6rpx 16rpx rgba(232, 74, 110, 0.32), 0 1rpx 4rpx rgba(255, 107, 138, 0.2);
-  }
+  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.28);
 }
 
-.mall-entry-icon {
-  font-size: 32rpx;
-  color: #fff;
-  margin-right: 12rpx;
+.vip-entry {
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 60%, #ff9f00 100%);
+  box-shadow: 0 8rpx 24rpx rgba(255, 183, 0, 0.28);
+}
+
+.entry-icon-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
   position: relative;
   z-index: 1;
 }
 
-.mall-entry-text {
-  flex: 1;
+.entry-icon {
+  font-size: 36rpx;
+  color: #fff;
+}
+
+.entry-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.entry-title {
   font-size: 28rpx;
   color: #fff;
-  font-weight: 600;
-  position: relative;
-  z-index: 1;
-  text-shadow: 0 1rpx 2rpx rgba(180, 40, 70, 0.3);
+  font-weight: 700;
 }
 
-.mall-entry-arrow {
-  font-size: 28rpx;
-  color: #fff;
-  position: relative;
-  z-index: 1;
+.entry-desc {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 /* 付费模板卡片 */
@@ -833,9 +841,25 @@ onMounted(() => {
   box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
 }
 
+/* 精选卡片 VIP 标识 */
+.card-vip-tag {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 100%);
+  color: #7a4a00;
+  font-size: 20rpx;
+  font-weight: 700;
+  padding: 4rpx 14rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 12rpx rgba(255, 183, 0, 0.4);
+  letter-spacing: 1rpx;
+  z-index: 2;
+}
+
 .card-sub {
   font-size: 22rpx;
-  color: #8e8e93;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* 海报模板卡片 */

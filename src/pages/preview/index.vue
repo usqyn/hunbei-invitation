@@ -536,7 +536,10 @@ const isFavorited = computed(() => {
 })
 
 async function toggleFavorite() {
-  if (!editorStore.currentWorkId) return
+  if (!editorStore.currentWorkId) {
+    uni.showToast({ title: '请先保存作品', icon: 'none' })
+    return
+  }
   const wasFavorited = isFavorited.value
   await worksStore.toggleFavorite(editorStore.currentWorkId)
   if (wasFavorited !== isFavorited.value) {
@@ -569,12 +572,24 @@ const goToVip = () => {
 }
 
 async function exportFree() {
-  if (!editorStore.currentWorkId) return
+  if (!editorStore.currentWorkId) {
+    uni.showToast({ title: '请先保存作品', icon: 'none' })
+    return
+  }
   uni.showLoading({ title: '导出中...' })
   try {
     const res = await exportInvitation(editorStore.currentWorkId, { watermark: true, quality: 'normal' })
     uni.hideLoading()
-    uni.showToast({ title: '已导出', icon: 'success' })
+    if (res && res.url) {
+      // 保存到相册
+      uni.saveImageToPhotosAlbum({
+        filePath: res.url,
+        success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
+        fail: () => uni.showToast({ title: '保存失败，请授权相册权限', icon: 'none' }),
+      })
+    } else {
+      uni.showToast({ title: '已导出', icon: 'success' })
+    }
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: '导出失败', icon: 'none' })
