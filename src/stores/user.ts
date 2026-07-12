@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { request } from '@/utils/request'
+import { resolveUrl } from '@/utils/url'
 
 const STORAGE_KEY = 'hunbei_user'
 
@@ -138,7 +139,7 @@ export const useUserStore = defineStore('user', () => {
         vip_plan?: string
       }>({ url: '/api/user/info', method: 'GET' })
       nickname.value = res.nickname
-      avatar.value = res.avatar || ''
+      avatar.value = resolveUrl(res.avatar || '')
       phone.value = res.phone
       if (res.vip_status !== undefined) vipStatus.value = res.vip_status
       if (res.vip_expire_at !== undefined) vipExpireAt.value = res.vip_expire_at

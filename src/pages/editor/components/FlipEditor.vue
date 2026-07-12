@@ -509,7 +509,7 @@ function handleLocation() {
   uni.showToast({ title: '该功能仅支持单页模式', icon: 'none' })
 }
 
-function handleSave() {
+async function handleSave() {
   const editorData = editorStore.buildEditorData()
   const musicId = templateStore.selectedMusicId
   if (editorStore.currentWorkId) {

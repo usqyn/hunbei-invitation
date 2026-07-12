@@ -63,7 +63,7 @@
         <text class="price-symbol">¥</text>
         <text class="price-num">{{ orderTotal }}</text>
       </view>
-      <view class="submit-btn" @click="submitOrder">提交订单</view>
+      <view class="submit-btn" :class="{ disabled: submitting }" :disabled="submitting" @click="submitOrder">提交订单</view>
     </view>
   </view>
 </template>
@@ -86,6 +86,7 @@ interface OrderItem {
 
 const orderItems = ref<OrderItem[]>([])
 const remark = ref('')
+const submitting = ref(false)
 const userStore = useUserStore()
 
 // 收货地址
@@ -158,12 +159,18 @@ const loadOrderItems = () => {
 }
 
 const submitOrder = async () => {
+  if (submitting.value) return
+  submitting.value = true
   if (orderItems.value.length === 0) {
+    submitting.value = false
     uni.showToast({ title: '订单商品为空', icon: 'none' })
     return
   }
   // 校验收货地址
-  if (!validateAddress()) return
+  if (!validateAddress()) {
+    submitting.value = false
+    return
+  }
 
   const orderData = {
     items: orderItems.value.map(item => ({
@@ -254,6 +261,8 @@ const submitOrder = async () => {
     setTimeout(() => {
       uni.redirectTo({ url: '/pages/mall/orders' })
     }, 2000)
+  } finally {
+    submitting.value = false
   }
 }
 

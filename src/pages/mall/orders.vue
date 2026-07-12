@@ -81,6 +81,7 @@ const statusMap: Record<string, string> = {
 
 const orders = ref<Order[]>([])
 const activeStatus = ref('all')
+const paying = ref<string | null>(null)
 
 const filteredOrders = computed(() => {
   if (activeStatus.value === 'all') return orders.value
@@ -131,6 +132,9 @@ const switchStatus = (status: string) => {
 }
 
 const payOrder = async (order: Order) => {
+  if (paying.value === order.orderNo) return
+  paying.value = order.orderNo
+  try {
   const confirm = await new Promise<boolean>((resolve) => {
     uni.showModal({
       title: '确认支付',
@@ -222,6 +226,9 @@ const payOrder = async (order: Order) => {
   setTimeout(() => {
     uni.redirectTo({ url: `/pages/mall/pay-result?orderNo=${order.orderNo}&amount=${order.totalAmount}&status=success` })
   }, 500)
+  } finally {
+    paying.value = null
+  }
 }
 
 const viewDetail = (order: Order) => {

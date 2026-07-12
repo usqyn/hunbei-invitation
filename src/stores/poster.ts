@@ -111,6 +111,7 @@ export const usePosterStore = defineStore('poster', () => {
 
   /** Restore editable areas from saved work content */
   function restoreFromWork(areas: PosterEditableAreaRuntime[], content?: any) {
+    if (!areas || !Array.isArray(areas)) return
     editableAreas.value.splice(0, editableAreas.value.length)
     areas.forEach(a => {
       const restoredArea: PosterEditableAreaRuntime = {
@@ -165,6 +166,7 @@ export const usePosterStore = defineStore('poster', () => {
     if (area) {
       area._text = text
     }
+    pushHistory()
   }
 
   function updateImage(id: string, src: string) {
@@ -172,6 +174,7 @@ export const usePosterStore = defineStore('poster', () => {
     if (area) {
       area._src = src
     }
+    pushHistory()
   }
 
   type StyleField = 'fontSize' | 'color' | 'align' | 'bold' | 'rotate' | 'scale' | 'fontFamily' | 'x' | 'y' | 'w' | 'h'
@@ -194,6 +197,7 @@ export const usePosterStore = defineStore('poster', () => {
     }
     const key = map[field]
     ;(area as unknown as Record<string, unknown>)[key] = value
+    pushHistory()
   }
 
   function pushHistory() {

@@ -98,7 +98,7 @@ export const useWorksStore = defineStore('works', () => {
               existing.cover = serverWork.cover ? resolveUrl(serverWork.cover) : existing.cover
               existing.title = serverWork.title ?? existing.title
               existing.templateType = serverWork.templateType || serverWork.template_type || existing.templateType
-              existing.data = serverWork.data || existing.data
+              existing.data = (serverWork.data && Object.keys(serverWork.data).length > 0) ? serverWork.data : existing.data
               existing.musicId = serverWork.musicId ?? serverWork.music_id ?? existing.musicId
               existing.date = serverWork.date || existing.date
               existing.status = serverWork.status || existing.status

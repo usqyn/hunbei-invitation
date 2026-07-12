@@ -78,7 +78,7 @@ export const useTemplateStore = defineStore('template', () => {
         if (saved.templateData) Object.assign(templateData, saved.templateData)
         if (saved.basicInfo) Object.assign(basicInfo, saved.basicInfo)
         if (saved.settings) Object.assign(settings, saved.settings)
-        if (saved.selectedMusicId) selectedMusicId.value = saved.selectedMusicId
+        if (saved.selectedMusicId !== undefined && saved.selectedMusicId !== null) selectedMusicId.value = saved.selectedMusicId
         if (saved.canvasSize) {
           // 同步恢复的 canvasSize 到 editorStore
           const editorStore = useEditorStore()
@@ -103,6 +103,8 @@ export const useTemplateStore = defineStore('template', () => {
     selectedMusicId.value = null
     // 重置画布尺寸与方向（setCanvasSize 会同步到 editorStore 并根据宽高推导 orientation）
     setCanvasSize({ width: DEFAULT_CANVAS_WIDTH, height: DEFAULT_CANVAS_HEIGHT })
+    // 清理持久化存储，避免 restore() 时恢复已被重置的旧状态
+    try { uni.removeStorageSync(STORAGE_KEY) } catch {}
   }
 
   restore()

@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getPosterWorks, deletePosterWork } from '@/api/index'
 import { resolveUrl } from '@/utils/url'
 import type { PosterWork } from '@/types/poster'
@@ -249,6 +249,10 @@ function onBack() {
 
 onMounted(() => {
   loadWorks()
+})
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
 

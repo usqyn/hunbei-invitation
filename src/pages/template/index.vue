@@ -285,25 +285,25 @@ async function loadTemplates() {
     if (data && Array.isArray(data)) {
       allTemplates.value = data
     }
+
+    // 合并 API 模板 + 本地模板（不重复），深拷贝避免污染静态导入数据
+    const existingIds = new Set(allTemplates.value.map(t => t.id))
+    TEMPLATE_LIST.forEach(t => {
+      if (!existingIds.has(t.id)) {
+        allTemplates.value.push({ ...t })
+        existingIds.add(t.id)
+      }
+    })
+    categoryList.value = categoryList.value.map(cat => ({
+      ...cat,
+      templates: allTemplates.value.filter(t => t.category === cat.id),
+    }))
   } catch (e) {
     console.error('加载模板列表失败:', e)
     loadError.value = true
+  } finally {
+    loading.value = false
   }
-
-  // 合并 API 模板 + 本地模板（不重复），深拷贝避免污染静态导入数据
-  const existingIds = new Set(allTemplates.value.map(t => t.id))
-  TEMPLATE_LIST.forEach(t => {
-    if (!existingIds.has(t.id)) {
-      allTemplates.value.push({ ...t })
-      existingIds.add(t.id)
-    }
-  })
-  categoryList.value = categoryList.value.map(cat => ({
-    ...cat,
-    templates: allTemplates.value.filter(t => t.category === cat.id),
-  }))
-
-  loading.value = false
 }
 
 // ============ 方法 ============

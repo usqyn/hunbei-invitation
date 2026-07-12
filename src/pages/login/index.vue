@@ -183,6 +183,7 @@ const showSmsForm = ref(false)
 const phone = ref('')
 const smsCode = ref('')
 const countdown = ref(0)
+const sending = ref(false)
 const phoneTouched = ref(false)
 let timer: number | null = null
 const isMpWeixin = ref(false)
@@ -307,10 +308,13 @@ const sendCode = async () => {
     feedbackWarning('请输入正确的手机号')
     return
   }
+  if (sending.value) return
+  sending.value = true
   haptic('medium')
   try {
     await request({ url: '/api/sms/send', method: 'POST', data: { phone: phone.value }, hideLoading: true })
   } catch (e: any) {
+    sending.value = false
     feedbackError(e.message || '网络错误，请重试')
     return
   }
@@ -321,6 +325,7 @@ const sendCode = async () => {
       if (timer) clearInterval(timer)
     }
   }, 1000)
+  sending.value = false
   feedbackSuccess('验证码已发送')
 }
 

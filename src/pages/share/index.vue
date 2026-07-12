@@ -22,7 +22,6 @@
           :maxlength="48"
           placeholder="请输入分享标题"
           placeholder-style="color:#cccccc"
-          @input="onTitleInput"
         />
         <text class="input-count">{{ shareTitle.length }}/48</text>
       </view>
@@ -37,7 +36,6 @@
             placeholder="请输入分享描述"
             placeholder-style="color:#cccccc"
             auto-height
-            @input="onDescInput"
           />
           <view class="desc-bottom">
             <view class="template-lib" @click="onTemplateLib">

@@ -678,7 +678,13 @@ const goToMall = () => {
 }
 
 const goToProduct = (p: any) => {
-  uni.navigateTo({ url: `/pages/mall/index?productId=${p.id}` })
+  uni.switchTab({
+    url: '/pages/mall/index',
+    success: () => {
+      // 通过全局事件将 productId 传递给 mall 页面
+      uni.$emit('selectProduct', { id: p.id })
+    }
+  })
 }
 
 // ============ Flip 翻页模式方法 ============

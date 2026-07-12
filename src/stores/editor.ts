@@ -453,9 +453,9 @@ export const useEditorStore = defineStore('editor', () => {
     // 恢复 orientation（横屏/竖屏）
     const templateStore = useTemplateStore()
     if (data.canvasSize && data.canvasSize.width > data.canvasSize.height) {
-      templateStore.setOrientation('landscape')
+      templateStore.orientation = 'landscape'
     } else if (data.canvasSize && data.canvasSize.width < data.canvasSize.height) {
-      templateStore.setOrientation('portrait')
+      templateStore.orientation = 'portrait'
     }
     if (data.background) {
       const bg = { ...data.background }
@@ -545,11 +545,13 @@ export const useEditorStore = defineStore('editor', () => {
   function confirmTextEdit() {
     const templateStore = useTemplateStore()
     // canvas 模式
-    if (selectedElement.value !== null) {
+    if (selectedElement.value !== null && selectedElement.value < editableElements.length) {
       const el = editableElements[selectedElement.value]
-      el.text = editingText.value
-      if (el.dataKey) {
-        templateStore.updateField(el.dataKey, editingText.value)
+      if (el) {
+        el.text = editingText.value
+        if (el.dataKey) {
+          templateStore.updateField(el.dataKey, editingText.value)
+        }
       }
     }
     // page 模式
@@ -647,6 +649,7 @@ export const useEditorStore = defineStore('editor', () => {
 
     if (typeof materialOrIdx === 'number') {
       idx = materialOrIdx
+      if (!url) return
       imageUrl = url!
     } else {
       idx = selectedElement.value!
