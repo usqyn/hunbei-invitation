@@ -450,6 +450,7 @@ import { usePosterStore } from '@/stores/poster'
 import { useGoBack } from '@/composables/useGoBack'
 import { resolveUrl } from '@/utils/url'
 import { request } from '@/utils/request'
+import { uploadImage } from '@/api'
 import type { PosterEditableAreaRuntime, PosterWork } from '@/types/poster'
 
 const posterStore = usePosterStore()
@@ -747,11 +748,22 @@ function onChooseImage() {
     count: 1,
     mediaType: ['image'],
     sourceType: ['album', 'camera'],
-    success: (res: any) => {
+    success: async (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0 && selectedArea.value) {
-        posterStore.updateImage(selectedArea.value.id, res.tempFiles[0].tempFilePath)
+        const tempPath = res.tempFiles[0].tempFilePath
+        posterStore.updateImage(selectedArea.value.id, tempPath)
         posterStore.pushHistory()
         showToast('图片已更换')
+        // 异步上传获取永久URL
+        try {
+          const permanentUrl = await uploadImage(tempPath)
+          if (permanentUrl) {
+            posterStore.updateImage(selectedArea.value.id, permanentUrl)
+            posterStore.pushHistory()
+          }
+        } catch (e) {
+          console.warn('poster image upload failed:', e)
+        }
       }
     },
     fail: () => showToast('图片选择失败'),
@@ -762,11 +774,21 @@ function onChooseImage() {
     count: 1,
     sizeType: ['compressed'],
     sourceType: ['album', 'camera'],
-    success: (res: any) => {
+    success: async (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0 && selectedArea.value) {
-        posterStore.updateImage(selectedArea.value.id, res.tempFilePaths[0])
+        const tempPath = res.tempFilePaths[0]
+        posterStore.updateImage(selectedArea.value.id, tempPath)
         posterStore.pushHistory()
         showToast('图片已更换')
+        try {
+          const permanentUrl = await uploadImage(tempPath)
+          if (permanentUrl) {
+            posterStore.updateImage(selectedArea.value.id, permanentUrl)
+            posterStore.pushHistory()
+          }
+        } catch (e) {
+          console.warn('poster image upload failed:', e)
+        }
       }
     },
     fail: () => showToast('图片选择失败'),
@@ -1088,7 +1110,7 @@ onMounted(async () => {
         if (templateIdToLoad) {
           await posterStore.loadTemplate(templateIdToLoad)
         }
-        posterStore.restoreFromWork(workData.content.editableAreas)
+        posterStore.restoreFromWork(workData.content.editableAreas, workData.content)
         showToast('已加载作品')
       } else if (templateId) {
         await posterStore.loadTemplate(templateId)

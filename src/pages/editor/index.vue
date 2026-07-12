@@ -529,6 +529,8 @@ const hasShownProgressPopup = ref(false)
 const editStartTime = ref(Date.now())
 // 标记模板是否已加载完成（用于 onShow 检测登录返回后是否需要重新加载）
 const templateLoaded = ref(false)
+// 防止 onMounted 与 onShow 并发触发 loadEditorData 产生竞态
+const isLoading = ref(false)
 
 const basicInfo = computed(() => templateStore.basicInfo)
 
@@ -992,36 +994,45 @@ function findWork(workId: string): Work | undefined {
 
 // 提取模板加载逻辑为可复用函数，供 onMounted 与 onShow 调用
 async function loadEditorData(options: any) {
-  const workId = options.workId
-  if (workId) {
-    const work = findWork(workId)
-    if (work) {
-      editorStore.setCurrentWorkId(work.id)
-      const templateId = work.templateId || options.templateId || options.id
-      // 有作品数据时，先加载模板获取基础结构，再用作品数据覆盖
+  // 防止并发加载：onMounted 与 onShow 可能同时触发
+  if (isLoading.value) return
+  isLoading.value = true
+  try {
+    const workId = options.workId
+    if (workId) {
+      const work = findWork(workId)
+      if (work) {
+        editorStore.setCurrentWorkId(work.id)
+        const templateId = work.templateId || options.templateId || options.id
+        // 有作品数据时，先加载模板获取基础结构，再用作品数据覆盖
+        if (templateId) {
+          await editorStore.loadTemplateById(templateId)
+        }
+        if (work.data) {
+          // 恢复作品数据，并恢复音乐选择
+          editorStore.restoreFromWorkData(work.data, work.musicId)
+        }
+        track('edit_start', { template_id: templateId, work_id: workId })
+      } else {
+        await editorStore.restoreTemplate()
+        track('edit_start', { template_id: editorStore.currentTemplateId })
+      }
+    } else {
+      const templateId = options.templateId || options.id
       if (templateId) {
         await editorStore.loadTemplateById(templateId)
+        track('edit_start', { template_id: templateId })
+      } else {
+        await editorStore.restoreTemplate()
+        track('edit_start', { template_id: editorStore.currentTemplateId })
       }
-      if (work.data) {
-        // 恢复作品数据，并恢复音乐选择
-        editorStore.restoreFromWorkData(work.data, work.musicId)
-      }
-      track('edit_start', { template_id: templateId, work_id: workId })
-    } else {
-      await editorStore.restoreTemplate()
-      track('edit_start', { template_id: editorStore.currentTemplateId })
     }
-  } else {
-    const templateId = options.templateId || options.id
-    if (templateId) {
-      await editorStore.loadTemplateById(templateId)
-      track('edit_start', { template_id: templateId })
-    } else {
-      await editorStore.restoreTemplate()
-      track('edit_start', { template_id: editorStore.currentTemplateId })
-    }
+    templateLoaded.value = true
+  } catch (e) {
+    console.error('loadEditorData failed:', e)
+  } finally {
+    isLoading.value = false
   }
-  templateLoaded.value = true
 }
 
 onMounted(async () => {

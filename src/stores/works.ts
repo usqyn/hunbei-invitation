@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { Work } from '@/types'
 import { useUserStore } from './user'
 import { addFavorite, removeFavorite, fetchFavorites, saveWorkApi, updateWorkApi, fetchWorksApi, deleteWorkApi } from '@/api'
+import { resolveUrl } from '@/utils/url'
 
 const STORAGE_KEY = 'hunbei_works'
 
@@ -92,12 +93,15 @@ export const useWorksStore = defineStore('works', () => {
             if (serverUpdatedAt > localUpdatedAt) {
               // 统一做 snake_case → camelCase 转换，保证字段一致
               existing.templateId = serverWork.templateId || serverWork.template_id || existing.templateId
-              existing.image = serverWork.cover || serverWork.image || existing.image
-              existing.cover = serverWork.cover || existing.cover
+              const serverImage = serverWork.cover || serverWork.image
+              existing.image = serverImage ? resolveUrl(serverImage) : existing.image
+              existing.cover = serverWork.cover ? resolveUrl(serverWork.cover) : existing.cover
               existing.title = serverWork.title ?? existing.title
               existing.templateType = serverWork.templateType || serverWork.template_type || existing.templateType
               existing.data = serverWork.data || existing.data
-              existing.musicId = serverWork.musicId || serverWork.music_id || existing.musicId
+              existing.musicId = serverWork.musicId ?? serverWork.music_id ?? existing.musicId
+              existing.date = serverWork.date || existing.date
+              existing.status = serverWork.status || existing.status
               existing.updatedAt = serverWork.updatedAt || serverWork.updated_at || existing.updatedAt
             }
           } else if (!localIds.has(id)) {
@@ -105,14 +109,14 @@ export const useWorksStore = defineStore('works', () => {
             const mappedWork: Work = {
               id: serverWork.id,
               title: serverWork.title || '未命名作品',
-              date: '',
-              image: serverWork.cover || serverWork.image || '',
-              cover: serverWork.cover || '',
+              date: serverWork.date || new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+              image: resolveUrl(serverWork.cover || serverWork.image || ''),
+              cover: resolveUrl(serverWork.cover || ''),
               templateType: serverWork.templateType || serverWork.template_type || 'canvas',
               templateId: serverWork.templateId || serverWork.template_id || '',
-              musicId: serverWork.musicId || serverWork.music_id || '',
+              musicId: serverWork.musicId ?? serverWork.music_id ?? null,
               data: serverWork.data || {},
-              status: 'draft',
+              status: serverWork.status || 'draft',
               updatedAt: serverWork.updatedAt || serverWork.updated_at || new Date().toISOString(),
             }
             works.value.push(mappedWork)

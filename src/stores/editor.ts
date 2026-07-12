@@ -231,6 +231,7 @@ export const useEditorStore = defineStore('editor', () => {
           color1: page.background?.color1 || '#ffffff',
           color2: page.background?.color2,
           angle: page.background?.angle,
+          image: page.background?.image ? resolveUrl(page.background.image) : undefined,
           imageUrl: page.background?.imageUrl ? resolveUrl(page.background.imageUrl) : undefined,
           imageScale: page.background?.imageScale,
           imageOpacity: page.background?.imageOpacity,
@@ -315,6 +316,7 @@ export const useEditorStore = defineStore('editor', () => {
         basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
         settings: JSON.parse(JSON.stringify(templateStore.settings)),
         selectedMusicId: templateStore.selectedMusicId,
+        currentFlipPageIndex: currentFlipPageIndex.value,
       }
       setStorage(STORAGE_KEY_TEMPLATE_DATA, data)
     } catch (e) {
@@ -355,6 +357,9 @@ export const useEditorStore = defineStore('editor', () => {
             if (page.background?.image) {
               page.background.image = resolveUrl(page.background.image)
             }
+            if (page.background?.imageUrl) {
+              page.background.imageUrl = resolveUrl(page.background.imageUrl)
+            }
             (page.elements || []).forEach((el: any) => {
               if (el.type === 'image' && el.text) {
                 el.text = resolveUrl(el.text)
@@ -376,7 +381,13 @@ export const useEditorStore = defineStore('editor', () => {
           renderedImage.value = resolveUrl(savedData.renderedImage)
         }
         if (savedData.templateData) {
-          Object.assign(templateStore.templateData, savedData.templateData)
+          const td = JSON.parse(JSON.stringify(savedData.templateData))
+          if (td.coverImage) td.coverImage = resolveUrl(td.coverImage)
+          if (td.photo1) td.photo1 = resolveUrl(td.photo1)
+          if (td.photo2) td.photo2 = resolveUrl(td.photo2)
+          if (td.photo3) td.photo3 = resolveUrl(td.photo3)
+          if (td.photo4) td.photo4 = resolveUrl(td.photo4)
+          Object.assign(templateStore.templateData, td)
         }
         if (savedData.basicInfo) {
           Object.assign(templateStore.basicInfo, savedData.basicInfo)
@@ -453,12 +464,23 @@ export const useEditorStore = defineStore('editor', () => {
       if (bg.imageUrl) bg.imageUrl = resolveUrl(bg.imageUrl)
       background.value = bg
     }
-    if (data.templateData) Object.assign(templateStore.templateData, data.templateData)
+    if (data.templateData) {
+      const td = JSON.parse(JSON.stringify(data.templateData))
+      // 对 templateData 中的图片字段做 URL 归一化
+      if (td.coverImage) td.coverImage = resolveUrl(td.coverImage)
+      if (td.photo1) td.photo1 = resolveUrl(td.photo1)
+      if (td.photo2) td.photo2 = resolveUrl(td.photo2)
+      if (td.photo3) td.photo3 = resolveUrl(td.photo3)
+      if (td.photo4) td.photo4 = resolveUrl(td.photo4)
+      Object.assign(templateStore.templateData, td)
+    }
     if (data.basicInfo) Object.assign(templateStore.basicInfo, data.basicInfo)
     if (data.settings) Object.assign(templateStore.settings, data.settings)
-    // 恢复音乐选择
-    if (musicId) {
+    // 恢复音乐选择（使用 !== undefined 确保正确处理 null/0）
+    if (musicId !== undefined && musicId !== null) {
       templateStore.selectedMusicId = musicId
+    } else {
+      templateStore.setSelectedMusic(null)
     }
     // 恢复翻页模式当前页码
     if (data.currentFlipPageIndex != null && data.currentFlipPageIndex < flipPages.length) {

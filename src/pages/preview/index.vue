@@ -16,6 +16,10 @@
     </view>
 
     <scroll-view class="preview-content" scroll-y>
+      <view v-if="editorStore.templateLoading" class="preview-loading">
+        <text>加载中...</text>
+      </view>
+      <template v-else>
       <!-- Flip 翻页模式：左右滑动翻页 -->
       <template v-if="editorStore.templateType === 'flip'">
         <view class="flip-preview-wrap animate-fade-scale">
@@ -151,6 +155,7 @@
         </view>
       </template>
       </view>
+      </template>
       <view class="zoom-spacer" :style="{ height: spacerHeight + 'px' }"></view>
 
       <!-- 相似推荐 -->
@@ -851,6 +856,15 @@ const onImageError = () => {
   overflow: hidden;
   position: relative;
   z-index: 1;
+}
+
+.preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+  color: #e84a6e;
+  font-size: 30rpx;
 }
 
 /* 画布模式 */

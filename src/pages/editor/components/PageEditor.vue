@@ -472,6 +472,10 @@ function handleSave() {
 
 async function handleShare() {
   await handleSave()
+  if (!editorStore.currentWorkId) {
+    uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+    return
+  }
   uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
 }
 

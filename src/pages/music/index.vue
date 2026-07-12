@@ -132,10 +132,16 @@ async function loadMusic() {
   loading.value = true
   currentPage.value = 1
   hasMore.value = true
-  const result = await fetchMusicFromApi(undefined, 1, PAGE_SIZE)
-  musicList.value = result.list
-  hasMore.value = result.hasMore
-  loading.value = false
+  try {
+    const result = await fetchMusicFromApi(undefined, 1, PAGE_SIZE)
+    musicList.value = result.list
+    hasMore.value = result.hasMore
+  } catch (e) {
+    console.warn('loadMusic failed:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    loading.value = false
+  }
 }
 
 async function switchTag(tag: string) {
@@ -143,27 +149,39 @@ async function switchTag(tag: string) {
   loading.value = true
   currentPage.value = 1
   hasMore.value = true
-  const result = await fetchMusicFromApi(tag, 1, PAGE_SIZE)
-  musicList.value = result.list
-  hasMore.value = result.hasMore
-  loading.value = false
+  try {
+    const result = await fetchMusicFromApi(tag, 1, PAGE_SIZE)
+    musicList.value = result.list
+    hasMore.value = result.hasMore
+  } catch (e) {
+    console.warn('switchTag failed:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadMore() {
   if (loading.value || loadingMore.value || !hasMore.value) return
   loadingMore.value = true
   const nextPage = currentPage.value + 1
-  const result = await fetchMusicFromApi(currentTag.value === '全部' ? undefined : currentTag.value, nextPage, PAGE_SIZE)
-  if (result.list.length > 0) {
-    const existingIds = new Set(musicList.value.map(m => m.id))
-    const newSongs = result.list.filter(m => !existingIds.has(m.id))
-    musicList.value.push(...newSongs)
-    currentPage.value = nextPage
-    hasMore.value = result.hasMore
-  } else {
-    hasMore.value = false
+  try {
+    const result = await fetchMusicFromApi(currentTag.value === '全部' ? undefined : currentTag.value, nextPage, PAGE_SIZE)
+    if (result.list.length > 0) {
+      const existingIds = new Set(musicList.value.map(m => m.id))
+      const newSongs = result.list.filter(m => !existingIds.has(m.id))
+      musicList.value.push(...newSongs)
+      currentPage.value = nextPage
+      hasMore.value = result.hasMore
+    } else {
+      hasMore.value = false
+    }
+  } catch (e) {
+    console.warn('loadMore failed:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    loadingMore.value = false
   }
-  loadingMore.value = false
 }
 
 function stopAudio() {

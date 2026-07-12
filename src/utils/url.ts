@@ -7,7 +7,8 @@ import { API_BASE } from '@/config'
 export function resolveUrl(url: string | undefined | null): string {
   if (!url) return ''
   if (
-    url.startsWith('http') ||
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
     url.startsWith('data:') ||
     url.startsWith('blob:') ||
     url.startsWith('wxfile://')

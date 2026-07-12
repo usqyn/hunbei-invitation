@@ -186,6 +186,8 @@ const { getTextStyle } = useCanvasRender({
 const activeElementIndex = ref(-1)
 const selectedElement = ref<any>(null)
 let _formSnapshot: any = null
+// 组件挂载状态标记，用于异步操作中判断组件是否已卸载
+let _isMounted = true
 
 const currentPage = computed(() => {
   return editorStore.flipPages[editorStore.currentFlipPageIndex]
@@ -260,20 +262,24 @@ async function applySelectedImage(tempFilePath: string) {
   uni.showLoading({ title: '上传中...' })
   try {
     const permanentUrl = await uploadImage(tempFilePath)
-    selectedElement.value.text = permanentUrl
-    if (selectedElement.value.dataKey) {
-      editorStore.syncFieldToAllModes(selectedElement.value.dataKey, permanentUrl)
+    if (_isMounted && selectedElement.value) {
+      selectedElement.value.text = permanentUrl
+      if (selectedElement.value.dataKey) {
+        editorStore.syncFieldToAllModes(selectedElement.value.dataKey, permanentUrl)
+      }
+      editorStore.pushHistory()
     }
-    editorStore.pushHistory()
   } catch (e) {
     console.warn('图片上传失败:', e)
-    selectedElement.value.text = tempFilePath
-    if (selectedElement.value.dataKey) {
-      editorStore.syncFieldToAllModes(selectedElement.value.dataKey, tempFilePath)
+    if (_isMounted && selectedElement.value) {
+      selectedElement.value.text = tempFilePath
+      if (selectedElement.value.dataKey) {
+        editorStore.syncFieldToAllModes(selectedElement.value.dataKey, tempFilePath)
+      }
+      uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
     }
-    uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
   } finally {
-    uni.hideLoading()
+    if (_isMounted) uni.hideLoading()
   }
 }
 
@@ -546,10 +552,15 @@ function handleSave() {
 
 async function handleShare() {
   await handleSave()
+  if (!editorStore.currentWorkId) {
+    uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+    return
+  }
   uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
 }
 
 onUnmounted(() => {
+  _isMounted = false
   if (textInputTimer) clearTimeout(textInputTimer)
 })
 </script>

@@ -171,8 +171,11 @@ onMounted(() => {
 
 // 微信分享配置 - 同时支持右上角 ... 菜单和自定义按钮
 onShareAppMessage(() => {
-  const templateId = editorStore.currentTemplateId || ''
-  const workId = editorStore.currentWorkId || ''
+  const workId = editorStore.currentWorkId
+  const templateId = editorStore.currentTemplateId
+  if (!workId && !templateId) {
+    return { title: '婚贝请柬', path: '/pages/index/index' }
+  }
   let path = '/pages/preview/index'
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
@@ -236,6 +239,10 @@ async function onShareMoments() {
   try {
     const res = await generatePoster(workId)
     uni.hideLoading()
+    if (!res || !res.url) {
+      uni.showToast({ title: '生成海报失败', icon: 'none' })
+      return
+    }
     uni.downloadFile({
       url: res.url,
       success: (r) => {
@@ -260,6 +267,10 @@ async function onSharePoster() {
   try {
     const res = await generatePoster(workId)
     uni.hideLoading()
+    if (!res || !res.url) {
+      uni.showToast({ title: '生成海报失败', icon: 'none' })
+      return
+    }
     uni.showModal({
       title: '分享海报',
       content: '如需将请柬分享到朋友圈，请保存下方图片后从相册分享。',
@@ -287,8 +298,12 @@ async function onSharePoster() {
 }
 
 function onCopyLink() {
+  const workId = editorStore.currentWorkId
+  if (!workId) {
+    uni.showToast({ title: '请先创建作品', icon: 'none' })
+    return
+  }
   const templateId = editorStore.currentTemplateId || ''
-  const workId = editorStore.currentWorkId || ''
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
   if (workId) params.push(`workId=${workId}`)

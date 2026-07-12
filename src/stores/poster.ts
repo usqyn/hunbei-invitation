@@ -110,10 +110,10 @@ export const usePosterStore = defineStore('poster', () => {
   }
 
   /** Restore editable areas from saved work content */
-  function restoreFromWork(areas: PosterEditableAreaRuntime[]) {
+  function restoreFromWork(areas: PosterEditableAreaRuntime[], content?: any) {
     editableAreas.value.splice(0, editableAreas.value.length)
     areas.forEach(a => {
-      editableAreas.value.push({
+      const restoredArea: PosterEditableAreaRuntime = {
         id: a.id,
         type: a.type,
         label: a.label || '',
@@ -133,7 +133,7 @@ export const usePosterStore = defineStore('poster', () => {
         _w: a._w,
         _h: a._h,
         _text: a._text,
-        _src: a._src,
+        _src: a._src ? resolveUrl(a._src) : a._src,
         _fontSize: a._fontSize || 28,
         _color: a._color || '#333333',
         _align: a._align || 'center',
@@ -141,8 +141,16 @@ export const usePosterStore = defineStore('poster', () => {
         _rotate: a._rotate || 0,
         _scale: a._scale || 1,
         _fontFamily: a._fontFamily || 'sans-serif',
-      })
+      }
+      editableAreas.value.push(restoredArea)
     })
+    // 恢复 canvasSize 和 background
+    if (content?.canvasSize) {
+      canvasSize.value = { ...content.canvasSize }
+    }
+    if (content?.background_url) {
+      customBackground.value = resolveUrl(content.background_url)
+    }
     history.value = []
     historyIndex.value = -1
     pushHistory()
@@ -530,6 +538,12 @@ export const usePosterStore = defineStore('poster', () => {
 
   async function switchTemplate(id: string) {
     showTemplatePicker.value = false
+    // 切换模板时重置当前作品 ID，避免保存覆盖旧作品
+    currentWorkId.value = null
+    selectedAreaId.value = null
+    customBackground.value = ''
+    previewImage.value = ''
+    showPreview.value = false
     await loadTemplate(id)
   }
 

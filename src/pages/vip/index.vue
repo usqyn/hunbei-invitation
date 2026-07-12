@@ -135,13 +135,22 @@ async function handlePay() {
   try {
     const order = await createVipOrder(selectedPlan.value, currentPlan.value.price)
     uni.hideLoading()
+
+    // 检查服务端是否返回了完整的支付参数
+    if (!order.paySign) {
+      // 服务端未返回签名，无法调起支付
+      uni.showToast({ title: '支付服务暂不可用，请稍后重试', icon: 'none' })
+      paying.value = false
+      return
+    }
+
     uni.requestPayment({
       provider: 'wxpay',
-      timeStamp: String(Math.floor(Date.now() / 1000)),
-      nonceStr: order.nonceStr || Math.random().toString(36).slice(2),
-      package: `prepay_id=${order.prepayId}`,
-      signType: 'MD5',
-      paySign: order.paySign || '',
+      timeStamp: order.timeStamp,
+      nonceStr: order.nonceStr,
+      package: order.package || `prepay_id=${order.prepayId}`,
+      signType: order.signType || 'MD5',
+      paySign: order.paySign,
       success: async () => {
         uni.showLoading({ title: '验证中...' })
         try {
@@ -159,10 +168,13 @@ async function handlePay() {
         paying.value = false
         setTimeout(() => uni.navigateBack(), 1500)
       },
-      fail: () => {
-        uni.showToast({ title: '支付取消', icon: 'none' })
+      fail: (err: any) => {
+        const isCancel = err && /cancel/i.test(err.errMsg || '')
+        uni.showToast({ title: isCancel ? '支付已取消' : '支付失败', icon: 'none' })
         paying.value = false
       },
+      // Safety net: success/fail 均会重置 paying，complete 仅作兜底说明
+      // complete: () => { /* paying 已在 success/fail 中重置 */ },
     })
   } catch (e) {
     uni.hideLoading()

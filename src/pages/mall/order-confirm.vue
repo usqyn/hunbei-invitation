@@ -79,6 +79,7 @@ interface OrderItem {
   name: string
   spec?: string
   image: string
+  cover?: string
   price: string
   quantity: number
 }
@@ -170,8 +171,12 @@ const submitOrder = async () => {
       productName: item.name,
       quantity: item.quantity || 1,
       price: item.price,
+      image: item.image || item.cover || '',
     })),
     totalAmount: String(orderTotal.value),
+    goodsAmount: String(goodsTotal.value),
+    freight: String(freight.value),
+    discount: String(discount.value),
     status: 'pending',
     contactName: address.value.name,
     contactPhone: address.value.phone,
@@ -218,17 +223,18 @@ const submitOrder = async () => {
     }, 1500)
   } catch (e) {
     uni.hideLoading()
-    // API失败时回退到本地存储
+    console.warn('createOrder API failed:', e)
+    // API失败时仅保存到本地，明确提示用户
     const localOrder = {
       orderNo: 'HB' + Date.now(),
       ...orderData,
       createTime: new Date().toISOString(),
+      _offline: true,  // 标记为离线订单
     }
     const local = uni.getStorageSync('mall_orders') || []
     local.unshift(localOrder)
     uni.setStorageSync('mall_orders', local)
 
-    // 保存收货地址供下次复用
     saveAddress()
 
     let cart = uni.getStorageSync('mall_cart') || []
@@ -244,10 +250,10 @@ const submitOrder = async () => {
     uni.setStorageSync('mall_cart', cart)
     uni.removeStorageSync('mall_orderItems')
 
-    uni.showToast({ title: '下单成功', icon: 'success' })
+    uni.showToast({ title: '订单已保存（离线），请稍后联系客服', icon: 'none', duration: 3000 })
     setTimeout(() => {
       uni.redirectTo({ url: '/pages/mall/orders' })
-    }, 1500)
+    }, 2000)
   }
 }
 
