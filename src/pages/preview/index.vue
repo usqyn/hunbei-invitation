@@ -16,8 +16,24 @@
     </view>
 
     <scroll-view class="preview-content" scroll-y>
-      <view v-if="editorStore.templateLoading" class="preview-loading">
-        <text>加载中...</text>
+      <view v-if="loadError" class="preview-error-state animate-fade-in">
+        <view class="error-icon-wrap">
+          <text class="error-icon">⚠️</text>
+        </view>
+        <text class="error-title">加载失败</text>
+        <text class="error-desc">数据加载出现问题，请重试</text>
+        <view class="error-retry-btn" @click="retryLoad">
+          <text class="error-retry-text">重新加载</text>
+        </view>
+      </view>
+      <view v-else-if="editorStore.templateLoading" class="preview-skeleton">
+        <view class="skeleton-card">
+          <view class="skeleton-block skeleton-cover"></view>
+          <view class="skeleton-block skeleton-line skeleton-line--title"></view>
+          <view class="skeleton-block skeleton-line skeleton-line--text"></view>
+          <view class="skeleton-block skeleton-line skeleton-line--text-short"></view>
+          <view class="skeleton-block skeleton-line skeleton-line--text"></view>
+        </view>
       </view>
       <template v-else>
       <!-- Flip 翻页模式：左右滑动翻页 -->
@@ -75,7 +91,7 @@
               <image
                 class="section-image"
                 lazy-load
-                :src="sec.image || ''"
+                :src="sec.image || PLACEHOLDER_IMAGE"
                 mode="aspectFit"
                 @error="onImageError"
               />
@@ -187,18 +203,26 @@
         <view class="compare-row">
           <view class="compare-col">
             <view class="compare-label">免费导出</view>
-            <image class="compare-img" lazy-load :src="watermarkedPreview" mode="aspectFill" />
+            <view class="compare-img-wrap">
+              <image class="compare-img compare-img--watermarked" lazy-load :src="watermarkedPreview" mode="aspectFill" />
+              <view class="compare-watermark-overlay">
+                <text class="compare-watermark-text">水印</text>
+              </view>
+            </view>
             <view class="compare-desc">带水印 · 720px</view>
           </view>
           <view class="compare-col compare-highlight">
             <view class="compare-vip-badge">VIP</view>
             <view class="compare-label">高清导出</view>
-            <image class="compare-img" lazy-load :src="hdPreview" mode="aspectFill" />
+            <view class="compare-img-wrap">
+              <image class="compare-img compare-img--hd" lazy-load :src="hdPreview" mode="aspectFill" />
+              <view class="compare-hd-badge">高清</view>
+            </view>
             <view class="compare-desc">无水印 · 1440px</view>
           </view>
         </view>
         <view class="compare-action">
-          <button class="btn-primary" @click="goToVip">3元 高清导出</button>
+          <button class="btn-primary" @click="goToVip">高清导出</button>
           <button
             class="btn-secondary"
             :class="{ 'btn--loading': exportingLoading }"
@@ -321,8 +345,11 @@ const displayTitle = computed(() => {
 })
 
 const templateId = ref('')
+const loadError = ref(false)
 
+// 免费导出预览图（通过 CSS 类 compare-img--watermarked 降低不透明度并加模糊）
 const watermarkedPreview = computed(() => editorStore.renderedImage || '')
+// 高清导出预览图（通过 CSS 类 compare-img--hd 增强 contrast/saturate 以示区分）
 const hdPreview = computed(() => editorStore.renderedImage || '')
 
 const fallbackRecommendProducts = [
@@ -377,8 +404,9 @@ function findWork(workId: string): Work | undefined {
   return undefined
 }
 
-onMounted(async () => {
+async function loadData() {
   try {
+    loadError.value = false
     const pages = getCurrentPages()
     const curPage = pages[pages.length - 1] as any
     const options = curPage?.options || {}
@@ -426,8 +454,18 @@ onMounted(async () => {
   loadRecommendProducts()
   } catch (e) {
     console.error('preview mount failed:', e)
+    loadError.value = true
     uni.showToast({ title: '加载失败', icon: 'none' })
   }
+}
+
+// 重试加载：重置错误状态并重新执行加载逻辑
+function retryLoad() {
+  loadData()
+}
+
+onMounted(() => {
+  loadData()
 })
 
 watch(() => editorStore.templateLoading, (loading) => {
@@ -470,7 +508,7 @@ async function loadSimilarTemplates() {
   }
 }
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 
 const handleShare = () => {
   track('click_share', { channel: 'wechat' })
@@ -752,9 +790,18 @@ function getFlipTextStyle(el: any): Record<string, string> {
   }
 }
 
+const PLACEHOLDER_IMAGE = '/static/images/icons/img-placeholder.svg'
+
+// 节流：记录上次 toast 时间，避免图片错误刷屏
+const lastImageErrorToastTime = ref(0)
+
 const onImageError = () => {
   console.warn('Preview image load failed')
-  uni.showToast({ title: '图片加载失败', icon: 'none' })
+  const now = Date.now()
+  if (now - lastImageErrorToastTime.value > 3000) {
+    lastImageErrorToastTime.value = now
+    uni.showToast({ title: '部分图片加载失败', icon: 'none' })
+  }
 }
 </script>
 
@@ -855,7 +902,22 @@ const onImageError = () => {
 }
 
 .header-action--share {
-  background: linear-gradient(135deg, rgba(255, 107, 138, 0.12) 0%, rgba(232, 74, 110, 0.08) 100%);
+  min-width: 80rpx;
+  height: 80rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  box-shadow: 0 6rpx 18rpx rgba(232, 74, 110, 0.35);
+}
+
+.header-action--share .action-icon {
+  color: #ffffff;
+  font-size: 34rpx;
+  font-weight: 600;
+}
+
+.header-action--share:active {
+  background: linear-gradient(135deg, #d63f61 0%, #f55d7e 100%);
+  transform: scale(0.92);
+  background-color: transparent;
 }
 
 .action-icon {
@@ -875,13 +937,112 @@ const onImageError = () => {
   z-index: 1;
 }
 
-.preview-loading {
+.preview-skeleton {
+  padding: 24rpx 32rpx;
+}
+
+/* 加载失败错误状态 */
+.preview-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 48rpx;
+}
+
+.error-icon-wrap {
+  width: 120rpx;
+  height: 120rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 120rpx 0;
-  color: #e84a6e;
-  font-size: 30rpx;
+  background: linear-gradient(135deg, rgba(232, 74, 110, 0.1) 0%, rgba(255, 107, 138, 0.06) 100%);
+  border-radius: 50%;
+  margin-bottom: 32rpx;
+}
+
+.error-icon {
+  font-size: 56rpx;
+}
+
+.error-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 12rpx;
+}
+
+.error-desc {
+  font-size: 26rpx;
+  color: #8a8a9a;
+  margin-bottom: 40rpx;
+}
+
+.error-retry-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 44rpx;
+  padding: 20rpx 56rpx;
+  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.error-retry-btn:active {
+  transform: scale(0.96);
+}
+
+.error-retry-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.skeleton-card {
+  background: #ffffff;
+  border-radius: 28rpx;
+  padding: 28rpx;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid rgba(232, 74, 110, 0.08);
+}
+
+.skeleton-block {
+  border-radius: 16rpx;
+  background: linear-gradient(90deg, #eee5e8 25%, #f6f0f2 37%, #eee5e8 63%);
+  background-size: 400% 100%;
+  animation: skeletonShimmer 1.4s ease infinite;
+}
+
+.skeleton-cover {
+  width: 100%;
+  height: 360rpx;
+  border-radius: 24rpx;
+  margin-bottom: 28rpx;
+}
+
+.skeleton-line {
+  height: 32rpx;
+  margin-bottom: 20rpx;
+}
+
+.skeleton-line--title {
+  width: 50%;
+  height: 44rpx;
+  margin: 0 auto 28rpx;
+}
+
+.skeleton-line--text {
+  width: 100%;
+}
+
+.skeleton-line--text-short {
+  width: 65%;
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }
 
 /* 画布模式 */
@@ -1492,6 +1653,64 @@ const onImageError = () => {
   border-radius: 20rpx;
   background: #e8e8ed;
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.compare-img-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+/* 水印预览图：降低不透明度 + 轻微模糊，模拟低质量效果 */
+.compare-img--watermarked {
+  opacity: 0.7;
+  filter: blur(0.5rpx) brightness(0.95);
+}
+
+/* 高清预览图：增强对比度与饱和度，模拟高质量效果 */
+.compare-img--hd {
+  filter: contrast(1.1) saturate(1.1);
+}
+
+/* 水印文字遮罩 */
+.compare-watermark-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.compare-watermark-text {
+  font-size: 36rpx;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  letter-spacing: 8rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  transform: rotate(-20deg);
+  border: 2rpx solid rgba(255, 255, 255, 0.6);
+  padding: 8rpx 20rpx;
+  border-radius: 12rpx;
+}
+
+/* 高清角标 */
+.compare-hd-badge {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  padding: 4rpx 14rpx;
+  background: linear-gradient(135deg, #f5d76e 0%, #f5a623 100%);
+  color: #1a0f2e;
+  font-size: 20rpx;
+  font-weight: 700;
+  border-radius: 8rpx;
+  box-shadow: 0 2rpx 8rpx rgba(245, 166, 35, 0.4);
 }
 
 .compare-desc {

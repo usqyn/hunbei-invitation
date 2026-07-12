@@ -44,7 +44,7 @@ import { useGoBack } from '@/composables/useGoBack'
 import { fetchRecycleBin, restoreWork, permanentDelete } from '@/api'
 import { useWorksStore } from '@/stores/works'
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 const worksStore = useWorksStore()
 
 interface RecycleItem {

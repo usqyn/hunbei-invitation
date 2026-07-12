@@ -79,7 +79,7 @@
 import { ref, onMounted } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 const activeTab = ref<'user' | 'privacy'>('user')
 
 onMounted(() => {

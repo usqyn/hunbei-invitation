@@ -15,6 +15,17 @@
       <view class="header-right"></view>
     </view>
 
+    <!-- 加载错误状态 -->
+    <view v-if="loadError" class="load-error-overlay">
+      <view class="load-error-content">
+        <text class="load-error-icon">⚠️</text>
+        <text class="load-error-text">加载失败，请重试</text>
+        <view class="load-error-retry-btn" @click="retryLoad">
+          <text class="load-error-retry-text">重试</text>
+        </view>
+      </view>
+    </view>
+
     <!-- Body: 根据模板类型渲染不同编辑界面 -->
     <view v-if="editorStore.templateLoading" class="loading-overlay">
       <view class="loading-content">
@@ -62,13 +73,15 @@
                 class="rendered-overlay-element"
                 :class="{
                   'rendered-overlay-element--active': editorStore.selectedElement === idx,
-                  'rendered-overlay-element--no-click': el.editable === false
+                  'rendered-overlay-element--no-click': el.editable === false,
+                  'canvas-element--dragging': dragging
                 }"
                 :style="getOverlayElementStyle(el)"
                 @touchstart="el.editable === false ? null : onElementTouchStart(idx, $event)"
                 @touchmove.stop.prevent="onElementTouchMove"
                 @touchend="onElementTouchEnd"
                 @click="el.editable === false ? null : onElementTap(idx)"
+                @longpress="el.editable === false ? null : onElementLongPress(idx)"
               >
                 <!-- 缩放手柄（选中时显示） -->
                 <view
@@ -87,8 +100,8 @@
               <view class="empty-hint-icon-wrap animate-float">
                 <text class="empty-hint-icon">📋</text>
               </view>
-              <text class="empty-hint-text">此模板暂无内容</text>
-              <text class="empty-hint-sub">请在管理端重新发布模板</text>
+              <text class="empty-hint-text">模板内容为空</text>
+              <text class="empty-hint-sub">请尝试更换其他模板</text>
               <view class="empty-hint-decoration">
                 <text class="empty-decor-dot"></text>
                 <text class="empty-decor-dot"></text>
@@ -103,13 +116,15 @@
                   'active-element': editorStore.selectedElement === idx,
                   'text-element': el.type === 'text',
                   'non-editable': el.editable === false,
-                  'canvas-element--no-interact': el.editable === false
+                  'canvas-element--no-interact': el.editable === false,
+                  'canvas-element--dragging': dragging
                 }"
                 :style="getCanvasElementStyle(el)"
                 @touchstart="el.editable === false ? null : onElementTouchStart(idx, $event)"
                 @touchmove.stop.prevent="onElementTouchMove"
                 @touchend="onElementTouchEnd"
                 @click="el.editable === false ? null : onElementTap(idx)"
+                @longpress="el.editable === false ? null : onElementLongPress(idx)"
               >
                 <image
                   v-if="el.type === 'image'"
@@ -252,6 +267,7 @@
       :element="selectedImageElement"
       @close="showImagePanel = false"
       @update="onImagePropUpdate"
+      @preview="onImagePropPreview"
       @reset="onImagePropReset"
     />
 
@@ -348,6 +364,12 @@ function getOverlayElementStyle(el: EditableElement): Record<string, string> {
 
 // 标记 renderedImage 已过期（用户编辑后需要重新渲染）
 const renderedImageStale = ref(false)
+// 标记是否有未保存的更改（用于自动保存）
+const hasUnsavedChanges = ref(false)
+// 加载错误状态
+const loadError = ref(false)
+// 自动保存定时器
+let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 
 // 图片属性面板显示控制
 const showImagePanel = ref(false)
@@ -364,6 +386,7 @@ const selectedImageElement = computed(() => {
 function onTextEditorConfirm() {
   editorStore.confirmTextEdit()
   renderedImageStale.value = true
+  hasUnsavedChanges.value = true
 }
 
 // 统一表单确认：同步到可编辑元素，标记过期
@@ -372,14 +395,14 @@ function onUnifiedEditConfirm() {
   editorStore.closeBasicInfoEditor()
   formSnapshot = null
   renderedImageStale.value = true
+  hasUnsavedChanges.value = true
 }
 
 // 统一表单取消：回滚到打开前的状态
 function onUnifiedEditCancel() {
   if (formSnapshot) {
-    const templateStore2 = templateStore
-    Object.assign(templateStore2.basicInfo, formSnapshot.basicInfo)
-    Object.assign(templateStore2.templateData, formSnapshot.templateData)
+    Object.assign(templateStore.basicInfo, formSnapshot.basicInfo)
+    Object.assign(templateStore.templateData, formSnapshot.templateData)
     editorStore.editableElements.splice(0, editorStore.editableElements.length, ...formSnapshot.elements)
     editorStore.pageSections.splice(0, editorStore.pageSections.length, ...formSnapshot.pageSections)
     editorStore.flipPages.splice(0, editorStore.flipPages.length, ...formSnapshot.flipPages)
@@ -396,6 +419,7 @@ let _mountTimers: ReturnType<typeof setTimeout>[] = []
 function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
   renderedImageStale.value = true
+  hasUnsavedChanges.value = true
   if (smartEditTimer) clearTimeout(smartEditTimer)
   smartEditTimer = setTimeout(() => {
     editorStore.pushHistory()
@@ -433,15 +457,83 @@ const dragState = ref<DragState | null>(null)
 const DRAG_THRESHOLD = 5
 // 记录最近一次拖拽是否产生了位移，防止 touchend 后 click 仍触发编辑器
 let lastDragMoved = false
+// 拖拽中状态（用于添加视觉反馈）
+const dragging = ref(false)
 // 组件挂载状态标记，用于异步操作中判断组件是否已卸载
 let _isMounted = true
+
+// 双击检测：记录上次点击的元素索引和时间
+let lastTapIdx: number | null = null
+let lastTapTime = 0
+const DOUBLE_TAP_INTERVAL = 350
 
 function onElementTap(idx: number) {
   if (lastDragMoved) {
     lastDragMoved = false
     return
   }
-  onOpenEditor(idx)
+  const now = Date.now()
+  // 如果点击的是已选中的元素，且在双击间隔内，则打开编辑器
+  if (editorStore.selectedElement === idx && lastTapIdx === idx && (now - lastTapTime) < DOUBLE_TAP_INTERVAL) {
+    lastTapIdx = null
+    lastTapTime = 0
+    onOpenEditor(idx)
+    return
+  }
+  // 第一次点击：仅选中元素，不打开编辑器
+  editorStore.selectedElement = idx
+  haptic('light')
+  lastTapIdx = idx
+  lastTapTime = now
+}
+
+function onElementLongPress(idx: number) {
+  const el = editorStore.editableElements[idx]
+  if (!el || el.editable === false) return
+  editorStore.selectedElement = idx
+  haptic('medium')
+  const items: string[] = ['编辑']
+  if (el.type === 'image') {
+    items.push('换图')
+    items.push('调整')
+  }
+  items.push('删除')
+  uni.showActionSheet({
+    itemList: items,
+    success: (res: any) => {
+      let offset = 0
+      if (items[offset] === '编辑') {
+        if (res.tapIndex === offset) {
+          onOpenEditor(idx)
+          return
+        }
+        offset++
+      }
+      if (el.type === 'image' && items[offset] === '换图') {
+        if (res.tapIndex === offset) {
+          handleReplaceImage()
+          return
+        }
+        offset++
+      }
+      if (el.type === 'image' && items[offset] === '调整') {
+        if (res.tapIndex === offset) {
+          showImagePanel.value = true
+          return
+        }
+        offset++
+      }
+      if (items[offset] === '删除') {
+        if (res.tapIndex === offset) {
+          editorStore.editableElements.splice(idx, 1)
+          editorStore.selectedElement = null
+          editorStore.pushHistory()
+          renderedImageStale.value = true
+          hasUnsavedChanges.value = true
+        }
+      }
+    },
+  })
 }
 
 function onElementTouchStart(idx: number, e: any) {
@@ -472,6 +564,7 @@ function onElementTouchMove(e: any) {
   const dy = touch.clientY - ds.startTouchY
   if (!ds.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
   ds.moved = true
+  dragging.value = true
   const rect = canvasDisplayRect.value
   const scaleX = rect.width ? editorStore.canvasSize.width / rect.width : 1
   const scaleY = rect.height ? editorStore.canvasSize.height / rect.height : 1
@@ -495,7 +588,9 @@ function onElementTouchEnd() {
     lastDragMoved = true
     editorStore.pushHistory()
     renderedImageStale.value = true
+    hasUnsavedChanges.value = true
   }
+  dragging.value = false
   dragState.value = null
 }
 
@@ -547,6 +642,7 @@ function onResizeHandleTouchEnd() {
   if (ds && ds.type === 'scale' && ds.moved) {
     editorStore.pushHistory()
     renderedImageStale.value = true
+    hasUnsavedChanges.value = true
   }
   dragState.value = null
 }
@@ -586,13 +682,28 @@ function deselectElement() {
   editorStore.selectedElement = null
 }
 
-// 图片属性面板更新回调
+// 图片属性面板更新回调（防抖记录历史，避免滑块拖动时频繁 pushHistory）
+let propPanelTimer: ReturnType<typeof setTimeout> | null = null
 function onImagePropUpdate(field: string, value: number) {
   if (editorStore.selectedElement === null) return
   const el = editorStore.editableElements[editorStore.selectedElement]
   if (!el) return
   ;(el as any)[field] = value
-  editorStore.pushHistory()
+  renderedImageStale.value = true
+  hasUnsavedChanges.value = true
+  if (propPanelTimer) clearTimeout(propPanelTimer)
+  propPanelTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    propPanelTimer = null
+  }, 500)
+}
+
+// 图片属性面板预览回调（@changing 事件，实时更新但不记录历史）
+function onImagePropPreview(field: string, value: number) {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el) return
+  ;(el as any)[field] = value
   renderedImageStale.value = true
 }
 
@@ -607,6 +718,7 @@ function onImagePropReset() {
   el.borderRadius = 0
   editorStore.pushHistory()
   renderedImageStale.value = true
+  hasUnsavedChanges.value = true
 }
 
 function resolveText(text: string): string {
@@ -697,9 +809,11 @@ function onOpenEditor(idx: number) {
 
 function chooseLocalImage(idx: number) {
   const applyImage = async (tempPath: string) => {
-    uni.showLoading({ title: '上传中...' })
+    uni.showLoading({ title: '上传中 0%' })
     try {
-      const permanentUrl = await uploadImage(tempPath)
+      const permanentUrl = await uploadImage(tempPath, (progress: number) => {
+        uni.showLoading({ title: `上传中 ${progress}%` })
+      })
       if (!_isMounted) return
       editorStore.applyImageToElement(idx, permanentUrl)
       renderedImageStale.value = true
@@ -709,7 +823,7 @@ function chooseLocalImage(idx: number) {
       console.warn('图片上传失败，使用临时路径:', e)
       editorStore.applyImageToElement(idx, tempPath)
       renderedImageStale.value = true
-      uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
+      uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     } finally {
       if (_isMounted) uni.hideLoading()
     }
@@ -802,7 +916,12 @@ function toggleSetting(key: string) {
   templateStore.toggleSetting(key)
 }
 
-const goBack = useGoBack()
+const { goBack, isDirty } = useGoBack()
+
+// 同步 hasUnsavedChanges 到 isDirty，用于返回前确认
+watch(hasUnsavedChanges, (val) => {
+  isDirty.value = val
+})
 
 function onImageError(e: any) {
   console.warn('Editor image load failed')
@@ -910,6 +1029,53 @@ async function handleSave() {
     }
     worksStore.saveAsWork(work)
   }, { successMessage: '已保存', minLoadingDuration: 400 })
+  hasUnsavedChanges.value = false
+}
+
+// 轻量自动保存（无 toast、无 loading，静默持久化）
+async function autoSaveWork() {
+  if (!hasUnsavedChanges.value) return
+  try {
+    const editorData = editorStore.buildEditorData()
+    const musicId = templateStore.selectedMusicId
+    if (editorStore.currentWorkId) {
+      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+      if (existing) {
+        existing.title = templateStore.templateData.coverTitle || '未命名作品'
+        existing.image = templateStore.templateData.coverImage
+        existing.cover = templateStore.templateData.coverImage
+        existing.templateId = editorStore.currentTemplateId
+        existing.templateType = editorStore.templateType
+        existing.musicId = musicId
+        existing.data = editorData
+        existing.updatedAt = new Date().toISOString()
+        worksStore.saveAsWork(existing)
+        hasUnsavedChanges.value = false
+        return
+      }
+    }
+    const id = editorStore.currentWorkId || String(Date.now())
+    if (!editorStore.currentWorkId) {
+      editorStore.setCurrentWorkId(id)
+    }
+    const work: Work = {
+      id,
+      title: templateStore.templateData.coverTitle || '未命名作品',
+      date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+      image: templateStore.templateData.coverImage,
+      cover: templateStore.templateData.coverImage,
+      templateId: editorStore.currentTemplateId,
+      templateType: editorStore.templateType,
+      musicId,
+      status: 'draft',
+      data: editorData,
+      updatedAt: new Date().toISOString(),
+    }
+    worksStore.saveAsWork(work)
+    hasUnsavedChanges.value = false
+  } catch (e) {
+    console.warn('自动保存失败:', e)
+  }
 }
 
 let isExporting = false
@@ -922,17 +1088,17 @@ function handleExport() {
   } else {
     uni.showActionSheet({
       title: '选择导出方式',
-      itemList: ['📦 高清无水印导出（3元）', '📦 免费导出（带水印）'],
+      itemList: ['📦 高清无水印导出', '📦 免费导出（带水印）'],
       success: (res: any) => {
         if (res.tapIndex === 0) {
           track('click_export', { export_type: 'paid' })
           uni.showModal({
             title: '高清导出',
-            content: '支付 3 元即可高清无水印导出',
-            confirmText: '立即支付',
+            content: '开通VIP即可高清无水印导出，还能享受更多权益',
+            confirmText: '去开通VIP',
             success: (r) => {
               if (r.confirm) {
-                uni.showToast({ title: '微信支付功能开发中', icon: 'none' })
+                uni.navigateTo({ url: '/pages/vip/index' })
               }
               isExporting = false
             },
@@ -1078,6 +1244,7 @@ async function loadEditorData(options: any) {
   // 防止并发加载：onMounted 与 onShow 可能同时触发
   if (isLoading.value) return
   isLoading.value = true
+  loadError.value = false
   try {
     const workId = options.workId
     if (workId) {
@@ -1111,9 +1278,18 @@ async function loadEditorData(options: any) {
     templateLoaded.value = true
   } catch (e) {
     console.error('loadEditorData failed:', e)
+    loadError.value = true
   } finally {
     isLoading.value = false
   }
+}
+
+// 重试加载
+function retryLoad() {
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  const options = curPage?.options || {}
+  loadEditorData(options)
 }
 
 onMounted(async () => {
@@ -1130,6 +1306,11 @@ onMounted(async () => {
   const options = curPage?.options || {}
 
   await loadEditorData(options)
+
+  // 启动自动保存定时器（每 60 秒）
+  autoSaveTimer = setInterval(() => {
+    autoSaveWork()
+  }, 60000)
 
   nextTick(() => {
     _mountTimers.push(setTimeout(() => updateCardSize(), 100))
@@ -1179,6 +1360,8 @@ watch(() => editorStore.editableElements.length, () => {
 onUnmounted(() => {
   _isMounted = false
   if (smartEditTimer) clearTimeout(smartEditTimer)
+  if (propPanelTimer) clearTimeout(propPanelTimer)
+  if (autoSaveTimer) clearInterval(autoSaveTimer)
   _mountTimers.forEach(t => clearTimeout(t))
   _mountTimers = []
 })
@@ -1561,6 +1744,11 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
+.canvas-element--dragging {
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.2);
+  opacity: 0.9;
+}
+
 .active-element {
   outline: 4rpx solid #e84a6e;
   outline-offset: -2rpx;
@@ -1858,6 +2046,51 @@ onUnmounted(() => {
 @keyframes btnSpin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* ===== 加载错误状态 ===== */
+.load-error-overlay {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
+  padding: 32rpx;
+}
+
+.load-error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24rpx;
+}
+
+.load-error-icon {
+  font-size: 80rpx;
+}
+
+.load-error-text {
+  font-size: 32rpx;
+  color: #5a5a6a;
+  font-weight: 600;
+}
+
+.load-error-retry-btn {
+  padding: 20rpx 64rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 44rpx;
+  box-shadow: 0 6rpx 20rpx rgba(232, 74, 110, 0.35);
+}
+
+.load-error-retry-btn:active {
+  transform: scale(0.94);
+  opacity: 0.9;
+}
+
+.load-error-retry-text {
+  font-size: 28rpx;
+  color: #fff;
+  font-weight: 600;
 }
 
 /* ===== Loading 骨架屏 ===== */

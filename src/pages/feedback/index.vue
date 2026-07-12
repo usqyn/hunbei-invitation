@@ -44,7 +44,7 @@ import { useGoBack } from '@/composables/useGoBack'
 import { useUserStore } from '@/stores/user'
 import { submitFeedback } from '@/api'
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 const userStore = useUserStore()
 
 const form = reactive({

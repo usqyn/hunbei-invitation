@@ -79,7 +79,7 @@
             <view class="spinner"></view>
             <text class="btn-text">登录中...</text>
           </view>
-          <text v-else class="btn-text">一键登录</text>
+          <text v-else class="btn-text">手机号登录</text>
         </button>
 
         <view class="divider">
@@ -231,7 +231,7 @@ const openSmsForm = () => {
   showSmsForm.value = true
 }
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 
 const loginSuccess = async () => {
   logging.value = false
@@ -247,12 +247,19 @@ const loginSuccess = async () => {
   }
   uni.hideLoading()
   feedbackSuccess('登录成功')
-  loginSuccessTimer = setTimeout(() => goBack(), 1500)
+  loginSuccessTimer = setTimeout(() => goBack(), 800)
 }
 
 const onGetPhoneNumber = (e: any) => {
-  if (!agreed.value || logging.value) return
-  if (e.detail?.errMsg !== 'getPhoneNumber:ok') return
+  if (!agreed.value) {
+    feedbackWarning('请先同意用户协议和隐私政策')
+    return
+  }
+  if (logging.value) return
+  if (e.detail?.errMsg !== 'getPhoneNumber:ok') {
+    uni.showToast({ title: '已取消授权', icon: 'none' })
+    return
+  }
 
   logging.value = true
   uni.showLoading({ title: '登录中...' })
@@ -277,7 +284,11 @@ const onGetPhoneNumber = (e: any) => {
 }
 
 const handleH5Login = async () => {
-  if (!agreed.value || logging.value) return
+  if (!agreed.value) {
+    feedbackWarning('请先同意用户协议和隐私政策')
+    return
+  }
+  if (logging.value) return
   // H5 环境下先打开短信登录弹窗
   if (!showSmsForm.value) {
     showSmsForm.value = true

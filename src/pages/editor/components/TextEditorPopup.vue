@@ -6,7 +6,7 @@
           <text class="close-text">取消</text>
         </view>
         <text class="header-title">修改文字</text>
-        <view class="header-action" @click="$emit('confirm')">
+        <view class="header-action header-confirm" @click="$emit('confirm')">
           <text class="confirm-text">完成</text>
         </view>
       </view>
@@ -21,7 +21,11 @@
             :maxlength="500"
             placeholder="请输入文字内容"
             placeholder-class="textarea-placeholder"
-            :auto-height="false"
+            :auto-height="true"
+            :focus="visible"
+            :auto-focus="true"
+            cursor-spacing="20"
+            adjust-position="true"
             :style="textareaStyle"
           />
           <view class="textarea-footer">
@@ -109,9 +113,23 @@ const onInput = (e: any) => {
 
 .confirm-text {
   font-size: 28rpx;
-  color: var(--color-primary);
-  font-weight: 500;
+  color: #fff;
+  font-weight: 600;
   text-align: right;
+}
+
+.header-confirm {
+  background: var(--color-primary, #e84a6e);
+  border-radius: 32rpx;
+  padding: 12rpx 32rpx;
+  min-width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-confirm:active {
+  opacity: 0.85;
 }
 
 .header-title {
@@ -134,7 +152,7 @@ const onInput = (e: any) => {
 
 .editor-textarea {
   width: 100%;
-  height: 240rpx;
+  min-height: 240rpx;
   padding: 20rpx;
   font-size: 28rpx;
   line-height: 1.8;

@@ -57,7 +57,8 @@
           </view>
           <text class="plan-original" v-if="plan.original && plan.original !== plan.price">原价{{ plan.original }}元</text>
           <text class="plan-unit">/{{ plan.unit }}</text>
-          <text v-if="plan.best" class="plan-avg">月均17元</text>
+          <text v-if="plan.best" class="plan-avg">月均{{ Math.round(plan.price / plan.months) }}元</text>
+          <text v-else class="plan-avg plan-avg-normal">月均{{ Math.round(plan.price / plan.months) }}元</text>
         </view>
       </view>
     </view>
@@ -85,7 +86,7 @@
       <button class="pay-btn" :disabled="paying" @click="handlePay">
         <text class="pay-btn-text">立即开通 {{ currentPlan.price }}元</text>
       </button>
-      <text class="pay-tip">开通即表示同意《VIP服务协议》</text>
+      <text class="pay-tip">开通即表示同意<text class="pay-agreement" @click="openAgreement">《VIP服务协议》</text></text>
     </view>
   </view>
 </template>
@@ -108,9 +109,9 @@ const benefits = [
 ]
 
 const plans = [
-  { key: 'monthly', name: '月卡', price: 29, original: 29, unit: '月', best: false },
-  { key: 'quarterly', name: '季卡', price: 69, original: 87, unit: '季', best: false },
-  { key: 'yearly', name: '年卡', price: 199, original: 348, unit: '年', best: true },
+  { key: 'monthly', name: '月卡', price: 29, original: 29, unit: '月', months: 1, best: false },
+  { key: 'quarterly', name: '季卡', price: 69, original: 87, unit: '季', months: 3, best: false },
+  { key: 'yearly', name: '年卡', price: 199, original: 348, unit: '年', months: 12, best: true },
 ]
 
 const selectedPlan = ref('yearly')
@@ -127,9 +128,28 @@ const compareList = [
   { feature: '客服支持', free: '无', vip: '专属客服' },
 ]
 
+function openAgreement() {
+  uni.showModal({
+    title: 'VIP服务协议',
+    content:
+      'VIP会员服务条款：\n\n' +
+      '1. VIP会员有效期内可享受全站模板免费使用、高清无水印导出、专属音乐库等权益。\n\n' +
+      '2. VIP会员费用一经支付，除法律规定的情形外不予退款。\n\n' +
+      '3. VIP权益仅限本人账户使用，禁止共享、转让或出售。\n\n' +
+      '4. 本服务最终解释权归平台所有。\n\n' +
+      '如需查看完整协议，请联系客服。',
+    showCancel: false,
+    confirmText: '我知道了',
+  })
+}
+
 async function handlePay() {
   if (paying.value) return
   if (!userStore.requireLogin()) return
+  if (userStore.isVip()) {
+    uni.showToast({ title: '您已是VIP会员', icon: 'none' })
+    return
+  }
   paying.value = true
   track('vip_click_pay', { plan: selectedPlan.value, price: currentPlan.value.price })
   uni.showLoading({ title: '创建订单中...' })
@@ -529,6 +549,11 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
+.plan-avg-normal {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
 /* 权益对比表 */
 .vip-compare-section {
   padding: 40rpx 40rpx 20rpx;
@@ -652,5 +677,10 @@ onUnmounted(() => {
   margin-top: 16rpx;
   position: relative;
   z-index: 1;
+}
+
+.pay-agreement {
+  color: #e84a6e;
+  text-decoration: underline;
 }
 </style>

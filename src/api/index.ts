@@ -30,7 +30,7 @@ function normalizeImageUrl(url: string): string {
 }
 
 /** 上传图片到服务器，返回永久 URL */
-export function uploadImage(filePath: string): Promise<string> {
+export function uploadImage(filePath: string, onProgress?: (progress: number) => void): Promise<string> {
   let uploadTask: UniApp.UploadTask | undefined
   return Promise.race([
     new Promise<string>((resolve, reject) => {
@@ -52,6 +52,11 @@ export function uploadImage(filePath: string): Promise<string> {
         },
         fail: (err) => reject(err),
       })
+      if (onProgress && uploadTask) {
+        uploadTask.onProgressUpdate((res) => {
+          onProgress(res.progress)
+        })
+      }
     }),
     new Promise<string>((_, reject) => setTimeout(() => {
       uploadTask?.abort()

@@ -42,7 +42,7 @@
             @click="activeTab = tab.key"
           >
             <text class="tab-text">{{ tab.name }}</text>
-            <text class="tab-badge">{{ getTabCount(tab.key) }}</text>
+            <text class="tab-badge">{{ getTabCount(tab.key) || '' }}</text>
           </view>
           <view class="tab-indicator" :style="indicatorStyle"></view>
         </view>
@@ -50,12 +50,27 @@
 
       <view class="works-grid-wrap">
         <view class="works-grid stagger-list" v-if="activeTab === 'all'">
+          <view v-if="batchMode" class="batch-bar">
+            <view class="batch-action" @click="toggleSelectAll">
+              <text class="batch-action-text">{{ isAllSelected ? '取消全选' : '全选' }}</text>
+            </view>
+            <view class="batch-action danger" :class="{ disabled: selectedIds.length === 0 }" @click="handleBatchDelete">
+              <text class="batch-action-text">删除选中({{ selectedIds.length }})</text>
+            </view>
+            <view class="batch-action" @click="exitBatchMode">
+              <text class="batch-action-text">完成</text>
+            </view>
+          </view>
           <view
             v-for="work in worksStore.works"
             :key="work.id"
             class="work-card"
-            @click="handleWorkClick(work)"
+            :class="{ 'batch-selected': batchMode && selectedIds.includes(work.id) }"
+            @click="batchMode ? toggleSelect(work.id) : handleWorkClick(work)"
           >
+            <view v-if="batchMode" class="card-checkbox" :class="{ checked: selectedIds.includes(work.id) }" @click.stop="toggleSelect(work.id)">
+              <text class="checkbox-icon">{{ selectedIds.includes(work.id) ? '✓' : '' }}</text>
+            </view>
             <view class="card-cover">
               <image class="cover-image" lazy-load :src="work.image" mode="aspectFill" @error="onImageError" />
               <view class="cover-gradient"></view>
@@ -142,6 +157,10 @@
             </view>
             <text class="empty-title">暂无草稿</text>
             <text class="empty-text">{{ worksConfig.emptyStates.draft.text }}</text>
+            <view class="create-btn" @click="handleCreate">
+              <text class="create-btn-text">去制作</text>
+              <text class="create-btn-arrow">+</text>
+            </view>
           </view>
         </view>
 
@@ -190,6 +209,10 @@
             </view>
             <text class="empty-title">暂无收藏</text>
             <text class="empty-text">{{ worksConfig.emptyStates.favorite.text }}</text>
+            <view class="create-btn" @click="handleBrowse">
+              <text class="create-btn-text">去逛逛</text>
+              <text class="create-btn-arrow">→</text>
+            </view>
           </view>
         </view>
       </view>
@@ -203,14 +226,22 @@ import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
+import { useFeedback } from '@/composables/useFeedback'
 import { WORKS_CONFIG } from '@/config'
 
 const userStore = useUserStore()
 const worksStore = useWorksStore()
 const { isLoggedIn } = storeToRefs(userStore)
 const activeTab = ref('all')
+const batchMode = ref(false)
+const selectedIds = ref<string[]>([])
 const worksConfig = WORKS_CONFIG
 const { loading } = storeToRefs(worksStore)
+const { haptic } = useFeedback()
+
+const isAllSelected = computed(() => {
+  return worksStore.works.length > 0 && selectedIds.value.length === worksStore.works.length
+})
 
 const tabList = ref([
   { key: 'all', name: '全部' },
@@ -268,8 +299,52 @@ const handleMore = () => {
   uni.showActionSheet({
     itemList: ['批量管理', '刷新列表'],
     success: (res) => {
-      if (res.tapIndex === 1) {
+      if (res.tapIndex === 0) {
+        batchMode.value = true
+        selectedIds.value = []
+        activeTab.value = 'all'
+      } else if (res.tapIndex === 1) {
         worksStore.loadAll()
+      }
+    },
+  })
+}
+
+const toggleSelect = (id: string) => {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx > -1) {
+    selectedIds.value.splice(idx, 1)
+  } else {
+    selectedIds.value.push(id)
+  }
+}
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = worksStore.works.map((w: any) => w.id)
+  }
+}
+
+const exitBatchMode = () => {
+  batchMode.value = false
+  selectedIds.value = []
+}
+
+const handleBatchDelete = () => {
+  if (selectedIds.value.length === 0) return
+  uni.showModal({
+    title: '批量删除',
+    content: `确定要删除选中的 ${selectedIds.value.length} 个作品吗？删除后不可恢复。`,
+    confirmColor: '#ef4444',
+    success: (res) => {
+      if (res.confirm) {
+        haptic('medium')
+        selectedIds.value.forEach(id => worksStore.deleteWork(id))
+        uni.showToast({ title: '已删除', icon: 'success' })
+        selectedIds.value = []
+        batchMode.value = false
       }
     },
   })
@@ -307,6 +382,7 @@ const handleDelete = (draft: any) => {
     content: '确定要删除这个草稿吗？',
     success: (res) => {
       if (res.confirm) {
+        haptic('medium')
         worksStore.deleteWork(draft.id)
         uni.showToast({ title: '已删除', icon: 'success' })
       }
@@ -349,6 +425,7 @@ const handleDeleteWork = (work: any) => {
     confirmColor: '#ef4444',
     success: (res) => {
       if (res.confirm) {
+        haptic('medium')
         worksStore.deleteWork(work.id)
         uni.showToast({ title: '已删除', icon: 'success' })
       }
@@ -372,6 +449,10 @@ const handleRemoveFavorite = (fav: any) => {
 const handleCreate = () => {
   if (!userStore.requireLogin()) return
   uni.navigateTo({ url: '/pages/editor/index' })
+}
+
+const handleBrowse = () => {
+  uni.switchTab({ url: '/pages/index/index' })
 }
 
 const onImageError = () => {
@@ -930,5 +1011,87 @@ const onImageError = () => {
   font-size: 32rpx;
   color: #ffffff;
   font-weight: 500;
+}
+
+/* 批量管理模式 */
+.batch-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 20rpx 24rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
+  margin-bottom: 8rpx;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.batch-action {
+  padding: 16rpx 32rpx;
+  background: #f5f6fa;
+  border-radius: 40rpx;
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.95);
+    background: #eef0f5;
+  }
+
+  &.danger {
+    background: #fef2f2;
+
+    .batch-action-text {
+      color: #ef4444;
+    }
+
+    &:active {
+      background: #fee2e2;
+    }
+
+    &.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+  }
+}
+
+.batch-action-text {
+  font-size: 26rpx;
+  color: #1a1a2e;
+  font-weight: 500;
+}
+
+.work-card.batch-selected {
+  box-shadow: 0 0 0 4rpx #e84a6e, 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
+}
+
+.card-checkbox {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  border: 4rpx solid rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  transition: all 0.2s ease;
+
+  &.checked {
+    background: #e84a6e;
+    border-color: #e84a6e;
+  }
+}
+
+.checkbox-icon {
+  font-size: 28rpx;
+  color: #ffffff;
+  font-weight: 700;
 }
 </style>

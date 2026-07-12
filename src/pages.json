@@ -9,7 +9,8 @@
     {
       "path": "pages/works/index",
       "style": {
-        "navigationBarTitleText": "作品管理"
+        "navigationBarTitleText": "作品管理",
+        "enablePullDownRefresh": true
       }
     },
     {

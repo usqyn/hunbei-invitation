@@ -146,6 +146,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { EditableElement, BasicInfo } from '@/types'
+import { showToast } from '@/composables/useFeedback'
 
 const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholder: string }> = {
   inviter: { label: '邀请者', icon: '👤', placeholder: '请输入邀请者姓名' },
@@ -228,6 +229,14 @@ function onDateChange(e: any) {
 }
 
 function onConfirm() {
+  if (!props.basicInfo.groomName?.trim()) {
+    showToast('请输入新郎姓名', 'warning')
+    return
+  }
+  if (!props.basicInfo.brideName?.trim()) {
+    showToast('请输入新娘姓名', 'warning')
+    return
+  }
   emit('confirm')
 }
 </script>

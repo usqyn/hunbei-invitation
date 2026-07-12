@@ -25,6 +25,7 @@
             { 'page-section--non-editable': sec.editable === false }
           ]"
           @click="onSectionClick(sec)"
+          @longpress="onSectionLongPress(sec)"
         >
           <template v-if="sec.type === 'title'">
             <text class="section-title" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入标题' }}</text>
@@ -56,7 +57,8 @@
           </template>
           <template v-else-if="sec.type === 'rsvp'">
             <!-- RSVP 表单为演示展示，实际提交功能在预览页生效 -->
-            <view class="rsvp-section">
+            <view class="rsvp-section rsvp-section--preview">
+              <view class="rsvp-demo-badge">演示</view>
               <text class="rsvp-title">RSVP</text>
               <view class="rsvp-form">
                 <view class="form-item">
@@ -89,7 +91,7 @@
           <template v-else-if="sec.type === 'countdown'">
             <view class="countdown-section">
               <text class="countdown-label">距婚礼还有</text>
-              <view class="countdown-days">{{ sec.text || '0' }}</view>
+              <view class="countdown-days">{{ countdownDays }}</view>
               <text class="countdown-unit">天</text>
             </view>
           </template>
@@ -151,8 +153,12 @@
           </view>
         </view>
         <view class="footer-actions">
-          <view class="footer-action-btn footer-save-btn" @click="handleSave">
-            <text class="action-btn-text">保存</text>
+          <view
+            class="footer-action-btn footer-save-btn"
+            :class="{ 'btn--disabled': savingLoading }"
+            @click="handleSave"
+          >
+            <text class="action-btn-text">{{ savingLoading ? '保存中' : '保存' }}</text>
           </view>
           <view class="footer-action-btn footer-share-btn" @click="handleShare">
             <text class="action-btn-text">预览分享</text>
@@ -190,18 +196,20 @@
       :element="activeSection as any"
       @close="showImagePanel = false"
       @update="onImagePropUpdate"
+      @preview="onImagePropPreview"
       @reset="onImagePropReset"
     />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useWorksStore } from '@/stores/works'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
+import { useFeedback } from '@/composables/useFeedback'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
@@ -211,20 +219,36 @@ import type { PageSection, Work } from '@/types'
 const editorStore = useEditorStore()
 const templateStore = useTemplateStore()
 const worksStore = useWorksStore()
-const goBack = useGoBack()
+const { goBack, isDirty } = useGoBack()
+const { haptic } = useFeedback()
 
 // 图片属性面板显示控制
 const showImagePanel = ref(false)
+const savingLoading = ref(false)
+const hasUnsavedChanges = ref(false)
+
+// 同步 hasUnsavedChanges 到 isDirty，用于返回前确认
+watch(hasUnsavedChanges, (val) => {
+  isDirty.value = val
+})
 
 // 组件挂载状态标记，用于异步操作中判断组件是否已卸载
 let _isMounted = true
 onUnmounted(() => {
   _isMounted = false
   _snapshotBeforeEdit = null
+  if (pagePropTimer) clearTimeout(pagePropTimer)
+  if (pageSmartEditTimer) clearTimeout(pageSmartEditTimer)
 })
 
 // 统一编辑前的快照，取消编辑时回滚
-let _snapshotBeforeEdit: { pageSections: PageSection[] } | null = null
+let _snapshotBeforeEdit: {
+  pageSections: PageSection[]
+  elements: any[]
+  flipPages: any[]
+  basicInfo: any
+  templateData: any
+} | null = null
 
 const { canvasBackgroundStyle, getTextStyle } = useCanvasRender({
   getElements: () => [],
@@ -236,14 +260,95 @@ const activeSection = computed(() => {
   return editorStore.pageSections.find(s => s.id === editorStore.activeSectionId)
 })
 
+// 计算距婚礼日期的天数
+const countdownDays = computed(() => {
+  const weddingDate = templateStore.basicInfo.weddingDate
+  if (!weddingDate) return 0
+  const target = new Date(weddingDate).getTime()
+  if (isNaN(target)) return 0
+  return Math.max(0, Math.ceil((target - Date.now()) / 86400000))
+})
+
+// 双击检测
+let lastSectionTapId: string | null = null
+let lastSectionTapTime = 0
+const SECTION_DOUBLE_TAP_INTERVAL = 350
+
 function onSectionClick(sec: PageSection) {
   if (sec.editable === false) return
+  const now = Date.now()
+  // 双击检测：已选中且在间隔内再次点击则触发编辑
+  if (editorStore.activeSectionId === sec.id && lastSectionTapId === sec.id && (now - lastSectionTapTime) < SECTION_DOUBLE_TAP_INTERVAL) {
+    lastSectionTapId = null
+    lastSectionTapTime = 0
+    openSectionEditor(sec)
+    return
+  }
+  // 第一次点击：仅选中
   editorStore.activeSectionId = sec.id
+  haptic('light')
+  lastSectionTapId = sec.id
+  lastSectionTapTime = now
+}
+
+// 打开 section 编辑器（双击或上下文菜单触发）
+function openSectionEditor(sec: PageSection) {
+  if (sec.editable === false) return
   if (sec.type === 'image') {
     chooseImage(sec.id)
   } else if (sec.type === 'title' || sec.type === 'text' || sec.type === 'date' || sec.type === 'location') {
     editorStore.openSectionTextEditor(sec.id)
   }
+}
+
+function onSectionLongPress(sec: PageSection) {
+  if (sec.editable === false) return
+  editorStore.activeSectionId = sec.id
+  haptic('medium')
+  const items: string[] = ['编辑']
+  if (sec.type === 'image') {
+    items.push('换图')
+    items.push('调整')
+  }
+  items.push('删除')
+  uni.showActionSheet({
+    itemList: items,
+    success: (res: any) => {
+      let offset = 0
+      if (items[offset] === '编辑') {
+        if (res.tapIndex === offset) {
+          openSectionEditor(sec)
+          return
+        }
+        offset++
+      }
+      if (sec.type === 'image' && items[offset] === '换图') {
+        if (res.tapIndex === offset) {
+          handleReplaceImage()
+          return
+        }
+        offset++
+      }
+      if (sec.type === 'image' && items[offset] === '调整') {
+        if (res.tapIndex === offset) {
+          showImagePanel.value = true
+          return
+        }
+        offset++
+      }
+      if (items[offset] === '删除') {
+        if (res.tapIndex === offset) {
+          const idx = editorStore.pageSections.findIndex(s => s.id === sec.id)
+          if (idx >= 0) {
+            editorStore.pageSections.splice(idx, 1)
+            editorStore.activeSectionId = null
+            editorStore.pushHistory()
+            hasUnsavedChanges.value = true
+          }
+        }
+      }
+    },
+  })
 }
 
 function deselectSection() {
@@ -267,11 +372,23 @@ function getImageSectionStyle(sec: PageSection): Record<string, string> {
   return style
 }
 
-// 图片属性面板更新回调
+// 图片属性面板更新回调（防抖记录历史）
+let pagePropTimer: ReturnType<typeof setTimeout> | null = null
 function onImagePropUpdate(field: string, value: number) {
   if (!activeSection.value) return
   ;(activeSection.value as any)[field] = value
-  editorStore.pushHistory()
+  hasUnsavedChanges.value = true
+  if (pagePropTimer) clearTimeout(pagePropTimer)
+  pagePropTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    pagePropTimer = null
+  }, 500)
+}
+
+// 图片属性面板预览回调（@changing 事件，实时更新但不记录历史）
+function onImagePropPreview(field: string, value: number) {
+  if (!activeSection.value) return
+  ;(activeSection.value as any)[field] = value
 }
 
 // 图片属性面板重置回调
@@ -282,6 +399,7 @@ function onImagePropReset() {
   activeSection.value.opacity = 1
   activeSection.value.borderRadius = 0
   editorStore.pushHistory()
+  hasUnsavedChanges.value = true
 }
 
 function handleEditSection() {
@@ -289,7 +407,7 @@ function handleEditSection() {
     uni.showToast({ title: '请先点击选择要编辑的内容', icon: 'none' })
     return
   }
-  onSectionClick(activeSection.value)
+  openSectionEditor(activeSection.value)
 }
 
 function handleReplaceImage() {
@@ -304,15 +422,18 @@ function chooseImage(sectionId: string) {
   editorStore.activeSectionId = sectionId
 
   const applyImage = async (tempPath: string) => {
-    uni.showLoading({ title: '上传中...' })
+    uni.showLoading({ title: '上传中 0%' })
     try {
-      const permanentUrl = await uploadImage(tempPath)
+      const permanentUrl = await uploadImage(tempPath, (progress: number) => {
+        uni.showLoading({ title: `上传中 ${progress}%` })
+      })
       editorStore.updatePageSectionImage(sectionId, permanentUrl)
       editorStore.pushHistory()
+      hasUnsavedChanges.value = true
     } catch (e) {
       console.warn('图片上传失败:', e)
       editorStore.updatePageSectionImage(sectionId, tempPath)
-      if (_isMounted) uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
+      if (_isMounted) uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     } finally {
       if (_isMounted) uni.hideLoading()
     }
@@ -358,6 +479,7 @@ function chooseImage(sectionId: string) {
 function onTextEditorConfirm() {
   // confirmTextEdit 内部已调用 pushHistory，无需重复
   editorStore.confirmTextEdit()
+  hasUnsavedChanges.value = true
 }
 
 function openUnifiedEdit() {
@@ -375,6 +497,7 @@ function openUnifiedEdit() {
 function onUnifiedEditConfirm() {
   editorStore.syncBasicInfoToElements()
   editorStore.closeBasicInfoEditor()
+  hasUnsavedChanges.value = true
 }
 
 function onUnifiedEditCancel() {
@@ -390,8 +513,15 @@ function onUnifiedEditCancel() {
   }
 }
 
+let pageSmartEditTimer: ReturnType<typeof setTimeout> | null = null
 function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
+  hasUnsavedChanges.value = true
+  if (pageSmartEditTimer) clearTimeout(pageSmartEditTimer)
+  pageSmartEditTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    pageSmartEditTimer = null
+  }, 800)
 }
 
 function handleUndo() {
@@ -474,7 +604,7 @@ async function handleExport() {
       })
     })
     if (!confirmed) return
-    handleSave()
+    await handleSave()
   }
   if (editorStore.currentWorkId) {
     uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
@@ -488,44 +618,52 @@ function handleLocation() {
 }
 
 async function handleSave() {
-  const editorData = editorStore.buildEditorData()
-  const musicId = templateStore.selectedMusicId
-  if (editorStore.currentWorkId) {
-    const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
-    if (existing) {
-      existing.title = templateStore.templateData.coverTitle || '未命名作品'
-      existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
-      existing.image = templateStore.templateData.coverImage
-      existing.cover = templateStore.templateData.coverImage
-      existing.templateId = editorStore.currentTemplateId
-      existing.templateType = editorStore.templateType
-      existing.musicId = musicId
-      existing.data = editorData
-      existing.updatedAt = new Date().toISOString()
-      worksStore.saveAsWork(existing)
-      uni.showToast({ title: '已保存', icon: 'success' })
-      return
+  if (savingLoading.value) return
+  savingLoading.value = true
+  try {
+    const editorData = editorStore.buildEditorData()
+    const musicId = templateStore.selectedMusicId
+    if (editorStore.currentWorkId) {
+      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+      if (existing) {
+        existing.title = templateStore.templateData.coverTitle || '未命名作品'
+        existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+        existing.image = templateStore.templateData.coverImage
+        existing.cover = templateStore.templateData.coverImage
+        existing.templateId = editorStore.currentTemplateId
+        existing.templateType = editorStore.templateType
+        existing.musicId = musicId
+        existing.data = editorData
+        existing.updatedAt = new Date().toISOString()
+        worksStore.saveAsWork(existing)
+        hasUnsavedChanges.value = false
+        uni.showToast({ title: '已保存', icon: 'success' })
+        return
+      }
     }
+    const id = editorStore.currentWorkId || String(Date.now())
+    if (!editorStore.currentWorkId) {
+      editorStore.setCurrentWorkId(id)
+    }
+    const work: Work = {
+      id,
+      title: templateStore.templateData.coverTitle || '未命名作品',
+      date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+      image: templateStore.templateData.coverImage,
+      cover: templateStore.templateData.coverImage,
+      templateId: editorStore.currentTemplateId,
+      templateType: editorStore.templateType,
+      musicId,
+      status: 'draft',
+      data: editorData,
+      updatedAt: new Date().toISOString(),
+    }
+    worksStore.saveAsWork(work)
+    hasUnsavedChanges.value = false
+    uni.showToast({ title: '已保存', icon: 'success' })
+  } finally {
+    savingLoading.value = false
   }
-  const id = editorStore.currentWorkId || String(Date.now())
-  if (!editorStore.currentWorkId) {
-    editorStore.setCurrentWorkId(id)
-  }
-  const work: Work = {
-    id,
-    title: templateStore.templateData.coverTitle || '未命名作品',
-    date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
-    image: templateStore.templateData.coverImage,
-    cover: templateStore.templateData.coverImage,
-    templateId: editorStore.currentTemplateId,
-    templateType: editorStore.templateType,
-    musicId,
-    status: 'draft',
-    data: editorData,
-    updatedAt: new Date().toISOString(),
-  }
-  worksStore.saveAsWork(work)
-  uni.showToast({ title: '已保存', icon: 'success' })
 }
 
 async function handleShare() {
@@ -715,6 +853,23 @@ function onImageError() {
   background: #fdf6f8;
   border-radius: 12rpx;
   padding: 24rpx;
+}
+
+.rsvp-section--preview {
+  opacity: 0.6;
+  position: relative;
+}
+
+.rsvp-demo-badge {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  background: rgba(232, 74, 110, 0.15);
+  color: #e84a6e;
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  font-weight: 500;
 }
 
 .rsvp-title {
@@ -964,6 +1119,11 @@ function onImageError() {
 
 .footer-save-btn:active {
   background: #eef0f4;
+}
+
+.btn--disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .footer-share-btn {

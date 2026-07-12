@@ -41,7 +41,7 @@ import { ref, onMounted } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { fetchNotifications, markNotificationRead } from '@/api'
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 
 interface Notification {
   id: string

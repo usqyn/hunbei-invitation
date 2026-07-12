@@ -1,6 +1,8 @@
 <template>
   <view v-if="visible" class="img-prop-mask" @click="onClose">
     <view class="img-prop-panel" @click.stop>
+      <!-- 拖拽指示条 -->
+      <view class="drag-handle-bar"></view>
       <!-- 头部 -->
       <view class="panel-header">
         <text class="panel-title">图片调整</text>
@@ -28,8 +30,9 @@
           :step="5"
           activeColor="#e84a6e"
           backgroundColor="#e8e8e8"
-          block-size="20"
+          block-size="28"
           @change="onScaleChange"
+          @changing="onScaleChanging"
         />
       </view>
 
@@ -51,8 +54,9 @@
           :step="1"
           activeColor="#e84a6e"
           backgroundColor="#e8e8e8"
-          block-size="20"
+          block-size="28"
           @change="onRotationChange"
+          @changing="onRotationChanging"
         />
       </view>
 
@@ -74,8 +78,9 @@
           :step="5"
           activeColor="#e84a6e"
           backgroundColor="#e8e8e8"
-          block-size="20"
+          block-size="28"
           @change="onOpacityChange"
+          @changing="onOpacityChanging"
         />
       </view>
 
@@ -97,8 +102,9 @@
           :step="2"
           activeColor="#e84a6e"
           backgroundColor="#e8e8e8"
-          block-size="20"
+          block-size="28"
           @change="onRadiusChange"
+          @changing="onRadiusChanging"
         />
       </view>
 
@@ -126,6 +132,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'update', field: string, value: number): void
+  (e: 'preview', field: string, value: number): void
   (e: 'reset'): void
 }>()
 
@@ -147,6 +154,27 @@ function onOpacityChange(e: any) {
 function onRadiusChange(e: any) {
   const val = e.detail?.value ?? 0
   emit('update', 'borderRadius', val)
+}
+
+// @changing 事件：实时预览但不记录历史
+function onScaleChanging(e: any) {
+  const val = (e.detail?.value ?? 100) / 100
+  emit('preview', 'imageScale', val)
+}
+
+function onRotationChanging(e: any) {
+  const val = e.detail?.value ?? 0
+  emit('preview', 'rotation', val)
+}
+
+function onOpacityChanging(e: any) {
+  const val = (e.detail?.value ?? 100) / 100
+  emit('preview', 'opacity', val)
+}
+
+function onRadiusChanging(e: any) {
+  const val = e.detail?.value ?? 0
+  emit('preview', 'borderRadius', val)
 }
 
 function adjustScale(delta: number) {
@@ -204,6 +232,14 @@ function onClose() {
   border-radius: 24rpx 24rpx 0 0;
   padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
   animation: slideUp 0.25s ease-out;
+}
+
+.drag-handle-bar {
+  width: 60rpx;
+  height: 8rpx;
+  background: #ddd;
+  border-radius: 4rpx;
+  margin: 0 auto 16rpx;
 }
 
 @keyframes slideUp {
@@ -267,8 +303,8 @@ function onClose() {
 }
 
 .prop-btn {
-  width: 48rpx;
-  height: 48rpx;
+  width: 64rpx;
+  height: 64rpx;
   border-radius: 50%;
   background: #f5f5f5;
   display: flex;

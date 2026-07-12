@@ -40,7 +40,7 @@ import { ref, onMounted } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { fetchFootprints } from '@/api'
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 
 interface Footprint {
   id: string

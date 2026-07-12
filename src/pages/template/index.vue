@@ -57,6 +57,19 @@
       </view>
     </view>
 
+    <!-- 排序标签栏 -->
+    <view class="sort-bar">
+      <view
+        v-for="sort in sortOptions"
+        :key="sort.value"
+        class="sort-item"
+        :class="{ active: activeSort === sort.value }"
+        @click="activeSort = sort.value"
+      >
+        <text>{{ sort.label }}</text>
+      </view>
+    </view>
+
     <!-- 加载状态 -->
     <view v-if="loading" class="loading-state">
       <text class="loading-text">{{ pageConfig.loadingText }}</text>
@@ -151,8 +164,10 @@ import { HOME_CATEGORIES } from '@/constants/categories'
 import { TEMPLATE_PAGE_CONFIG } from '@/config'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
+import { useFeedback } from '@/composables/useFeedback'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
+const { haptic } = useFeedback()
 
 const isPurchased = computed(() => {
   // TODO: 从用户订单状态获取真实购买状态
@@ -187,6 +202,12 @@ const filters = [
   { label: 'VIP免费', value: 'vip' },
 ]
 const activeFilter = ref<string>('all')
+
+const sortOptions = [
+  { label: '热门', value: 'likes' },
+  { label: '最新', value: 'date' },
+]
+const activeSort = ref<string>('likes')
 const userStore = useUserStore()
 const navigating = ref(false)
 
@@ -227,7 +248,19 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
     })
   }
 
-  return list
+  // 排序
+  const sorted = [...list]
+  if (activeSort.value === 'likes') {
+    sorted.sort((a, b) => (b.likes || 0) - (a.likes || 0))
+  } else if (activeSort.value === 'date') {
+    sorted.sort((a, b) => {
+      const ta = new Date((a as any).updatedAt || (a as any).createdAt || 0).getTime()
+      const tb = new Date((b as any).updatedAt || (b as any).createdAt || 0).getTime()
+      return tb - ta
+    })
+  }
+
+  return sorted
 })
 
 // ============ 生命周期 ============
@@ -332,13 +365,18 @@ function onSelectTemplate(template: TemplateItem) {
   if (template.is_paid) {
     const isVip = userStore.isVip()
     if (!isVip && !isPurchased.value) {
-      uni.showModal({
-        title: '付费模板',
-        content: `该模板需要支付 ${template.price || 0} 元，或开通VIP免费使用`,
-        confirmText: '去购买',
-        cancelText: '取消',
+      haptic('light')
+      const price = template.price || 0
+      uni.showActionSheet({
+        itemList: [`单买 ${price}元`, '开通VIP免费使用'],
         success: (res) => {
-          if (res.confirm) {
+          if (res.tapIndex === 0) {
+            // 单买流程：跳转支付页
+            uni.navigateTo({
+              url: `/pages/vip/index?mode=purchase&templateId=${template.id}&price=${price}`,
+            })
+          } else if (res.tapIndex === 1) {
+            // 开通VIP
             uni.navigateTo({
               url: '/pages/vip/index',
             })
@@ -348,6 +386,7 @@ function onSelectTemplate(template: TemplateItem) {
       return
     }
   }
+  haptic('light')
   navigating.value = true
   uni.navigateTo({
     url: `/pages/editor/index?templateId=${template.id}`,
@@ -391,6 +430,7 @@ function onBack() {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 30rpx;
+  padding-top: calc(env(safe-area-inset-top) + 20rpx);
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20rpx);
   -webkit-backdrop-filter: blur(20rpx);
@@ -600,6 +640,36 @@ function onBack() {
     color: #ffffff;
     font-weight: 500;
     box-shadow: 0 6rpx 16rpx rgba(232, 74, 110, 0.3);
+  }
+}
+
+/* 排序标签栏 */
+.sort-bar {
+  display: flex;
+  gap: 16rpx;
+  padding: 12rpx 30rpx 20rpx;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+}
+
+.sort-item {
+  padding: 8rpx 24rpx;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  color: #6e6e80;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  &:active {
+    transform: scale(0.94);
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+    color: #ffffff;
+    font-weight: 500;
+    box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.25);
   }
 }
 

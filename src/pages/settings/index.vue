@@ -68,7 +68,7 @@ import { useGoBack } from '@/composables/useGoBack'
 import { useUserStore } from '@/stores/user'
 import { APP_VERSION } from '@/config'
 
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 const userStore = useUserStore()
 const showAbout = ref(false)
 

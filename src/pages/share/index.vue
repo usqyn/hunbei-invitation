@@ -9,6 +9,23 @@
       <view class="header-right"></view>
     </view>
 
+    <!-- 微信分享卡片预览 -->
+    <view class="share-preview-mock">
+      <text class="preview-mock-label">分享效果预览</text>
+      <view class="wechat-card">
+        <view class="wechat-card-thumb">
+          <image class="wechat-card-img" :src="coverImage" mode="aspectFill" />
+        </view>
+        <view class="wechat-card-body">
+          <text class="wechat-card-title">{{ shareTitle || '分享标题' }}</text>
+          <text class="wechat-card-desc">{{ shareDesc || '分享描述' }}</text>
+          <view class="wechat-card-source">
+            <text class="source-text">婚贝请柬</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <!-- 分享设置卡片 -->
     <view class="share-card">
       <text class="share-hint">请设置微信分享标题、描述和封面</text>
@@ -126,11 +143,13 @@ import { onShareAppMessage } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useGoBack } from '@/composables/useGoBack'
+import { useFeedback } from '@/composables/useFeedback'
 import { generatePoster } from '@/api'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
-const goBack = useGoBack()
+const { goBack } = useGoBack()
+const { haptic } = useFeedback()
 
 // 分享信息
 const shareTitle = ref('')
@@ -242,6 +261,7 @@ function onSelectTemplate(item: string) {
 
 // 分享渠道
 async function onShareMoments() {
+  haptic('medium')
   if (isGenerating.value) return
   const workId = editorStore.currentWorkId
   if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
@@ -261,7 +281,18 @@ async function onShareMoments() {
         uni.saveImageToPhotosAlbum({
           filePath: r.tempFilePath,
           success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
-          fail: () => uni.showToast({ title: '保存失败', icon: 'none' }),
+          fail: (err) => {
+            if (err.errMsg && err.errMsg.includes('auth')) {
+              uni.showModal({
+                title: '提示',
+                content: '需要相册权限才能保存图片，请在设置中开启',
+                confirmText: '去设置',
+                success: (modalRes) => { if (modalRes.confirm) uni.openSetting({}) },
+              })
+            } else {
+              uni.showToast({ title: '保存失败', icon: 'none' })
+            }
+          },
         })
       },
       fail: () => {
@@ -278,6 +309,7 @@ async function onShareMoments() {
 }
 
 async function onSharePoster() {
+  haptic('medium')
   if (isGenerating.value) return
   const workId = editorStore.currentWorkId
   if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
@@ -303,7 +335,18 @@ async function onSharePoster() {
               uni.saveImageToPhotosAlbum({
                 filePath: r.tempFilePath,
                 success: () => uni.showToast({ title: '图片已保存到相册', icon: 'success' }),
-                fail: () => uni.showToast({ title: '保存失败', icon: 'none' }),
+                fail: (err) => {
+                  if (err.errMsg && err.errMsg.includes('auth')) {
+                    uni.showModal({
+                      title: '提示',
+                      content: '需要相册权限才能保存图片，请在设置中开启',
+                      confirmText: '去设置',
+                      success: (settingsRes) => { if (settingsRes.confirm) uni.openSetting({}) },
+                    })
+                  } else {
+                    uni.showToast({ title: '保存失败', icon: 'none' })
+                  }
+                },
               })
             },
             fail: () => {
@@ -325,6 +368,7 @@ async function onSharePoster() {
 }
 
 function onCopyLink() {
+  haptic('medium')
   const workId = editorStore.currentWorkId
   if (!workId) {
     uni.showToast({ title: '请先创建作品', icon: 'none' })
@@ -373,6 +417,7 @@ function goToMall() {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 30rpx;
+  padding-top: calc(env(safe-area-inset-top) + 20rpx);
   background: #fff;
   border-bottom: 1rpx solid #f0f0f0;
   flex-shrink: 0;
@@ -400,6 +445,83 @@ function goToMall() {
 
 .header-right {
   width: 60rpx;
+}
+
+/* 微信分享卡片预览 */
+.share-preview-mock {
+  padding: 24rpx 30rpx 8rpx;
+}
+
+.preview-mock-label {
+  font-size: 24rpx;
+  color: #999999;
+  margin-bottom: 16rpx;
+  display: block;
+}
+
+.wechat-card {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.08);
+  border: 1rpx solid #f0f0f0;
+}
+
+.wechat-card-thumb {
+  width: 140rpx;
+  height: 112rpx;
+  border-radius: 8rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f5f5f5;
+}
+
+.wechat-card-img {
+  width: 100%;
+  height: 100%;
+}
+
+.wechat-card-body {
+  flex: 1;
+  margin-left: 20rpx;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 112rpx;
+}
+
+.wechat-card-title {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #1a1a2e;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.wechat-card-desc {
+  font-size: 24rpx;
+  color: #999999;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wechat-card-source {
+  display: flex;
+  align-items: center;
+}
+
+.source-text {
+  font-size: 22rpx;
+  color: #bbbbbb;
 }
 
 /* 分享设置卡片 */

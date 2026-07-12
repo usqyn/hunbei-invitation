@@ -54,9 +54,16 @@
             v-for="(el, eIdx) in page.elements"
             :key="eIdx"
             class="flip-element"
-            :class="{ 'flip-element--active': activeElementIndex === eIdx }"
+            :class="{
+              'flip-element--active': activeElementIndex === eIdx,
+              'flip-element--dragging': flipDragging
+            }"
             :style="getElementStyle(el)"
+            @touchstart="onElementTouchStart(el, eIdx, $event)"
+            @touchmove.stop.prevent="onElementTouchMove"
+            @touchend="onElementTouchEnd"
             @click="onElementClick(el, eIdx)"
+            @longpress="onElementLongPress(el, eIdx)"
           >
             <image
               v-if="el.type === 'image'"
@@ -128,8 +135,12 @@
           </view>
         </view>
         <view class="footer-actions">
-          <view class="footer-action-btn footer-save-btn" @click="handleSave">
-            <text class="action-btn-text">保存</text>
+          <view
+            class="footer-action-btn footer-save-btn"
+            :class="{ 'btn--disabled': savingLoading }"
+            @click="handleSave"
+          >
+            <text class="action-btn-text">{{ savingLoading ? '保存中' : '保存' }}</text>
           </view>
           <view class="footer-action-btn footer-share-btn" @click="handleShare">
             <text class="action-btn-text">预览分享</text>
@@ -167,18 +178,20 @@
       :element="selectedElement as any"
       @close="showImagePanel = false"
       @update="onImagePropUpdate"
+      @preview="onImagePropPreview"
       @reset="onImagePropReset"
     />
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useWorksStore } from '@/stores/works'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
+import { useFeedback } from '@/composables/useFeedback'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
@@ -189,7 +202,18 @@ import type { Work } from '@/types'
 const editorStore = useEditorStore()
 const templateStore = useTemplateStore()
 const worksStore = useWorksStore()
-const goBack = useGoBack()
+const { goBack, isDirty } = useGoBack()
+const { haptic } = useFeedback()
+
+// 缓存系统屏幕信息，避免每次 touchmove 都调用 getSystemInfoSync
+const _screenInfo = (() => {
+  try {
+    const info = uni.getSystemInfoSync()
+    return { width: info.windowWidth || 375, height: info.windowHeight || 667 }
+  } catch {
+    return { width: 375, height: 667 }
+  }
+})()
 
 const { getTextStyle } = useCanvasRender({
   getElements: () => [],
@@ -200,9 +224,158 @@ const { getTextStyle } = useCanvasRender({
 const activeElementIndex = ref(-1)
 const selectedElement = ref<any>(null)
 const showImagePanel = ref(false)
+const savingLoading = ref(false)
+const hasUnsavedChanges = ref(false)
+const flipDragging = ref(false)
 let _formSnapshot: any = null
 // 组件挂载状态标记，用于异步操作中判断组件是否已卸载
 let _isMounted = true
+
+// 同步 hasUnsavedChanges 到 isDirty，用于返回前确认
+watch(hasUnsavedChanges, (val) => {
+  isDirty.value = val
+})
+
+// ============ 元素拖拽（touch 事件） ============
+interface FlipDragState {
+  elementIdx: number
+  startTouchX: number
+  startTouchY: number
+  startX: number
+  startY: number
+  moved: boolean
+}
+const flipDragState = ref<FlipDragState | null>(null)
+const FLIP_DRAG_THRESHOLD = 5
+let lastFlipDragMoved = false
+
+// 双击检测
+let lastFlipTapIdx: number | null = null
+let lastFlipTapTime = 0
+const FLIP_DOUBLE_TAP_INTERVAL = 350
+
+function onElementTouchStart(el: any, idx: number, e: any) {
+  if (el.editable === false) return
+  activeElementIndex.value = idx
+  selectedElement.value = el
+  haptic('light')
+  const touch = e.touches ? e.touches[0] : e
+  flipDragState.value = {
+    elementIdx: idx,
+    startTouchX: touch.clientX,
+    startTouchY: touch.clientY,
+    startX: el.x || 0,
+    startY: el.y || 0,
+    moved: false,
+  }
+}
+
+function onElementTouchMove(e: any) {
+  const ds = flipDragState.value
+  if (!ds) return
+  const touch = e.touches ? e.touches[0] : e
+  const dx = touch.clientX - ds.startTouchX
+  const dy = touch.clientY - ds.startTouchY
+  if (!ds.moved && Math.abs(dx) + Math.abs(dy) < FLIP_DRAG_THRESHOLD) return
+  if (!ds.moved) {
+    ds.moved = true
+    flipDragging.value = true
+    haptic('medium')
+  }
+  const page = currentPage.value
+  if (!page) return
+  const el = page.elements[ds.elementIdx]
+  if (!el) return
+  const cs = editorStore.canvasSize
+  // 将屏幕像素位移转换为画布坐标（缓存系统信息避免每次 touchmove 都同步调用）
+  const screenW = _screenInfo.width || 375
+  const screenH = _screenInfo.height || 667
+  const screenToCanvasX = cs.width / screenW
+  const screenToCanvasY = cs.height / screenH
+  let newX = ds.startX + dx * screenToCanvasX
+  let newY = ds.startY + dy * screenToCanvasY
+  // 边界裁剪
+  const elW = el.width || 0
+  const elH = el.height || 0
+  newX = Math.max(0, Math.min(cs.width - elW, newX))
+  newY = Math.max(0, Math.min(cs.height - elH, newY))
+  el.x = newX
+  el.y = newY
+}
+
+function onElementTouchEnd() {
+  const ds = flipDragState.value
+  if (ds && ds.moved) {
+    lastFlipDragMoved = true
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+  }
+  flipDragging.value = false
+  flipDragState.value = null
+}
+
+function onElementLongPress(el: any, idx: number) {
+  if (el.editable === false) return
+  activeElementIndex.value = idx
+  selectedElement.value = el
+  haptic('medium')
+  const items: string[] = ['编辑']
+  if (el.type === 'image') {
+    items.push('换图')
+    items.push('调整')
+  }
+  items.push('删除')
+  uni.showActionSheet({
+    itemList: items,
+    success: (res: any) => {
+      let offset = 0
+      if (items[offset] === '编辑') {
+        if (res.tapIndex === offset) {
+          openEditorForElement(el)
+          return
+        }
+        offset++
+      }
+      if (el.type === 'image' && items[offset] === '换图') {
+        if (res.tapIndex === offset) {
+          handleReplaceImage()
+          return
+        }
+        offset++
+      }
+      if (el.type === 'image' && items[offset] === '调整') {
+        if (res.tapIndex === offset) {
+          showImagePanel.value = true
+          return
+        }
+        offset++
+      }
+      if (items[offset] === '删除') {
+        if (res.tapIndex === offset) {
+          const page = currentPage.value
+          if (page) {
+            page.elements.splice(idx, 1)
+            activeElementIndex.value = -1
+            selectedElement.value = null
+            editorStore.pushHistory()
+            hasUnsavedChanges.value = true
+          }
+        }
+      }
+    },
+  })
+}
+
+// 打开元素编辑器（双击或上下文菜单触发）
+function openEditorForElement(el: any) {
+  if (!el || el.editable === false) return
+  if (el.type === 'image') {
+    onImageUpload()
+  } else if (el.type === 'text') {
+    editorStore.editingText = el.text
+    editorStore.showTextEditor = true
+  }
+}
 
 const currentPage = computed(() => {
   return editorStore.flipPages[editorStore.currentFlipPageIndex] || editorStore.flipPages[0] || null
@@ -229,8 +402,24 @@ function onSwiperChange(e: any) {
 }
 
 function onElementClick(el: any, idx: number) {
+  if (lastFlipDragMoved) {
+    lastFlipDragMoved = false
+    return
+  }
+  const now = Date.now()
+  // 双击检测：已选中且在间隔内再次点击则打开编辑器
+  if (activeElementIndex.value === idx && lastFlipTapIdx === idx && (now - lastFlipTapTime) < FLIP_DOUBLE_TAP_INTERVAL) {
+    lastFlipTapIdx = null
+    lastFlipTapTime = 0
+    openEditorForElement(el)
+    return
+  }
+  // 第一次点击：仅选中
   activeElementIndex.value = idx
   selectedElement.value = el
+  haptic('light')
+  lastFlipTapIdx = idx
+  lastFlipTapTime = now
 }
 
 function deselectElement() {
@@ -238,11 +427,23 @@ function deselectElement() {
   selectedElement.value = null
 }
 
-// 图片属性面板更新回调
+// 图片属性面板更新回调（防抖记录历史）
+let flipPropTimer: ReturnType<typeof setTimeout> | null = null
 function onImagePropUpdate(field: string, value: number) {
   if (!selectedElement.value) return
   ;(selectedElement.value as any)[field] = value
-  editorStore.pushHistory()
+  hasUnsavedChanges.value = true
+  if (flipPropTimer) clearTimeout(flipPropTimer)
+  flipPropTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    flipPropTimer = null
+  }, 500)
+}
+
+// 图片属性面板预览回调（@changing 事件，实时更新但不记录历史）
+function onImagePropPreview(field: string, value: number) {
+  if (!selectedElement.value) return
+  ;(selectedElement.value as any)[field] = value
 }
 
 // 图片属性面板重置回调
@@ -253,6 +454,7 @@ function onImagePropReset() {
   selectedElement.value.opacity = 1
   selectedElement.value.borderRadius = 0
   editorStore.pushHistory()
+  hasUnsavedChanges.value = true
 }
 
 function handleEditText() {
@@ -280,6 +482,7 @@ function onTextEditorConfirm() {
     if (selectedElement.value.dataKey) {
       editorStore.syncFieldToAllModes(selectedElement.value.dataKey, editorStore.editingText)
     }
+    hasUnsavedChanges.value = true
     if (textInputTimer) clearTimeout(textInputTimer)
     textInputTimer = setTimeout(() => {
       editorStore.pushHistory()
@@ -291,15 +494,18 @@ function onTextEditorConfirm() {
 
 async function applySelectedImage(tempFilePath: string) {
   if (!selectedElement.value) return
-  uni.showLoading({ title: '上传中...' })
+  uni.showLoading({ title: '上传中 0%' })
   try {
-    const permanentUrl = await uploadImage(tempFilePath)
+    const permanentUrl = await uploadImage(tempFilePath, (progress: number) => {
+      uni.showLoading({ title: `上传中 ${progress}%` })
+    })
     if (_isMounted && selectedElement.value) {
       selectedElement.value.text = permanentUrl
       if (selectedElement.value.dataKey) {
         editorStore.syncFieldToAllModes(selectedElement.value.dataKey, permanentUrl)
       }
       editorStore.pushHistory()
+      hasUnsavedChanges.value = true
     }
   } catch (e) {
     console.warn('图片上传失败:', e)
@@ -308,7 +514,7 @@ async function applySelectedImage(tempFilePath: string) {
       if (selectedElement.value.dataKey) {
         editorStore.syncFieldToAllModes(selectedElement.value.dataKey, tempFilePath)
       }
-      uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
+      uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     }
   } finally {
     if (_isMounted) uni.hideLoading()
@@ -461,8 +667,15 @@ function onUnifiedEditCancel() {
   _formSnapshot = null
 }
 
+let flipSmartEditTimer: ReturnType<typeof setTimeout> | null = null
 function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
+  hasUnsavedChanges.value = true
+  if (flipSmartEditTimer) clearTimeout(flipSmartEditTimer)
+  flipSmartEditTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    flipSmartEditTimer = null
+  }, 800)
 }
 
 function handleUndo() {
@@ -545,7 +758,7 @@ async function handleExport() {
       })
     })
     if (!confirmed) return
-    handleSave()
+    await handleSave()
   }
   if (editorStore.currentWorkId) {
     uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
@@ -559,44 +772,52 @@ function handleLocation() {
 }
 
 async function handleSave() {
-  const editorData = editorStore.buildEditorData()
-  const musicId = templateStore.selectedMusicId
-  if (editorStore.currentWorkId) {
-    const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
-    if (existing) {
-      existing.title = templateStore.templateData.coverTitle || '未命名作品'
-      existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
-      existing.image = templateStore.templateData.coverImage
-      existing.cover = templateStore.templateData.coverImage
-      existing.templateId = editorStore.currentTemplateId
-      existing.templateType = editorStore.templateType
-      existing.musicId = musicId
-      existing.data = editorData
-      existing.updatedAt = new Date().toISOString()
-      worksStore.saveAsWork(existing)
-      uni.showToast({ title: '已保存', icon: 'success' })
-      return
+  if (savingLoading.value) return
+  savingLoading.value = true
+  try {
+    const editorData = editorStore.buildEditorData()
+    const musicId = templateStore.selectedMusicId
+    if (editorStore.currentWorkId) {
+      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+      if (existing) {
+        existing.title = templateStore.templateData.coverTitle || '未命名作品'
+        existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+        existing.image = templateStore.templateData.coverImage
+        existing.cover = templateStore.templateData.coverImage
+        existing.templateId = editorStore.currentTemplateId
+        existing.templateType = editorStore.templateType
+        existing.musicId = musicId
+        existing.data = editorData
+        existing.updatedAt = new Date().toISOString()
+        worksStore.saveAsWork(existing)
+        hasUnsavedChanges.value = false
+        uni.showToast({ title: '已保存', icon: 'success' })
+        return
+      }
     }
+    const id = editorStore.currentWorkId || String(Date.now())
+    if (!editorStore.currentWorkId) {
+      editorStore.setCurrentWorkId(id)
+    }
+    const work: Work = {
+      id,
+      title: templateStore.templateData.coverTitle || '未命名作品',
+      date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+      image: templateStore.templateData.coverImage,
+      cover: templateStore.templateData.coverImage,
+      templateId: editorStore.currentTemplateId,
+      templateType: editorStore.templateType,
+      musicId,
+      status: 'draft',
+      data: editorData,
+      updatedAt: new Date().toISOString(),
+    }
+    worksStore.saveAsWork(work)
+    hasUnsavedChanges.value = false
+    uni.showToast({ title: '已保存', icon: 'success' })
+  } finally {
+    savingLoading.value = false
   }
-  const id = editorStore.currentWorkId || String(Date.now())
-  if (!editorStore.currentWorkId) {
-    editorStore.setCurrentWorkId(id)
-  }
-  const work: Work = {
-    id,
-    title: templateStore.templateData.coverTitle || '未命名作品',
-    date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
-    image: templateStore.templateData.coverImage,
-    cover: templateStore.templateData.coverImage,
-    templateId: editorStore.currentTemplateId,
-    templateType: editorStore.templateType,
-    musicId,
-    status: 'draft',
-    data: editorData,
-    updatedAt: new Date().toISOString(),
-  }
-  worksStore.saveAsWork(work)
-  uni.showToast({ title: '已保存', icon: 'success' })
 }
 
 async function handleShare() {
@@ -612,6 +833,8 @@ onUnmounted(() => {
   _isMounted = false
   _formSnapshot = null
   if (textInputTimer) clearTimeout(textInputTimer)
+  if (flipPropTimer) clearTimeout(flipPropTimer)
+  if (flipSmartEditTimer) clearTimeout(flipSmartEditTimer)
 })
 </script>
 
@@ -814,6 +1037,11 @@ onUnmounted(() => {
   outline-offset: -4rpx;
 }
 
+.flip-element--dragging {
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.2);
+  opacity: 0.9;
+}
+
 .flip-image {
   width: 100%;
   height: 100%;
@@ -966,6 +1194,11 @@ onUnmounted(() => {
 
 .footer-save-btn:active {
   background: #eef0f4;
+}
+
+.btn--disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .footer-share-btn {

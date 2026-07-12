@@ -15,11 +15,12 @@
         <view class="user-info">
           <text class="user-name delay-100">{{ isLoggedIn ? (nickname || '用户') : '登录/注册' }}</text>
           <text class="user-desc delay-200">{{ isLoggedIn ? '管理你的作品和设置' : '登录后查看更多功能' }}</text>
-          <view class="user-stats delay-300">
+          <view v-if="isLoggedIn" class="user-stats delay-300">
             <text class="stat-item">作品数: <text class="stat-num">{{ worksCount }}</text></text>
             <text class="stat-divider">|</text>
             <text class="stat-item">收藏: <text class="stat-num">{{ favoritesCount }}</text></text>
           </view>
+          <text v-else class="login-hint delay-300">登录后查看</text>
         </view>
         <view class="user-actions delay-200">
           <view class="action-icon" @click="handleSetting">⚙️</view>
@@ -157,12 +158,18 @@ const hotTools = ref([
   { id: 8, name: '收到的请柬', icon: '💌', bgColor: '#fff9c4' }
 ])
 
-const menuItems = ref([
-  { id: 1, name: '我的订单', icon: '📦', badge: true },
+const menuItems = computed(() => [
+  { id: 1, name: '我的订单', icon: '📦', badge: hasOrders.value },
   { id: 2, name: '在线客服', icon: '💬' },
   { id: 3, name: '意见反馈', icon: '📧' },
   { id: 4, name: '设置', icon: '⚙️' }
 ])
+
+// 订单徽标：仅当有实际订单时显示红点
+const hasOrders = computed(() => {
+  // TODO: 接入真实订单数据后替换此逻辑
+  return false
+})
 
 const handleAvatarClick = () => {
   if (!isLoggedIn.value) {
@@ -196,7 +203,7 @@ const handleQuickAction = (item: any) => {
     if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/footprint/index' })
   } else if (item.name === '卡券包') {
-    uni.showToast({ title: '暂无优惠券', icon: 'none' })
+    uni.showToast({ title: '功能开发中', icon: 'none' })
   } else if (item.name === '回收站') {
     if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/recycle/index' })
@@ -210,7 +217,7 @@ const handleToolClick = (tool: any) => {
   } else if (tool.name === '婚礼文案') {
     uni.navigateTo({ url: '/pages/template/index' })
   } else if (tool.name === '婚礼MV') {
-    uni.navigateTo({ url: '/pages/music/index' })
+    uni.navigateTo({ url: '/pages/music/index?title=背景音乐' })
   } else if (tool.name === '收到的请柬') {
     uni.navigateTo({ url: '/pages/footprint/index' })
   } else if (tool.name === '朋友圈图片') {
@@ -485,6 +492,15 @@ onShow(() => {
 .user-stats {
   display: flex;
   align-items: center;
+  opacity: 0;
+  animation: fadeInUp 0.4s ease 0.3s forwards;
+}
+
+.login-hint {
+  font-size: 24rpx;
+  color: #6e6e80;
+  display: block;
+  margin-top: 4rpx;
   opacity: 0;
   animation: fadeInUp 0.4s ease 0.3s forwards;
 }

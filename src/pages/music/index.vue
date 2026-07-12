@@ -4,7 +4,7 @@
       <view class="header-back" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
-      <text class="header-title">音乐库</text>
+      <text class="header-title">{{ pageTitle }}</text>
       <view class="header-upload" @click="handleUpload">
         <text class="upload-text">本地上传</text>
       </view>
@@ -45,11 +45,11 @@
         v-for="(song, idx) in filteredMusicList"
         :key="song.id"
         class="music-item"
-        :class="{ 'is-using': selectedMusicId === song.id }"
+        :class="{ 'is-using': selectedMusicId === song.id, 'is-playing': currentSongIndex === idx && isPlaying }"
         @click="handleSelectSong(song, idx)"
       >
         <view class="music-icon">
-          <text class="icon-text">🎵</text>
+          <text class="icon-text">{{ currentSongIndex === idx && isPlaying ? '▶️' : '🎵' }}</text>
         </view>
         <view class="music-info">
           <text class="music-name">{{ song.name }}</text>
@@ -58,10 +58,23 @@
         <view v-if="selectedMusicId === song.id" class="music-using">
           <text class="using-text">使用中</text>
         </view>
+        <view v-else class="music-use-btn" @click.stop="handleUseSong(song)">
+          <text class="use-btn-text">使用</text>
+        </view>
       </view>
-      <view v-if="loading" class="loading-text">加载中...</view>
-      <view v-else-if="loadingMore" class="loading-text">加载中...</view>
-      <view v-else-if="!hasMore && musicList.length > 0" class="loading-text">没有更多了</view>
+      <view v-if="loading" class="loading-text">
+        <view class="loading-spinner"></view>
+        <text>加载中...</text>
+      </view>
+      <view v-else-if="loadingMore" class="loading-text">
+        <view class="loading-spinner"></view>
+        <text>加载中...</text>
+      </view>
+      <view v-else-if="!hasMore && musicList.length > 0 && filteredMusicList.length > 0" class="loading-text">没有更多了</view>
+      <view v-if="!loading && filteredMusicList.length === 0" class="search-empty">
+        <text class="search-empty-icon">🔍</text>
+        <text class="search-empty-text">未找到相关音乐</text>
+      </view>
     </scroll-view>
 
     <view class="music-player">
@@ -85,10 +98,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTemplateStore } from '@/stores/template'
+import { useFeedback } from '@/composables/useFeedback'
 import { MUSIC_TAGS, fetchMusicFromApi } from '@/constants/music'
 import type { Music } from '@/types'
 
 const templateStore = useTemplateStore()
+const { haptic } = useFeedback()
+
+const UPLOADED_MUSIC_STORAGE_KEY = 'hunbei_uploaded_music'
+
+// 页面标题（支持从导航参数设置）
+const pageTitle = ref('音乐库')
 
 const PAGE_SIZE = 20
 const currentTag = ref('全部')
@@ -106,12 +126,38 @@ const durationText = ref('00:00')
 
 const selectedMusicId = computed(() => templateStore.selectedMusicId)
 
+// 上传歌曲持久化
+const uploadedSongs = ref<Music[]>([])
+
+function saveUploadedSongs() {
+  try {
+    uni.setStorageSync(UPLOADED_MUSIC_STORAGE_KEY, JSON.stringify(uploadedSongs.value))
+  } catch (e) {
+    console.warn('保存上传歌曲失败:', e)
+  }
+}
+
+function loadUploadedSongs() {
+  try {
+    const saved = uni.getStorageSync(UPLOADED_MUSIC_STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed)) {
+        uploadedSongs.value = parsed
+      }
+    }
+  } catch (e) {
+    console.warn('恢复上传歌曲失败:', e)
+  }
+}
+
 let audio: UniApp.InnerAudioContext | null = null
 
 const filteredMusicList = computed(() => {
-  let list = musicList.value
+  // 合并上传歌曲与 API 歌曲
+  let list = [...uploadedSongs.value, ...musicList.value]
   if (currentTag.value !== '全部') {
-    list = list.filter(s => s.tag === currentTag.value)
+    list = list.filter(s => s.tag === currentTag.value || s.tag === '本地上传')
   }
   // 按关键词本地搜索过滤
   if (searchKeyword.value) {
@@ -213,13 +259,15 @@ const handleUpload = () => {
     mediaType: ['audio'],
     success: (res: any) => {
       const file = res.tempFiles[0]
-      musicList.value.push({
+      const newSong: Music = {
         id: Date.now(),
         name: file.name || '本地音乐',
         hot: false,
         tag: '本地上传',
         src: file.tempFilePath,
-      })
+      }
+      uploadedSongs.value.push(newSong)
+      saveUploadedSongs()
       uni.showToast({ title: '上传成功', icon: 'success' })
     },
     fail: () => {
@@ -235,13 +283,15 @@ const handleUpload = () => {
     success: (res: any) => {
       const tempPath = res.tempFilePaths?.[0] || res.tempFiles?.[0]?.path
       if (tempPath) {
-        musicList.value.push({
+        const newSong: Music = {
           id: Date.now(),
           name: '本地音乐',
           hot: false,
           tag: '本地上传',
           src: tempPath,
-        })
+        }
+        uploadedSongs.value.push(newSong)
+        saveUploadedSongs()
         uni.showToast({ title: '上传成功', icon: 'success' })
       }
     },
@@ -253,13 +303,13 @@ const handleUpload = () => {
 }
 
 const handleSelectSong = (song: Music, idx: number) => {
+  haptic('light')
   stopAudio()
   if (!song.src) {
     uni.showToast({ title: '该歌曲暂无音频源', icon: 'none' })
     return
   }
   currentSongIndex.value = idx
-  templateStore.setSelectedMusic(song.id)
 
   audio = uni.createInnerAudioContext()
   audio.src = song.src
@@ -301,6 +351,16 @@ const handleSelectSong = (song: Music, idx: number) => {
   })
 }
 
+const handleUseSong = (song: Music) => {
+  haptic('light')
+  if (!song.src) {
+    uni.showToast({ title: '该歌曲暂无音频源', icon: 'none' })
+    return
+  }
+  templateStore.setSelectedMusic(song.id)
+  uni.showToast({ title: '已选用该音乐', icon: 'success' })
+}
+
 const togglePlay = () => {
   if (!audio || currentSongIndex.value === null) return
   if (isPlaying.value) {
@@ -313,6 +373,14 @@ const togglePlay = () => {
 }
 
 onMounted(() => {
+  // 从页面参数读取标题
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  const options = curPage?.options || {}
+  if (options.title) {
+    pageTitle.value = decodeURIComponent(options.title)
+  }
+  loadUploadedSongs()
   loadMusic()
 })
 
@@ -347,6 +415,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 24rpx 32rpx;
+  padding-top: calc(env(safe-area-inset-top) + 24rpx);
   background: #fff;
   flex-shrink: 0;
 }
@@ -471,6 +540,11 @@ onUnmounted(() => {
     .music-name { color: #e84a6e; }
   }
 
+  &.is-playing {
+    background: #fff8f0;
+    .music-name { color: #e84a6e; }
+  }
+
   &:active { background: #fafafa; }
 }
 
@@ -525,11 +599,67 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+.music-use-btn {
+  flex-shrink: 0;
+  padding: 10rpx 28rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.music-use-btn:active {
+  transform: scale(0.92);
+}
+
+.use-btn-text {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
 .loading-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
   text-align: center;
   padding: 32rpx;
-  color: #999;
+  color: #e84a6e;
   font-size: 26rpx;
+}
+
+.loading-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border: 3rpx solid rgba(232, 74, 110, 0.2);
+  border-top-color: #e84a6e;
+  border-radius: 50%;
+  animation: musicSpin 0.6s linear infinite;
+}
+
+@keyframes musicSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.search-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 32rpx;
+  gap: 16rpx;
+}
+
+.search-empty-icon {
+  font-size: 56rpx;
+  opacity: 0.5;
+}
+
+.search-empty-text {
+  font-size: 28rpx;
+  color: #999999;
 }
 
 .music-player {

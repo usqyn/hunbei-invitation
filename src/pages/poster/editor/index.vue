@@ -454,7 +454,7 @@ import { uploadImage } from '@/api'
 import type { PosterEditableAreaRuntime, PosterWork } from '@/types/poster'
 
 const posterStore = usePosterStore()
-const goBack = useGoBack()
+const { goBack } = useGoBack()
 
 const alignOptions = [
   { value: 'left', icon: '⬅' },
