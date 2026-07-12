@@ -110,6 +110,8 @@ export interface TemplateBackground {
   angle?: number
   image?: string
   imageUrl?: string
+  imageScale?: string
+  imageOpacity?: number
 }
 
 // 模板分类

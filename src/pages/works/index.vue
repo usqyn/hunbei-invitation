@@ -280,7 +280,7 @@ const handleLogin = () => {
 }
 
 const handleWorkClick = (work: any) => {
-  uni.navigateTo({ url: `/pages/preview/index?workId=${work.id}&templateId=${work.templateType}` })
+  uni.navigateTo({ url: `/pages/preview/index?workId=${work.id}&templateId=${work.templateId || work.templateType}` })
 }
 
 const handleDraftClick = (draft: any) => {
@@ -289,11 +289,11 @@ const handleDraftClick = (draft: any) => {
 }
 
 const handlePreview = (work: any) => {
-  uni.navigateTo({ url: `/pages/preview/index?workId=${work.id}&templateId=${work.templateType}` })
+  uni.navigateTo({ url: `/pages/preview/index?workId=${work.id}&templateId=${work.templateId || work.templateType}` })
 }
 
 const handleShare = (work: any) => {
-  uni.navigateTo({ url: `/pages/share/index?workId=${work.id}&templateId=${work.templateType || ''}` })
+  uni.navigateTo({ url: `/pages/share/index?workId=${work.id}&templateId=${work.templateId || work.templateType || ''}` })
 }
 
 const handleEdit = (draft: any) => {

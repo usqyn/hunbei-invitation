@@ -16,9 +16,9 @@
           <text class="user-name delay-100">{{ isLoggedIn ? (nickname || '用户') : '登录/注册' }}</text>
           <text class="user-desc delay-200">{{ isLoggedIn ? '管理你的作品和设置' : '登录后查看更多功能' }}</text>
           <view class="user-stats delay-300">
-            <text class="stat-item">作品数: <text class="stat-num">0</text></text>
+            <text class="stat-item">作品数: <text class="stat-num">{{ worksCount }}</text></text>
             <text class="stat-divider">|</text>
-            <text class="stat-item">收藏: <text class="stat-num">0</text></text>
+            <text class="stat-item">收藏: <text class="stat-num">{{ favoritesCount }}</text></text>
             <text class="stat-divider">|</text>
             <text class="stat-item">浏览: <text class="stat-num">0</text></text>
           </view>
@@ -121,9 +121,15 @@
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
+import { useWorksStore } from '@/stores/works'
 
 const userStore = useUserStore()
+const worksStore = useWorksStore()
 const { isLoggedIn, nickname } = storeToRefs(userStore)
+
+// 从 store 获取真实统计数据
+const worksCount = computed(() => worksStore.works.length)
+const favoritesCount = computed(() => worksStore.favorites.length)
 
 const vipExpireText = computed(() => {
   if (!userStore.vipExpireAt) return ''

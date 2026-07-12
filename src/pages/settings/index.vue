@@ -75,13 +75,13 @@ const showAbout = ref(false)
 const handleClearCache = () => {
   uni.showModal({
     title: '提示',
-    content: '确定要清除缓存吗？',
+    content: '确定要清除缓存吗？作品数据不会被删除。',
     success: (res) => {
       if (res.confirm) {
-        // 只清除应用缓存，保留登录态
-        uni.removeStorageSync('hunbei_drafts')
-        uni.removeStorageSync('hunbei_works')
+        // 只清除编辑器缓存和模板缓存，保留用户作品和登录态
         uni.removeStorageSync('hunbei_current_template')
+        uni.removeStorageSync('hunbei_current_template_data')
+        uni.removeStorageSync('hunbei_template')
         uni.showToast({ title: '缓存已清除', icon: 'success' })
       }
     }

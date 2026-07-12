@@ -71,8 +71,17 @@ export const useWorksStore = defineStore('works', () => {
   async function syncWorksFromServer() {
     try {
       const data = await fetchWorksApi()
-      if (data && Array.isArray(data) && data.length > 0) {
+      if (data && Array.isArray(data)) {
+        // 服务器有数据时合并；服务器返回空数组时清理本地已删除的幽灵作品
+        const serverIds = new Set(data.map((w: any) => w.id))
         const localIds = new Set(works.value.map(w => w.id))
+        // 清理本地有但服务器已删除的作品（仅在服务器返回了完整列表时）
+        if (data.length === 0 && works.value.length > 0) {
+          works.value = []
+          drafts.value = []
+          persist()
+          return
+        }
         data.forEach((serverWork: any) => {
           const id = serverWork.id
           if (!id) return
@@ -181,7 +190,15 @@ export const useWorksStore = defineStore('works', () => {
     update(works.value)
     update(drafts.value)
     update(favorites.value)
-    debouncedPersist()
+    persist()
+
+    // 同步到服务器
+    const userStore = useUserStore()
+    if (userStore.isLoggedIn) {
+      updateWorkApi(id, { title: name }).catch(e => {
+        console.warn('renameWork sync to server failed:', id, e)
+      })
+    }
   }
 
   async function deleteWork(id: string) {
@@ -261,7 +278,8 @@ export const useWorksStore = defineStore('works', () => {
     if (draftIdx !== -1) {
       drafts.value.splice(draftIdx, 1)
     }
-    debouncedPersist()
+    // 关键操作使用同步持久化，避免防抖延迟导致数据丢失
+    persist()
 
     // 本地保存成功后，登录用户异步同步到服务器
     const userStore = useUserStore()

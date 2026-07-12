@@ -309,6 +309,7 @@ export const useEditorStore = defineStore('editor', () => {
         flipPages: JSON.parse(JSON.stringify(flipPages)),
         canvasSize: JSON.parse(JSON.stringify(canvasSize.value)),
         background: JSON.parse(JSON.stringify(background.value)),
+        renderedImage: renderedImage.value,
         templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
         basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
         settings: JSON.parse(JSON.stringify(templateStore.settings)),
@@ -339,6 +340,9 @@ export const useEditorStore = defineStore('editor', () => {
         }
         if (savedData.pageSections && Array.isArray(savedData.pageSections)) {
           savedData.pageSections.forEach((sec: any) => {
+            if (sec.type === 'image' && sec.image) {
+              sec.image = resolveUrl(sec.image)
+            }
             if (sec.type === 'image' && sec.content) {
               sec.content = resolveUrl(sec.content)
             }
@@ -602,6 +606,24 @@ export const useEditorStore = defineStore('editor', () => {
     currentWorkId.value = id
   }
 
+  /** 构建用于保存/分享的作品数据快照 */
+  function buildEditorData(): WorkEditorData {
+    const templateStore = useTemplateStore()
+    return {
+      elements: JSON.parse(JSON.stringify(editableElements)),
+      pageSections: JSON.parse(JSON.stringify(pageSections)),
+      flipPages: JSON.parse(JSON.stringify(flipPages)),
+      background: JSON.parse(JSON.stringify(background.value)),
+      canvasSize: JSON.parse(JSON.stringify(canvasSize.value)),
+      templateType: templateType.value,
+      renderedImage: renderedImage.value,
+      templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
+      basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
+      settings: JSON.parse(JSON.stringify(templateStore.settings)),
+      currentFlipPageIndex: currentFlipPageIndex.value,
+    }
+  }
+
   function updatePageSection(id: string, updates: Partial<PageSection>) {
     const sec = pageSections.find(s => s.id === id)
     if (sec) {
@@ -636,6 +658,7 @@ export const useEditorStore = defineStore('editor', () => {
     loadTemplateById, restoreTemplate, restoreFromWorkData, openSectionTextEditor, closeTextEditor, closeSectionTextEditor, confirmTextEdit,
     closeBasicInfoEditor, syncSmartField, syncBasicInfoToElements, syncFieldToAllModes,
     selectMaterial, applyImageToElement: selectMaterial, setCurrentWorkId,
+    buildEditorData,
     updatePageSection, updatePageSectionText, updatePageSectionImage,
     pushHistory, undo, redo,
   }

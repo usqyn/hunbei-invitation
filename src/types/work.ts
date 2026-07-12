@@ -7,6 +7,7 @@ export interface WorkEditorData {
   background?: TemplateBackground
   canvasSize?: { width: number; height: number }
   templateType?: 'canvas' | 'page' | 'flip'
+  renderedImage?: string
   templateData?: TemplateData
   basicInfo?: BasicInfo
   settings?: TemplateSettings

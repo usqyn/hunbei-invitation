@@ -65,7 +65,13 @@ const loadFootprints = async () => {
 }
 
 const handleClick = (item: Footprint) => {
-  uni.navigateTo({ url: `/pages/preview/index?id=${item.id}` })
+  if (item.workId) {
+    uni.navigateTo({ url: `/pages/preview/index?workId=${item.workId}` })
+  } else if (item.templateId) {
+    uni.navigateTo({ url: `/pages/preview/index?templateId=${item.templateId}` })
+  } else {
+    uni.navigateTo({ url: `/pages/preview/index?id=${item.id}` })
+  }
 }
 
 onMounted(() => {

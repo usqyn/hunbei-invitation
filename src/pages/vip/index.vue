@@ -137,7 +137,7 @@ async function handlePay() {
       nonceStr: order.nonceStr || Math.random().toString(36).slice(2),
       package: `prepay_id=${order.prepayId}`,
       signType: 'MD5',
-      paySign: order.paySign || 'DEV_SIGN',
+      paySign: order.paySign || '',
       success: async () => {
         uni.showLoading({ title: '验证中...' })
         try {

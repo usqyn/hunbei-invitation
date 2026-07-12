@@ -86,7 +86,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { MUSIC_TAGS, fetchMusicFromApi } from '@/constants/music'
-import { useGoBack } from '@/composables/useGoBack'
 import type { Music } from '@/types'
 
 const templateStore = useTemplateStore()

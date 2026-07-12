@@ -68,6 +68,7 @@
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { createOrder } from '@/api'
+import { useUserStore } from '@/stores/user'
 
 interface OrderItem {
   id: number
@@ -80,6 +81,7 @@ interface OrderItem {
 
 const orderItems = ref<OrderItem[]>([])
 const remark = ref('')
+const userStore = useUserStore()
 
 // 收货地址
 const address = ref({ name: '', phone: '', detail: '' })
@@ -117,14 +119,19 @@ function validateAddress(): boolean {
   }
   return true
 }
-const discount = ref(0)
-
 const goodsTotal = computed(() => {
   let total = 0
   orderItems.value.forEach(item => {
     total += parseFloat(item.price) * item.quantity
   })
   return total.toFixed(2)
+})
+
+const discount = computed(() => {
+  if (userStore.isVip()) {
+    return Math.floor(parseFloat(goodsTotal.value) * 0.1 * 100) / 100
+  }
+  return 0
 })
 
 const freight = computed(() => {

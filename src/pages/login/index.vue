@@ -264,12 +264,18 @@ const onGetPhoneNumber = (e: any) => {
 
 const handleH5Login = async () => {
   if (!agreed.value || logging.value) return
+  if (!phoneValid.value) {
+    feedbackWarning('请输入正确的手机号')
+    return
+  }
+  if (smsCode.value.length < 4) {
+    feedbackWarning('请输入验证码')
+    return
+  }
   logging.value = true
   uni.showLoading({ title: '登录中...' })
   try {
-    const testPhone = '13800000000'
-    const universalCode = '000000'
-    const ok = await userStore.doLogin({ phone: testPhone, code: universalCode })
+    const ok = await userStore.doLogin({ phone: phone.value, code: smsCode.value })
     if (ok) {
       loginSuccess()
     } else {

@@ -53,7 +53,10 @@ export function request<T = any>(options: string | {
         } else if (res.statusCode === 401) {
           if (!_isRedirecting) {
             _isRedirecting = true
-            try { uni.removeStorageSync('token') } catch {}
+            try {
+              uni.removeStorageSync('token')
+              uni.removeStorageSync('hunbei_user')
+            } catch {}
             uni.reLaunch({
               url: '/pages/login/index',
               complete: () => {
@@ -62,7 +65,15 @@ export function request<T = any>(options: string | {
             })
           }
           reject(new Error('登录已过期'))
-        } else reject(new Error(`请求失败: ${res.statusCode}`))
+        } else {
+          // 解析服务端返回的错误详情
+          const body = res.data
+          let msg = `请求失败: ${res.statusCode}`
+          if (body && typeof body === 'object') {
+            msg = body.error || body.message || body.msg || msg
+          }
+          reject(new Error(msg))
+        }
       },
       fail: (err: any) => reject(new Error(err.errMsg || '网络异常')),
       complete: () => { if (!options.hideLoading) hideLoadingSafe() },

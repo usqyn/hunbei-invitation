@@ -382,7 +382,7 @@ onMounted(async () => {
     const work = findWork(workId)
     if (work) {
       editorStore.setCurrentWorkId(work.id)
-      const id = work.templateType || options.templateId || options.id
+      const id = work.templateId || options.templateId || options.id
       if (id) {
         templateId.value = id
         if (editorStore.currentTemplateId !== id) {

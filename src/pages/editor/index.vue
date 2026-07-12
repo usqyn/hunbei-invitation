@@ -799,18 +799,7 @@ async function handleSave() {
   haptic('medium')
   track('edit_save', { progress: editProgress.value })
   await runSave(async () => {
-    const editorData = {
-      elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
-      pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
-      flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
-      background: JSON.parse(JSON.stringify(editorStore.background)),
-      canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
-      templateType: editorStore.templateType,
-      templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
-      basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
-      settings: JSON.parse(JSON.stringify(templateStore.settings)),
-      currentFlipPageIndex: editorStore.currentFlipPageIndex,
-    }
+    const editorData = editorStore.buildEditorData()
     const musicId = templateStore.selectedMusicId
     if (editorStore.currentWorkId) {
       const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
@@ -944,23 +933,17 @@ async function handleShare() {
   if (sharingLoading.value) return
   haptic('medium')
   await runShare(async () => {
-    // 先保存
-    const editorData = {
-      elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
-      pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
-      flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
-      background: JSON.parse(JSON.stringify(editorStore.background)),
-      canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
-      templateType: editorStore.templateType,
-      templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
-      basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
-      settings: JSON.parse(JSON.stringify(templateStore.settings)),
-      currentFlipPageIndex: editorStore.currentFlipPageIndex,
-    }
+    // 先保存（复用 buildEditorData，确保标题/封面等字段同步更新）
+    const editorData = editorStore.buildEditorData()
     const musicId = templateStore.selectedMusicId
     if (editorStore.currentWorkId) {
       const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
       if (existing) {
+        existing.title = templateStore.templateData.coverTitle || '未命名作品'
+        existing.image = templateStore.templateData.coverImage
+        existing.cover = templateStore.templateData.coverImage
+        existing.templateId = editorStore.currentTemplateId
+        existing.templateType = editorStore.templateType
         existing.data = editorData
         existing.musicId = musicId
         existing.updatedAt = new Date().toISOString()
@@ -1015,7 +998,7 @@ onMounted(async () => {
     const work = findWork(workId)
     if (work) {
       editorStore.setCurrentWorkId(work.id)
-      const templateId = work.templateType || options.templateId || options.id
+      const templateId = work.templateId || options.templateId || options.id
       // 有作品数据时，先加载模板获取基础结构，再用作品数据覆盖
       if (templateId) {
         await editorStore.loadTemplateById(templateId)

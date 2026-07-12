@@ -17,7 +17,8 @@ export const useUserStore = defineStore('user', () => {
   /** 纯函数：判断是否为 VIP，不修改任何状态 */
   function checkVip(): boolean {
     if (vipStatus.value !== 1) return false
-    if (vipExpireAt.value && vipExpireAt.value < Date.now()) {
+    // vipExpireAt 为 0 表示永久 VIP（服务端未设过期时间），视为有效
+    if (vipExpireAt.value && vipExpireAt.value > 0 && vipExpireAt.value < Date.now()) {
       return false
     }
     return true
