@@ -989,6 +989,13 @@ function findWork(workId: string): Work | undefined {
 
 onMounted(async () => {
   editStartTime.value = Date.now()
+
+  // 安全兜底：如果未登录，重定向到登录页
+  if (!userStore.isLoggedIn) {
+    userStore.requireLogin()
+    return
+  }
+
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}

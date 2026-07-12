@@ -388,6 +388,8 @@ const handleCategoryClick = (item: any) => {
 }
 
 const handleCardClick = (card: any) => {
+  // 登录拦截：未登录时跳转登录页
+  if (!userStore.requireLogin()) return
   uni.navigateTo({
     url: `/pages/editor/index?templateId=${card.type}`,
   })
@@ -437,6 +439,8 @@ async function loadPosterTemplates() {
 }
 
 function handlePosterClick(poster: any) {
+  // 登录拦截：未登录时跳转登录页
+  if (!userStore.requireLogin()) return
   uni.navigateTo({
     url: `/pages/poster/editor/index?id=${poster.id}`,
   })
@@ -449,6 +453,9 @@ function goToPosterPage() {
 }
 
 function handlePaidCardClick(card: any) {
+  // 登录拦截：未登录时跳转登录页
+  if (!userStore.requireLogin()) return
+
   if (userStore.isVip()) {
     uni.navigateTo({
       url: `/pages/editor/index?templateId=${card.id}`,

@@ -324,6 +324,9 @@ function formatLikes(num: number): string {
 }
 
 function onSelectTemplate(template: TemplateItem) {
+  // 登录拦截：未登录时跳转登录页
+  if (!userStore.requireLogin()) return
+
   if (template.is_paid) {
     const isVip = userStore.isVip()
     if (!isVip && !isPurchased.value) {
