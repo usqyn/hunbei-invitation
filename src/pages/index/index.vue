@@ -1,55 +1,84 @@
 <template>
-  <view class="page">
+  <view class="page animate-page-fade-in">
+    <!-- 顶部状态栏区域 + 问候语 -->
+    <view class="status-bar">
+      <view class="greeting-wrap">
+        <text class="greeting-text">{{ greetingText }}</text>
+        <text class="date-text">{{ dateText }}</text>
+      </view>
+    </view>
+
     <!-- 顶部轮播图 -->
-    <swiper
-      class="banner-swiper"
-      :indicator-dots="true"
-      :autoplay="true"
-      :interval="3000"
-      :duration="500"
-      :circular="true"
-      indicator-color="rgba(255,255,255,0.5)"
-      indicator-active-color="#ffffff"
-    >
-      <swiper-item v-for="(banner, index) in homeConfig.banners" :key="index" @click="handleBannerClick(banner)">
-        <image lazy-load :src="banner.image" mode="aspectFill" class="banner-image" />
-      </swiper-item>
-    </swiper>
+    <view class="banner-wrap">
+      <swiper
+        class="banner-swiper animate-banner-in"
+        :indicator-dots="true"
+        :autoplay="true"
+        :interval="3000"
+        :duration="500"
+        :circular="true"
+        indicator-color="rgba(255,255,255,0.4)"
+        indicator-active-color="#ffffff"
+      >
+        <swiper-item v-for="(banner, index) in homeConfig.banners" :key="index" @click="handleBannerClick(banner)">
+          <view class="banner-item">
+            <image lazy-load :src="banner.image" mode="aspectFill" class="banner-image" />
+            <view class="banner-gradient"></view>
+          </view>
+        </swiper-item>
+      </swiper>
+
+      <!-- 浮动装饰 -->
+      <view class="deco-heart deco-heart-1">♥</view>
+      <view class="deco-heart deco-heart-2">♡</view>
+      <view class="deco-sparkle deco-sparkle-1">✦</view>
+      <view class="deco-sparkle deco-sparkle-2">✧</view>
+    </view>
 
     <!-- 搜索栏 -->
-    <view class="search-bar">
+    <view class="search-bar animate-search-in">
       <input
         class="search-input"
         :placeholder="homeConfig.searchPlaceholder"
         v-model="searchText"
         @confirm="handleSearch"
+        @focus="isSearchFocused = true"
+        @blur="isSearchFocused = false"
       />
+      <view class="search-icon" :class="{ focused: isSearchFocused }">
+        <text class="iconfont">&#128269;</text>
+      </view>
     </view>
 
     <!-- 双栏入口 -->
-    <view class="dual-entry">
+    <view class="dual-entry stagger-list">
       <view class="entry-card mall-entry" @click="goToMall">
-        <view class="entry-icon-wrap">
+        <view class="entry-icon-wrap animate-float-slow">
           <text class="entry-icon">&#128722;</text>
         </view>
         <view class="entry-text-wrap">
           <text class="entry-title">婚礼商城</text>
           <text class="entry-desc">精选好物</text>
         </view>
+        <view class="deco-circle deco-circle-1"></view>
+        <view class="deco-circle deco-circle-2"></view>
       </view>
-      <view class="entry-card vip-entry" @click="goToVipPage">
-        <view class="entry-icon-wrap">
+      <view class="entry-card vip-entry vip-pulse" @click="goToVipPage">
+        <view class="vip-badge">HOT</view>
+        <view class="entry-icon-wrap animate-float-slow" style="animation-delay: 0.5s">
           <text class="entry-icon">&#9733;</text>
         </view>
         <view class="entry-text-wrap">
           <text class="entry-title">开通VIP</text>
           <text class="entry-desc">全站免费</text>
         </view>
+        <view class="deco-star deco-star-1">✦</view>
+        <view class="deco-star deco-star-2">✧</view>
       </view>
     </view>
 
     <!-- 分类网格 - 点击跳转到对应分类的模板列表 -->
-    <view class="category-grid">
+    <view class="category-grid stagger-list">
       <view
         v-for="item in categories"
         :key="item.id"
@@ -58,13 +87,15 @@
       >
         <view class="category-icon" :style="{ background: getCategoryBg(item.categoryId) }">
           <image class="icon-image-full" lazy-load :src="item.image" mode="aspectFill" />
+          <view class="icon-glow"></view>
         </view>
         <text class="category-name">{{ item.name }}</text>
+        <text class="category-count">{{ getCategoryCount(item.categoryId) }} 个模板</text>
       </view>
     </view>
 
     <!-- 特色功能区 - 快速进入制作 -->
-    <view class="feature-section">
+    <view class="feature-section stagger-list">
       <view
         v-for="card in homeConfig.featureCards"
         :key="card.categoryId"
@@ -76,23 +107,32 @@
           <view class="feature-badge">{{ card.badge }}</view>
           <text class="feature-title">{{ card.title }}</text>
           <text class="feature-desc">{{ card.desc }}</text>
+          <view class="feature-cta">
+            <text class="cta-text">立即制作</text>
+            <text class="cta-arrow">→</text>
+          </view>
         </view>
-        <image class="feature-icon-image" :src="card.image" mode="aspectFit" />
+        <image class="feature-icon-image animate-float-slow" :src="card.image" mode="aspectFit" />
+        <view class="card-shine"></view>
       </view>
     </view>
 
     <!-- 模板精选区 -->
-    <view class="section">
+    <view class="section animate-section-fade-in">
       <view class="section-header">
-        <text class="section-title">{{ homeConfig.sections.featured.title }}</text>
+        <view class="section-title-wrap">
+          <text class="section-title">{{ homeConfig.sections.featured.title }}</text>
+          <view class="title-decoration"></view>
+        </view>
         <view class="section-more" @click="goToTemplatePage">
-          <text class="more-text">{{ homeConfig.moreText }}</text>
+          <text class="more-text">查看更多</text>
+          <text class="more-arrow">›</text>
         </view>
       </view>
 
       <!-- 横向滚动的精选卡片 -->
       <scroll-view class="card-scroll" scroll-x>
-        <view class="card-list">
+        <view class="card-list stagger-list-horizontal">
           <view
             v-for="card in featuredCards"
             :key="card.id"
@@ -100,10 +140,23 @@
             @click="handleCardClick(card)"
           >
             <image class="card-image" lazy-load :src="card.image" mode="aspectFill" @error="onImageError" />
-            <view class="card-vip-tag">VIP</view>
+            <view class="card-overlay"></view>
+            <view class="card-badge-wrap">
+              <view class="card-vip-tag">
+                <text class="vip-icon">♛</text>
+                VIP
+              </view>
+              <view class="card-hot-tag" v-if="card.isHot">HOT</view>
+            </view>
             <view class="card-info">
               <text class="card-title">{{ card.title }}</text>
-              <text class="card-date">{{ card.date }}</text>
+              <view class="card-meta">
+                <text class="card-date">{{ card.date }}</text>
+                <view class="card-views" v-if="card.views">
+                  <text class="view-icon">👁</text>
+                  <text class="view-count">{{ formatCount(card.views) }}</text>
+                </view>
+              </view>
             </view>
           </view>
         </view>
@@ -111,15 +164,19 @@
     </view>
 
     <!-- 热门付费模板 -->
-    <view class="section" v-if="paidTemplates.length > 0">
+    <view class="section animate-section-fade-in" v-if="paidTemplates.length > 0" style="animation-delay: 0.1s">
       <view class="section-header">
-        <text class="section-title">热门付费模板</text>
+        <view class="section-title-wrap">
+          <text class="section-title">热门付费模板</text>
+          <view class="title-decoration"></view>
+        </view>
         <view class="section-more" @click="goToTemplatePage('paid')">
           <text class="more-text">查看更多</text>
+          <text class="more-arrow">›</text>
         </view>
       </view>
       <scroll-view class="card-scroll" scroll-x>
-        <view class="card-list">
+        <view class="card-list stagger-list-horizontal">
           <view
             v-for="card in paidTemplates"
             :key="card.id"
@@ -127,7 +184,15 @@
             @click="handlePaidCardClick(card)"
           >
             <image class="card-image" lazy-load :src="card.cover || card.image" mode="aspectFill" />
-            <view class="paid-badge">{{ card.price }}元</view>
+            <view class="card-overlay"></view>
+            <view class="paid-badge">
+              <text class="price-symbol">¥</text>
+              <text class="price-num">{{ card.price }}</text>
+            </view>
+            <view class="paid-sold" v-if="card.sales_count || card.sales">
+              <text class="sold-icon">🔥</text>
+              <text class="sold-text">已售{{ card.sales_count || card.sales || '100+' }}</text>
+            </view>
             <view class="card-info">
               <text class="card-title">{{ card.name }}</text>
               <text class="card-sub">{{ card.subtitle }}</text>
@@ -138,15 +203,19 @@
     </view>
 
     <!-- 海报模板区 -->
-    <view class="section" v-if="posterTemplates.length > 0">
+    <view class="section animate-section-fade-in" v-if="posterTemplates.length > 0" style="animation-delay: 0.2s">
       <view class="section-header">
-        <text class="section-title">海报模板</text>
+        <view class="section-title-wrap">
+          <text class="section-title">海报模板</text>
+          <view class="title-decoration"></view>
+        </view>
         <view class="section-more" @click="goToPosterPage">
-          <text class="more-text">查看全部 ›</text>
+          <text class="more-text">查看全部</text>
+          <text class="more-arrow">›</text>
         </view>
       </view>
       <scroll-view class="card-scroll" scroll-x>
-        <view class="card-list">
+        <view class="card-list stagger-list-horizontal">
           <view
             v-for="poster in posterTemplates"
             :key="poster.id"
@@ -154,9 +223,13 @@
             @click="handlePosterClick(poster)"
           >
             <image class="card-image poster-card-image" lazy-load :src="resolveUrl(poster.cover_url)" mode="aspectFill" @error="onImageError" />
+            <view class="card-overlay"></view>
+            <view class="poster-category-tag">{{ poster.category_name }}</view>
             <view class="card-info">
               <text class="card-title">{{ poster.name }}</text>
-              <text class="card-sub">{{ poster.category_name }}</text>
+              <view class="card-meta">
+                <text class="card-sub">{{ poster.category_name }}</text>
+              </view>
             </view>
           </view>
         </view>
@@ -164,34 +237,47 @@
     </view>
 
     <!-- 全部分类区 - 展示所有分类的模板数 -->
-    <view class="section">
-      <view class="section-header">
-        <text class="section-title">{{ homeConfig.sections.allCategories.title }}</text>
+    <view class="section animate-section-fade-in" style="animation-delay: 0.3s">
+      <view class="section-header section-header-column">
+        <view class="section-title-wrap">
+          <text class="section-title">{{ homeConfig.sections.allCategories.title }}</text>
+          <view class="title-decoration"></view>
+        </view>
         <view class="section-tabs">
-          <text
+          <view
             v-for="tab in tabs"
             :key="tab"
-            class="tab-item"
+            class="tab-pill"
             :class="{ active: activeTab === tab }"
             @click="activeTab = tab"
-          >{{ tab }}</text>
+          >
+            <text class="tab-pill-text">{{ tab }}</text>
+          </view>
         </view>
       </view>
 
       <!-- 分类网格 - 展示所有分类模板数 -->
-      <view class="category-count-grid">
+      <view class="category-count-grid stagger-list">
         <view
           v-for="cat in allCategories"
           :key="cat.id"
           class="count-card"
           @click="goToTemplatePage(cat.id)"
         >
-          <image class="count-icon-image" :src="cat.icon" mode="aspectFit" />
-          <text class="count-name">{{ cat.name }}</text>
-          <text class="count-num">{{ cat.templates.length }} 个模板</text>
+          <view class="count-icon-wrap" :style="{ background: getCategoryBg(cat.id) }">
+            <image class="count-icon-image" :src="cat.icon" mode="aspectFit" />
+          </view>
+          <view class="count-info">
+            <text class="count-name">{{ cat.name }}</text>
+            <text class="count-num">{{ cat.templates.length }} 个模板</text>
+          </view>
+          <text class="count-arrow">›</text>
         </view>
       </view>
     </view>
+
+    <!-- 底部安全区 -->
+    <view class="bottom-safe-area"></view>
   </view>
 </template>
 
@@ -208,9 +294,9 @@ const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
 const paidTemplates = ref<any[]>([])
 const posterTemplates = ref<any[]>([])
+const isSearchFocused = ref(false)
 const userStore = useUserStore()
 const isPurchased = computed(() => {
-  // TODO: 从用户订单状态获取真实购买状态
   return userStore.isVip()
 })
 
@@ -219,12 +305,44 @@ const tabs = HOME_TABS
 const featuredCards = HOME_FEATURED_CARDS
 const homeConfig = HOME_CONFIG
 
-// 分类图标渐变背景色映射
+const greetingText = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 6) return '夜深了'
+  if (hour < 12) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+
+const dateText = computed(() => {
+  const now = new Date()
+  const month = now.getMonth() + 1
+  const day = now.getDate()
+  const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  const weekDay = weekDays[now.getDay()]
+  return `${month}月${day}日 ${weekDay}`
+})
+
+function getCategoryCount(categoryId: string): number {
+  const cat = CATEGORY_LIST.find(c => c.id === categoryId)
+  return cat ? cat.templates.length : 0
+}
+
+function formatCount(count: number): string {
+  if (count >= 10000) {
+    return (count / 10000).toFixed(1) + 'w'
+  }
+  if (count >= 1000) {
+    return (count / 1000).toFixed(1) + 'k'
+  }
+  return count.toString()
+}
+
 function getCategoryBg(id: string): string {
   const bgMap: Record<string, string> = {
     wedding: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
     engagement: 'linear-gradient(135deg, #fd79a8 0%, #e84393 100%)',
-    creative: 'linear-gradient(135deg, #a29bfe 0%, #dfe6e9 100%)',
+    creative: 'linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%)',
     birthday: 'linear-gradient(135deg, #fdcb6e 0%, #e17055 100%)',
     poster: 'linear-gradient(135deg, #fd79a8 0%, #fab1a0 100%)',
     baby: 'linear-gradient(135deg, #fdcb6e 0%, #f39c12 100%)',
@@ -235,7 +353,6 @@ function getCategoryBg(id: string): string {
   return bgMap[id] || 'linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%)'
 }
 
-// 全部分类 - 根据选中的 tab 标签筛选
 const allCategories = computed(() => {
   const tag = activeTab.value
   return CATEGORY_LIST
@@ -248,7 +365,6 @@ const allCategories = computed(() => {
     }))
 })
 
-// 点击轮播图 - 跳转到对应分类
 const handleBannerClick = (banner: any) => {
   if (banner.linkType === 'category') {
     uni.navigateTo({
@@ -257,7 +373,6 @@ const handleBannerClick = (banner: any) => {
   }
 }
 
-// 搜索功能
 const handleSearch = () => {
   if (searchText.value) {
     uni.navigateTo({
@@ -266,28 +381,24 @@ const handleSearch = () => {
   }
 }
 
-// 点击分类卡片 - 跳转到模板选择页并自动选中该分类
 const handleCategoryClick = (item: any) => {
   uni.navigateTo({
     url: `/pages/template/index?category=${item.categoryId}`,
   })
 }
 
-// 点击精选卡片 - 直接跳转到编辑器并加载对应的模板
 const handleCardClick = (card: any) => {
   uni.navigateTo({
     url: `/pages/editor/index?templateId=${card.type}`,
   })
 }
 
-// 点击特色功能卡片 - 跳转到模板选择页
 const goToEditor = (categoryId: string) => {
   uni.navigateTo({
     url: `/pages/template/index?category=${categoryId}`,
   })
 }
 
-// 跳转到模板选择页
 const goToTemplatePage = (categoryId?: string) => {
   if (categoryId === 'paid') {
     uni.navigateTo({ url: '/pages/template/index?filter=paid' })
@@ -299,12 +410,10 @@ const goToTemplatePage = (categoryId?: string) => {
   uni.navigateTo({ url })
 }
 
-// 图片加载失败的兜底处理
 const onImageError = () => {
   console.warn('Home page image load failed')
 }
 
-// 加载热门付费模板
 async function loadPaidTemplates() {
   try {
     const data = await request<any[]>({ url: '/api/templates?is_paid=1', hideLoading: true })
@@ -316,7 +425,6 @@ async function loadPaidTemplates() {
   }
 }
 
-// 加载热门海报模板
 async function loadPosterTemplates() {
   try {
     const data = await request<any[]>({ url: '/api/poster/templates/hot', hideLoading: true })
@@ -328,21 +436,18 @@ async function loadPosterTemplates() {
   }
 }
 
-// 点击海报模板卡片 - 跳转到海报编辑器
 function handlePosterClick(poster: any) {
   uni.navigateTo({
     url: `/pages/poster/editor/index?id=${poster.id}`,
   })
 }
 
-// 跳转到海报模板列表页
 function goToPosterPage() {
   uni.navigateTo({
     url: '/pages/poster/index/index',
   })
 }
 
-// 点击付费模板卡片
 function handlePaidCardClick(card: any) {
   if (userStore.isVip()) {
     uni.navigateTo({
@@ -365,14 +470,12 @@ function handlePaidCardClick(card: any) {
   })
 }
 
-// 跳转到VIP页面
 function goToVipPage() {
   uni.navigateTo({
     url: '/pages/vip/index',
   })
 }
 
-// 跳转到婚礼商城
 function goToMall() {
   uni.switchTab({
     url: '/pages/mall/index',
@@ -388,20 +491,106 @@ onMounted(() => {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: #f2f2f7;
+  background: linear-gradient(180deg, #fff5f7 0%, #f2f2f7 300rpx);
   padding-bottom: 140rpx;
+  position: relative;
+  overflow-x: hidden;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-page-fade-in {
+  animation: pageFadeIn 0.5s ease-out both;
+}
+
+@keyframes sectionFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-section-fade-in {
+  animation: sectionFadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 状态栏 + 问候语 */
+.status-bar {
+  padding-top: calc(env(safe-area-inset-top) + 16rpx);
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  padding-bottom: 8rpx;
+  position: relative;
+  z-index: 10;
+}
+
+.greeting-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.greeting-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1c1c1e;
+  line-height: 1.4;
+}
+
+.date-text {
+  font-size: 22rpx;
+  color: #8e8e93;
+  margin-top: 2rpx;
 }
 
 /* 顶部轮播图 */
+.banner-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes bannerIn {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-banner-in {
+  animation: bannerIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: 0.1s;
+}
+
 .banner-swiper {
   width: 100%;
-  height: 360rpx;
-  border-bottom-left-radius: 32rpx;
-  border-bottom-right-radius: 32rpx;
-  box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.12);
+  height: 380rpx;
+  border-bottom-left-radius: 40rpx;
+  border-bottom-right-radius: 40rpx;
+  box-shadow: 0 16rpx 48rpx rgba(232, 74, 110, 0.15);
   position: relative;
   z-index: 1;
   overflow: hidden;
+}
+
+.banner-item {
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
 
 .banner-image {
@@ -409,29 +598,149 @@ onMounted(() => {
   height: 100%;
 }
 
-/* 搜索栏 - 毛玻璃浮动 */
+.banner-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.2) 100%);
+  pointer-events: none;
+}
+
+/* 浮动装饰 */
+@keyframes floatHeart {
+  0%, 100% {
+    transform: translateY(0) rotate(-5deg);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-20rpx) rotate(5deg);
+    opacity: 0.9;
+  }
+}
+
+@keyframes floatSparkle {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-15rpx) scale(1.2);
+    opacity: 1;
+  }
+}
+
+.deco-heart {
+  position: absolute;
+  color: rgba(255, 107, 138, 0.7);
+  z-index: 5;
+  pointer-events: none;
+  animation: floatHeart 3s ease-in-out infinite;
+}
+
+.deco-heart-1 {
+  top: 80rpx;
+  left: 40rpx;
+  font-size: 28rpx;
+  animation-delay: 0s;
+}
+
+.deco-heart-2 {
+  top: 120rpx;
+  right: 60rpx;
+  font-size: 24rpx;
+  color: rgba(255, 182, 193, 0.8);
+  animation-delay: 1s;
+}
+
+.deco-sparkle {
+  position: absolute;
+  color: rgba(255, 215, 0, 0.8);
+  z-index: 5;
+  pointer-events: none;
+  animation: floatSparkle 2.5s ease-in-out infinite;
+}
+
+.deco-sparkle-1 {
+  top: 100rpx;
+  right: 120rpx;
+  font-size: 20rpx;
+  animation-delay: 0.5s;
+}
+
+.deco-sparkle-2 {
+  top: 160rpx;
+  left: 80rpx;
+  font-size: 16rpx;
+  color: rgba(255, 255, 255, 0.7);
+  animation-delay: 1.5s;
+}
+
+/* 搜索栏 */
+@keyframes searchIn {
+  from {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-search-in {
+  animation: searchIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: 0.3s;
+}
+
 .search-bar {
-  padding: 24rpx;
+  padding: 20rpx 20rpx 20rpx 32rpx;
   margin: -56rpx 24rpx 0;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
-  border-radius: 28rpx;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24rpx);
+  -webkit-backdrop-filter: blur(24rpx);
+  border-radius: 32rpx;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.1);
   position: relative;
   z-index: 2;
-  border: 1rpx solid rgba(255, 255, 255, 0.6);
+  border: 1rpx solid rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-bar:focus-within {
+  box-shadow: 0 16rpx 48rpx rgba(232, 74, 110, 0.18);
+  border-color: rgba(232, 74, 110, 0.3);
+  transform: translateY(-2rpx);
 }
 
 .search-input {
-  width: 100%;
-  height: 80rpx;
-  background: rgba(245, 245, 245, 0.8);
-  border-radius: 40rpx;
-  padding: 0 32rpx;
+  flex: 1;
+  height: 72rpx;
+  background: rgba(245, 245, 250, 0.6);
+  border-radius: 36rpx;
+  padding: 0 24rpx 0 64rpx;
   font-size: 28rpx;
   box-sizing: border-box;
-  transition: all 0.25s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-icon {
+  position: absolute;
+  left: 40rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 32rpx;
+  color: #c0c0d0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 3;
+
+  &.focused {
+    color: #e84a6e;
+    transform: translateY(-50%) scale(1.1);
+  }
 }
 
 /* 分类网格 */
@@ -442,7 +751,7 @@ onMounted(() => {
   padding: 32rpx 24rpx;
   background: #ffffff;
   margin: 24rpx 24rpx 0;
-  border-radius: 28rpx;
+  border-radius: 32rpx;
   box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
 }
 
@@ -450,46 +759,70 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12rpx;
-  padding: 12rpx 0;
-  transition: transform 0.2s ease;
+  gap: 10rpx;
+  padding: 16rpx 0;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  border-radius: 24rpx;
 
   &:active {
-    transform: scale(0.92);
+    transform: scale(0.9);
   }
 }
 
 .category-icon {
-  width: 100rpx;
-  height: 100rpx;
-  border-radius: 28rpx;
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 30rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.1);
-  transition: box-shadow 0.2s ease;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.12);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
 .category-item:active .category-icon {
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.15);
+  transform: scale(0.95);
 }
 
-.icon-image {
-  width: 48rpx;
-  height: 48rpx;
+.icon-glow {
+  position: absolute;
+  top: -10rpx;
+  left: -10rpx;
+  right: -10rpx;
+  bottom: -10rpx;
+  border-radius: 36rpx;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  background: inherit;
+  filter: blur(20rpx);
+  z-index: -1;
+}
+
+.category-item:active .icon-glow {
+  opacity: 0.5;
 }
 
 .icon-image-full {
-  width: 100rpx;
-  height: 100rpx;
-  border-radius: 28rpx;
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 30rpx;
 }
 
 .category-name {
-  font-size: 24rpx;
-  color: #333333;
-  font-weight: 500;
+  font-size: 26rpx;
+  color: #1c1c1e;
+  font-weight: 600;
+}
+
+.category-count {
+  font-size: 20rpx;
+  color: #8e8e93;
+  margin-top: -4rpx;
 }
 
 /* 特色功能区 */
@@ -502,14 +835,14 @@ onMounted(() => {
 
 .feature-card {
   flex: 1;
-  border-radius: 28rpx;
-  padding: 28rpx;
+  border-radius: 32rpx;
+  padding: 32rpx 28rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 180rpx;
-  box-shadow: 0 10rpx 28rpx rgba(0, 0, 0, 0.14), 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-height: 200rpx;
+  box-shadow: 0 12rpx 36rpx rgba(0, 0, 0, 0.15), 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
   position: relative;
   overflow: hidden;
 
@@ -520,14 +853,30 @@ onMounted(() => {
     left: 0;
     right: 0;
     height: 50%;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 100%);
     pointer-events: none;
   }
 
   &:active {
-    transform: scale(0.96);
-    box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.16), 0 1rpx 4rpx rgba(0, 0, 0, 0.1);
+    transform: scale(0.95) translateY(2rpx);
+    box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.18), 0 1rpx 4rpx rgba(0, 0, 0, 0.1);
   }
+}
+
+.card-shine {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 60%
+  );
+  transform: translateX(-100%);
+  pointer-events: none;
 }
 
 .invitation-card {
@@ -548,29 +897,65 @@ onMounted(() => {
 }
 
 .feature-badge {
-  background: rgba(255, 255, 255, 0.28);
-  padding: 6rpx 18rpx;
-  border-radius: 20rpx;
-  font-size: 18rpx;
+  background: rgba(255, 255, 255, 0.32);
+  padding: 8rpx 20rpx;
+  border-radius: 24rpx;
+  font-size: 20rpx;
   color: #ffffff;
   align-self: flex-start;
-  border: 1rpx solid rgba(255, 255, 255, 0.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.45);
+  font-weight: 500;
+  backdrop-filter: blur(10rpx);
 }
 
 .feature-title {
-  font-size: 26rpx;
+  font-size: 30rpx;
   color: #ffffff;
-  font-weight: 600;
+  font-weight: 700;
+  margin-top: 6rpx;
 }
 
 .feature-desc {
-  font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.feature-cta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 12rpx;
+}
+
+.cta-text {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 500;
+}
+
+.cta-arrow {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 700;
+  transition: transform 0.2s ease;
+}
+
+.feature-card:active .cta-arrow {
+  transform: translateX(6rpx);
+}
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8rpx); }
+}
+
+.animate-float-slow {
+  animation: floatSlow 3s ease-in-out infinite;
 }
 
 .feature-icon-image {
-  width: 56rpx;
-  height: 56rpx;
+  width: 64rpx;
+  height: 64rpx;
   margin-left: 16rpx;
   position: relative;
   z-index: 1;
@@ -580,8 +965,8 @@ onMounted(() => {
 .section {
   margin: 24rpx 24rpx 0;
   background: #ffffff;
-  padding: 28rpx 24rpx;
-  border-radius: 28rpx;
+  padding: 32rpx 24rpx 28rpx;
+  border-radius: 32rpx;
   box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
 }
 
@@ -589,17 +974,41 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
+}
+
+.section-header-column {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24rpx;
+}
+
+.section-title-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
 }
 
 .section-title {
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 700;
   color: #1c1c1e;
+  position: relative;
+}
+
+.title-decoration {
+  width: 8rpx;
+  height: 32rpx;
+  background: linear-gradient(180deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 4rpx;
 }
 
 .section-more {
-  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  transition: all 0.2s ease;
 
   &:active {
     opacity: 0.6;
@@ -607,68 +1016,110 @@ onMounted(() => {
 }
 
 .more-text {
-  font-size: 24rpx;
-  color: #8e8e93;
+  font-size: 26rpx;
+  color: #e84a6e;
+  font-weight: 500;
 }
 
+.more-arrow {
+  font-size: 32rpx;
+  color: #e84a6e;
+  font-weight: 600;
+  margin-top: -2rpx;
+  transition: transform 0.2s ease;
+}
+
+.section-more:active .more-arrow {
+  transform: translateX(4rpx);
+}
+
+/* Tab 胶囊样式 */
 .section-tabs {
   display: flex;
-  gap: 32rpx;
+  gap: 16rpx;
+  flex-wrap: wrap;
 }
 
-.tab-item {
-  font-size: 26rpx;
-  color: #8e8e93;
-  transition: color 0.2s ease;
+.tab-pill {
+  padding: 16rpx 32rpx;
+  background: #f2f2f7;
+  border-radius: 40rpx;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.active {
-    color: #e84a6e;
-    font-weight: 600;
-    position: relative;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -10rpx;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 36rpx;
-      height: 6rpx;
-      background: linear-gradient(90deg, #ff6b8a 0%, #e84a6e 100%);
-      border-radius: 3rpx;
-    }
+    background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+    box-shadow: 0 6rpx 16rpx rgba(232, 74, 110, 0.3);
   }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+.tab-pill-text {
+  font-size: 26rpx;
+  color: #8e8e93;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.tab-pill.active .tab-pill-text {
+  color: #ffffff;
+  font-weight: 600;
 }
 
 /* 横向滚动卡片 */
 .card-scroll {
   white-space: nowrap;
+  margin: 0 -24rpx;
+  padding: 0 24rpx;
 }
 
 .card-list {
   display: inline-flex;
   gap: 20rpx;
-  padding: 4rpx;
+  padding: 6rpx 4rpx 12rpx;
+}
+
+.stagger-list-horizontal {
+  > * {
+    opacity: 0;
+    transform: translateY(16rpx);
+    animation: fadeInUp 0.4s ease forwards;
+  }
+
+  > *:nth-child(1) { animation-delay: 0.05s; }
+  > *:nth-child(2) { animation-delay: 0.1s; }
+  > *:nth-child(3) { animation-delay: 0.15s; }
+  > *:nth-child(4) { animation-delay: 0.2s; }
+  > *:nth-child(5) { animation-delay: 0.25s; }
+  > *:nth-child(6) { animation-delay: 0.3s; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .scroll-card {
   width: 280rpx;
-  border-radius: 24rpx;
+  border-radius: 28rpx;
   overflow: hidden;
   background: linear-gradient(160deg, #ffffff 0%, #fafafa 100%);
-  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1), 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  box-shadow: 0 12rpx 36rpx rgba(0, 0, 0, 0.1), 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
   display: inline-block;
   position: relative;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-
-  &:hover {
-    transform: translateY(-6rpx);
-    box-shadow: 0 16rpx 40rpx rgba(232, 74, 110, 0.18), 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
-  }
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
 
   &:active {
-    transform: scale(0.96);
-    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1), 0 1rpx 3rpx rgba(0, 0, 0, 0.06);
+    transform: scale(0.94) translateY(4rpx);
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.12), 0 1rpx 4rpx rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -677,22 +1128,82 @@ onMounted(() => {
   height: 360rpx;
 }
 
+.card-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.5) 75%, rgba(0, 0, 0, 0.75) 100%);
+  pointer-events: none;
+}
+
+.card-badge-wrap {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  right: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 3;
+}
+
+.card-vip-tag {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 50%, #ff9f00 100%);
+  color: #7a4a00;
+  font-size: 20rpx;
+  font-weight: 700;
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 12rpx rgba(255, 183, 0, 0.4);
+  letter-spacing: 0.5rpx;
+}
+
+.vip-icon {
+  font-size: 18rpx;
+}
+
+.card-hot-tag {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  color: #ffffff;
+  font-size: 18rpx;
+  font-weight: 700;
+  padding: 6rpx 14rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 12rpx rgba(238, 90, 36, 0.4);
+  letter-spacing: 1rpx;
+}
+
 .card-info {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 40rpx 18rpx 18rpx;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.7) 100%);
+  padding: 48rpx 20rpx 20rpx;
+  z-index: 2;
 }
 
 .card-title {
-  font-size: 26rpx;
+  font-size: 28rpx;
   color: #ffffff;
   font-weight: 600;
   display: block;
   margin-bottom: 8rpx;
-  text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.3);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .card-date {
@@ -700,44 +1211,90 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.card-views {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.view-icon {
+  font-size: 20rpx;
+}
+
+.view-count {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 /* 分类模板数量网格 */
 .category-count-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20rpx;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 16rpx;
 }
 
 .count-card {
-  background: linear-gradient(145deg, #ffffff 0%, #f7f7fa 100%);
+  background: linear-gradient(145deg, #ffffff 0%, #fafafc 100%);
   border-radius: 24rpx;
-  padding: 32rpx 24rpx;
+  padding: 24rpx 20rpx;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 12rpx;
+  gap: 20rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1rpx solid rgba(0, 0, 0, 0.03);
 
   &:active {
-    transform: translateY(-4rpx) scale(0.98);
-    box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+    transform: scale(0.98);
+    box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.08);
   }
 }
 
+.count-icon-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.1);
+}
+
 .count-icon-image {
-  width: 56rpx;
-  height: 56rpx;
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.count-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
 }
 
 .count-name {
   font-size: 28rpx;
   color: #1c1c1e;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .count-num {
   font-size: 22rpx;
   color: #8e8e93;
+}
+
+.count-arrow {
+  font-size: 36rpx;
+  color: #c0c0d0;
+  font-weight: 500;
+  margin-top: -4rpx;
+  transition: all 0.2s ease;
+}
+
+.count-card:active .count-arrow {
+  color: #e84a6e;
+  transform: translateX(4rpx);
 }
 
 /* 双栏入口 */
@@ -752,14 +1309,14 @@ onMounted(() => {
   flex: 1;
   display: flex;
   align-items: center;
-  padding: 24rpx 20rpx;
-  border-radius: 24rpx;
+  padding: 28rpx 24rpx;
+  border-radius: 28rpx;
   position: relative;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
 
   &:active {
-    transform: scale(0.96);
+    transform: scale(0.95);
   }
 
   &::before {
@@ -767,60 +1324,140 @@ onMounted(() => {
     position: absolute;
     top: -30%;
     right: -10%;
-    width: 160rpx;
-    height: 160rpx;
+    width: 180rpx;
+    height: 180rpx;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
     pointer-events: none;
   }
 }
 
 .mall-entry {
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 60%, #ff8fb1 100%);
-  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.28);
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 50%, #ff8fb1 100%);
+  box-shadow: 0 10rpx 28rpx rgba(232, 74, 110, 0.32);
 }
 
 .vip-entry {
-  background: linear-gradient(135deg, #ffd700 0%, #ffb700 60%, #ff9f00 100%);
-  box-shadow: 0 8rpx 24rpx rgba(255, 183, 0, 0.28);
+  background: linear-gradient(135deg, #ffe259 0%, #ffa751 50%, #ff8c42 100%);
+  box-shadow: 0 10rpx 28rpx rgba(255, 167, 81, 0.35);
+}
+
+@keyframes vipPulse {
+  0%, 100% {
+    box-shadow: 0 10rpx 28rpx rgba(255, 167, 81, 0.35);
+  }
+  50% {
+    box-shadow: 0 10rpx 40rpx rgba(255, 167, 81, 0.55);
+  }
+}
+
+.vip-pulse {
+  animation: vipPulse 2s ease-in-out infinite;
+}
+
+.vip-badge {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  color: #ffffff;
+  font-size: 18rpx;
+  font-weight: 700;
+  padding: 4rpx 12rpx;
+  border-radius: 16rpx;
+  z-index: 3;
+  box-shadow: 0 4rpx 10rpx rgba(238, 90, 36, 0.4);
+  letter-spacing: 1rpx;
 }
 
 .entry-icon-wrap {
-  width: 72rpx;
-  height: 72rpx;
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 20rpx;
+  width: 76rpx;
+  height: 76rpx;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 22rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-right: 16rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
+  border: 1rpx solid rgba(255, 255, 255, 0.35);
   position: relative;
   z-index: 1;
+  backdrop-filter: blur(10rpx);
 }
 
 .entry-icon {
-  font-size: 36rpx;
+  font-size: 38rpx;
   color: #fff;
 }
 
 .entry-text-wrap {
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  gap: 6rpx;
   position: relative;
   z-index: 1;
+  flex: 1;
 }
 
 .entry-title {
-  font-size: 28rpx;
+  font-size: 30rpx;
   color: #fff;
   font-weight: 700;
 }
 
 .entry-desc {
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.deco-circle {
+  position: absolute;
+  border-radius: 50%;
+  border: 2rpx solid rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.deco-circle-1 {
+  width: 100rpx;
+  height: 100rpx;
+  bottom: -20rpx;
+  left: -20rpx;
+}
+
+.deco-circle-2 {
+  width: 60rpx;
+  height: 60rpx;
+  top: 10rpx;
+  right: 30rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.2);
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.deco-star {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.7);
+  z-index: 1;
+  pointer-events: none;
+  animation: twinkle 2s ease-in-out infinite;
+}
+
+.deco-star-1 {
+  top: 20rpx;
+  right: 60rpx;
+  font-size: 16rpx;
+  animation-delay: 0s;
+}
+
+.deco-star-2 {
+  bottom: 30rpx;
+  right: 20rpx;
+  font-size: 12rpx;
+  animation-delay: 1s;
 }
 
 /* 付费模板卡片 */
@@ -832,29 +1469,50 @@ onMounted(() => {
   position: absolute;
   top: 16rpx;
   right: 16rpx;
+  display: flex;
+  align-items: baseline;
+  gap: 2rpx;
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
   color: #ffffff;
-  font-size: 22rpx;
-  font-weight: 600;
-  padding: 6rpx 18rpx;
-  border-radius: 20rpx;
-  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
+  font-weight: 700;
+  padding: 8rpx 18rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 16rpx rgba(232, 74, 110, 0.45);
+  z-index: 3;
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
-/* 精选卡片 VIP 标识 */
-.card-vip-tag {
+.price-symbol {
+  font-size: 20rpx;
+}
+
+.price-num {
+  font-size: 28rpx;
+}
+
+.paid-sold {
   position: absolute;
   top: 16rpx;
   left: 16rpx;
-  background: linear-gradient(135deg, #ffd700 0%, #ffb700 100%);
-  color: #7a4a00;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10rpx);
+  padding: 8rpx 14rpx;
+  border-radius: 20rpx;
+  z-index: 3;
+  border: 1rpx solid rgba(255, 255, 255, 0.15);
+}
+
+.sold-icon {
+  font-size: 18rpx;
+}
+
+.sold-text {
   font-size: 20rpx;
-  font-weight: 700;
-  padding: 4rpx 14rpx;
-  border-radius: 16rpx;
-  box-shadow: 0 4rpx 12rpx rgba(255, 183, 0, 0.4);
-  letter-spacing: 1rpx;
-  z-index: 2;
+  color: #ffffff;
+  font-weight: 500;
 }
 
 .card-sub {
@@ -865,5 +1523,44 @@ onMounted(() => {
 /* 海报模板卡片 */
 .poster-card-image {
   height: 420rpx;
+}
+
+.poster-category-tag {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12rpx);
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 500;
+  padding: 8rpx 18rpx;
+  border-radius: 20rpx;
+  z-index: 3;
+  border: 1rpx solid rgba(255, 255, 255, 0.2);
+}
+
+/* 错峰入场 */
+.stagger-list {
+  > * {
+    opacity: 0;
+    transform: translateY(20rpx);
+    animation: fadeInUp 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  > *:nth-child(1) { animation-delay: 0.05s; }
+  > *:nth-child(2) { animation-delay: 0.1s; }
+  > *:nth-child(3) { animation-delay: 0.15s; }
+  > *:nth-child(4) { animation-delay: 0.2s; }
+  > *:nth-child(5) { animation-delay: 0.25s; }
+  > *:nth-child(6) { animation-delay: 0.3s; }
+  > *:nth-child(7) { animation-delay: 0.35s; }
+  > *:nth-child(8) { animation-delay: 0.4s; }
+  > *:nth-child(9) { animation-delay: 0.45s; }
+}
+
+/* 底部安全区 */
+.bottom-safe-area {
+  height: calc(120rpx + env(safe-area-inset-bottom));
 }
 </style>

@@ -1,19 +1,24 @@
 <template>
-  <view class="preview-page">
-    <view class="preview-header">
+  <view class="preview-page animate-fade-in">
+    <view class="preview-header animate-slide-down">
       <view class="header-back" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
       <text class="header-title">{{ displayTitle }}</text>
-      <view class="header-action" @click="handleMore">
-        <text class="action-icon">⋯</text>
+      <view class="header-actions">
+        <view class="header-action header-action--share" @click="handleShare">
+          <text class="action-icon action-icon--share">↗</text>
+        </view>
+        <view class="header-action" @click="handleMore">
+          <text class="action-icon">⋯</text>
+        </view>
       </view>
     </view>
 
     <scroll-view class="preview-content" scroll-y>
       <!-- Flip 翻页模式：左右滑动翻页 -->
       <template v-if="editorStore.templateType === 'flip'">
-        <view class="flip-preview-wrap">
+        <view class="flip-preview-wrap animate-fade-scale">
           <swiper
             class="flip-swiper"
             :indicator-dots="true"
@@ -46,7 +51,7 @@
           </swiper>
         </view>
       </template>
-      <view v-else class="preview-zoom-wrap" :style="zoomStyle" @touchstart="onZoomTouchStart" @touchmove="onZoomTouchMove" @touchend="onZoomTouchEnd">
+      <view v-else class="preview-zoom-wrap animate-fade-scale" :style="zoomStyle" @touchstart="onZoomTouchStart" @touchmove="onZoomTouchMove" @touchend="onZoomTouchEnd">
       <!-- Page 模式：垂直滚动区块渲染 -->
       <template v-if="editorStore.templateType === 'page'">
         <view class="preview-card preview-card--page" :style="canvasBackgroundStyle">
@@ -149,12 +154,13 @@
       <view class="zoom-spacer" :style="{ height: spacerHeight + 'px' }"></view>
 
       <!-- 相似推荐 -->
-      <view class="similar-section">
+      <view class="similar-section animate-fade-up">
         <view class="similar-title-bar">
           <text class="similar-bar-text">相似推荐</text>
+          <view class="similar-title-underline"></view>
         </view>
         <view class="similar-list">
-          <view class="similar-item" v-for="(item, idx) in similarTemplates" :key="idx" @click="onSimilarClick(item)">
+          <view class="similar-item animate-stagger-item" v-for="(item, idx) in similarTemplates" :key="idx" :style="{ animationDelay: (idx * 0.1) + 's' }" @click="onSimilarClick(item)">
             <view class="similar-image-wrap">
               <image class="similar-image" lazy-load :src="item.image" mode="aspectFill" @error="onImageError"></image>
               <view class="similar-overlay">
@@ -171,7 +177,7 @@
       </view>
 
       <!-- 导出效果对比 -->
-      <view class="watermark-compare" v-if="!userStore.isVip()">
+      <view class="watermark-compare animate-fade-up glass-card" v-if="!userStore.isVip()">
         <view class="compare-title">&#128064; 导出效果对比</view>
         <view class="compare-row">
           <view class="compare-col">
@@ -180,6 +186,7 @@
             <view class="compare-desc">带水印 · 720px</view>
           </view>
           <view class="compare-col compare-highlight">
+            <view class="compare-vip-badge">VIP</view>
             <view class="compare-label">高清导出</view>
             <image class="compare-img" lazy-load :src="hdPreview" mode="aspectFill" />
             <view class="compare-desc">无水印 · 1440px</view>
@@ -187,19 +194,30 @@
         </view>
         <view class="compare-action">
           <button class="btn-primary" @click="goToVip">3元 高清导出</button>
-          <button class="btn-secondary" @click="exportFree">免费导出</button>
+          <button
+            class="btn-secondary"
+            :class="{ 'btn--loading': exportingLoading }"
+            :disabled="exportingLoading"
+            @click="exportFree"
+          >
+            <view v-if="exportingLoading" class="btn-loading-wrap">
+              <view class="btn-loading-spinner"></view>
+              <text>导出中...</text>
+            </view>
+            <text v-else>免费导出</text>
+          </button>
         </view>
       </view>
 
       <!-- 婚礼推荐 -->
-      <view class="shop-recommend-preview" v-if="recommendProducts.length > 0">
+      <view class="shop-recommend-preview animate-fade-up" v-if="recommendProducts.length > 0">
         <view class="shop-rec-header">
           <text class="shop-rec-title">&#128722; 为你的婚礼推荐</text>
           <text class="shop-rec-more" @click="goToMall">更多 ></text>
         </view>
         <scroll-view class="shop-rec-scroll" scroll-x>
           <view class="shop-rec-list">
-            <view v-for="p in recommendProducts" :key="p.id" class="shop-rec-card" @click="goToProduct(p)">
+            <view v-for="(p, idx) in recommendProducts" :key="p.id" class="shop-rec-card animate-stagger-item" :style="{ animationDelay: (idx * 0.08) + 's' }" @click="goToProduct(p)">
               <image class="shop-rec-img" lazy-load :src="p.image" mode="aspectFill" />
               <text class="shop-rec-name">{{ p.name }}</text>
               <text class="shop-rec-price">{{ p.price }}元</text>
@@ -210,7 +228,7 @@
     </scroll-view>
 
     <!-- 缩放控制 -->
-    <view class="zoom-controls" v-if="isZoomable">
+    <view class="zoom-controls animate-fade-scale" v-if="isZoomable">
       <view class="zoom-btn" @click="zoomIn">
         <text class="zoom-btn-text">+</text>
       </view>
@@ -223,13 +241,13 @@
       </view>
     </view>
 
-    <view class="vip-bar" v-if="!userStore.isVip()" @click="goToVip">
-      <text class="vip-icon">&#9733;</text>
+    <view class="vip-bar animate-slide-up" v-if="!userStore.isVip()" @click="goToVip">
+      <text class="vip-icon">👑</text>
       <text class="vip-text">开通VIP，本次请柬免费导出 + 全模板解锁 + 商城9折</text>
-      <text class="vip-btn">去开通</text>
+      <text class="vip-btn">去开通 →</text>
     </view>
 
-    <view class="preview-footer">
+    <view class="preview-footer animate-slide-up">
       <view class="create-button" @click="handleCreate">
         <text class="button-text">立即制作</text>
       </view>
@@ -249,6 +267,8 @@ import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
+import { useFeedback } from '@/composables/useFeedback'
+import { useAsyncAction } from '@/composables/useAsyncAction'
 import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts } from '@/api'
 import type { EditableElement, Work } from '@/types'
 
@@ -256,6 +276,9 @@ const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const userStore = useUserStore()
 const worksStore = useWorksStore()
+
+const { haptic, feedbackSuccess, feedbackError, feedbackWarning } = useFeedback()
+const { loading: exportingLoading, run: runExport } = useAsyncAction()
 
 // 跟踪所有 setTimeout，组件卸载时统一清理，防止内存泄漏
 let _timers: ReturnType<typeof setTimeout>[] = []
@@ -576,6 +599,7 @@ const handleMore = () => {
 
 const handleCreate = () => {
   if (!userStore.requireLogin()) return
+  haptic('medium')
   const templateId = editorStore.currentTemplateId
   if (templateId) {
     uni.navigateTo({ url: `/pages/editor/index?templateId=${templateId}` })
@@ -585,46 +609,55 @@ const handleCreate = () => {
 }
 
 const goToVip = () => {
+  haptic('light')
   uni.navigateTo({ url: '/pages/vip/index' })
 }
 
 async function exportFree() {
+  if (exportingLoading.value) return
   if (!editorStore.currentWorkId) {
-    uni.showToast({ title: '请先保存作品', icon: 'none' })
+    feedbackWarning('请先保存作品')
     return
   }
-  uni.showLoading({ title: '导出中...' })
-  try {
-    const res = await exportInvitation(editorStore.currentWorkId, { watermark: true, quality: 'normal' })
-    if (res && res.url) {
-      // 先下载到本地临时文件
+  haptic('medium')
+  await runExport(async () => {
+    const res = await exportInvitation(editorStore.currentWorkId!, { watermark: true, quality: 'normal' })
+    if (!res || !res.url) throw new Error('导出失败')
+
+    // 下载并保存到相册
+    await new Promise<void>((resolve, reject) => {
       uni.downloadFile({
         url: res.url,
         success: (downloadRes) => {
-          uni.hideLoading()
-          if (downloadRes.statusCode === 200) {
-            uni.saveImageToPhotosAlbum({
-              filePath: downloadRes.tempFilePath,
-              success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
-              fail: () => uni.showToast({ title: '保存失败，请授权相册权限', icon: 'none' }),
-            })
-          } else {
-            uni.showToast({ title: '下载失败', icon: 'none' })
+          if (downloadRes.statusCode !== 200) {
+            reject(new Error('下载失败'))
+            return
           }
+          uni.saveImageToPhotosAlbum({
+            filePath: downloadRes.tempFilePath,
+            success: () => {
+              feedbackSuccess('已保存到相册')
+              resolve()
+            },
+            fail: (err) => {
+              if (err.errMsg?.includes('auth')) {
+                uni.showModal({
+                  title: '提示',
+                  content: '需要相册权限才能保存图片，请在设置中开启',
+                  confirmText: '去设置',
+                  success: (r) => { if (r.confirm) uni.openSetting({}) },
+                })
+              } else {
+                feedbackError('保存失败，请授权相册权限')
+              }
+              reject(new Error('保存失败'))
+            },
+          })
         },
-        fail: () => {
-          uni.hideLoading()
-          uni.showToast({ title: '下载失败', icon: 'none' })
-        }
+        fail: () => reject(new Error('下载失败')),
       })
-    } else {
-      uni.hideLoading()
-      uni.showToast({ title: '导出失败', icon: 'none' })
-    }
-  } catch (e) {
-    uni.hideLoading()
-    uni.showToast({ title: '导出失败', icon: 'none' })
-  }
+    })
+  }, { successMessage: '导出成功', minLoadingDuration: 500 })
 }
 
 const goToMall = () => {
@@ -695,9 +728,23 @@ const onImageError = () => {
 <style lang="scss" scoped>
 .preview-page {
   min-height: 100vh;
-  background: #f2f2f7;
+  background: linear-gradient(180deg, #fff5f7 0%, #f8f0f2 30%, #f2f2f7 100%);
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.preview-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 600rpx;
+  background: radial-gradient(ellipse at top, rgba(232, 74, 110, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .preview-header {
@@ -705,48 +752,63 @@ const onImageError = () => {
   align-items: center;
   justify-content: space-between;
   padding: 24rpx 32rpx;
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 240, 245, 0.92) 100%);
+  backdrop-filter: blur(24rpx);
+  -webkit-backdrop-filter: blur(24rpx);
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  box-shadow: 0 4rpx 24rpx rgba(232, 74, 110, 0.08), 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  border-bottom: 1rpx solid rgba(232, 74, 110, 0.1);
 }
 
 .header-back {
-  min-width: 60rpx;
-  height: 60rpx;
+  min-width: 72rpx;
+  height: 72rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: transform 0.2s ease, background-color 0.2s ease;
+  background: linear-gradient(135deg, #ff6b8a 0%, #e84a6e 100%);
+  box-shadow: 0 6rpx 16rpx rgba(232, 74, 110, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .header-back:active {
   transform: scale(0.88);
-  background-color: rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2rpx 8rpx rgba(232, 74, 110, 0.25);
 }
 
 .back-icon {
-  font-size: 56rpx;
-  color: #1a1a2e;
-  font-weight: 300;
+  font-size: 48rpx;
+  color: #ffffff;
+  font-weight: 400;
   line-height: 1;
+  margin-left: -4rpx;
 }
 
 .header-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1a1a2e;
+  font-size: 32rpx;
+  font-weight: 700;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 50%, #d6385c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   text-align: center;
   flex: 1;
-  letter-spacing: 1rpx;
+  letter-spacing: 2rpx;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
 }
 
 .header-action {
-  min-width: 60rpx;
-  height: 60rpx;
+  min-width: 64rpx;
+  height: 64rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -756,17 +818,28 @@ const onImageError = () => {
 
 .header-action:active {
   transform: scale(0.88);
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(232, 74, 110, 0.08);
+}
+
+.header-action--share {
+  background: linear-gradient(135deg, rgba(255, 107, 138, 0.12) 0%, rgba(232, 74, 110, 0.08) 100%);
 }
 
 .action-icon {
   font-size: 36rpx;
-  color: #6e6e80;
+  color: #e84a6e;
+  font-weight: 500;
+}
+
+.action-icon--share {
+  font-size: 32rpx;
 }
 
 .preview-content {
   flex: 1;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 /* 画布模式 */
@@ -777,6 +850,20 @@ const onImageError = () => {
   border-radius: 0;
   overflow: hidden;
   margin: 0;
+}
+
+.preview-card--canvas::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 2rpx solid rgba(232, 74, 110, 0.15);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: inset 0 0 40rpx rgba(232, 74, 110, 0.05);
 }
 
 .rendered-image {
@@ -802,18 +889,34 @@ const onImageError = () => {
 
 /* Page 模式 */
 .preview-card--page {
-  padding: 20rpx;
+  padding: 24rpx;
+  margin: 24rpx 32rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid rgba(232, 74, 110, 0.08);
 }
 
 .preview-page-section {
   position: relative;
-  margin-bottom: 30rpx;
-  padding: 16rpx;
-  border-radius: 20rpx;
+  margin-bottom: 36rpx;
+  padding: 20rpx;
+  border-radius: 24rpx;
+}
+
+.preview-page-section + .preview-page-section::before {
+  content: '';
+  position: absolute;
+  top: -18rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1rpx;
+  background: linear-gradient(90deg, transparent, rgba(232, 74, 110, 0.15), transparent);
 }
 
 .preview-page-section--title .section-title {
-  font-size: 40rpx;
+  font-size: 44rpx;
   font-weight: 700;
   text-align: center;
   color: #1a1a2e;
@@ -821,21 +924,22 @@ const onImageError = () => {
 }
 
 .preview-page-section--date .section-date {
-  font-size: 28rpx;
+  font-size: 30rpx;
   text-align: center;
   color: #6e6e80;
-  margin-top: 10rpx;
+  margin-top: 12rpx;
 }
 
 .preview-page-section--image .section-image {
   width: 100%;
   aspect-ratio: 3 / 4;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   background: #f2f2f7;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
 }
 
 .preview-page-section--text .section-text {
-  font-size: 28rpx;
+  font-size: 30rpx;
   color: #6e6e80;
   line-height: 1.8;
   text-align: center;
@@ -861,7 +965,7 @@ const onImageError = () => {
   display: flex;
   align-items: center;
   gap: 20rpx;
-  padding: 20rpx 0;
+  padding: 24rpx 0;
 }
 
 .preview-page-section--divider .divider-line::before,
@@ -880,26 +984,68 @@ const onImageError = () => {
 
 .preview-page-section--countdown .countdown-section {
   text-align: center;
-  padding: 30rpx;
+  padding: 40rpx 30rpx;
+  background: linear-gradient(135deg, rgba(255, 240, 245, 0.6) 0%, rgba(255, 220, 230, 0.4) 100%);
+  border-radius: 28rpx;
+  position: relative;
+  overflow: hidden;
+  border: 1rpx solid rgba(232, 74, 110, 0.15);
+}
+
+.preview-page-section--countdown .countdown-section::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(232, 74, 110, 0.08) 0%, transparent 60%);
+  animation: countdownPulse 3s ease-in-out infinite;
+}
+
+@keyframes countdownPulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.1); opacity: 1; }
 }
 
 .preview-page-section--countdown .countdown-label {
   display: block;
-  font-size: 24rpx;
-  color: #6e6e80;
-  margin-bottom: 10rpx;
+  font-size: 26rpx;
+  color: #8a6a70;
+  margin-bottom: 16rpx;
+  position: relative;
+  z-index: 1;
+  letter-spacing: 4rpx;
+  font-weight: 500;
 }
 
 .preview-page-section--countdown .countdown-days {
-  font-size: 80rpx;
-  font-weight: 700;
-  color: #e84a6e;
+  font-size: 96rpx;
+  font-weight: 800;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 50%, #d6385c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 4rpx 20rpx rgba(232, 74, 110, 0.3);
+  filter: drop-shadow(0 4rpx 12rpx rgba(232, 74, 110, 0.25));
+  animation: countdownNumPulse 2s ease-in-out infinite;
+}
+
+@keyframes countdownNumPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
 }
 
 .preview-page-section--countdown .countdown-unit {
-  font-size: 28rpx;
-  color: #6e6e80;
-  margin-left: 8rpx;
+  font-size: 32rpx;
+  color: #e84a6e;
+  margin-left: 12rpx;
+  font-weight: 600;
+  position: relative;
+  z-index: 1;
 }
 
 /* Flip 翻页模式 */
@@ -916,22 +1062,24 @@ const onImageError = () => {
 /* 翻页指示器精致样式：圆点 -> 激活时变为椭圆胶囊 */
 .flip-swiper :deep(.uni-swiper-dot),
 .flip-swiper :deep(.wx-swiper-dot) {
-  width: 12rpx;
-  height: 12rpx;
+  width: 14rpx;
+  height: 14rpx;
   border-radius: 50%;
-  margin: 0 8rpx;
+  margin: 0 10rpx;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0.55;
+  opacity: 0.5;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
 }
 
 .flip-swiper :deep(.uni-swiper-dot-active),
 .flip-swiper :deep(.wx-swiper-dot-active) {
-  width: 36rpx;
-  height: 12rpx;
-  border-radius: 6rpx;
-  background: #ffffff;
+  width: 40rpx;
+  height: 14rpx;
+  border-radius: 7rpx;
+  background: linear-gradient(90deg, #ff6b8a, #e84a6e);
   opacity: 1;
-  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4rpx 16rpx rgba(232, 74, 110, 0.5), 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
 }
 
 .flip-page-card {
@@ -940,6 +1088,18 @@ const onImageError = () => {
   height: 100vh;
   overflow: hidden;
   background: #f2f2f7;
+}
+
+.flip-page-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-shadow: inset 0 0 60rpx rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  z-index: 10;
 }
 
 .flip-page-element {
@@ -968,12 +1128,23 @@ const onImageError = () => {
   display: flex;
   flex-direction: column;
   padding: 24rpx 32rpx;
-  gap: 20rpx;
+  gap: 24rpx;
+}
+
+.preview-card--flex {
+  margin: 24rpx 32rpx;
+  padding: 28rpx;
+  background: #ffffff;
+  border-radius: 28rpx;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid rgba(232, 74, 110, 0.08);
+  gap: 24rpx;
 }
 
 .preview-image-section {
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   overflow: hidden;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
 }
 
 .preview-section-image {
@@ -984,14 +1155,15 @@ const onImageError = () => {
 }
 
 .preview-text-section {
-  padding: 20rpx;
-  background: #fff;
-  border-radius: 20rpx;
+  padding: 28rpx;
+  background: linear-gradient(135deg, #fff8fa 0%, #ffffff 100%);
+  border-radius: 24rpx;
   text-align: center;
   min-height: 80rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1rpx solid rgba(232, 74, 110, 0.08);
 }
 
 .preview-section-text {
@@ -1002,149 +1174,227 @@ const onImageError = () => {
 
 /* 相似推荐 */
 .similar-section {
-  padding: 24rpx 32rpx;
+  padding: 32rpx;
+  padding-top: 16rpx;
 }
 
 .similar-title-bar {
-  margin-bottom: 20rpx;
+  margin-bottom: 24rpx;
+  position: relative;
+  display: inline-block;
 }
 
 .similar-bar-text {
-  font-size: 28rpx;
-  font-weight: 600;
+  font-size: 32rpx;
+  font-weight: 700;
   color: #1a1a2e;
+  letter-spacing: 2rpx;
+}
+
+.similar-title-underline {
+  margin-top: 10rpx;
+  width: 60rpx;
+  height: 6rpx;
+  background: linear-gradient(90deg, #e84a6e 0%, #ff6b8a 100%);
+  border-radius: 3rpx;
+  box-shadow: 0 2rpx 8rpx rgba(232, 74, 110, 0.4);
 }
 
 .similar-list {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 28rpx;
 }
 
 .similar-item {
   width: 100%;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
 }
 
 .similar-item:active {
-  transform: scale(0.97);
-  opacity: 0.92;
+  transform: scale(0.96) translateY(-4rpx);
+  opacity: 0.95;
 }
 
 .similar-image-wrap {
   width: 100%;
-  height: 500rpx;
-  border-radius: 20rpx;
+  height: 520rpx;
+  border-radius: 28rpx;
   overflow: hidden;
   position: relative;
-  box-shadow: 0 10rpx 36rpx rgba(0, 0, 0, 0.12), 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.15), 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
   transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.similar-item:active .similar-image-wrap {
+  box-shadow: 0 8rpx 28rpx rgba(232, 74, 110, 0.2), 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 }
 
 .similar-image {
   width: 100%;
   height: 100%;
+  transition: transform 0.5s ease;
+}
+
+.similar-item:active .similar-image {
+  transform: scale(1.05);
 }
 
 .similar-overlay {
   position: absolute;
-  top: 60rpx;
+  top: 0;
   left: 0;
   right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8rpx;
+  justify-content: center;
+  gap: 12rpx;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.4) 60%, rgba(0, 0, 0, 0.6) 100%);
 }
 
 .similar-title {
-  font-size: 40rpx;
-  color: #1a1a2e;
+  font-size: 44rpx;
+  color: #ffffff;
   font-weight: bold;
   font-family: STKaiti, KaiTi, serif;
+  text-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.4);
 }
 
 .similar-sub {
-  font-size: 18rpx;
-  color: #6e6e80;
-  letter-spacing: 2rpx;
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 4rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
 }
 
 .similar-stats {
   position: absolute;
-  bottom: 20rpx;
-  left: 20rpx;
+  bottom: 24rpx;
+  left: 24rpx;
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10rpx);
-  -webkit-backdrop-filter: blur(10rpx);
-  padding: 8rpx 16rpx;
-  border-radius: 20rpx;
+  gap: 10rpx;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(16rpx);
+  -webkit-backdrop-filter: blur(16rpx);
+  padding: 12rpx 20rpx;
+  border-radius: 24rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
-.similar-stat-icon { font-size: 20rpx; }
+.similar-stat-icon { font-size: 22rpx; }
 
 .similar-stat-value {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #fff;
+  font-weight: 500;
 }
 
 .preview-footer {
   padding: 20rpx 32rpx;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
-  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(24rpx);
+  -webkit-backdrop-filter: blur(24rpx);
+  box-shadow: 0 -4rpx 24rpx rgba(0, 0, 0, 0.08), 0 -1rpx 0 rgba(232, 74, 110, 0.06);
   flex-shrink: 0;
+  position: relative;
+  z-index: 20;
 }
 
 .create-button {
   width: 100%;
-  height: 88rpx;
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  border-radius: 44rpx;
+  height: 96rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 50%, #e84a6e 100%);
+  background-size: 200% 200%;
+  border-radius: 48rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10rpx 28rpx rgba(232, 74, 110, 0.35), 0 2rpx 8rpx rgba(232, 74, 110, 0.2);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 12rpx 32rpx rgba(232, 74, 110, 0.4), 0 4rpx 12rpx rgba(232, 74, 110, 0.25), 0 0 0 1rpx rgba(255, 255, 255, 0.3) inset;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  animation: btnGradientShift 4s ease-in-out infinite;
+}
+
+@keyframes btnGradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.create-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transform: translateX(-150%) skewX(-15deg);
+  animation: btnShimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes btnShimmer {
+  0% { transform: translateX(-150%) skewX(-15deg); }
+  60%, 100% { transform: translateX(200%) skewX(-15deg); }
 }
 
 .create-button:active {
-  transform: scale(0.97);
-  box-shadow: 0 4rpx 16rpx rgba(232, 74, 110, 0.3);
+  transform: scale(0.96);
+  box-shadow: 0 6rpx 18rpx rgba(232, 74, 110, 0.35), 0 2rpx 8rpx rgba(232, 74, 110, 0.2);
 }
 
 .button-text {
-  font-size: 32rpx;
-  font-weight: 600;
+  font-size: 34rpx;
+  font-weight: 700;
   color: #fff;
-  letter-spacing: 4rpx;
+  letter-spacing: 6rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 1;
 }
 
 /* 导出效果对比 */
 .watermark-compare {
   margin: 24rpx 32rpx;
-  padding: 28rpx;
-  background: #fff;
-  border-radius: 20rpx;
-  box-shadow: 0 6rpx 28rpx rgba(0, 0, 0, 0.05);
+  padding: 32rpx;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border-radius: 28rpx;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid rgba(255, 255, 255, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.watermark-compare::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2rpx;
+  background: linear-gradient(90deg, transparent, #e84a6e, transparent);
+  opacity: 0.3;
 }
 
 .compare-title {
-  font-size: 30rpx;
-  font-weight: 600;
+  font-size: 32rpx;
+  font-weight: 700;
   color: #1a1a2e;
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
+  letter-spacing: 2rpx;
 }
 
 .compare-row {
   display: flex;
   gap: 20rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
 }
 
 .compare-col {
@@ -1152,35 +1402,64 @@ const onImageError = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12rpx;
-  padding: 20rpx 16rpx;
-  background: #f2f2f7;
-  border-radius: 20rpx;
+  gap: 14rpx;
+  padding: 24rpx 16rpx;
+  background: #f7f7fa;
+  border-radius: 24rpx;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
 }
 
 .compare-highlight {
-  background: linear-gradient(135deg, #fff8f0 0%, #fff0e0 100%);
-  border: 2rpx solid rgba(255, 179, 71, 0.4);
-  box-shadow: 0 6rpx 20rpx rgba(255, 179, 71, 0.18);
+  background: linear-gradient(135deg, #fffaf0 0%, #fff5e0 100%);
+  border: 2rpx solid rgba(255, 183, 0, 0.5);
+  box-shadow: 0 8rpx 28rpx rgba(255, 183, 0, 0.25), 0 0 0 1rpx rgba(255, 215, 0, 0.3) inset;
+}
+
+.compare-vip-badge {
+  position: absolute;
+  top: -2rpx;
+  right: 16rpx;
+  padding: 4rpx 16rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb800 100%);
+  color: #8B4513;
+  font-size: 20rpx;
+  font-weight: 700;
+  border-radius: 0 0 12rpx 12rpx;
+  letter-spacing: 1rpx;
+  box-shadow: 0 4rpx 12rpx rgba(255, 183, 0, 0.4);
+  z-index: 2;
 }
 
 .compare-label {
-  font-size: 26rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: #1a1a2e;
 }
 
+.compare-highlight .compare-label {
+  background: linear-gradient(135deg, #d48806 0%, #fa8c16 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .compare-img {
   width: 100%;
-  height: 200rpx;
-  border-radius: 16rpx;
+  height: 220rpx;
+  border-radius: 20rpx;
   background: #e8e8ed;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
 }
 
 .compare-desc {
   font-size: 22rpx;
   color: #6e6e80;
+}
+
+.compare-highlight .compare-desc {
+  color: #d48806;
+  font-weight: 500;
 }
 
 .compare-action {
@@ -1190,24 +1469,27 @@ const onImageError = () => {
 
 .btn-primary {
   flex: 1;
-  height: 80rpx;
+  height: 88rpx;
   background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
   color: #fff;
-  border-radius: 40rpx;
+  border-radius: 44rpx;
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   line-height: 1;
-  box-shadow: 0 6rpx 18rpx rgba(232, 74, 110, 0.3);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.35), 0 2rpx 8rpx rgba(232, 74, 110, 0.2);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  letter-spacing: 2rpx;
 }
 
 .btn-primary:active {
-  transform: scale(0.97);
-  box-shadow: 0 2rpx 8rpx rgba(232, 74, 110, 0.25);
+  transform: scale(0.96);
+  box-shadow: 0 4rpx 14rpx rgba(232, 74, 110, 0.3);
 }
 
 .btn-primary::after {
@@ -1216,23 +1498,23 @@ const onImageError = () => {
 
 .btn-secondary {
   flex: 1;
-  height: 80rpx;
-  background: #f2f2f7;
+  height: 88rpx;
+  background: #ffffff;
   color: #6e6e80;
-  border-radius: 40rpx;
+  border-radius: 44rpx;
   font-size: 28rpx;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 2rpx solid #e8e8ed;
   line-height: 1;
   transition: transform 0.2s ease, background-color 0.2s ease;
 }
 
 .btn-secondary:active {
-  transform: scale(0.97);
-  background: #e8e8ed;
+  transform: scale(0.96);
+  background: #f7f7fa;
 }
 
 .btn-secondary::after {
@@ -1243,28 +1525,33 @@ const onImageError = () => {
 .shop-recommend-preview {
   margin: 24rpx 32rpx;
   padding: 28rpx;
-  background: #fff;
-  border-radius: 20rpx;
-  box-shadow: 0 6rpx 28rpx rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border-radius: 28rpx;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid rgba(255, 255, 255, 0.6);
 }
 
 .shop-rec-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20rpx;
+  margin-bottom: 24rpx;
 }
 
 .shop-rec-title {
-  font-size: 30rpx;
-  font-weight: 600;
+  font-size: 32rpx;
+  font-weight: 700;
   color: #1a1a2e;
+  letter-spacing: 2rpx;
 }
 
 .shop-rec-more {
   font-size: 24rpx;
-  color: #6e6e80;
+  color: #e84a6e;
   transition: opacity 0.2s ease;
+  font-weight: 500;
 }
 
 .shop-rec-more:active {
@@ -1284,19 +1571,25 @@ const onImageError = () => {
   width: 200rpx;
   display: inline-flex;
   flex-direction: column;
-  gap: 8rpx;
-  transition: transform 0.2s ease;
+  gap: 10rpx;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .shop-rec-card:active {
-  transform: scale(0.96);
+  transform: scale(0.94) translateY(-4rpx);
 }
 
 .shop-rec-img {
   width: 200rpx;
   height: 200rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   background: #f2f2f7;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease;
+}
+
+.shop-rec-card:active .shop-rec-img {
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.2);
 }
 
 .shop-rec-name {
@@ -1305,26 +1598,41 @@ const onImageError = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 500;
 }
 
 .shop-rec-price {
-  font-size: 26rpx;
+  font-size: 28rpx;
   color: #e84a6e;
   font-weight: 700;
+  position: relative;
+  display: inline-block;
+}
+
+.shop-rec-price::before {
+  content: '¥';
+  font-size: 22rpx;
+  margin-right: 2rpx;
 }
 
 /* VIP 提示条：精致金色渐变 */
 .vip-bar {
-  padding: 20rpx 32rpx;
-  background: linear-gradient(135deg, #ffe5a0 0%, #ffd700 30%, #f5b800 70%, #e6a800 100%);
+  padding: 22rpx 32rpx;
+  background: linear-gradient(135deg, #fff1b8 0%, #ffd700 25%, #ffb800 50%, #ffa000 75%, #ff8c00 100%);
   background-size: 200% 200%;
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 14rpx;
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 6rpx 24rpx rgba(255, 183, 0, 0.28);
+  box-shadow: 0 8rpx 32rpx rgba(255, 160, 0, 0.35), 0 2rpx 8rpx rgba(255, 183, 0, 0.2);
+  animation: vipBarPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes vipBarPulse {
+  0%, 100% { box-shadow: 0 8rpx 32rpx rgba(255, 160, 0, 0.35), 0 2rpx 8rpx rgba(255, 183, 0, 0.2); }
+  50% { box-shadow: 0 12rpx 40rpx rgba(255, 160, 0, 0.5), 0 4rpx 12rpx rgba(255, 183, 0, 0.3); }
 }
 
 /* 光泽扫过动画 - 使用 transform 代替 left 以优化性能 */
@@ -1335,9 +1643,9 @@ const onImageError = () => {
   left: 0;
   width: 60%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
   transform: translateX(-170%);
-  animation: vipGloss 3.5s ease-in-out infinite;
+  animation: vipGloss 3s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -1346,39 +1654,54 @@ const onImageError = () => {
   60%, 100% { transform: translateX(170%); }
 }
 
+.vip-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at center top, rgba(255, 255, 255, 0.3) 0%, transparent 60%);
+  pointer-events: none;
+}
+
 .vip-bar .vip-icon {
-  font-size: 32rpx;
+  font-size: 36rpx;
   color: #fff;
-  text-shadow: 0 2rpx 4rpx rgba(180, 130, 0, 0.4);
+  text-shadow: 0 2rpx 8rpx rgba(180, 100, 0, 0.4);
   position: relative;
   z-index: 1;
+  filter: drop-shadow(0 2rpx 4rpx rgba(0, 0, 0, 0.2));
 }
 
 .vip-bar .vip-text {
   flex: 1;
   font-size: 26rpx;
   color: #fff;
-  font-weight: 500;
-  text-shadow: 0 2rpx 4rpx rgba(180, 130, 0, 0.3);
+  font-weight: 600;
+  text-shadow: 0 2rpx 8rpx rgba(180, 100, 0, 0.35);
   position: relative;
   z-index: 1;
+  line-height: 1.4;
 }
 
 .vip-bar .vip-btn {
   font-size: 26rpx;
-  color: #b8860b;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.85);
-  padding: 8rpx 20rpx;
-  border-radius: 24rpx;
+  color: #d48806;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffffff 0%, #fff8e1 100%);
+  padding: 10rpx 24rpx;
+  border-radius: 28rpx;
   position: relative;
   z-index: 1;
-  transition: transform 0.2s ease, background-color 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4rpx 12rpx rgba(180, 100, 0, 0.25);
+  letter-spacing: 1rpx;
 }
 
 .vip-bar:active .vip-btn {
-  transform: scale(0.95);
-  background: rgba(255, 255, 255, 0.95);
+  transform: scale(0.94);
+  box-shadow: 0 2rpx 6rpx rgba(180, 100, 0, 0.2);
 }
 
 /* 预览缩放 */
@@ -1396,51 +1719,180 @@ const onImageError = () => {
 .zoom-controls {
   position: fixed;
   right: 24rpx;
-  bottom: 220rpx;
+  bottom: 240rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12rpx;
   z-index: 50;
   background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
-  border-radius: 40rpx;
-  padding: 16rpx 12rpx;
-  box-shadow: 0 10rpx 36rpx rgba(0, 0, 0, 0.12), 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
-  border: 1rpx solid rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(24rpx);
+  -webkit-backdrop-filter: blur(24rpx);
+  border-radius: 44rpx;
+  padding: 18rpx 14rpx;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.15), 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+  border: 1rpx solid rgba(255, 255, 255, 0.7);
 }
 
 .zoom-btn {
-  width: 64rpx;
-  height: 64rpx;
+  width: 68rpx;
+  height: 68rpx;
   border-radius: 50%;
-  background: rgba(242, 242, 247, 0.6);
+  background: linear-gradient(135deg, rgba(255, 107, 138, 0.15) 0%, rgba(232, 74, 110, 0.1) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease, background-color 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2rpx 8rpx rgba(232, 74, 110, 0.1);
 }
 
 .zoom-btn:active {
-  transform: scale(0.88);
-  background: rgba(232, 74, 110, 0.12);
+  transform: scale(0.85);
+  background: linear-gradient(135deg, #ff6b8a 0%, #e84a6e 100%);
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.3);
+}
+
+.zoom-btn:active .zoom-btn-text {
+  color: #ffffff;
 }
 
 .zoom-btn-text {
   font-size: 40rpx;
-  color: #1a1a2e;
-  font-weight: 600;
+  color: #e84a6e;
+  font-weight: 700;
   line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.zoom-reset {
+  background: linear-gradient(135deg, rgba(232, 74, 110, 0.2) 0%, rgba(214, 56, 92, 0.15) 100%);
 }
 
 .zoom-reset .zoom-btn-text {
   font-size: 22rpx;
+  font-weight: 700;
 }
 
 .zoom-level {
   font-size: 20rpx;
-  color: #6e6e80;
-  font-weight: 500;
+  color: #e84a6e;
+  font-weight: 600;
+}
+
+/* ============ 入场动画 ============ */
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(30rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-scale {
+  animation: fadeScale 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes fadeScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-slide-down {
+  animation: slideDown 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-stagger-item {
+  animation: staggerFadeUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes staggerFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== 按钮 loading 态 ===== */
+.btn--loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.btn-loading-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+}
+
+.btn-loading-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border: 3rpx solid rgba(232, 74, 110, 0.2);
+  border-top-color: #e84a6e;
+  border-radius: 50%;
+  animation: btnSpin 0.6s linear infinite;
+}
+
+@keyframes btnSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

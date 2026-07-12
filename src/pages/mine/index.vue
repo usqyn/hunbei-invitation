@@ -1,24 +1,41 @@
 <template>
-  <view class="page">
-    <view class="header-bg"></view>
+  <view class="page animate-fade-in">
+    <view class="header-bg">
+      <view class="header-blob blob-1"></view>
+      <view class="header-blob blob-2"></view>
+      <view class="header-blob blob-3"></view>
+      <view class="header-blob blob-4"></view>
+    </view>
 
     <view class="user-section">
-      <view class="user-card">
-        <view class="avatar" @click="handleAvatarClick">
+      <view class="user-card animate-fade-in-up">
+        <view class="avatar animate-float" @click="handleAvatarClick">
           <text class="avatar-icon">👤</text>
         </view>
         <view class="user-info">
-          <text class="user-name">{{ isLoggedIn ? (nickname || '用户') : '登录/注册' }}</text>
-          <text class="user-desc">{{ isLoggedIn ? '管理你的作品和设置' : '登录后查看更多功能' }}</text>
+          <text class="user-name delay-100">{{ isLoggedIn ? (nickname || '用户') : '登录/注册' }}</text>
+          <text class="user-desc delay-200">{{ isLoggedIn ? '管理你的作品和设置' : '登录后查看更多功能' }}</text>
+          <view class="user-stats delay-300">
+            <text class="stat-item">作品数: <text class="stat-num">0</text></text>
+            <text class="stat-divider">|</text>
+            <text class="stat-item">收藏: <text class="stat-num">0</text></text>
+            <text class="stat-divider">|</text>
+            <text class="stat-item">浏览: <text class="stat-num">0</text></text>
+          </view>
         </view>
-        <view class="user-actions">
+        <view class="user-actions delay-200">
           <view class="action-icon" @click="handleSetting">⚙️</view>
-          <view class="action-icon" @click="handleBell">🔔</view>
+          <view class="action-icon bell-icon" @click="handleBell">
+            🔔
+            <view class="bell-dot"></view>
+          </view>
         </view>
       </view>
     </view>
 
-    <view class="vip-card" @click="handleVip">
+    <view class="vip-card animate-fade-in-up delay-100" @click="handleVip">
+      <view class="vip-watermark">VIP</view>
+      <view class="vip-save-badge">立省¥99</view>
       <view class="vip-content">
         <view class="vip-icon">👑</view>
         <view class="vip-info">
@@ -29,55 +46,72 @@
       <view class="vip-btn">{{ userStore.isVip() ? '查看权益 >' : '立即开通 >' }}</view>
     </view>
 
-    <view class="quick-actions">
+    <view class="quick-actions stagger-list animate-fade-in-up delay-200">
       <view
         v-for="item in quickActions"
         :key="item.id"
         class="quick-item"
         @click="handleQuickAction(item)"
       >
-        <view class="quick-icon" :style="{ background: item.bgColor }">
-          <text>{{ item.icon }}</text>
+        <view class="quick-icon-wrap">
+          <view class="quick-icon" :style="{ background: item.bgColor }">
+            <text>{{ item.icon }}</text>
+          </view>
+          <view v-if="item.badge" class="quick-badge">{{ item.badge }}</view>
         </view>
         <text class="quick-name">{{ item.name }}</text>
       </view>
     </view>
 
-    <view class="tools-section">
-      <view class="section-title">热门工具</view>
-      <view class="tools-grid">
+    <view class="tools-section animate-fade-in-up delay-300">
+      <view class="section-title">
+        <text>热门工具</text>
+        <text class="section-more">全部 ›</text>
+      </view>
+      <view class="tools-grid stagger-list">
         <view
           v-for="tool in hotTools"
           :key="tool.id"
           class="tool-item"
           @click="handleToolClick(tool)"
         >
-          <view class="tool-icon" :style="{ background: tool.bgColor }">
-            <text>{{ tool.icon }}</text>
+          <view class="tool-icon-wrap">
+            <view class="tool-icon" :style="{ background: tool.bgColor }">
+              <text>{{ tool.icon }}</text>
+            </view>
+            <view v-if="tool.tag" class="tool-tag" :class="'tag-' + tool.tag">{{ tool.tag === 'hot' ? 'HOT' : 'NEW' }}</view>
           </view>
           <text class="tool-name">{{ tool.name }}</text>
         </view>
       </view>
     </view>
 
-    <view class="menu-section">
+    <view class="menu-section animate-fade-in-up delay-400">
       <view
         v-for="item in menuItems"
         :key="item.id"
         class="menu-item"
         @click="handleMenuItemClick(item)"
       >
-        <view class="menu-icon">{{ item.icon }}</view>
-        <text class="menu-name">{{ item.name }}</text>
-        <text class="menu-arrow">›</text>
+        <view class="menu-left">
+          <view class="menu-icon">{{ item.icon }}</view>
+          <text class="menu-name">{{ item.name }}</text>
+        </view>
+        <view class="menu-right">
+          <view v-if="item.badge" class="menu-badge-dot"></view>
+          <text class="menu-arrow">›</text>
+        </view>
       </view>
     </view>
 
-    <view v-if="isLoggedIn" class="logout-section">
-      <view class="logout-btn" @click="handleLogout">退出登录</view>
+    <view v-if="isLoggedIn" class="logout-section animate-fade-in-up delay-500">
+      <view class="logout-btn" @click="handleLogout">
+        <text class="logout-icon">🚪</text>
+        <text>退出登录</text>
+      </view>
     </view>
 
-    <view class="footer">
+    <view class="footer safe-area-bottom">
       <text class="copyright">网页版 www.hunbei.com</text>
     </view>
   </view>
@@ -101,25 +135,25 @@ const vipExpireText = computed(() => {
 })
 
 const quickActions = ref([
-  { id: 1, name: '收藏', icon: '⭐', bgColor: '#fff3e0' },
+  { id: 1, name: '收藏', icon: '⭐', bgColor: '#fff3e0', badge: '4' },
   { id: 2, name: '足迹', icon: '👣', bgColor: '#e3f2fd' },
-  { id: 3, name: '卡券包', icon: '🎫', bgColor: '#fce4ec' },
+  { id: 3, name: '卡券包', icon: '🎫', bgColor: '#fce4ec', badge: '2' },
   { id: 4, name: '回收站', icon: '🗑️', bgColor: '#e8f5e9' }
 ])
 
 const hotTools = ref([
-  { id: 1, name: '婚礼文案', icon: '📝', bgColor: '#ffe4e8' },
-  { id: 2, name: '一键成请柬', icon: '✨', bgColor: '#e6f3ff' },
+  { id: 1, name: '婚礼文案', icon: '📝', bgColor: '#ffe4e8', tag: 'hot' },
+  { id: 2, name: '一键成请柬', icon: '✨', bgColor: '#e6f3ff', tag: 'hot' },
   { id: 3, name: '婚礼MV', icon: '🎬', bgColor: '#fff3e6' },
-  { id: 4, name: '朋友圈图片', icon: '📸', bgColor: '#e8f5e9' },
+  { id: 4, name: '朋友圈图片', icon: '📸', bgColor: '#e8f5e9', tag: 'new' },
   { id: 5, name: '迎宾海报', icon: '🎨', bgColor: '#fce4ec' },
-  { id: 6, name: '一键出片', icon: '📷', bgColor: '#f3e5f5' },
+  { id: 6, name: '一键出片', icon: '📷', bgColor: '#f3e5f5', tag: 'new' },
   { id: 7, name: '我的海报', icon: '🖼️', bgColor: '#e3f2fd' },
   { id: 8, name: '收到的请柬', icon: '💌', bgColor: '#fff9c4' }
 ])
 
 const menuItems = ref([
-  { id: 1, name: '我的订单', icon: '📦' },
+  { id: 1, name: '我的订单', icon: '📦', badge: true },
   { id: 2, name: '在线客服', icon: '💬' },
   { id: 3, name: '意见反馈', icon: '📧' },
   { id: 4, name: '设置', icon: '⚙️' }
@@ -212,9 +246,65 @@ const handleLogout = () => {
   min-height: 100vh;
   background: #f5f6fa;
   padding-bottom: 120rpx;
+  opacity: 0;
+  animation: pageFadeIn 0.5s ease forwards;
 }
 
-/* 顶部 mesh gradient：多色径向渐变叠加 */
+@keyframes pageFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in-up {
+  opacity: 0;
+  transform: translateY(20rpx);
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+
+.animate-float {
+  animation: avatarFloat 3.5s ease-in-out infinite;
+}
+
+@keyframes avatarFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6rpx); }
+}
+
+.stagger-list {
+  > * {
+    opacity: 0;
+    transform: translateY(16rpx);
+    animation: fadeInUp 0.4s ease forwards;
+  }
+
+  > *:nth-child(1) { animation-delay: 0.05s; }
+  > *:nth-child(2) { animation-delay: 0.1s; }
+  > *:nth-child(3) { animation-delay: 0.15s; }
+  > *:nth-child(4) { animation-delay: 0.2s; }
+  > *:nth-child(5) { animation-delay: 0.25s; }
+  > *:nth-child(6) { animation-delay: 0.3s; }
+  > *:nth-child(7) { animation-delay: 0.35s; }
+  > *:nth-child(8) { animation-delay: 0.4s; }
+}
+
+/* 顶部 mesh gradient：动态径向渐变blob */
 .header-bg {
   height: 380rpx;
   position: absolute;
@@ -222,12 +312,74 @@ const handleLogout = () => {
   left: 0;
   right: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(255, 138, 190, 0.92) 0%, transparent 42%),
-    radial-gradient(circle at 82% 12%, rgba(173, 122, 255, 0.55) 0%, transparent 48%),
-    radial-gradient(circle at 72% 82%, rgba(255, 178, 120, 0.6) 0%, transparent 52%),
-    radial-gradient(circle at 22% 88%, rgba(255, 110, 140, 0.7) 0%, transparent 52%),
-    linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+}
+
+.header-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40rpx);
+  opacity: 0.7;
+}
+
+.blob-1 {
+  width: 300rpx;
+  height: 300rpx;
+  background: rgba(255, 138, 190, 0.9);
+  top: -60rpx;
+  left: -40rpx;
+  animation: blobMove1 8s ease-in-out infinite;
+}
+
+.blob-2 {
+  width: 280rpx;
+  height: 280rpx;
+  background: rgba(173, 122, 255, 0.5);
+  top: -40rpx;
+  right: -60rpx;
+  animation: blobMove2 10s ease-in-out infinite;
+}
+
+.blob-3 {
+  width: 260rpx;
+  height: 260rpx;
+  background: rgba(255, 178, 120, 0.55);
+  bottom: -80rpx;
+  right: 20rpx;
+  animation: blobMove3 9s ease-in-out infinite;
+}
+
+.blob-4 {
+  width: 240rpx;
+  height: 240rpx;
+  background: rgba(255, 110, 140, 0.6);
+  bottom: -60rpx;
+  left: 20rpx;
+  animation: blobMove4 7s ease-in-out infinite;
+}
+
+@keyframes blobMove1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(20rpx, 30rpx) scale(1.1); }
+  66% { transform: translate(-10rpx, 20rpx) scale(0.95); }
+}
+
+@keyframes blobMove2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-30rpx, 20rpx) scale(1.05); }
+  66% { transform: translate(10rpx, 30rpx) scale(1.1); }
+}
+
+@keyframes blobMove3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-20rpx, -30rpx) scale(0.95); }
+  66% { transform: translate(30rpx, -10rpx) scale(1.05); }
+}
+
+@keyframes blobMove4 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(25rpx, -20rpx) scale(1.1); }
+  66% { transform: translate(-20rpx, -25rpx) scale(0.9); }
 }
 
 .user-section {
@@ -264,6 +416,7 @@ const handleLogout = () => {
   margin-right: 24rpx;
   box-shadow: 0 8rpx 20rpx rgba(232, 74, 110, 0.25);
   transition: transform 0.3s ease;
+  flex-shrink: 0;
 
   &:active {
     transform: scale(0.94);
@@ -283,6 +436,7 @@ const handleLogout = () => {
 
 .user-info {
   flex: 1;
+  min-width: 0;
 }
 
 .user-name {
@@ -290,44 +444,92 @@ const handleLogout = () => {
   font-weight: 600;
   color: #1a1a2e;
   display: block;
-  margin-bottom: 8rpx;
+  margin-bottom: 6rpx;
+  opacity: 0;
+  animation: fadeInUp 0.4s ease 0.1s forwards;
 }
 
 .user-desc {
   font-size: 24rpx;
   color: #6e6e80;
+  display: block;
+  margin-bottom: 12rpx;
+  opacity: 0;
+  animation: fadeInUp 0.4s ease 0.2s forwards;
+}
+
+.user-stats {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  animation: fadeInUp 0.4s ease 0.3s forwards;
+}
+
+.stat-item {
+  font-size: 22rpx;
+  color: #6e6e80;
+}
+
+.stat-num {
+  font-weight: 600;
+  color: #e84a6e;
+}
+
+.stat-divider {
+  margin: 0 12rpx;
+  font-size: 20rpx;
+  color: #d8d8e0;
 }
 
 .user-actions {
   display: flex;
   gap: 24rpx;
+  opacity: 0;
+  animation: fadeInUp 0.4s ease 0.2s forwards;
 }
 
 .action-icon {
   font-size: 40rpx;
   transition: transform 0.25s ease;
+  position: relative;
 
   &:active {
     transform: scale(0.88);
   }
 }
 
-/* VIP 卡片：精致金色渐变 + 内部高光 + 光泽扫过动画 */
+.bell-icon {
+  position: relative;
+}
+
+.bell-dot {
+  position: absolute;
+  top: 4rpx;
+  right: 2rpx;
+  width: 14rpx;
+  height: 14rpx;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 2rpx solid #ffffff;
+}
+
+/* VIP 卡片：奢华金色渐变 + 水印 + 立省徽章 */
 .vip-card {
   position: relative;
   margin: 24rpx;
   padding: 28rpx 24rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
   overflow: hidden;
-  background: linear-gradient(135deg, #fce38a 0%, #f5af19 45%, #f12711 100%);
-  box-shadow: 0 12rpx 32rpx rgba(241, 39, 17, 0.28);
-  transition: transform 0.3s ease;
+  background: linear-gradient(135deg, #d4a017 0%, #f5d76e 25%, #f5af19 50%, #e89316 75%, #b8860b 100%);
+  box-shadow: 0 16rpx 40rpx rgba(212, 160, 23, 0.35);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
 
   &:active {
-    transform: scale(0.98);
+    transform: scale(0.97);
+    box-shadow: 0 8rpx 20rpx rgba(212, 160, 23, 0.25);
   }
 
   /* 内部顶部高光 */
@@ -338,8 +540,9 @@ const handleLogout = () => {
     left: 0;
     right: 0;
     height: 55%;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 100%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 100%);
     pointer-events: none;
+    z-index: 1;
   }
 
   /* 光泽扫过动画 */
@@ -350,11 +553,39 @@ const handleLogout = () => {
     left: -60%;
     width: 40%;
     height: 100%;
-    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%);
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
     transform: skewX(-20deg);
     animation: vipShimmer 3.6s ease-in-out infinite;
     pointer-events: none;
+    z-index: 2;
   }
+}
+
+.vip-watermark {
+  position: absolute;
+  right: -20rpx;
+  top: 50%;
+  transform: translateY(-50%) rotate(-15deg);
+  font-size: 120rpx;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.08);
+  letter-spacing: 8rpx;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.vip-save-badge {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 6rpx 14rpx;
+  border-radius: 20rpx;
+  z-index: 3;
+  box-shadow: 0 4rpx 10rpx rgba(238, 90, 36, 0.3);
 }
 
 @keyframes vipShimmer {
@@ -389,52 +620,64 @@ const handleLogout = () => {
   font-size: 28rpx;
   font-weight: 600;
   color: #ffffff;
+  text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.15);
 }
 
 .vip-desc {
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
 }
 
 .vip-btn {
   position: relative;
   z-index: 1;
   background: #ffffff;
-  padding: 12rpx 24rpx;
-  border-radius: 24rpx;
+  padding: 14rpx 28rpx;
+  border-radius: 28rpx;
   font-size: 24rpx;
-  color: #e84a6e;
+  color: #d4a017;
   font-weight: 600;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.12);
-  transition: transform 0.25s ease;
+  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.12);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
 
   &:active {
-    transform: scale(0.94);
+    transform: scale(0.92);
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
   }
 }
 
+/* 快捷操作 */
 .quick-actions {
   background: #ffffff;
   margin: 0 24rpx;
-  border-radius: 20rpx;
-  padding: 28rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 32rpx 24rpx;
   display: flex;
   justify-content: space-around;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.06);
 }
 
 .quick-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:active {
     transform: scale(0.92);
+
+    .quick-icon {
+      box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+    }
   }
 }
 
-/* 快捷操作图标：柔和阴影 + :active 微缩放 */
+.quick-icon-wrap {
+  position: relative;
+  margin-bottom: 12rpx;
+}
+
 .quick-icon {
   width: 88rpx;
   height: 88rpx;
@@ -442,9 +685,41 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12rpx;
   font-size: 36rpx;
   box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 50%);
+    pointer-events: none;
+  }
+}
+
+.quick-badge {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  background: #ef4444;
+  color: #ffffff;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid #ffffff;
+  box-sizing: border-box;
 }
 
 .quick-name {
@@ -452,51 +727,69 @@ const handleLogout = () => {
   color: #6e6e80;
 }
 
+/* 热门工具 */
 .tools-section {
   background: #ffffff;
   margin: 24rpx;
-  border-radius: 20rpx;
-  padding: 28rpx 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+  border-radius: 24rpx;
+  padding: 32rpx 24rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.06);
 }
 
 .section-title {
-  font-size: 28rpx;
+  font-size: 30rpx;
   font-weight: 600;
   color: #1a1a2e;
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-more {
+  font-size: 24rpx;
+  color: #a0a0b0;
+  font-weight: 400;
 }
 
 .tools-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 28rpx 24rpx;
+  gap: 32rpx 24rpx;
 }
 
 .tool-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:active {
-    transform: translateY(-4rpx) scale(0.96);
+    transform: translateY(-6rpx) scale(0.96);
+
+    .tool-icon {
+      box-shadow: 0 12rpx 28rpx rgba(0, 0, 0, 0.12);
+    }
   }
 }
 
-/* 工具图标：背景渐变叠加（高光） + 悬浮阴影 */
+.tool-icon-wrap {
+  position: relative;
+  margin-bottom: 14rpx;
+}
+
 .tool-icon {
   position: relative;
   width: 96rpx;
   height: 96rpx;
-  border-radius: 24rpx;
+  border-radius: 26rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 14rpx;
-  font-size: 40rpx;
+  font-size: 42rpx;
   overflow: hidden;
   box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease;
 
   &::before {
     content: '';
@@ -505,7 +798,7 @@ const handleLogout = () => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.05) 100%);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.06) 100%);
     pointer-events: none;
   }
 
@@ -515,33 +808,76 @@ const handleLogout = () => {
   }
 }
 
+.tool-tag {
+  position: absolute;
+  top: -10rpx;
+  right: -10rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+  padding: 4rpx 10rpx;
+  border-radius: 12rpx;
+  color: #ffffff;
+  z-index: 2;
+
+  &.tag-hot {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  }
+
+  &.tag-new {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  }
+}
+
 .tool-name {
   font-size: 24rpx;
   color: #6e6e80;
 }
 
+/* 菜单列表 */
 .menu-section {
   background: #ffffff;
   margin: 0 24rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   overflow: hidden;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.06);
 }
 
 .menu-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 32rpx 28rpx;
-  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+  position: relative;
   transition: background 0.2s ease;
 
+  &::after {
+    content: '';
+    position: absolute;
+    left: 84rpx;
+    right: 28rpx;
+    bottom: 0;
+    height: 1rpx;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.05) 100%);
+  }
+
   &:last-child {
-    border-bottom: none;
+    &::after {
+      display: none;
+    }
   }
 
   &:active {
-    background: rgba(0, 0, 0, 0.03);
+    background: rgba(232, 74, 110, 0.04);
+
+    .menu-arrow {
+      transform: translateX(6rpx);
+    }
   }
+}
+
+.menu-left {
+  display: flex;
+  align-items: center;
 }
 
 .menu-icon {
@@ -550,49 +886,77 @@ const handleLogout = () => {
 }
 
 .menu-name {
-  flex: 1;
   font-size: 28rpx;
   color: #1a1a2e;
   font-weight: 500;
+}
+
+.menu-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.menu-badge-dot {
+  width: 16rpx;
+  height: 16rpx;
+  background: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3rpx #ffffff;
 }
 
 .menu-arrow {
   font-size: 36rpx;
   color: #c8c8d0;
   transition: transform 0.2s ease;
+  font-weight: 300;
 }
 
+/* 退出按钮 */
 .logout-section {
   padding: 24rpx;
 }
 
-/* 退出按钮：:active 反馈 */
 .logout-btn {
   width: 100%;
-  height: 92rpx;
-  line-height: 92rpx;
-  text-align: center;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
   background: #ffffff;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   font-size: 28rpx;
   color: #ef4444;
   font-weight: 500;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
-  transition: all 0.2s ease;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.06);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2rpx solid rgba(239, 68, 68, 0.1);
 
   &:active {
-    transform: scale(0.98);
+    transform: scale(0.97);
     background: #fef2f2;
+    box-shadow: 0 4rpx 16rpx rgba(239, 68, 68, 0.15);
   }
 }
 
+.logout-icon {
+  font-size: 32rpx;
+}
+
+/* 底部版权 */
 .footer {
   text-align: center;
-  padding: 48rpx 0;
+  padding: 48rpx 0 32rpx;
 }
 
 .copyright {
   font-size: 22rpx;
   color: #b8b8c4;
+  letter-spacing: 1rpx;
+}
+
+.safe-area-bottom {
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
 }
 </style>

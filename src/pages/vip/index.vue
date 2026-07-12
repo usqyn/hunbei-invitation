@@ -1,55 +1,89 @@
 <template>
   <view class="page vip-page">
-    <!-- 顶部标题 -->
-    <view class="vip-header">
-      <text class="vip-title">&#9733; 开通 VIP</text>
+    <!-- Hero 区域 -->
+    <view class="vip-hero">
+      <view class="hero-bg">
+        <view class="hero-glow"></view>
+        <view class="sparkle sparkle-1"></view>
+        <view class="sparkle sparkle-2"></view>
+        <view class="sparkle sparkle-3"></view>
+        <view class="sparkle sparkle-4"></view>
+        <view class="sparkle sparkle-5"></view>
+      </view>
+      <view class="crown-container">
+        <view class="crown-glow"></view>
+        <text class="crown-icon">&#128081;</text>
+        <view class="ray ray-1"></view>
+        <view class="ray ray-2"></view>
+        <view class="ray ray-3"></view>
+        <view class="ray ray-4"></view>
+      </view>
+      <text class="vip-title">开通VIP</text>
       <text class="vip-subtitle">解锁全部功能，让请柬更专业</text>
     </view>
-    
+
     <!-- 权益展示 -->
-    <view class="vip-benefits">
-      <view v-for="b in benefits" :key="b.icon" class="benefit-item">
-        <text class="benefit-icon">{{ b.icon }}</text>
-        <text class="benefit-title">{{ b.title }}</text>
-        <text class="benefit-desc">{{ b.desc }}</text>
+    <view class="vip-benefits-section">
+      <text class="section-title">会员特权</text>
+      <view class="vip-benefits">
+        <view v-for="b in benefits" :key="b.icon" class="benefit-item">
+          <view class="benefit-icon-wrap">
+            <text class="benefit-icon">{{ b.icon }}</text>
+          </view>
+          <text class="benefit-title">{{ b.title }}</text>
+          <text class="benefit-desc">{{ b.desc }}</text>
+        </view>
       </view>
     </view>
-    
+
     <!-- 价格卡片 -->
-    <view class="vip-plans">
-      <view
-        v-for="plan in plans"
-        :key="plan.key"
-        class="plan-card"
-        :class="{ active: selectedPlan === plan.key, best: plan.best }"
-        @click="selectedPlan = plan.key"
-      >
-        <view v-if="plan.best" class="best-badge">最划算</view>
-        <text class="plan-name">{{ plan.name }}</text>
-        <text class="plan-price">{{ plan.price }}元</text>
-        <text class="plan-original" v-if="plan.original">原价{{ plan.original }}元</text>
-        <text class="plan-unit">/{{ plan.unit }}</text>
+    <view class="vip-plans-section">
+      <text class="section-title">选择套餐</text>
+      <view class="vip-plans">
+        <view
+          v-for="plan in plans"
+          :key="plan.key"
+          class="plan-card"
+          :class="{ active: selectedPlan === plan.key, best: plan.best }"
+          @click="selectedPlan = plan.key"
+        >
+          <view v-if="plan.best" class="best-badge">
+            <text class="best-badge-text">最划算</text>
+          </view>
+          <text class="plan-name">{{ plan.name }}</text>
+          <view class="plan-price-wrap">
+            <text class="plan-price">{{ plan.price }}</text>
+            <text class="plan-currency">元</text>
+          </view>
+          <text class="plan-original" v-if="plan.original && plan.original !== plan.price">原价{{ plan.original }}元</text>
+          <text class="plan-unit">/{{ plan.unit }}</text>
+          <text v-if="plan.best" class="plan-avg">月均17元</text>
+        </view>
       </view>
     </view>
-    
+
     <!-- 权益对比表 -->
-    <view class="vip-compare">
-      <view class="compare-row compare-header">
-        <text class="compare-cell">功能</text>
-        <text class="compare-cell">免费</text>
-        <text class="compare-cell vip-cell">VIP</text>
-      </view>
-      <view v-for="c in compareList" :key="c.feature" class="compare-row">
-        <text class="compare-cell">{{ c.feature }}</text>
-        <text class="compare-cell">{{ c.free }}</text>
-        <text class="compare-cell vip-cell">{{ c.vip }}</text>
+    <view class="vip-compare-section">
+      <text class="section-title">权益对比</text>
+      <view class="vip-compare">
+        <view class="compare-row compare-header">
+          <text class="compare-cell compare-feature">功能</text>
+          <text class="compare-cell">免费</text>
+          <text class="compare-cell vip-cell">VIP</text>
+        </view>
+        <view v-for="c in compareList" :key="c.feature" class="compare-row">
+          <text class="compare-cell compare-feature">{{ c.feature }}</text>
+          <text class="compare-cell">{{ c.free }}</text>
+          <text class="compare-cell vip-cell">{{ c.vip }}</text>
+        </view>
       </view>
     </view>
-    
+
     <!-- 底部支付按钮 -->
     <view class="vip-footer">
+      <view class="footer-bg"></view>
       <button class="pay-btn" @click="handlePay">
-        立即开通 {{ currentPlan.price }}元
+        <text class="pay-btn-text">立即开通 {{ currentPlan.price }}元</text>
       </button>
       <text class="pay-tip">开通即表示同意《VIP服务协议》</text>
     </view>
@@ -133,29 +167,461 @@ track('vip_page_view')
 </script>
 
 <style lang="scss" scoped>
-.page { min-height: 100vh; background: #0f172a; color: #f1f5f9; padding-bottom: 240rpx; }
-.vip-header { text-align: center; padding: 80rpx 40rpx; background: linear-gradient(135deg, #f59e0b22, #ec489922); }
-.vip-title { font-size: 56rpx; font-weight: 700; display: block; }
-.vip-subtitle { font-size: 28rpx; color: #94a3b8; margin-top: 16rpx; display: block; }
-.vip-benefits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24rpx; padding: 40rpx; }
-.benefit-item { background: #1e293b; border-radius: 24rpx; padding: 32rpx 16rpx; text-align: center; }
-.benefit-icon { font-size: 48rpx; display: block; }
-.benefit-title { font-size: 26rpx; font-weight: 600; margin-top: 16rpx; display: block; }
-.benefit-desc { font-size: 22rpx; color: #94a3b8; margin-top: 8rpx; display: block; }
-.vip-plans { display: flex; gap: 24rpx; padding: 0 40rpx; }
-.plan-card { flex: 1; background: #1e293b; border: 2rpx solid #334155; border-radius: 24rpx; padding: 32rpx; text-align: center; position: relative; }
-.plan-card.active { border-color: #f59e0b; background: #f59e0b11; }
-.best-badge { position: absolute; top: -20rpx; right: 16rpx; background: #f59e0b; color: #0f172a; font-size: 20rpx; font-weight: 700; padding: 4rpx 16rpx; border-radius: 20rpx; }
-.plan-name { font-size: 28rpx; display: block; }
-.plan-price { font-size: 48rpx; font-weight: 700; color: #f59e0b; display: block; margin-top: 8rpx; }
-.plan-original { font-size: 22rpx; color: #94a3b8; text-decoration: line-through; display: block; }
-.plan-unit { font-size: 24rpx; color: #94a3b8; }
-.vip-compare { margin: 40rpx; background: #1e293b; border-radius: 24rpx; overflow: hidden; }
-.compare-row { display: flex; border-bottom: 2rpx solid #334155; }
-.compare-header { background: #334155; font-weight: 600; }
-.compare-cell { flex: 1; padding: 24rpx 16rpx; font-size: 26rpx; text-align: center; }
-.vip-cell { color: #f59e0b; font-weight: 600; }
-.vip-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 2rpx solid #334155; padding: 32rpx 40rpx; z-index: 100; }
-.pay-btn { width: 100%; background: linear-gradient(135deg, #f59e0b, #ec4899); color: #0f172a; font-weight: 700; font-size: 32rpx; border: none; border-radius: 48rpx; padding: 28rpx; }
-.pay-tip { display: block; text-align: center; font-size: 22rpx; color: #94a3b8; margin-top: 16rpx; }
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #1a0f2e 0%, #0f172a 40%, #0a0a0f 100%);
+  color: #f1f5f9;
+  padding-bottom: 280rpx;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Hero 区域 */
+.vip-hero {
+  position: relative;
+  text-align: center;
+  padding: 100rpx 40rpx 80rpx;
+  overflow: hidden;
+}
+
+.hero-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.hero-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500rpx;
+  height: 500rpx;
+  background: radial-gradient(circle, rgba(245, 215, 110, 0.15) 0%, rgba(245, 166, 35, 0.08) 40%, transparent 70%);
+  border-radius: 50%;
+  animation: pulse 4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+.sparkle {
+  position: absolute;
+  width: 8rpx;
+  height: 8rpx;
+  background: #f5d76e;
+  border-radius: 50%;
+  box-shadow: 0 0 12rpx #f5d76e, 0 0 24rpx rgba(245, 215, 110, 0.5);
+  animation: sparkle 3s ease-in-out infinite;
+}
+
+.sparkle-1 { top: 80rpx; left: 60rpx; animation-delay: 0s; }
+.sparkle-2 { top: 120rpx; right: 80rpx; animation-delay: 0.8s; width: 6rpx; height: 6rpx; }
+.sparkle-3 { top: 200rpx; left: 100rpx; animation-delay: 1.5s; width: 10rpx; height: 10rpx; }
+.sparkle-4 { bottom: 100rpx; right: 60rpx; animation-delay: 2s; }
+.sparkle-5 { bottom: 150rpx; left: 80rpx; animation-delay: 1s; width: 6rpx; height: 6rpx; }
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.crown-container {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 30rpx;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12rpx); }
+}
+
+.crown-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 180rpx;
+  height: 180rpx;
+  background: radial-gradient(circle, rgba(245, 215, 110, 0.4) 0%, rgba(245, 166, 35, 0.2) 40%, transparent 70%);
+  border-radius: 50%;
+  animation: glow-breath 2.5s ease-in-out infinite;
+}
+
+@keyframes glow-breath {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+
+.crown-icon {
+  font-size: 100rpx;
+  position: relative;
+  z-index: 1;
+  display: block;
+  filter: drop-shadow(0 0 20rpx rgba(245, 215, 110, 0.8));
+}
+
+.ray {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4rpx;
+  height: 60rpx;
+  background: linear-gradient(180deg, rgba(245, 215, 110, 0.6) 0%, transparent 100%);
+  transform-origin: center bottom;
+  opacity: 0.6;
+}
+
+.ray-1 { transform: translate(-50%, -100%) rotate(0deg) translateY(-40rpx); }
+.ray-2 { transform: translate(-50%, -100%) rotate(45deg) translateY(-40rpx); }
+.ray-3 { transform: translate(-50%, -100%) rotate(-45deg) translateY(-40rpx); }
+.ray-4 { transform: translate(-50%, -100%) rotate(90deg) translateY(-40rpx); }
+
+.vip-title {
+  font-size: 72rpx;
+  font-weight: 800;
+  display: block;
+  background: linear-gradient(135deg, #f5d76e 0%, #f5a623 50%, #e89316 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: 4rpx;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 4rpx 20rpx rgba(245, 166, 35, 0.3));
+}
+
+.vip-subtitle {
+  font-size: 28rpx;
+  color: #94a3b8;
+  margin-top: 20rpx;
+  display: block;
+  position: relative;
+  z-index: 1;
+  letter-spacing: 2rpx;
+}
+
+/* Section 标题 */
+.section-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #f1f5f9;
+  display: block;
+  margin-bottom: 32rpx;
+  padding-left: 40rpx;
+  position: relative;
+}
+
+.section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8rpx;
+  height: 36rpx;
+  background: linear-gradient(180deg, #f5d76e, #f5a623);
+  border-radius: 0 8rpx 8rpx 0;
+}
+
+/* 权益展示 */
+.vip-benefits-section {
+  padding: 40rpx 0 20rpx;
+}
+
+.vip-benefits {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+  padding: 0 40rpx;
+}
+
+.benefit-item {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 2rpx solid rgba(245, 215, 110, 0.15);
+  border-radius: 24rpx;
+  padding: 36rpx 28rpx;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.benefit-item:active {
+  transform: scale(0.97);
+  border-color: rgba(245, 215, 110, 0.4);
+}
+
+.benefit-icon-wrap {
+  width: 88rpx;
+  height: 88rpx;
+  background: radial-gradient(circle, rgba(245, 215, 110, 0.15) 0%, transparent 70%);
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20rpx;
+}
+
+.benefit-icon {
+  font-size: 48rpx;
+  display: block;
+  filter: drop-shadow(0 0 12rpx rgba(245, 215, 110, 0.5));
+}
+
+.benefit-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-top: 8rpx;
+  display: block;
+}
+
+.benefit-desc {
+  font-size: 24rpx;
+  color: #94a3b8;
+  margin-top: 10rpx;
+  display: block;
+  line-height: 1.5;
+}
+
+/* 价格卡片 */
+.vip-plans-section {
+  padding: 40rpx 0 20rpx;
+}
+
+.vip-plans {
+  display: flex;
+  gap: 20rpx;
+  padding: 0 40rpx;
+}
+
+.plan-card {
+  flex: 1;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 2rpx solid rgba(148, 163, 184, 0.2);
+  border-radius: 28rpx;
+  padding: 40rpx 20rpx 32rpx;
+  text-align: center;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.plan-card.active {
+  border-color: #f5d76e;
+  background: linear-gradient(180deg, rgba(245, 215, 110, 0.1) 0%, rgba(15, 23, 42, 0.95) 100%);
+  transform: scale(1.02);
+  box-shadow: 0 0 30rpx rgba(245, 215, 110, 0.2), inset 0 0 30rpx rgba(245, 215, 110, 0.05);
+}
+
+.plan-card.best.active {
+  border-color: #f5a623;
+  box-shadow: 0 0 40rpx rgba(245, 166, 35, 0.3), inset 0 0 40rpx rgba(245, 166, 35, 0.08);
+}
+
+.best-badge {
+  position: absolute;
+  top: -2rpx;
+  left: 50%;
+  transform: translateX(-50%) translateY(-60%);
+  background: linear-gradient(135deg, #f5d76e 0%, #f5a623 50%, #e89316 100%);
+  padding: 8rpx 24rpx;
+  border-radius: 24rpx 24rpx 24rpx 8rpx;
+  box-shadow: 0 4rpx 16rpx rgba(245, 166, 35, 0.4);
+}
+
+.best-badge-text {
+  font-size: 22rpx;
+  font-weight: 800;
+  color: #1a0f2e;
+  letter-spacing: 2rpx;
+}
+
+.plan-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #cbd5e1;
+  display: block;
+  margin-bottom: 16rpx;
+}
+
+.plan-price-wrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  margin-bottom: 8rpx;
+}
+
+.plan-price {
+  font-size: 56rpx;
+  font-weight: 800;
+  background: linear-gradient(135deg, #f5d76e 0%, #f5a623 50%, #e89316 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1;
+}
+
+.plan-currency {
+  font-size: 28rpx;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f5d76e, #f5a623);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-left: 4rpx;
+}
+
+.plan-original {
+  font-size: 22rpx;
+  color: #64748b;
+  text-decoration: line-through;
+  display: block;
+  margin-bottom: 4rpx;
+}
+
+.plan-unit {
+  font-size: 24rpx;
+  color: #64748b;
+  display: block;
+}
+
+.plan-avg {
+  font-size: 22rpx;
+  color: #f5d76e;
+  margin-top: 12rpx;
+  display: block;
+  font-weight: 600;
+}
+
+/* 权益对比表 */
+.vip-compare-section {
+  padding: 40rpx 40rpx 20rpx;
+}
+
+.vip-compare-section .section-title {
+  padding-left: 0;
+}
+
+.vip-compare-section .section-title::before {
+  left: 0;
+}
+
+.vip-compare {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 2rpx solid rgba(148, 163, 184, 0.15);
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+
+.compare-row {
+  display: flex;
+  border-bottom: 2rpx solid rgba(148, 163, 184, 0.1);
+}
+
+.compare-row:last-child {
+  border-bottom: none;
+}
+
+.compare-header {
+  background: rgba(51, 65, 85, 0.5);
+  font-weight: 700;
+}
+
+.compare-cell {
+  flex: 1;
+  padding: 28rpx 12rpx;
+  font-size: 26rpx;
+  text-align: center;
+  color: #cbd5e1;
+}
+
+.compare-feature {
+  flex: 1.2;
+  text-align: left;
+  padding-left: 28rpx;
+  color: #94a3b8;
+}
+
+.compare-header .compare-cell {
+  color: #f1f5f9;
+  font-weight: 700;
+  font-size: 28rpx;
+}
+
+.vip-cell {
+  color: #f5d76e;
+  font-weight: 600;
+}
+
+.compare-header .vip-cell {
+  color: #f5d76e;
+  background: rgba(245, 215, 110, 0.08);
+}
+
+/* 底部支付按钮 */
+.vip-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24rpx 40rpx 48rpx;
+  z-index: 100;
+}
+
+.footer-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(10, 10, 15, 0.8) 0%, rgba(10, 10, 15, 0.95) 50%, #0a0a0f 100%);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border-top: 2rpx solid rgba(245, 215, 110, 0.1);
+}
+
+.pay-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #f5d76e 0%, #f5a623 40%, #e89316 100%);
+  border: none;
+  border-radius: 48rpx;
+  padding: 30rpx;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8rpx 32rpx rgba(245, 166, 35, 0.4), 0 4rpx 12rpx rgba(245, 166, 35, 0.2);
+  transition: all 0.15s ease;
+}
+
+.pay-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 4rpx 16rpx rgba(245, 166, 35, 0.3);
+}
+
+.pay-btn::after {
+  border: none;
+}
+
+.pay-btn-text {
+  font-size: 34rpx;
+  font-weight: 800;
+  color: #1a0f2e;
+  letter-spacing: 4rpx;
+}
+
+.pay-tip {
+  display: block;
+  text-align: center;
+  font-size: 22rpx;
+  color: #64748b;
+  margin-top: 16rpx;
+  position: relative;
+  z-index: 1;
+}
 </style>

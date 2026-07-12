@@ -227,3 +227,316 @@ page {
     transform: scale(1);
   }
 }
+
+// 卡片悬浮弹簧效果
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8rpx); }
+}
+
+// 呼吸光晕效果
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 74, 110, 0.4); }
+  50% { box-shadow: 0 0 0 20rpx rgba(232, 74, 110, 0); }
+}
+
+// 渐入（从不同方向）
+@keyframes fadeInLeft {
+  from { opacity: 0; transform: translateX(-30rpx); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeInRight {
+  from { opacity: 0; transform: translateX(30rpx); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+// 滑出底部弹窗
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+// 旋转加载
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+// 弹跳加载点
+@keyframes bounceDot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+// 数字跳动
+@keyframes numberPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+// 摇晃（错误提示）
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-10rpx); }
+  40%, 80% { transform: translateX(10rpx); }
+}
+
+// 心跳
+@keyframes heartBeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.1); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.1); }
+  70% { transform: scale(1); }
+}
+
+// 动画工具类
+.animate-float { animation: cardFloat 3s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulseGlow 2s ease-out infinite; }
+.animate-fade-in-left { animation: fadeInLeft 0.4s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-fade-in-right { animation: fadeInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-fade-in-scale { animation: fadeInScale 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both; }
+.animate-slide-up { animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-slide-down { animation: slideDown 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-spin { animation: spin 1s linear infinite; }
+.animate-shake { animation: shake 0.5s ease-in-out; }
+.animate-heartbeat { animation: heartBeat 1.3s ease-in-out infinite; }
+.animate-bounce-in { animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both; }
+
+// 动画延迟
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+
+// 按钮系统升级
+.btn-secondary {
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  border: 2rpx solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 22rpx 48rpx;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+
+  &:active {
+    transform: scale(0.96);
+    background: var(--color-bg-hover);
+  }
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-primary);
+  border: none;
+  padding: 16rpx 24rpx;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  transition: opacity var(--transition-fast);
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 22rpx 48rpx;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  box-shadow: 0 8rpx 24rpx rgba(239, 68, 68, 0.25);
+  transition: transform var(--transition-fast);
+
+  &:active {
+    transform: scale(0.96);
+  }
+}
+
+.btn-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-lg {
+  padding: 28rpx 56rpx;
+  font-size: var(--font-size-md);
+}
+
+// 卡片层级系统
+.card-flat {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  border: 1rpx solid var(--color-border-light);
+}
+
+.card-raised {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.card-glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+// 标签/徽章系统
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rpx 16rpx;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1.4;
+
+  &.tag-primary {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+  }
+
+  &.tag-success {
+    background: #dcfce7;
+    color: #16a34a;
+  }
+
+  &.tag-warning {
+    background: #fef3c7;
+    color: #d97706;
+  }
+
+  &.tag-danger {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+
+  &.tag-info {
+    background: #dbeafe;
+    color: #2563eb;
+  }
+
+  &.tag-gold {
+    background: linear-gradient(135deg, #fce38a, #f5af19);
+    color: #ffffff;
+    text-shadow: 0 1rpx 2rpx rgba(0,0,0,0.1);
+  }
+}
+
+.badge {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  background: #ef4444;
+  color: #ffffff;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid #ffffff;
+}
+
+// 列表错峰入场
+.stagger-list {
+  > * {
+    opacity: 0;
+    transform: translateY(20rpx);
+    animation: fadeInUp 0.4s ease forwards;
+  }
+
+  > *:nth-child(1) { animation-delay: 0.05s; }
+  > *:nth-child(2) { animation-delay: 0.1s; }
+  > *:nth-child(3) { animation-delay: 0.15s; }
+  > *:nth-child(4) { animation-delay: 0.2s; }
+  > *:nth-child(5) { animation-delay: 0.25s; }
+  > *:nth-child(6) { animation-delay: 0.3s; }
+  > *:nth-child(7) { animation-delay: 0.35s; }
+  > *:nth-child(8) { animation-delay: 0.4s; }
+}
+
+// 骨架屏组件
+.skeleton-line {
+  height: 24rpx;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(90deg, #f0f0f5 25%, #e8e8f0 50%, #f0f0f5 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  margin-bottom: 16rpx;
+}
+
+.skeleton-circle {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #f0f0f5 25%, #e8e8f0 50%, #f0f0f5 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-card {
+  height: 200rpx;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, #f0f0f5 25%, #e8e8f0 50%, #f0f0f5 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  margin-bottom: var(--space-md);
+}
+
+// 安全区域适配
+.safe-bottom-nav {
+  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+}
+
+.header-safe-area {
+  padding-top: calc(20rpx + env(safe-area-inset-top));
+}
+
+/* ============================================================
+ * 无障碍适配：减弱动画
+ * 尊重用户系统设置，影响 25% 用户（WCAG 2.1 SC 2.3.3）
+ * 小程序中通过 media query 在 H5 端生效
+ * ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

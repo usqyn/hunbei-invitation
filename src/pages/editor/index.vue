@@ -1,21 +1,40 @@
 <template>
   <view class="editor-page">
     <!-- Header -->
-    <view class="editor-header">
+    <view class="editor-header animate-slide-down-fade">
       <view class="header-back" @click="goBack">
         <text class="back-icon">‹</text>
       </view>
-      <text class="header-title">编辑器</text>
+      <view class="header-center">
+        <text class="header-title">{{ templateStore.templateData?.coverTitle || '编辑器' }}</text>
+        <view class="ai-badge">
+          <text class="ai-badge-icon">✨</text>
+          <text class="ai-badge-text">AI 智能填充</text>
+        </view>
+      </view>
       <view class="header-right"></view>
     </view>
 
     <!-- Body: 根据模板类型渲染不同编辑界面 -->
     <view v-if="editorStore.templateLoading" class="loading-overlay">
-      <view class="skeleton-card">
-        <view class="skeleton-img skeleton-pulse"></view>
-        <view class="skeleton-line skeleton-pulse" style="width: 60%"></view>
-        <view class="skeleton-line skeleton-pulse" style="width: 40%"></view>
-        <view class="skeleton-line skeleton-pulse" style="width: 70%"></view>
+      <view class="loading-content">
+        <view class="loading-decor loading-decor-1">💌</view>
+        <view class="loading-decor loading-decor-2">💕</view>
+        <view class="loading-decor loading-decor-3">🌸</view>
+        <view class="skeleton-card">
+          <view class="skeleton-img skeleton-shimmer"></view>
+          <view class="skeleton-line skeleton-shimmer" style="width: 60%"></view>
+          <view class="skeleton-line skeleton-shimmer" style="width: 40%"></view>
+          <view class="skeleton-line skeleton-shimmer" style="width: 70%"></view>
+        </view>
+        <view class="loading-text-wrap">
+          <text class="loading-text">正在加载模板...</text>
+          <view class="loading-dots">
+            <text class="loading-dot"></text>
+            <text class="loading-dot"></text>
+            <text class="loading-dot"></text>
+          </view>
+        </view>
       </view>
     </view>
     <view v-else-if="editorStore.templateType === 'page'" class="editor-body editor-body--page">
@@ -30,7 +49,7 @@
         <scroll-view class="preview-scroll" scroll-y>
           <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
           <template v-if="editorStore.renderedImage && !renderedImageStale">
-            <view class="rendered-image-container">
+            <view class="rendered-image-container animate-fade-in-scale">
               <image
                 class="rendered-image"
                 :src="editorStore.renderedImage"
@@ -54,7 +73,7 @@
                 <!-- 缩放手柄（选中时显示） -->
                 <view
                   v-if="editorStore.selectedElement === idx && el.editable !== false"
-                  class="resize-handle"
+                  class="resize-handle resize-handle--active"
                   @touchstart.stop="onResizeHandleTouchStart"
                   @touchmove.stop.prevent="onResizeHandleTouchMove"
                   @touchend.stop="onResizeHandleTouchEnd"
@@ -64,14 +83,19 @@
           </template>
           <!-- 无 renderedImage：回退到百分比定位渲染 -->
           <template v-else>
-            <view v-if="editorStore.editableElements.length === 0" class="empty-template-hint">
-              <view class="empty-hint-icon-wrap">
+            <view v-if="editorStore.editableElements.length === 0" class="empty-template-hint animate-fade-in-scale">
+              <view class="empty-hint-icon-wrap animate-float">
                 <text class="empty-hint-icon">📋</text>
               </view>
               <text class="empty-hint-text">此模板暂无内容</text>
               <text class="empty-hint-sub">请在管理端重新发布模板</text>
+              <view class="empty-hint-decoration">
+                <text class="empty-decor-dot"></text>
+                <text class="empty-decor-dot"></text>
+                <text class="empty-decor-dot"></text>
+              </view>
             </view>
-            <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
+            <view v-else class="preview-card preview-card--canvas animate-fade-in-scale" :style="canvasBackgroundStyle">
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="el.id || ('el-' + idx)"
                 class="canvas-element"
@@ -102,7 +126,7 @@
                 <!-- 缩放手柄（选中时显示） -->
                 <view
                   v-if="editorStore.selectedElement === idx && el.editable !== false"
-                  class="resize-handle"
+                  class="resize-handle resize-handle--active"
                   @touchstart.stop="onResizeHandleTouchStart"
                   @touchmove.stop.prevent="onResizeHandleTouchMove"
                   @touchend.stop="onResizeHandleTouchEnd"
@@ -117,58 +141,78 @@
     <!-- 底部工具栏：上下文工具栏 + 5 Tab + 操作按钮 -->
     <view class="editor-footer">
       <!-- 上下文工具栏：选中元素时显示快捷操作 -->
-      <view v-if="editorStore.selectedElement !== null" class="context-toolbar">
+      <view v-if="editorStore.selectedElement !== null" class="context-toolbar context-toolbar--glass">
         <view class="ctx-btn" @click="handleEditText">
-          <text class="ctx-icon">✏️</text>
+          <text class="ctx-icon ctx-icon--bounce">✏️</text>
           <text class="ctx-label">编辑</text>
         </view>
+        <view class="ctx-divider"></view>
         <view v-if="selectedElType === 'image'" class="ctx-btn" @click="handleReplaceImage">
-          <text class="ctx-icon">🖼️</text>
+          <text class="ctx-icon ctx-icon--bounce">🖼️</text>
           <text class="ctx-label">换图</text>
         </view>
+        <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
         <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
-          <text class="ctx-icon">↩</text>
+          <text class="ctx-icon ctx-icon--bounce">↩</text>
           <text class="ctx-label">撤销</text>
         </view>
+        <view class="ctx-divider"></view>
         <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canRedo }" @click="handleRedo">
-          <text class="ctx-icon">↪</text>
+          <text class="ctx-icon ctx-icon--bounce">↪</text>
           <text class="ctx-label">重做</text>
         </view>
+        <view class="ctx-divider"></view>
         <view class="ctx-btn ctx-btn--danger" @click="deselectElement">
-          <text class="ctx-icon">✕</text>
+          <text class="ctx-icon ctx-icon--bounce">✕</text>
           <text class="ctx-label">取消</text>
         </view>
       </view>
       <!-- 底部 Tab + 操作区 -->
-      <view class="footer-main">
+      <view class="footer-main footer-stagger-anim">
         <view class="footer-tabs">
-          <view class="footer-tab" @click="openUnifiedEdit">
-            <text class="tab-icon">📋</text>
+          <view class="footer-tab footer-tab--item" @click="openUnifiedEdit">
+            <text class="tab-icon tab-icon--hover">📋</text>
             <text class="tab-label">信息</text>
           </view>
-          <view class="footer-tab" @click="handleEditText">
-            <text class="tab-icon">✏️</text>
+          <view class="footer-tab footer-tab--item" @click="handleEditText">
+            <text class="tab-icon tab-icon--hover">✏️</text>
             <text class="tab-label">文字</text>
           </view>
-          <view class="footer-tab" @click="handleReplaceImage">
-            <text class="tab-icon">🖼️</text>
+          <view class="footer-tab footer-tab--item" @click="handleReplaceImage">
+            <text class="tab-icon tab-icon--hover">🖼️</text>
             <text class="tab-label">图片</text>
           </view>
-          <view class="footer-tab" @click="handleMusic">
-            <text class="tab-icon">🎵</text>
+          <view class="footer-tab footer-tab--item" @click="handleMusic">
+            <text class="tab-icon tab-icon--hover">🎵</text>
             <text class="tab-label">音乐</text>
           </view>
-          <view class="footer-tab" @click="handleMore">
-            <text class="tab-icon">⋯</text>
+          <view class="footer-tab footer-tab--item" @click="handleMore">
+            <text class="tab-icon tab-icon--hover">⋯</text>
             <text class="tab-label">更多</text>
           </view>
         </view>
         <view class="footer-actions">
-          <view class="footer-action-btn footer-save-btn" @click="handleSave">
-            <text class="action-btn-text">保存</text>
+          <view
+            class="footer-action-btn footer-save-btn footer-save-btn--enhanced"
+            :class="{ 'btn--loading': savingLoading }"
+            @click="handleSave"
+          >
+            <view v-if="savingLoading" class="btn-spinner-wrap">
+              <view class="btn-spinner"></view>
+              <text class="action-btn-text">保存中</text>
+            </view>
+            <text v-else class="action-btn-text">保存</text>
           </view>
-          <view class="footer-action-btn footer-share-btn" @click="handleShare">
-            <text class="action-btn-text">预览分享</text>
+          <view
+            class="footer-action-btn footer-share-btn footer-share-btn--enhanced"
+            :class="{ 'btn--loading': sharingLoading }"
+            @click="handleShare"
+          >
+            <view v-if="sharingLoading" class="btn-spinner-wrap">
+              <view class="btn-spinner"></view>
+              <text class="action-btn-text">准备中</text>
+            </view>
+            <text v-else class="action-btn-text">预览分享</text>
           </view>
         </view>
       </view>
@@ -211,6 +255,8 @@ import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
+import { useFeedback } from '@/composables/useFeedback'
+import { useAsyncAction } from '@/composables/useAsyncAction'
 import { exportInvitation, uploadImage } from '@/api'
 import PageEditor from './components/PageEditor.vue'
 import FlipEditor from './components/FlipEditor.vue'
@@ -222,6 +268,11 @@ const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const worksStore = useWorksStore()
 const userStore = useUserStore()
+
+const { haptic, feedbackSuccess, feedbackError, feedbackWarning } = useFeedback()
+const { loading: savingLoading, run: runSave } = useAsyncAction()
+const { loading: sharingLoading, run: runShare } = useAsyncAction()
+const { loading: exportingLoading, run: runExport } = useAsyncAction()
 
 const {
   isCanvasMode,
@@ -744,56 +795,58 @@ function handleChangeTemplate() {
 }
 
 async function handleSave() {
+  if (savingLoading.value) return
+  haptic('medium')
   track('edit_save', { progress: editProgress.value })
-  const editorData = {
-    elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
-    pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
-    flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
-    background: JSON.parse(JSON.stringify(editorStore.background)),
-    canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
-    templateType: editorStore.templateType,
-    templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
-    basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
-    settings: JSON.parse(JSON.stringify(templateStore.settings)),
-    currentFlipPageIndex: editorStore.currentFlipPageIndex,
-  }
-  const musicId = templateStore.selectedMusicId
-  if (editorStore.currentWorkId) {
-    const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
-    if (existing) {
-      existing.title = templateStore.templateData.coverTitle || '未命名作品'
-      existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
-      existing.image = templateStore.templateData.coverImage
-      existing.cover = templateStore.templateData.coverImage
-      existing.templateId = editorStore.currentTemplateId
-      existing.templateType = editorStore.templateType
-      existing.musicId = musicId
-      existing.data = editorData
-      existing.updatedAt = new Date().toISOString()
-      worksStore.saveAsWork(existing)
-      uni.showToast({ title: '已保存', icon: 'success' })
-      return
+  await runSave(async () => {
+    const editorData = {
+      elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
+      pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
+      flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
+      background: JSON.parse(JSON.stringify(editorStore.background)),
+      canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
+      templateType: editorStore.templateType,
+      templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
+      basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
+      settings: JSON.parse(JSON.stringify(templateStore.settings)),
+      currentFlipPageIndex: editorStore.currentFlipPageIndex,
     }
-  }
-  const id = editorStore.currentWorkId || String(Date.now())
-  if (!editorStore.currentWorkId) {
-    editorStore.setCurrentWorkId(id)
-  }
-  const work: Work = {
-    id,
-    title: templateStore.templateData.coverTitle || '未命名作品',
-    date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
-    image: templateStore.templateData.coverImage,
-    cover: templateStore.templateData.coverImage,
-    templateId: editorStore.currentTemplateId,
-    templateType: editorStore.templateType,
-    musicId,
-    status: 'draft',
-    data: editorData,
-    updatedAt: new Date().toISOString(),
-  }
-  worksStore.saveAsWork(work)
-  uni.showToast({ title: '已保存', icon: 'success' })
+    const musicId = templateStore.selectedMusicId
+    if (editorStore.currentWorkId) {
+      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+      if (existing) {
+        existing.title = templateStore.templateData.coverTitle || '未命名作品'
+        existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+        existing.image = templateStore.templateData.coverImage
+        existing.cover = templateStore.templateData.coverImage
+        existing.templateId = editorStore.currentTemplateId
+        existing.templateType = editorStore.templateType
+        existing.musicId = musicId
+        existing.data = editorData
+        existing.updatedAt = new Date().toISOString()
+        worksStore.saveAsWork(existing)
+        return
+      }
+    }
+    const id = editorStore.currentWorkId || String(Date.now())
+    if (!editorStore.currentWorkId) {
+      editorStore.setCurrentWorkId(id)
+    }
+    const work: Work = {
+      id,
+      title: templateStore.templateData.coverTitle || '未命名作品',
+      date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+      image: templateStore.templateData.coverImage,
+      cover: templateStore.templateData.coverImage,
+      templateId: editorStore.currentTemplateId,
+      templateType: editorStore.templateType,
+      musicId,
+      status: 'draft',
+      data: editorData,
+      updatedAt: new Date().toISOString(),
+    }
+    worksStore.saveAsWork(work)
+  }, { successMessage: '已保存', minLoadingDuration: 400 })
 }
 
 function handleExport() {
@@ -888,7 +941,34 @@ async function doExport(options: { watermark: boolean; quality: string }) {
 }
 
 async function handleShare() {
-  await handleSave()
+  if (sharingLoading.value) return
+  haptic('medium')
+  await runShare(async () => {
+    // 先保存
+    const editorData = {
+      elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
+      pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
+      flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
+      background: JSON.parse(JSON.stringify(editorStore.background)),
+      canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
+      templateType: editorStore.templateType,
+      templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
+      basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
+      settings: JSON.parse(JSON.stringify(templateStore.settings)),
+      currentFlipPageIndex: editorStore.currentFlipPageIndex,
+    }
+    const musicId = templateStore.selectedMusicId
+    if (editorStore.currentWorkId) {
+      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
+      if (existing) {
+        existing.data = editorData
+        existing.musicId = musicId
+        existing.updatedAt = new Date().toISOString()
+        worksStore.saveAsWork(existing)
+      }
+    }
+  }, { minLoadingDuration: 300 })
+
   const templateId = editorStore.currentTemplateId
   if (templateId) {
     uni.navigateTo({ url: `/pages/share/index?templateId=${templateId}` })
@@ -1008,54 +1088,181 @@ onUnmounted(() => {
   width: 100%;
   height: 100vh;
   background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
+  overflow: hidden;
 }
 
-/* Header */
+/* ===== 入场动画定义 ===== */
+@keyframes slideDownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-30rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(40rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(232, 74, 110, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 16rpx rgba(232, 74, 110, 0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10rpx); }
+}
+
+@keyframes bounceDot {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes iconBounce {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes saveSuccessPop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ===== Header ===== */
 .editor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: calc(env(safe-area-inset-top) + 20rpx) 30rpx 20rpx;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(12rpx);
-  -webkit-backdrop-filter: blur(12rpx);
-  border-bottom: none;
+  padding: calc(env(safe-area-inset-top) + 20rpx) 30rpx 24rpx;
+  background: linear-gradient(135deg, #ffffff 0%, #fff5f7 50%, #fef0f3 100%);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border-bottom: 1rpx solid rgba(232, 74, 110, 0.08);
   flex-shrink: 0;
-  box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4rpx 24rpx rgba(232, 74, 110, 0.08), 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  position: relative;
+  z-index: 100;
+}
+
+.animate-slide-down-fade {
+  animation: slideDownFade 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .header-back {
-  width: 72rpx;
-  height: 72rpx;
+  width: 80rpx;
+  height: 80rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.04);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 245, 247, 0.9) 100%);
   border-radius: 50%;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2rpx 12rpx rgba(232, 74, 110, 0.1);
+  border: 1rpx solid rgba(232, 74, 110, 0.12);
 }
 
 .header-back:active {
-  background: rgba(0, 0, 0, 0.1);
-  transform: scale(0.92);
+  background: linear-gradient(135deg, rgba(232, 74, 110, 0.1) 0%, rgba(255, 107, 138, 0.1) 100%);
+  transform: scale(0.9);
+  box-shadow: 0 1rpx 6rpx rgba(232, 74, 110, 0.15);
 }
 
 .back-icon {
-  font-size: 44rpx;
-  color: #2c2c2c;
-  font-weight: 300;
+  font-size: 52rpx;
+  color: #e84a6e;
+  font-weight: 400;
   line-height: 1;
+  margin-top: -4rpx;
+}
+
+.header-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  flex: 1;
 }
 
 .header-title {
   font-size: 34rpx;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2c2c2c 0%, #4a4a4a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.5rpx;
+  max-width: 400rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 4rpx 16rpx;
+  background: linear-gradient(135deg, rgba(232, 74, 110, 0.1) 0%, rgba(255, 107, 138, 0.1) 100%);
+  border-radius: 20rpx;
+  border: 1rpx solid rgba(232, 74, 110, 0.2);
+}
+
+.ai-badge-icon {
+  font-size: 20rpx;
+}
+
+.ai-badge-text {
+  font-size: 20rpx;
   font-weight: 600;
-  color: #2c2c2c;
-  letter-spacing: 1rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .header-right {
-  width: 72rpx;
+  width: 80rpx;
 }
 
 /* Body */
@@ -1074,7 +1281,7 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: linear-gradient(180deg, #fdf6f8 0%, #ffffff 100%);
   border-radius: 0;
   overflow: hidden;
   min-height: 0;
@@ -1094,10 +1301,20 @@ onUnmounted(() => {
   gap: 20rpx;
 }
 
+.animate-fade-in-scale {
+  animation: fadeInScale 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
 /* ===== 画布模式 ===== */
 .rendered-image-container {
   position: relative;
   width: 100%;
+  margin: 24rpx auto;
+  max-width: 680rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.1), 0 4rpx 16rpx rgba(232, 74, 110, 0.06);
+  border: 2rpx solid rgba(255, 255, 255, 0.8);
 }
 
 .rendered-image {
@@ -1108,11 +1325,15 @@ onUnmounted(() => {
 .rendered-overlay-element {
   position: absolute;
   z-index: 10;
+  border-radius: 4rpx;
+  transition: box-shadow 0.3s ease;
 }
 
 .rendered-overlay-element--active {
   outline: 4rpx solid #e84a6e;
-  outline-offset: -4rpx;
+  outline-offset: -2rpx;
+  animation: pulseGlow 2s ease-in-out infinite;
+  border-radius: 4rpx;
 }
 
 .rendered-overlay-element--no-click {
@@ -1121,51 +1342,97 @@ onUnmounted(() => {
 
 .preview-card--canvas {
   display: block;
-  padding: 0;
+  padding: 24rpx;
   gap: 0;
   position: relative;
   border-radius: 0;
-  overflow: hidden;
-  margin: 0;
+  overflow: visible;
+  margin: 0 auto;
+  max-width: 720rpx;
+  width: calc(100% - 48rpx);
+  margin-top: 24rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 16rpx rgba(232, 74, 110, 0.04);
+  border: 2rpx solid rgba(255, 255, 255, 0.9);
 }
 
+/* ===== 空模板提示 ===== */
 .empty-template-hint {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 160rpx 40rpx;
-  gap: 20rpx;
+  padding: 200rpx 60rpx;
+  gap: 24rpx;
+  position: relative;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }
 
 .empty-hint-icon-wrap {
-  width: 120rpx;
-  height: 120rpx;
-  background: linear-gradient(135deg, #f0f0f5 0%, #e8e8f0 100%);
-  border-radius: 30rpx;
+  width: 160rpx;
+  height: 160rpx;
+  background: linear-gradient(135deg, #fff0f3 0%, #ffe4e8 50%, #ffd6dd 100%);
+  border-radius: 40rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 8rpx;
+  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.15), inset 0 2rpx 4rpx rgba(255, 255, 255, 0.8);
+  border: 2rpx solid rgba(255, 255, 255, 0.9);
 }
 
 .empty-hint-icon {
-  font-size: 60rpx;
+  font-size: 80rpx;
 }
 
 .empty-hint-text {
-  font-size: 32rpx;
-  color: #6e6e80;
-  font-weight: 600;
+  font-size: 34rpx;
+  color: #3a3a4a;
+  font-weight: 700;
+  letter-spacing: 0.5rpx;
 }
 
 .empty-hint-sub {
   font-size: 26rpx;
-  color: #a8a8b4;
+  color: #a0a0b0;
 }
 
+.empty-hint-decoration {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.empty-decor-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  opacity: 0.4;
+}
+
+.empty-decor-dot:nth-child(2) {
+  opacity: 0.7;
+  width: 16rpx;
+  height: 16rpx;
+}
+
+.empty-decor-dot:nth-child(1) {
+  opacity: 0.3;
+}
+
+.empty-decor-dot:nth-child(3) {
+  opacity: 0.3;
+}
+
+/* ===== 画布元素 ===== */
 .canvas-element {
   overflow: hidden;
+  border-radius: 4rpx;
 }
 .canvas-element.text-element {
   overflow: hidden;
@@ -1193,21 +1460,30 @@ onUnmounted(() => {
 
 .active-element {
   outline: 4rpx solid #e84a6e;
-  outline-offset: -4rpx;
+  outline-offset: -2rpx;
+  animation: pulseGlow 2s ease-in-out infinite;
+  border-radius: 4rpx;
 }
 
-/* 缩放手柄（元素右下角） */
+/* ===== 缩放手柄 ===== */
 .resize-handle {
   position: absolute;
-  right: -14rpx;
-  bottom: -14rpx;
-  width: 28rpx;
-  height: 28rpx;
+  right: -16rpx;
+  bottom: -16rpx;
+  width: 32rpx;
+  height: 32rpx;
   background: #fff;
   border: 4rpx solid #e84a6e;
   border-radius: 50%;
   z-index: 30;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+}
+
+.resize-handle--active {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border: 4rpx solid #fff;
+  box-shadow: 0 0 0 2rpx #e84a6e, 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
+  animation: pulseGlow 1.5s ease-in-out infinite;
 }
 
 /* 横屏模式布局 */
@@ -1232,24 +1508,33 @@ onUnmounted(() => {
 .editor-footer {
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
-  border-top: none;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(30rpx);
+  -webkit-backdrop-filter: blur(30rpx);
+  border-top: 1rpx solid rgba(232, 74, 110, 0.06);
   flex-shrink: 0;
   padding-bottom: env(safe-area-inset-bottom);
-  box-shadow: 0 -4rpx 24rpx rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.06), 0 -2rpx 8rpx rgba(232, 74, 110, 0.04);
+  position: relative;
+  z-index: 50;
 }
 
-/* 上下文工具栏 */
+/* ===== 上下文工具栏 ===== */
 .context-toolbar {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  padding: 16rpx 24rpx;
+  gap: 0;
+  padding: 16rpx 20rpx;
   background: linear-gradient(135deg, #fff5f7 0%, #fef0f3 100%);
-  border-bottom: 1rpx solid rgba(232, 74, 110, 0.1);
-  animation: slide-up 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: 1rpx solid rgba(232, 74, 110, 0.08);
+  animation: slideUpFade 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.context-toolbar--glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.6);
 }
 
 .ctx-btn {
@@ -1258,17 +1543,21 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12rpx 8rpx;
+  padding: 14rpx 10rpx;
   border-radius: 16rpx;
-  background: #fff;
+  background: transparent;
   gap: 6rpx;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
 .ctx-btn:active {
-  transform: scale(0.94);
-  box-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.06);
+  transform: scale(0.9);
+  background: rgba(232, 74, 110, 0.1);
+}
+
+.ctx-btn:active .ctx-icon--bounce {
+  animation: iconBounce 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .ctx-btn--disabled {
@@ -1277,40 +1566,60 @@ onUnmounted(() => {
 }
 
 .ctx-btn--danger {
-  background: #fff0f0;
+  background: transparent;
+}
+
+.ctx-btn--danger:active {
+  background: rgba(232, 74, 110, 0.12);
+}
+
+.ctx-divider {
+  width: 1rpx;
+  height: 48rpx;
+  background: linear-gradient(180deg, transparent 0%, rgba(232, 74, 110, 0.15) 50%, transparent 100%);
+  flex-shrink: 0;
 }
 
 .ctx-icon {
-  font-size: 32rpx;
+  font-size: 34rpx;
+  line-height: 1;
 }
 
 .ctx-label {
   font-size: 22rpx;
-  color: #555;
+  color: #5a5a6a;
   font-weight: 500;
 }
 
 .ctx-btn--danger .ctx-label {
   color: #e84a6e;
+  font-weight: 600;
 }
 
-@keyframes slide-up {
-  from { transform: translateY(100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-/* 底部主区域 */
+/* ===== 底部主区域 ===== */
 .footer-main {
   display: flex;
   align-items: center;
-  padding: 16rpx 24rpx;
+  padding: 20rpx 24rpx 16rpx;
   gap: 20rpx;
 }
+
+.footer-stagger-anim .footer-tab--item {
+  opacity: 0;
+  transform: translateY(20rpx);
+  animation: slideUpFade 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.footer-stagger-anim .footer-tab--item:nth-child(1) { animation-delay: 0.05s; }
+.footer-stagger-anim .footer-tab--item:nth-child(2) { animation-delay: 0.1s; }
+.footer-stagger-anim .footer-tab--item:nth-child(3) { animation-delay: 0.15s; }
+.footer-stagger-anim .footer-tab--item:nth-child(4) { animation-delay: 0.2s; }
+.footer-stagger-anim .footer-tab--item:nth-child(5) { animation-delay: 0.25s; }
 
 .footer-tabs {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  gap: 4rpx;
   flex: 1;
 }
 
@@ -1319,27 +1628,33 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: calc((100% - 32rpx) / 5);
-  height: 88rpx;
+  width: calc((100% - 16rpx) / 5);
+  height: 92rpx;
   padding: 8rpx 4rpx;
   gap: 6rpx;
   border-radius: 16rpx;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
 .footer-tab:active {
   transform: scale(0.92);
-  background: rgba(232, 74, 110, 0.06);
+  background: linear-gradient(135deg, rgba(232, 74, 110, 0.08) 0%, rgba(255, 107, 138, 0.08) 100%);
+}
+
+.footer-tab:active .tab-icon--hover {
+  animation: iconBounce 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .tab-icon {
-  font-size: 38rpx;
+  font-size: 40rpx;
   line-height: 1;
+  transition: transform 0.2s ease;
 }
 
 .tab-label {
   font-size: 22rpx;
-  color: #666;
+  color: #7a7a8a;
   font-weight: 500;
 }
 
@@ -1350,43 +1665,96 @@ onUnmounted(() => {
 }
 
 .footer-action-btn {
-  padding: 18rpx 36rpx;
+  padding: 20rpx 36rpx;
   border-radius: 44rpx;
   text-align: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .footer-action-btn:active {
-  transform: scale(0.96);
+  transform: scale(0.94);
 }
 
-.footer-save-btn {
-  background: #f5f5f7;
-  border: 1rpx solid #e8e8ec;
+.footer-save-btn--enhanced {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f8fa 100%);
+  border: 2rpx solid rgba(232, 74, 110, 0.2);
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.1);
 }
 
-.footer-save-btn:active {
-  background: #eef0f4;
+.footer-save-btn--enhanced:active {
+  background: linear-gradient(135deg, #fff5f7 0%, #fff0f3 100%);
+  box-shadow: 0 2rpx 6rpx rgba(232, 74, 110, 0.15);
 }
 
-.footer-share-btn {
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  box-shadow: 0 6rpx 20rpx rgba(232, 74, 110, 0.35);
+.footer-share-btn--enhanced {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 50%, #ff8fa3 100%);
+  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.4), 0 2rpx 8rpx rgba(255, 107, 138, 0.3);
+  position: relative;
 }
 
-.footer-share-btn:active {
-  box-shadow: 0 3rpx 10rpx rgba(232, 74, 110, 0.4);
+.footer-share-btn--enhanced::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.footer-share-btn--enhanced:active {
+  box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.5), 0 1rpx 4rpx rgba(255, 107, 138, 0.3);
 }
 
 .action-btn-text {
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: 700;
   color: #fff;
   letter-spacing: 0.5rpx;
+  position: relative;
+  z-index: 1;
 }
 
-.footer-save-btn .action-btn-text {
-  color: #4a4a4a;
+.footer-save-btn--enhanced .action-btn-text {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ===== 按钮 loading 态 ===== */
+.btn--loading {
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.btn-spinner-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+}
+
+.btn-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btnSpin 0.6s linear infinite;
+}
+
+.footer-save-btn--enhanced .btn-spinner {
+  border: 3rpx solid rgba(232, 74, 110, 0.2);
+  border-top-color: #e84a6e;
+}
+
+@keyframes btnSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ===== Loading 骨架屏 ===== */
@@ -1395,8 +1763,47 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fdf6f8;
+  background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
   padding: 32rpx;
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-content {
+  width: 100%;
+  max-width: 600rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32rpx;
+  position: relative;
+}
+
+.loading-decor {
+  position: absolute;
+  font-size: 48rpx;
+  opacity: 0.3;
+  animation: float 4s ease-in-out infinite;
+}
+
+.loading-decor-1 {
+  top: -60rpx;
+  left: 20rpx;
+  animation-delay: 0s;
+}
+
+.loading-decor-2 {
+  top: -40rpx;
+  right: 40rpx;
+  animation-delay: 0.5s;
+  font-size: 40rpx;
+}
+
+.loading-decor-3 {
+  top: 80rpx;
+  right: 10rpx;
+  animation-delay: 1s;
+  font-size: 36rpx;
 }
 
 .skeleton-card {
@@ -1407,29 +1814,58 @@ onUnmounted(() => {
 .skeleton-img {
   width: 100%;
   height: 400rpx;
-  border-radius: 20rpx;
-  margin-bottom: 24rpx;
+  border-radius: 24rpx;
+  margin-bottom: 28rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
 }
 
 .skeleton-line {
-  height: 32rpx;
+  height: 28rpx;
   border-radius: 8rpx;
   margin-bottom: 16rpx;
 }
 
-.skeleton-pulse {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f0f0f5 25%, #e8e8f0 50%, #f0f0f5 75%);
   background-size: 200% 100%;
-  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 
-@keyframes skeleton-pulse {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+.loading-text-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
 }
 
-.loading-overlay-text {
+.loading-text {
   font-size: 28rpx;
-  color: #999;
+  color: #8a8a9a;
+  font-weight: 500;
+}
+
+.loading-dots {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.loading-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  animation: bounceDot 1.4s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(1) { animation-delay: 0s; }
+.loading-dot:nth-child(2) { animation-delay: 0.2s; }
+.loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ===== 弹窗遮罩模糊效果 ===== */
+:deep(.uni-popup-mask),
+:deep(.u-mask) {
+  backdrop-filter: blur(8rpx);
+  -webkit-backdrop-filter: blur(8rpx);
 }
 </style>
