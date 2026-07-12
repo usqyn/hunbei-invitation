@@ -72,14 +72,13 @@ export const useWorksStore = defineStore('works', () => {
     try {
       const data = await fetchWorksApi()
       if (data && Array.isArray(data)) {
-        // 服务器有数据时合并；服务器返回空数组时清理本地已删除的幽灵作品
+        // 服务器有数据时合并；服务器返回空数组时不清理本地（可能存在未同步的本地作品）
         const serverIds = new Set(data.map((w: any) => w.id))
         const localIds = new Set(works.value.map(w => w.id))
-        // 清理本地有但服务器已删除的作品（仅在服务器返回了完整列表时）
-        if (data.length === 0 && works.value.length > 0) {
-          works.value = []
-          drafts.value = []
-          persist()
+        // 仅清理本地有、服务端也有过记录但现在已删除的作品
+        // 不清理本地-only的作品（从未同步到服务器的作品）
+        if (data.length === 0) {
+          // 服务端返回空列表，不清理本地（避免丢失未同步的作品）
           return
         }
         data.forEach((serverWork: any) => {

@@ -47,6 +47,10 @@
         <text>运费</text>
         <text>{{ freight > 0 ? '¥' + freight : '免运费' }}</text>
       </view>
+      <view v-if="discount > 0" class="price-row discount-row">
+        <text>VIP 9折优惠</text>
+        <text class="discount-text">-¥{{ discount }}</text>
+      </view>
       <view class="price-row total">
         <text>订单总额</text>
         <text class="total-price">¥{{ orderTotal }}</text>
@@ -401,6 +405,16 @@ onShow(() => {
   border-top: 1rpx solid #f0f0f0;
   padding-top: 20rpx;
   margin-top: 10rpx;
+}
+
+.discount-row {
+  color: #d4af37;
+  font-weight: 500;
+}
+
+.discount-text {
+  color: #d4af37;
+  font-weight: 600;
 }
 
 .total-price {

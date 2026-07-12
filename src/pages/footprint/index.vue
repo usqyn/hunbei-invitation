@@ -47,6 +47,8 @@ interface Footprint {
   title: string
   image: string
   time: string
+  workId?: string
+  templateId?: string
 }
 
 const footprints = ref<Footprint[]>([])

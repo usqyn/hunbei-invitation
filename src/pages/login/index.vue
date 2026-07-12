@@ -27,7 +27,7 @@
             <image class="logo-icon" src="/static/images/logo.png" mode="aspectFit"></image>
           </view>
         </view>
-        <text class="app-name">toy tamaxia</text>
+        <text class="app-name">婚贝请柬</text>
         <text class="app-desc">微信一键登录，制作专属婚礼请柬</text>
       </view>
     </view>
@@ -264,6 +264,12 @@ const onGetPhoneNumber = (e: any) => {
 
 const handleH5Login = async () => {
   if (!agreed.value || logging.value) return
+  // H5 环境下先打开短信登录弹窗
+  if (!showSmsForm.value) {
+    showSmsForm.value = true
+    feedbackWarning('请输入手机号和验证码登录')
+    return
+  }
   if (!phoneValid.value) {
     feedbackWarning('请输入正确的手机号')
     return
