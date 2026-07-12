@@ -273,7 +273,6 @@ const userStore = useUserStore()
 const { haptic, feedbackSuccess, feedbackError, feedbackWarning } = useFeedback()
 const { loading: savingLoading, run: runSave } = useAsyncAction()
 const { loading: sharingLoading, run: runShare } = useAsyncAction()
-const { loading: exportingLoading, run: runExport } = useAsyncAction()
 
 const {
   isCanvasMode,
@@ -395,6 +394,8 @@ const dragState = ref<DragState | null>(null)
 const DRAG_THRESHOLD = 5
 // 记录最近一次拖拽是否产生了位移，防止 touchend 后 click 仍触发编辑器
 let lastDragMoved = false
+// 组件挂载状态标记，用于异步操作中判断组件是否已卸载
+let _isMounted = true
 
 function onElementTap(idx: number) {
   if (lastDragMoved) {
@@ -637,16 +638,18 @@ function chooseLocalImage(idx: number) {
     uni.showLoading({ title: '上传中...' })
     try {
       const permanentUrl = await uploadImage(tempPath)
+      if (!_isMounted) return
       editorStore.applyImageToElement(idx, permanentUrl)
       renderedImageStale.value = true
     } catch (e) {
+      if (!_isMounted) return
       // 上传失败时回退到临时路径（至少当前会话可用）
       console.warn('图片上传失败，使用临时路径:', e)
       editorStore.applyImageToElement(idx, tempPath)
       renderedImageStale.value = true
       uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
     } finally {
-      uni.hideLoading()
+      if (_isMounted) uni.hideLoading()
     }
   }
   // #ifdef MP-WEIXIN
@@ -659,8 +662,10 @@ function chooseLocalImage(idx: number) {
         applyImage(res.tempFiles[0].tempFilePath)
       }
     },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
+      }
     },
   })
   // #endif
@@ -675,8 +680,10 @@ function chooseLocalImage(idx: number) {
         applyImage(res.tempFilePaths[0])
       }
     },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
+      }
     },
   })
   // #endif
@@ -843,10 +850,13 @@ async function handleSave() {
   }, { successMessage: '已保存', minLoadingDuration: 400 })
 }
 
+let isExporting = false
 function handleExport() {
+  if (isExporting) return
+  isExporting = true
   track('click_export')
   if (userStore.isVip()) {
-    doExport({ watermark: false, quality: 'high' })
+    doExport({ watermark: false, quality: 'high' }).finally(() => { isExporting = false })
   } else {
     uni.showActionSheet({
       title: '选择导出方式',
@@ -862,13 +872,17 @@ function handleExport() {
               if (r.confirm) {
                 uni.showToast({ title: '微信支付功能开发中', icon: 'none' })
               }
-            }
+              isExporting = false
+            },
           })
         } else {
           track('click_export', { export_type: 'free' })
-          doExport({ watermark: true, quality: 'normal' })
+          doExport({ watermark: true, quality: 'normal' }).finally(() => { isExporting = false })
         }
-      }
+      },
+      fail: () => {
+        isExporting = false
+      },
     })
   }
 }
@@ -974,7 +988,12 @@ function handleLocation() {
       editorStore.syncSmartField('location', res.name)
       editorStore.syncSmartField('address', res.address)
       renderedImageStale.value = true
-    }
+    },
+    fail: (err) => {
+      if (!err.errMsg?.includes('cancel')) {
+        uni.showToast({ title: '获取位置失败', icon: 'none' })
+      }
+    },
   })
 }
 
@@ -1065,7 +1084,7 @@ onShow(() => {
       nextTick(() => {
         _mountTimers.push(setTimeout(() => updateCardSize(), 100))
       })
-    })
+    }).catch(() => {})
   }
 })
 
@@ -1091,14 +1110,12 @@ watch(() => editorStore.templateLoading, (loading) => {
 
 watch(() => editorStore.editableElements.length, () => {
   nextTick(() => updateCardSize())
-})
-
-watch(() => editorStore.editableElements.length, () => {
   editProgress.value = calculateProgress()
 })
 
 // 组件卸载时清理定时器，防止内存泄漏
 onUnmounted(() => {
+  _isMounted = false
   if (smartEditTimer) clearTimeout(smartEditTimer)
   _mountTimers.forEach(t => clearTimeout(t))
   _mountTimers = []

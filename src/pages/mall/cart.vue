@@ -87,7 +87,11 @@ const discountAmount = computed(() => (rawTotal.value * 0.1).toFixed(2))
 
 const loadCart = () => {
   try {
-    const cart = uni.getStorageSync('mall_cart') || []
+    const cart = uni.getStorageSync('mall_cart')
+    if (!Array.isArray(cart)) {
+      cartItems.value = []
+      return
+    }
     cartItems.value = cart
     calculateTotal()
   } catch (e) {
@@ -113,7 +117,9 @@ const calculateTotal = () => {
 
   cartItems.value.forEach(item => {
     if (item.selected) {
-      total += parseFloat(item.price) * item.quantity
+      const price = parseFloat(item.price)
+      if (isNaN(price)) return 0
+      total += price * item.quantity
       count += item.quantity
     } else {
       allSel = false
@@ -155,6 +161,7 @@ const decreaseQty = (id: number) => {
 const increaseQty = (id: number) => {
   const item = cartItems.value.find(i => i.id === id)
   if (item) {
+    if (item.quantity >= 99) return
     item.quantity += 1
     saveCart()
   }

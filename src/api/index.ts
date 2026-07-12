@@ -31,10 +31,11 @@ function normalizeImageUrl(url: string): string {
 
 /** 上传图片到服务器，返回永久 URL */
 export function uploadImage(filePath: string): Promise<string> {
+  let uploadTask: UniApp.UploadTask | undefined
   return Promise.race([
     new Promise<string>((resolve, reject) => {
       const token = uni.getStorageSync('token') || ''
-      uni.uploadFile({
+      uploadTask = uni.uploadFile({
         url: `${API_BASE}/api/upload/image`,
         filePath,
         name: 'image',
@@ -52,7 +53,10 @@ export function uploadImage(filePath: string): Promise<string> {
         fail: (err) => reject(err),
       })
     }),
-    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('上传超时')), 30000)),
+    new Promise<string>((_, reject) => setTimeout(() => {
+      uploadTask?.abort()
+      reject(new Error('上传超时'))
+    }, 30000)),
   ])
 }
 
@@ -134,6 +138,9 @@ export function createOrder(orderData: {
   contactPhone: string
   address: string
   note: string
+  goodsAmount?: string
+  freight?: string
+  discount?: string
 }) {
   return request({ url: '/api/orders', method: 'POST', data: orderData })
 }

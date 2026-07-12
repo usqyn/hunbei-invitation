@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { request } from '@/utils/request'
 import { resolveUrl } from '@/utils/url'
 import { uniqueId } from '@/utils/common'
@@ -76,7 +76,12 @@ export const usePosterStore = defineStore('poster', () => {
   }
 
   function initEditor(template: PosterTemplate) {
-    currentTemplate.value = template
+    // 存储前对模板封面/背景图做 URL 归一化，补全相对路径
+    currentTemplate.value = {
+      ...template,
+      cover_url: resolveUrl(template.cover_url),
+      background_url: resolveUrl(template.background_url),
+    }
     canvasSize.value = {
       width: template.config.width,
       height: template.config.height,
@@ -231,13 +236,9 @@ export const usePosterStore = defineStore('poster', () => {
     snapshot.forEach(a => editableAreas.value.push({ ...a }))
   }
 
-  function canUndo() {
-    return historyIndex.value > 0
-  }
+  const canUndo = computed(() => historyIndex.value > 0)
 
-  function canRedo() {
-    return historyIndex.value < history.value.length - 1
-  }
+  const canRedo = computed(() => historyIndex.value < history.value.length - 1)
 
   function resetArea(id: string) {
     const area = getArea(id)
@@ -420,6 +421,13 @@ export const usePosterStore = defineStore('poster', () => {
             id: a.id,
             type: a.type,
             label: a.label || '',
+            defaultText: a.defaultText,
+            defaultImage: a.defaultImage,
+            fontSize: a.fontSize,
+            color: a.color,
+            align: a.align,
+            bold: a.bold,
+            borderRadius: a.borderRadius,
             _x: a._x,
             _y: a._y,
             _w: a._w,
@@ -486,6 +494,7 @@ export const usePosterStore = defineStore('poster', () => {
   function insertSticker(src: string) {
     const id = uniqueId('sticker_')
     const stickerSize = canvasSize.value.width * 0.2
+    const resolvedSrc = resolveUrl(src)
     const newArea: PosterEditableAreaRuntime = {
       id,
       type: 'image',
@@ -494,13 +503,13 @@ export const usePosterStore = defineStore('poster', () => {
       y: canvasSize.value.height / 2 - stickerSize / 2,
       width: stickerSize,
       height: stickerSize,
-      defaultImage: src,
+      defaultImage: resolvedSrc,
       borderRadius: 0,
       _x: canvasSize.value.width / 2 - stickerSize / 2,
       _y: canvasSize.value.height / 2 - stickerSize / 2,
       _w: stickerSize,
       _h: stickerSize,
-      _src: src,
+      _src: resolvedSrc,
       _rotate: 0,
       _scale: 1,
     }
@@ -522,6 +531,10 @@ export const usePosterStore = defineStore('poster', () => {
       y: ch / 2 - 24,
       width: 200,
       height: 48,
+      fontSize: 28,
+      color: '#333333',
+      align: 'center',
+      bold: false,
       _x: cw / 2 - 100,
       _y: ch / 2 - 24,
       _w: 200,
@@ -561,7 +574,12 @@ export const usePosterStore = defineStore('poster', () => {
         hideLoading: true,
       })
       if (data && Array.isArray(data)) {
-        relatedTemplates.value = data
+        // 对关联模板的封面/背景图做 URL 归一化，补全相对路径
+        relatedTemplates.value = data.map(t => ({
+          ...t,
+          cover_url: resolveUrl(t.cover_url),
+          background_url: resolveUrl(t.background_url),
+        }))
       }
     } catch (e) {
       console.warn('loadRelatedTemplates failed:', e)
@@ -606,10 +624,12 @@ export const usePosterStore = defineStore('poster', () => {
   /** 更换海报背景图（预设或自定义上传的 URL） */
   function setBackground(url: string) {
     if (!url) return
+    // 对背景图做 URL 归一化，补全相对路径
+    const resolved = resolveUrl(url)
     if (currentTemplate.value) {
-      currentTemplate.value.background_url = url
+      currentTemplate.value.background_url = resolved
     }
-    customBackground.value = url
+    customBackground.value = resolved
     pushHistory()
   }
 

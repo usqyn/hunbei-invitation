@@ -378,9 +378,10 @@ function findWork(workId: string): Work | undefined {
 }
 
 onMounted(async () => {
-  const pages = getCurrentPages()
-  const curPage = pages[pages.length - 1] as any
-  const options = curPage?.options || {}
+  try {
+    const pages = getCurrentPages()
+    const curPage = pages[pages.length - 1] as any
+    const options = curPage?.options || {}
 
   const workId = options.workId
   if (workId) {
@@ -423,6 +424,10 @@ onMounted(async () => {
   })
   loadSimilarTemplates()
   loadRecommendProducts()
+  } catch (e) {
+    console.error('preview mount failed:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  }
 })
 
 watch(() => editorStore.templateLoading, (loading) => {
@@ -593,10 +598,15 @@ async function toggleFavorite() {
     uni.showToast({ title: '请先保存作品', icon: 'none' })
     return
   }
-  const wasFavorited = isFavorited.value
-  await worksStore.toggleFavorite(editorStore.currentWorkId)
-  if (wasFavorited !== isFavorited.value) {
-    uni.showToast({ title: isFavorited.value ? '已收藏' : '已取消收藏', icon: isFavorited.value ? 'success' : 'none' })
+  try {
+    const wasFavorited = isFavorited.value
+    await worksStore.toggleFavorite(editorStore.currentWorkId)
+    if (wasFavorited !== isFavorited.value) {
+      uni.showToast({ title: isFavorited.value ? '已收藏' : '已取消收藏', icon: isFavorited.value ? 'success' : 'none' })
+    }
+  } catch (e) {
+    console.error('toggleFavorite failed:', e)
+    uni.showToast({ title: '操作失败', icon: 'none' })
   }
 }
 
@@ -744,6 +754,7 @@ function getFlipTextStyle(el: any): Record<string, string> {
 
 const onImageError = () => {
   console.warn('Preview image load failed')
+  uni.showToast({ title: '图片加载失败', icon: 'none' })
 }
 </script>
 

@@ -54,6 +54,9 @@ export const useEditorStore = defineStore('editor', () => {
       flipPages: JSON.parse(JSON.stringify(flipPages)),
       background: JSON.parse(JSON.stringify(background.value)),
       canvasSize: JSON.parse(JSON.stringify(canvasSize.value)),
+      templateType: templateType.value,
+      renderedImage: renderedImage.value,
+      currentFlipPageIndex: currentFlipPageIndex.value,
     }
   }
 
@@ -103,6 +106,15 @@ export const useEditorStore = defineStore('editor', () => {
     }
     if (snap && snap.canvasSize) {
       canvasSize.value = JSON.parse(JSON.stringify(snap.canvasSize))
+    }
+    if (snap && snap.templateType) {
+      templateType.value = snap.templateType
+    }
+    if (snap && typeof snap.renderedImage !== 'undefined') {
+      renderedImage.value = snap.renderedImage
+    }
+    if (snap && typeof snap.currentFlipPageIndex !== 'undefined') {
+      currentFlipPageIndex.value = snap.currentFlipPageIndex
     }
     selectedElement.value = null
     activeSectionId.value = null
@@ -171,10 +183,13 @@ export const useEditorStore = defineStore('editor', () => {
   // ============ 应用模板数据到编辑区 ============
 
   /** 将模板元素映射为可编辑元素（canvas / flip 模式共用） */
-  function mapTemplateElement(el: any): EditableElement {
+  function mapTemplateElement(el: EditableElement): EditableElement {
+    // 对必填字段加 fallback 默认值，防御 API 数据缺失
+    const type = el.type || 'text'
+    const text = el.text ?? ''
     return {
-      type: el.type,
-      text: el.type === 'image' ? resolveUrl(el.text) : el.text,
+      type,
+      text: type === 'image' ? resolveUrl(text) : text,
       dataKey: el.dataKey,
       label: el.label,
       style: el.style ? { ...el.style } : undefined,
@@ -192,6 +207,10 @@ export const useEditorStore = defineStore('editor', () => {
 
   function applyTemplateData(template: TemplateItem) {
     if (!template) return
+
+    // 加载新模板时重置选中状态，避免选中失效的元素索引
+    selectedElement.value = null
+    activeSectionId.value = null
 
     // 设置模板类型
     templateType.value = template.templateType || 'canvas'
@@ -346,9 +365,6 @@ export const useEditorStore = defineStore('editor', () => {
             if (sec.type === 'image' && sec.image) {
               sec.image = resolveUrl(sec.image)
             }
-            if (sec.type === 'image' && sec.content) {
-              sec.content = resolveUrl(sec.content)
-            }
           })
           pageSections.splice(0, pageSections.length, ...savedData.pageSections)
         }
@@ -429,9 +445,6 @@ export const useEditorStore = defineStore('editor', () => {
       sections.forEach((sec: any) => {
         if (sec.type === 'image' && sec.image) {
           sec.image = resolveUrl(sec.image)
-        }
-        if (sec.type === 'image' && sec.content) {
-          sec.content = resolveUrl(sec.content)
         }
       })
       pageSections.splice(0, pageSections.length, ...sections)
@@ -587,13 +600,13 @@ export const useEditorStore = defineStore('editor', () => {
     // page 模式：图片类型更新 image 字段，文本类型更新 text 字段
     pageSections.forEach(sec => {
       if (sec.dataKey === key) {
-        if (sec.type === 'image') sec.image = value
+        if (sec.type === 'image') sec.image = resolveUrl(value)
         else sec.text = value
       }
     })
     // flip 模式：遍历所有页面的元素
     flipPages.forEach(page => {
-      page.elements.forEach(el => {
+      (page.elements || []).forEach(el => {
         if (el.dataKey === key) {
           el.text = value
         }

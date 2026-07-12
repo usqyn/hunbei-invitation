@@ -485,12 +485,13 @@ const resolvedBgUrl = computed(() => {
 const canvasSize = computed(() => posterStore.canvasSize)
 
 const canvasWrapperStyle = computed(() => {
-  const ratio = canvasSize.value.width / canvasSize.value.height
+  const h = canvasSize.value.height || 1
+  const ratio = canvasSize.value.width / h
   const w = 100
-  const h = w / ratio
+  const hPercent = w / ratio
   return {
     width: `${w}%`,
-    paddingBottom: `${h}%`,
+    paddingBottom: `${hPercent}%`,
   }
 })
 
@@ -499,8 +500,8 @@ const selectedArea = computed(() => {
   return posterStore.editableAreas.find(a => a.id === posterStore.selectedAreaId) || null
 })
 
-const canUndo = computed(() => posterStore.canUndo())
-const canRedo = computed(() => posterStore.canRedo())
+const canUndo = computed(() => posterStore.canUndo)
+const canRedo = computed(() => posterStore.canRedo)
 
 function getAreaStyle(area: PosterEditableAreaRuntime): Record<string, string> {
   const cw = canvasSize.value.width
@@ -763,12 +764,14 @@ function onChooseImage() {
           }
         } catch (e) {
           console.warn('poster image upload failed:', e)
+          uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
         }
       }
     },
     fail: () => showToast('图片选择失败'),
   })
   // #endif
+
   // #ifndef MP-WEIXIN
   uni.chooseImage({
     count: 1,
@@ -788,6 +791,7 @@ function onChooseImage() {
           }
         } catch (e) {
           console.warn('poster image upload failed:', e)
+          uni.showToast({ title: '图片上传失败，已使用本地图片', icon: 'none' })
         }
       }
     },
@@ -816,6 +820,8 @@ function onRedo() {
 
 // ---- preview ----
 async function onPreview() {
+  if (isPreviewing.value) return
+  isPreviewing.value = true
   posterStore.showPreview = true
   posterStore.previewImage = ''
   await nextTick()
@@ -827,11 +833,14 @@ async function onPreview() {
     }
     if (!posterStore.previewImage) {
       showToast('预览生成失败，请重试')
+      posterStore.showPreview = false
     }
   } catch (e) {
     console.warn('preview failed:', e)
     showToast('预览生成失败')
     posterStore.showPreview = false
+  } finally {
+    isPreviewing.value = false
   }
 }
 
@@ -903,7 +912,9 @@ async function onExport() {
 
 // ---- save ----
 async function onSave() {
-  await posterStore.saveWork()
+  showToast('保存中...')
+  const id = await posterStore.saveWork()
+  if (id) showToast('已保存')
 }
 
 // ---- preview modal actions ----
@@ -988,6 +999,8 @@ function goToTemplates() {
 
 // ---- background panel ----
 const showBackgroundPanel = ref(false)
+const isPreviewing = ref(false)
+const isSwitching = ref(false)
 
 const presetBackgrounds = [
   '/uploads/poster/templates/wedding_1.jpg',
@@ -1051,23 +1064,29 @@ function onUploadBackground() {
 
 // ---- template picker ----
 async function onSwitchTemplate(id: string) {
+  if (isSwitching.value) return
   if (id === posterStore.currentTemplate?.id) {
     posterStore.showTemplatePicker = false
     return
   }
-  const confirm = await new Promise<boolean>((resolve) => {
-    uni.showModal({
-      title: '切换模板',
-      content: '切换模板将替换当前编辑内容，确定继续吗？',
-      confirmText: '切换',
-      cancelText: '取消',
-      confirmColor: '#e84a6e',
-      success: (r) => resolve(r.confirm),
+  isSwitching.value = true
+  try {
+    const confirm = await new Promise<boolean>((resolve) => {
+      uni.showModal({
+        title: '切换模板',
+        content: '切换模板将替换当前编辑内容，确定继续吗？',
+        confirmText: '切换',
+        cancelText: '取消',
+        confirmColor: '#e84a6e',
+        success: (r) => resolve(r.confirm),
+      })
     })
-  })
-  if (!confirm) return
-  await posterStore.switchTemplate(id)
-  showToast('模板已切换')
+    if (!confirm) return
+    await posterStore.switchTemplate(id)
+    showToast('模板已切换')
+  } finally {
+    isSwitching.value = false
+  }
 }
 
 // ---- canvas helper ----

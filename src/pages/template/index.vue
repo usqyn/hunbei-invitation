@@ -188,6 +188,7 @@ const filters = [
 ]
 const activeFilter = ref<string>('all')
 const userStore = useUserStore()
+const navigating = ref(false)
 
 // ============ 计算属性 ============
 const filteredTemplates = computed<TemplateItem[]>(() => {
@@ -324,6 +325,7 @@ function formatLikes(num: number): string {
 }
 
 function onSelectTemplate(template: TemplateItem) {
+  if (navigating.value) return
   // 登录拦截：未登录时跳转登录页
   if (!userStore.requireLogin()) return
 
@@ -346,6 +348,7 @@ function onSelectTemplate(template: TemplateItem) {
       return
     }
   }
+  navigating.value = true
   uni.navigateTo({
     url: `/pages/editor/index?templateId=${template.id}`,
   })

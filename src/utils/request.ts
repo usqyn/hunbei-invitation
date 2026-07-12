@@ -69,8 +69,12 @@ export function request<T = any>(options: string | {
                 _isRedirecting = false
               }
             })
+            reject(new Error('登录已过期'))
+          } else {
+            // 已经在重定向中，静默拒绝，避免调用方弹出重复提示
+            reject(new Error('redirecting'))
+            return
           }
-          reject(new Error('登录已过期'))
         } else {
           // 解析服务端返回的错误详情
           const body = res.data

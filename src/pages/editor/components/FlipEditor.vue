@@ -190,7 +190,7 @@ let _formSnapshot: any = null
 let _isMounted = true
 
 const currentPage = computed(() => {
-  return editorStore.flipPages[editorStore.currentFlipPageIndex]
+  return editorStore.flipPages[editorStore.currentFlipPageIndex] || editorStore.flipPages[0] || null
 })
 
 function getCurrentPageElements() {
@@ -294,8 +294,10 @@ function onImageUpload() {
         applySelectedImage(res.tempFiles[0].tempFilePath)
       }
     },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
+      }
     },
   })
   // #endif
@@ -310,8 +312,10 @@ function onImageUpload() {
         applySelectedImage(res.tempFilePaths[0])
       }
     },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
+      }
     },
   })
   // #endif
@@ -398,6 +402,7 @@ function openUnifiedEdit() {
 function onUnifiedEditConfirm() {
   editorStore.syncBasicInfoToElements()
   editorStore.closeBasicInfoEditor()
+  _formSnapshot = null
 }
 
 function onUnifiedEditCancel() {
@@ -410,6 +415,7 @@ function onUnifiedEditCancel() {
     editorStore.editableElements.splice(0, editorStore.editableElements.length, ...JSON.parse(JSON.stringify(_formSnapshot.elements)))
   }
   editorStore.closeBasicInfoEditor()
+  _formSnapshot = null
 }
 
 function onSmartFieldUpdate(key: string, value: string) {
@@ -561,6 +567,7 @@ async function handleShare() {
 
 onUnmounted(() => {
   _isMounted = false
+  _formSnapshot = null
   if (textInputTimer) clearTimeout(textInputTimer)
 })
 </script>

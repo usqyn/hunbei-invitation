@@ -54,16 +54,17 @@
             </view>
           </template>
           <template v-else-if="sec.type === 'rsvp'">
+            <!-- RSVP 表单为演示展示，实际提交功能在预览页生效 -->
             <view class="rsvp-section">
               <text class="rsvp-title">RSVP</text>
               <view class="rsvp-form">
                 <view class="form-item">
                   <text class="form-label">姓名</text>
-                  <input class="form-input" placeholder="请输入姓名" />
+                  <input class="form-input" placeholder="请输入姓名" disabled />
                 </view>
                 <view class="form-item">
                   <text class="form-label">出席人数</text>
-                  <input class="form-input" type="number" placeholder="请输入人数" />
+                  <input class="form-input" type="number" placeholder="请输入人数" disabled />
                 </view>
                 <view class="rsvp-submit">提交</view>
               </view>
@@ -201,6 +202,7 @@ const goBack = useGoBack()
 let _isMounted = true
 onUnmounted(() => {
   _isMounted = false
+  _snapshotBeforeEdit = null
 })
 
 // 统一编辑前的快照，取消编辑时回滚
@@ -274,8 +276,10 @@ function chooseImage(sectionId: string) {
         applyImage(res.tempFiles[0].tempFilePath)
       }
     },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
+      }
     },
   })
   // #endif
@@ -290,8 +294,10 @@ function chooseImage(sectionId: string) {
         applyImage(res.tempFilePaths[0])
       }
     },
-    fail: () => {
-      uni.showToast({ title: '图片选择失败', icon: 'none' })
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
+      }
     },
   })
   // #endif

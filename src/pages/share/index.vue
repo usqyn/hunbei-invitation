@@ -137,6 +137,7 @@ const shareTitle = ref('')
 const shareDesc = ref('')
 const coverImage = ref('')
 const showTemplateLib = ref(false)
+const isGenerating = ref(false)
 
 // 预设文案库
 const templateList = ref([
@@ -200,6 +201,11 @@ function onChangeCover() {
         uni.showToast({ title: '封面已更新', icon: 'success' })
       }
     },
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
+      }
+    },
   })
   // #endif
   // #ifndef MP-WEIXIN
@@ -211,6 +217,11 @@ function onChangeCover() {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
         coverImage.value = res.tempFilePaths[0]
         uni.showToast({ title: '封面已更新', icon: 'success' })
+      }
+    },
+    fail: (err) => {
+      if (err.errMsg && !err.errMsg.includes('cancel')) {
+        uni.showToast({ title: '图片选择失败', icon: 'none' })
       }
     },
   })
@@ -231,41 +242,51 @@ function onSelectTemplate(item: string) {
 
 // 分享渠道
 async function onShareMoments() {
+  if (isGenerating.value) return
   const workId = editorStore.currentWorkId
   if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
+  isGenerating.value = true
   uni.showLoading({ title: '生成海报中...' })
   try {
     const res = await generatePoster(workId)
-    uni.hideLoading()
     if (!res || !res.url) {
+      uni.hideLoading()
       uni.showToast({ title: '生成海报失败', icon: 'none' })
       return
     }
     uni.downloadFile({
       url: res.url,
       success: (r) => {
+        uni.hideLoading()
         uni.saveImageToPhotosAlbum({
           filePath: r.tempFilePath,
           success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
           fail: () => uni.showToast({ title: '保存失败', icon: 'none' }),
         })
       },
-      fail: () => uni.showToast({ title: '下载失败', icon: 'none' }),
+      fail: () => {
+        uni.hideLoading()
+        uni.showToast({ title: '下载失败', icon: 'none' })
+      },
     })
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: '生成海报失败', icon: 'none' })
+  } finally {
+    isGenerating.value = false
   }
 }
 
 async function onSharePoster() {
+  if (isGenerating.value) return
   const workId = editorStore.currentWorkId
   if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
+  isGenerating.value = true
   uni.showLoading({ title: '生成海报中...' })
   try {
     const res = await generatePoster(workId)
-    uni.hideLoading()
     if (!res || !res.url) {
+      uni.hideLoading()
       uni.showToast({ title: '生成海报失败', icon: 'none' })
       return
     }
@@ -278,20 +299,28 @@ async function onSharePoster() {
           uni.downloadFile({
             url: res.url,
             success: (r) => {
+              uni.hideLoading()
               uni.saveImageToPhotosAlbum({
                 filePath: r.tempFilePath,
                 success: () => uni.showToast({ title: '图片已保存到相册', icon: 'success' }),
                 fail: () => uni.showToast({ title: '保存失败', icon: 'none' }),
               })
             },
-            fail: () => uni.showToast({ title: '下载失败', icon: 'none' }),
+            fail: () => {
+              uni.hideLoading()
+              uni.showToast({ title: '下载失败', icon: 'none' })
+            },
           })
+        } else {
+          uni.hideLoading()
         }
       },
     })
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: '生成海报失败', icon: 'none' })
+  } finally {
+    isGenerating.value = false
   }
 }
 

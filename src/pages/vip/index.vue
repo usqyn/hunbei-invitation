@@ -91,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { track } from '@/utils/track'
 import { useUserStore } from '@/stores/user'
 import { createVipOrder } from '@/api'
@@ -116,6 +116,7 @@ const plans = [
 const selectedPlan = ref('yearly')
 const currentPlan = computed(() => plans.find(p => p.key === selectedPlan.value)!)
 const paying = ref(false)
+let navigateBackTimer: any = null
 
 const compareList = [
   { feature: '模板数量', free: '30套', vip: '全站500+' },
@@ -134,7 +135,6 @@ async function handlePay() {
   uni.showLoading({ title: '创建订单中...' })
   try {
     const order = await createVipOrder(selectedPlan.value, currentPlan.value.price)
-    uni.hideLoading()
 
     // 检查服务端是否返回了完整的支付参数
     if (!order.paySign) {
@@ -166,7 +166,7 @@ async function handlePay() {
           uni.showToast({ title: '支付成功', icon: 'success' })
         }
         paying.value = false
-        setTimeout(() => uni.navigateBack(), 1500)
+        navigateBackTimer = setTimeout(() => uni.navigateBack(), 1500)
       },
       fail: (err: any) => {
         const isCancel = err && /cancel/i.test(err.errMsg || '')
@@ -177,14 +177,22 @@ async function handlePay() {
       // complete: () => { /* paying 已在 success/fail 中重置 */ },
     })
   } catch (e) {
-    uni.hideLoading()
     uni.showToast({ title: '创建订单失败', icon: 'none' })
     paying.value = false
+  } finally {
+    uni.hideLoading()
   }
 }
 
 // 页面曝光埋点
 track('vip_page_view')
+
+onUnmounted(() => {
+  if (navigateBackTimer) {
+    clearTimeout(navigateBackTimer)
+    navigateBackTimer = null
+  }
+})
 </script>
 
 <style lang="scss" scoped>

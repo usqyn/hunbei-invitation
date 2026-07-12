@@ -56,6 +56,7 @@ interface RecycleItem {
 
 const recycleList = ref<RecycleItem[]>([])
 const loading = ref(false)
+const operating = ref(false)
 
 const loadRecycleBin = async () => {
   loading.value = true
@@ -70,6 +71,8 @@ const loadRecycleBin = async () => {
 }
 
 const handleRestore = async (item: RecycleItem) => {
+  if (operating.value) return
+  operating.value = true
   uni.showModal({
     title: '确认恢复',
     content: `确定要恢复「${item.title}」吗？`,
@@ -83,13 +86,22 @@ const handleRestore = async (item: RecycleItem) => {
           worksStore.loadAll()
         } catch (e) {
           uni.showToast({ title: '恢复失败', icon: 'none' })
+        } finally {
+          operating.value = false
         }
+      } else {
+        operating.value = false
       }
+    },
+    fail: () => {
+      operating.value = false
     }
   })
 }
 
 const handlePermanentDelete = async (item: RecycleItem) => {
+  if (operating.value) return
+  operating.value = true
   uni.showModal({
     title: '确认删除',
     content: `确定要彻底删除「${item.title}」吗？删除后不可恢复。`,
@@ -102,8 +114,15 @@ const handlePermanentDelete = async (item: RecycleItem) => {
           worksStore.loadAll()
         } catch (e) {
           uni.showToast({ title: '删除失败', icon: 'none' })
+        } finally {
+          operating.value = false
         }
+      } else {
+        operating.value = false
       }
+    },
+    fail: () => {
+      operating.value = false
     }
   })
 }

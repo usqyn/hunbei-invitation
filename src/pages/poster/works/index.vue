@@ -156,17 +156,19 @@ async function loadWorks() {
     } else {
       works.value = []
     }
+    return true
   } catch (e) {
     console.warn('加载海报作品失败:', e)
     works.value = []
+    return false
   } finally {
     loading.value = false
   }
 }
 
 async function onRefresh() {
-  await loadWorks()
-  showToast('已刷新')
+  const ok = await loadWorks()
+  if (ok) showToast('已刷新')
 }
 
 function onPullRefresh() {

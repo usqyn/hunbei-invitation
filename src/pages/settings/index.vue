@@ -24,7 +24,7 @@
         </view>
       </view>
 
-      <view class="logout-wrap">
+      <view class="logout-wrap" v-if="userStore.isLoggedIn">
         <view class="logout-btn" @click="handleLogout">退出登录</view>
       </view>
     </view>
@@ -82,6 +82,10 @@ const handleClearCache = () => {
         uni.removeStorageSync('hunbei_current_template')
         uni.removeStorageSync('hunbei_current_template_data')
         uni.removeStorageSync('hunbei_template')
+        uni.removeStorageSync('mall_cart')
+        uni.removeStorageSync('mall_orders')
+        uni.removeStorageSync('track_queue')
+        uni.removeStorageSync('mall_orderItems')
         uni.showToast({ title: '缓存已清除', icon: 'success' })
       }
     }

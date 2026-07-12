@@ -296,9 +296,6 @@ const paidTemplates = ref<any[]>([])
 const posterTemplates = ref<any[]>([])
 const isSearchFocused = ref(false)
 const userStore = useUserStore()
-const isPurchased = computed(() => {
-  return userStore.isVip()
-})
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
@@ -424,6 +421,7 @@ async function loadPaidTemplates() {
     }
   } catch (e) {
     console.warn('加载付费模板失败:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
   }
 }
 
@@ -435,6 +433,7 @@ async function loadPosterTemplates() {
     }
   } catch (e) {
     console.warn('加载海报模板失败:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
   }
 }
 

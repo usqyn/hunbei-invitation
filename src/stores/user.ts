@@ -32,7 +32,7 @@ export const useUserStore = defineStore('user', () => {
 
   /** 清理已过期的 VIP 状态（应在 fetchUserInfo 等显式时机调用） */
   function clearExpiredVip() {
-    if (vipStatus.value === 1 && vipExpireAt.value && vipExpireAt.value < Date.now()) {
+    if (vipStatus.value > 0 && vipExpireAt.value && vipExpireAt.value < Date.now()) {
       vipStatus.value = 0
       persist()
     }
@@ -63,7 +63,7 @@ export const useUserStore = defineStore('user', () => {
         avatar.value = saved.avatar || ''
         phone.value = saved.phone || ''
         token.value = saved.token || ''
-        vipStatus.value = saved.vipStatus || 0
+        vipStatus.value = saved.vipStatus ?? 0
         vipExpireAt.value = saved.vipExpireAt || 0
         vipPlan.value = saved.vipPlan || ''
         if (token.value) uni.setStorageSync('token', token.value)

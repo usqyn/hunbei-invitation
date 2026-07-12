@@ -79,7 +79,11 @@ export function useCanvasRender(options: {
     if (bg.type === 'radial-gradient') {
       return { background: `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})` }
     }
-    if (bg.type === 'image' && bg.image) {
+    if (bg.type === 'image') {
+      // 背景图 URL 为空时回退到纯色背景，避免渲染空 url()
+      if (!bg.image) {
+        return { background: bg.color1 || '#ffffff' }
+      }
       return { background: `url(${bg.image}) center/cover no-repeat` }
     }
     return { background: bg?.color1 || '#ffffff' }
@@ -88,12 +92,18 @@ export function useCanvasRender(options: {
   function getCanvasElementStyle(el: EditableElement): Record<string, string> {
     if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
 
+    // 限制最小尺寸，避免 width/height 为 0 或负值时产生非法比例
+    const cw = Math.max(canvasWidth.value, 1)
+    const ch = Math.max(canvasHeight.value, 1)
+    const w = Math.max(el.width || 0, 1)
+    const h = Math.max(el.height || 0, 1)
+
     const style: Record<string, string> = {
       position: 'absolute',
-      left: `${(el.x / canvasWidth.value) * 100}%`,
-      top: `${(el.y / canvasHeight.value) * 100}%`,
-      width: `${(el.width / canvasWidth.value) * 100}%`,
-      height: `${(el.height / canvasHeight.value) * 100}%`,
+      left: `${(el.x / cw) * 100}%`,
+      top: `${(el.y / ch) * 100}%`,
+      width: `${(w / cw) * 100}%`,
+      height: `${(h / ch) * 100}%`,
       zIndex: String(el.zIndex ?? 0),
       opacity: String(el.opacity ?? 1),
     }
@@ -137,9 +147,11 @@ export function useCanvasRender(options: {
     const detectedDirection = detectTextDirection(el.text)
     const direction = style.direction === 'auto' ? detectedDirection : (style.direction || 'ltr')
     const textAlign = style.textAlign || (direction === 'rtl' ? 'right' : 'center')
+    // 限制最小字号，避免 fontSize 为 0 或极小值导致文字不可见
+    const fontSize = Math.max(style.fontSize || DEFAULT_FONT_SIZE, 8)
 
     const result: Record<string, string | number | undefined> = {
-      fontSize: `${style.fontSize || DEFAULT_FONT_SIZE}rpx`,
+      fontSize: `${fontSize}rpx`,
       color: style.color || '#333333',
       lineHeight: String(style.lineHeight || DEFAULT_LINE_HEIGHT),
       letterSpacing: direction === 'rtl' ? 'normal' : `${style.spacing ?? DEFAULT_LETTER_SPACING}rpx`,

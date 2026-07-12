@@ -186,6 +186,7 @@ const countdown = ref(0)
 const sending = ref(false)
 const phoneTouched = ref(false)
 let timer: number | null = null
+let loginSuccessTimer: any = null
 const isMpWeixin = ref(false)
 
 /** 手机号实时校验 */
@@ -207,6 +208,10 @@ onUnmounted(() => {
   if (timer) {
     clearInterval(timer)
     timer = null
+  }
+  if (loginSuccessTimer) {
+    clearTimeout(loginSuccessTimer)
+    loginSuccessTimer = null
   }
 })
 
@@ -242,7 +247,7 @@ const loginSuccess = async () => {
   }
   uni.hideLoading()
   feedbackSuccess('登录成功')
-  setTimeout(() => goBack(), 1500)
+  loginSuccessTimer = setTimeout(() => goBack(), 1500)
 }
 
 const onGetPhoneNumber = (e: any) => {
@@ -319,6 +324,7 @@ const sendCode = async () => {
     return
   }
   countdown.value = 60
+  if (timer) clearInterval(timer)
   timer = setInterval(() => {
     countdown.value--
     if (countdown.value <= 0) {

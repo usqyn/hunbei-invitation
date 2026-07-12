@@ -14,7 +14,7 @@ export const useWorksStore = defineStore('works', () => {
   const loading = ref(false)
 
   // 防止并发收藏切换的锁
-  let _togglingFavorites = new Set<string>()
+  const _togglingFavorites = new Set<string>()
 
   function persist() {
     try {
@@ -40,9 +40,9 @@ export const useWorksStore = defineStore('works', () => {
     try {
       const saved = uni.getStorageSync(STORAGE_KEY)
       if (saved) {
-        if (saved.works) works.value = saved.works
-        if (saved.drafts) drafts.value = saved.drafts
-        if (saved.favorites) favorites.value = saved.favorites
+        if (Array.isArray(saved.works)) works.value = saved.works
+        if (Array.isArray(saved.drafts)) drafts.value = saved.drafts
+        if (Array.isArray(saved.favorites)) favorites.value = saved.favorites
       }
     } catch (e) { console.error('works restore failed', e) }
   }
@@ -259,7 +259,7 @@ export const useWorksStore = defineStore('works', () => {
           } else {
             favorites.value = favorites.value.filter(f => f.id !== id)
           }
-          debouncedPersist()
+          persist()
           uni.showToast({ title: '操作失败，请重试', icon: 'none' })
         }
       }

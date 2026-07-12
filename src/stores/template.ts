@@ -3,6 +3,7 @@ import { reactive, ref, computed } from 'vue'
 import { DEFAULT_TEMPLATE_DATA, DEFAULT_BASIC_INFO, DEFAULT_SETTINGS, DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '@/constants/editor'
 import type { TemplateData, BasicInfo, TemplateSettings, Template } from '@/types'
 import { request } from '@/utils/request'
+import { resolveUrl } from '@/utils/url'
 import { useEditorStore } from './editor'
 
 const STORAGE_KEY = 'hunbei_template'
@@ -91,7 +92,11 @@ export const useTemplateStore = defineStore('template', () => {
 
   async function fetchTemplates(type?: string) {
     loading.value = true
-    try { templateList.value = await request<Template[]>({ url: '/api/templates', data: { type, page: 1 } }) }
+    try {
+      const list = await request<Template[]>({ url: '/api/templates', data: { type, page: 1 } })
+      // 对模板封面图做 URL 归一化，补全相对路径
+      templateList.value = (list || []).map(t => ({ ...t, image: resolveUrl(t.image) }))
+    }
     catch (e) { console.error('fetchTemplates failed', e); templateList.value = [] }
     finally { loading.value = false }
   }
@@ -101,6 +106,7 @@ export const useTemplateStore = defineStore('template', () => {
     Object.assign(basicInfo, { ...DEFAULT_BASIC_INFO })
     Object.assign(settings, { ...DEFAULT_SETTINGS })
     selectedMusicId.value = null
+    templateList.value = []
     // 重置画布尺寸与方向（setCanvasSize 会同步到 editorStore 并根据宽高推导 orientation）
     setCanvasSize({ width: DEFAULT_CANVAS_WIDTH, height: DEFAULT_CANVAS_HEIGHT })
     // 清理持久化存储，避免 restore() 时恢复已被重置的旧状态

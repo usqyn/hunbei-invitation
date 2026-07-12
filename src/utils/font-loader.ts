@@ -16,11 +16,11 @@ function fetchFontMap(): Promise<void> {
       const check = setInterval(() => {
         if (fontMap !== null) { clearInterval(check); resolve() }
       }, 100)
-      // 10秒超时保护：避免请求卡住时无限轮询，超时后用空 map 兜底
+      // 10秒超时保护：避免请求卡住时无限轮询，超时后置 null 允许后续调用重试
       setTimeout(() => {
         if (fontMap === null) {
           clearInterval(check)
-          fontMap = {}
+          fontMap = null
           resolve()
         }
       }, 10000)
@@ -125,40 +125,7 @@ export function loadFontsForElementsWithCallback(
   elements: Array<{ type?: string; style?: { font?: string }; text?: string }>,
   onComplete?: () => void
 ) {
-  const fontSet = new Set<string>()
-
-  elements.forEach(el => {
-    const fontStyle = el.style?.font
-    const primary = extractPrimaryFont(fontStyle)
-    if (primary) fontSet.add(primary)
-    checkAndAddRtlFonts(el.text, fontSet)
-  })
-
-  if (fontSet.size === 0) {
-    onComplete?.()
-    return
-  }
-
-  fetchFontMap().then(() => {
-    let remaining = fontSet.size
-    fontSet.forEach(f => {
-      // 检查是否已加载
-      if (loadedFonts.has(f)) {
-        remaining--
-        if (remaining === 0) onComplete?.()
-        return
-      }
-      // 标记为待加载
-      remaining--
-      if (remaining === 0) {
-        // 所有字体已派发，延迟回调让 loadFontFace 有机会执行
-        loadCustomFont(f)
-        setTimeout(() => onComplete?.(), 500)
-      } else {
-        loadCustomFont(f)
-      }
-    })
-    // 如果所有字体都已加载
-    if (remaining === fontSet.size) onComplete?.()
-  })
+  loadFontsForElements(elements)
+  // 字体加载为异步且无法可靠追踪单个完成时机，固定延迟后触发回调
+  setTimeout(() => onComplete?.(), 500)
 }

@@ -12,7 +12,12 @@
       </view>
     </view>
 
-    <view class="empty-orders" v-if="filteredOrders.length === 0">
+    <view class="empty-orders" v-if="loading && filteredOrders.length === 0">
+      <view class="empty-icon">⏳</view>
+      <view class="empty-text">加载中...</view>
+    </view>
+
+    <view class="empty-orders" v-else-if="filteredOrders.length === 0">
       <view class="empty-icon">📋</view>
       <view class="empty-text">暂无订单</view>
     </view>
@@ -53,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { fetchOrders, payOrder as requestPayOrder } from '@/api'
 
@@ -82,6 +87,8 @@ const statusMap: Record<string, string> = {
 const orders = ref<Order[]>([])
 const activeStatus = ref('all')
 const paying = ref<string | null>(null)
+const loading = ref(false)
+let payRedirectTimer: any = null
 
 const filteredOrders = computed(() => {
   if (activeStatus.value === 'all') return orders.value
@@ -93,25 +100,39 @@ const totalCount = (order: Order) => {
 }
 
 const loadOrders = async () => {
+  loading.value = true
   try {
     const res = await fetchOrders()
     if (res && Array.isArray(res)) {
-      const data = res.map((order: any) => ({
-        id: order.id,
-        orderNo: order.id || order.orderNo,
-        items: typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []),
-        totalAmount: order.totalAmount || order.total_amount || '0',
-        status: order.status || 'pending',
-        createTime: order.createdAt || order.created_at || order.createTime || '',
-        contactName: order.contactName || order.contact_name || '',
-        contactPhone: order.contactPhone || order.contact_phone || '',
-        address: order.address || '',
-        remark: order.note || order.remark || '',
-        shippingAddress: order.shippingAddress || undefined,
-      }))
+      const data = res.map((order: any) => {
+        let parsedItems: any[] = []
+        if (typeof order.items === 'string') {
+          try {
+            parsedItems = JSON.parse(order.items)
+          } catch {
+            parsedItems = []
+          }
+        } else {
+          parsedItems = order.items || []
+        }
+        return {
+          id: order.id,
+          orderNo: order.id || order.orderNo,
+          items: parsedItems,
+          totalAmount: order.totalAmount || order.total_amount || '0',
+          status: order.status || 'pending',
+          createTime: order.createdAt || order.created_at || order.createTime || '',
+          contactName: order.contactName || order.contact_name || '',
+          contactPhone: order.contactPhone || order.contact_phone || '',
+          address: order.address || '',
+          remark: order.note || order.remark || '',
+          shippingAddress: order.shippingAddress || undefined,
+        }
+      })
       orders.value = data.sort((a: Order, b: Order) => {
         return (b.createTime || '').localeCompare(a.createTime || '')
       })
+      loading.value = false
       return
     }
   } catch (e) {
@@ -124,6 +145,8 @@ const loadOrders = async () => {
     })
   } catch (e) {
     orders.value = []
+  } finally {
+    loading.value = false
   }
 }
 
@@ -223,7 +246,7 @@ const payOrder = async (order: Order) => {
   // 同步本地 reactive 状态
   order.status = 'paid'
   uni.showToast({ title: '支付成功', icon: 'success' })
-  setTimeout(() => {
+  payRedirectTimer = setTimeout(() => {
     uni.redirectTo({ url: `/pages/mall/pay-result?orderNo=${order.orderNo}&amount=${order.totalAmount}&status=success` })
   }, 500)
   } finally {
@@ -249,6 +272,13 @@ const viewDetail = (order: Order) => {
 
 onShow(() => {
   loadOrders()
+})
+
+onUnmounted(() => {
+  if (payRedirectTimer) {
+    clearTimeout(payRedirectTimer)
+    payRedirectTimer = null
+  }
 })
 </script>
 

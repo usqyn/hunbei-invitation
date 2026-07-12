@@ -104,6 +104,8 @@ const loadError = ref(false)
 const currentPage = ref(1)
 const hasMore = ref(true)
 const loadingMore = ref(false)
+// 分类切换请求计数器，用于丢弃过期响应
+let categoryReqId = 0
 
 // ============ 生命周期 ============
 onMounted(async () => {
@@ -120,6 +122,7 @@ onMounted(async () => {
 
 // ============ 方法 ============
 async function loadPosterTemplates() {
+  const reqId = ++categoryReqId
   loading.value = true
   loadError.value = false
   // 重置分页状态
@@ -137,17 +140,22 @@ async function loadPosterTemplates() {
       },
       hideLoading: true,
     })
+    // 如果已有更新的请求发出，丢弃当前过期响应
+    if (reqId !== categoryReqId) return
     if (data && Array.isArray(data)) {
       posterTemplates.value = data
       // 返回不足一页说明已无更多数据
       hasMore.value = data.length >= PAGE_SIZE
     }
   } catch (e) {
+    if (reqId !== categoryReqId) return
     console.error('加载海报模板列表失败:', e)
     loadError.value = true
   }
 
-  loading.value = false
+  if (reqId === categoryReqId) {
+    loading.value = false
+  }
 }
 
 function onSelectCategory(catId: string) {

@@ -115,7 +115,7 @@ function validateAddress(): boolean {
     uni.showToast({ title: '请填写收货人姓名', icon: 'none' })
     return false
   }
-  if (!/^1\d{10}$/.test(address.value.phone)) {
+  if (!/^1[3-9]\d{9}$/.test(address.value.phone)) {
     uni.showToast({ title: '请填写正确的手机号', icon: 'none' })
     return false
   }
@@ -195,7 +195,6 @@ const submitOrder = async () => {
     uni.showLoading({ title: '提交中...' })
     // 先尝试调API
     const res = await createOrder(orderData)
-    uni.hideLoading()
 
     // 同时存本地备份
     const localOrder = {
@@ -229,7 +228,6 @@ const submitOrder = async () => {
       uni.redirectTo({ url: '/pages/mall/orders' })
     }, 1500)
   } catch (e) {
-    uni.hideLoading()
     console.warn('createOrder API failed:', e)
     // API失败时仅保存到本地，明确提示用户
     const localOrder = {
@@ -262,6 +260,7 @@ const submitOrder = async () => {
       uni.redirectTo({ url: '/pages/mall/orders' })
     }, 2000)
   } finally {
+    uni.hideLoading()
     submitting.value = false
   }
 }

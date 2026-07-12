@@ -19,8 +19,6 @@
             <text class="stat-item">作品数: <text class="stat-num">{{ worksCount }}</text></text>
             <text class="stat-divider">|</text>
             <text class="stat-item">收藏: <text class="stat-num">{{ favoritesCount }}</text></text>
-            <text class="stat-divider">|</text>
-            <text class="stat-item">浏览: <text class="stat-num">0</text></text>
           </view>
         </view>
         <view class="user-actions delay-200">
@@ -120,6 +118,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
 
@@ -140,10 +139,10 @@ const vipExpireText = computed(() => {
   return `有效期至 ${y}-${m}-${d}`
 })
 
-const quickActions = ref([
-  { id: 1, name: '收藏', icon: '⭐', bgColor: '#fff3e0', badge: '4' },
+const quickActions = computed(() => [
+  { id: 1, name: '收藏', icon: '⭐', bgColor: '#fff3e0', badge: favoritesCount.value > 0 ? String(favoritesCount.value) : '' },
   { id: 2, name: '足迹', icon: '👣', bgColor: '#e3f2fd' },
-  { id: 3, name: '卡券包', icon: '🎫', bgColor: '#fce4ec', badge: '2' },
+  { id: 3, name: '卡券包', icon: '🎫', bgColor: '#fce4ec' },
   { id: 4, name: '回收站', icon: '🗑️', bgColor: '#e8f5e9' }
 ])
 
@@ -168,6 +167,8 @@ const menuItems = ref([
 const handleAvatarClick = () => {
   if (!isLoggedIn.value) {
     uni.navigateTo({ url: '/pages/login/index' })
+  } else {
+    uni.navigateTo({ url: '/pages/settings/index' })
   }
 }
 
@@ -231,7 +232,11 @@ const handleMenuItemClick = (item: any) => {
     if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/mall/orders' })
   } else if (item.id === 2) {
-    uni.openCustomerServiceConversation({})
+    try {
+      uni.openCustomerServiceConversation({})
+    } catch (e) {
+      uni.showToast({ title: '暂不支持在线客服', icon: 'none' })
+    }
   } else if (item.id === 3) {
     if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/feedback/index' })
@@ -252,6 +257,12 @@ const handleLogout = () => {
     }
   })
 }
+
+onShow(() => {
+  if (isLoggedIn.value) {
+    userStore.fetchUserInfo().catch(() => {})
+  }
+})
 </script>
 
 <style lang="scss" scoped>
