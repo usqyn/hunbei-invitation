@@ -6,6 +6,7 @@ import { resolveUrl } from '@/utils/url'
 import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData } from '@/types'
 import { request } from '@/utils/request'
 import { getStorage, setStorage } from '@/utils/storage'
+import { loadFontsForElements } from '@/utils/font-loader'
 
 const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
 const STORAGE_KEY_TEMPLATE_DATA = 'hunbei_current_template_data'
@@ -412,7 +413,17 @@ export const useEditorStore = defineStore('editor', () => {
       editableElements.splice(0, editableElements.length, ...elements)
     }
     if (data.pageSections && Array.isArray(data.pageSections)) {
-      pageSections.splice(0, pageSections.length, ...JSON.parse(JSON.stringify(data.pageSections)))
+      const sections = JSON.parse(JSON.stringify(data.pageSections))
+      // 对 pageSections 做图片 URL 归一化（与 restoreTemplate 保持一致）
+      sections.forEach((sec: any) => {
+        if (sec.type === 'image' && sec.image) {
+          sec.image = resolveUrl(sec.image)
+        }
+        if (sec.type === 'image' && sec.content) {
+          sec.content = resolveUrl(sec.content)
+        }
+      })
+      pageSections.splice(0, pageSections.length, ...sections)
     }
     if (data.flipPages && Array.isArray(data.flipPages)) {
       const pages = JSON.parse(JSON.stringify(data.flipPages))
@@ -428,6 +439,13 @@ export const useEditorStore = defineStore('editor', () => {
       flipPages.splice(0, flipPages.length, ...pages)
     }
     if (data.canvasSize) canvasSize.value = { ...data.canvasSize }
+    // 恢复 orientation（横屏/竖屏）
+    const templateStore = useTemplateStore()
+    if (data.canvasSize && data.canvasSize.width > data.canvasSize.height) {
+      templateStore.setOrientation('landscape')
+    } else if (data.canvasSize && data.canvasSize.width < data.canvasSize.height) {
+      templateStore.setOrientation('portrait')
+    }
     if (data.background) {
       const bg = { ...data.background }
       if (bg.imageUrl && !bg.image) bg.image = bg.imageUrl
@@ -435,7 +453,6 @@ export const useEditorStore = defineStore('editor', () => {
       if (bg.imageUrl) bg.imageUrl = resolveUrl(bg.imageUrl)
       background.value = bg
     }
-    const templateStore = useTemplateStore()
     if (data.templateData) Object.assign(templateStore.templateData, data.templateData)
     if (data.basicInfo) Object.assign(templateStore.basicInfo, data.basicInfo)
     if (data.settings) Object.assign(templateStore.settings, data.settings)
@@ -458,6 +475,31 @@ export const useEditorStore = defineStore('editor', () => {
     // 重置历史，以当前作品状态为基线
     resetHistory()
     pushHistory()
+
+    // 恢复后重新加载字体（解决重新编辑时字体不正确的问题）
+    reloadFontsAfterRestore()
+  }
+
+  /** 根据当前模板类型重新加载所有相关字体 */
+  function reloadFontsAfterRestore() {
+    const allElements: any[] = [...editableElements]
+    // page 模式下 pageSections 的文字也需要加载字体
+    if (templateType.value === 'page') {
+      pageSections.forEach((sec: any) => {
+        if (sec.text || sec.style?.font) {
+          allElements.push(sec)
+        }
+      })
+    }
+    // flip 模式下所有页面的元素也需要加载字体
+    if (templateType.value === 'flip') {
+      flipPages.forEach((page: any) => {
+        if (page.elements && Array.isArray(page.elements)) {
+          allElements.push(...page.elements)
+        }
+      })
+    }
+    loadFontsForElements(allElements)
   }
 
   function openSectionTextEditor(sectionId: string) {

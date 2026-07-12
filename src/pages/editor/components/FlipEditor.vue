@@ -378,8 +378,14 @@ function deleteFlipPage() {
 }
 
 function openUnifiedEdit() {
-  // 保存当前快照，取消编辑时回滚
-  _formSnapshot = JSON.parse(JSON.stringify(templateStore.basicInfo))
+  // 保存当前快照，取消编辑时回滚（与主编辑器保持一致）
+  _formSnapshot = JSON.parse(JSON.stringify({
+    basicInfo: templateStore.basicInfo,
+    templateData: templateStore.templateData,
+    flipPages: editorStore.flipPages,
+    pageSections: editorStore.pageSections,
+    elements: editorStore.editableElements,
+  }))
   editorStore.showBasicInfoEditor = true
 }
 
@@ -389,9 +395,13 @@ function onUnifiedEditConfirm() {
 }
 
 function onUnifiedEditCancel() {
-  // 回滚 smart field 修改
+  // 回滚所有修改（与主编辑器保持一致）
   if (_formSnapshot) {
-    Object.assign(templateStore.basicInfo, _formSnapshot)
+    Object.assign(templateStore.basicInfo, _formSnapshot.basicInfo)
+    Object.assign(templateStore.templateData, _formSnapshot.templateData)
+    editorStore.flipPages.splice(0, editorStore.flipPages.length, ...JSON.parse(JSON.stringify(_formSnapshot.flipPages)))
+    editorStore.pageSections.splice(0, editorStore.pageSections.length, ...JSON.parse(JSON.stringify(_formSnapshot.pageSections)))
+    editorStore.editableElements.splice(0, editorStore.editableElements.length, ...JSON.parse(JSON.stringify(_formSnapshot.elements)))
   }
   editorStore.closeBasicInfoEditor()
 }

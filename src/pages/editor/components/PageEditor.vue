@@ -303,9 +303,13 @@ function onTextEditorConfirm() {
 }
 
 function openUnifiedEdit() {
-  // 创建快照用于取消时回滚
+  // 创建快照用于取消时回滚（与主编辑器保持一致）
   _snapshotBeforeEdit = JSON.parse(JSON.stringify({
     pageSections: editorStore.pageSections,
+    elements: editorStore.editableElements,
+    flipPages: editorStore.flipPages,
+    basicInfo: templateStore.basicInfo,
+    templateData: templateStore.templateData,
   }))
   editorStore.showBasicInfoEditor = true
 }
@@ -317,9 +321,13 @@ function onUnifiedEditConfirm() {
 
 function onUnifiedEditCancel() {
   editorStore.closeBasicInfoEditor()
-  // 取消时回滚到编辑前的快照
+  // 取消时回滚到编辑前的快照（使用 splice 保持响应式）
   if (_snapshotBeforeEdit) {
-    editorStore.pageSections = _snapshotBeforeEdit.pageSections
+    Object.assign(templateStore.basicInfo, _snapshotBeforeEdit.basicInfo)
+    Object.assign(templateStore.templateData, _snapshotBeforeEdit.templateData)
+    editorStore.pageSections.splice(0, editorStore.pageSections.length, ...JSON.parse(JSON.stringify(_snapshotBeforeEdit.pageSections)))
+    editorStore.editableElements.splice(0, editorStore.editableElements.length, ...JSON.parse(JSON.stringify(_snapshotBeforeEdit.elements)))
+    editorStore.flipPages.splice(0, editorStore.flipPages.length, ...JSON.parse(JSON.stringify(_snapshotBeforeEdit.flipPages)))
     _snapshotBeforeEdit = null
   }
 }

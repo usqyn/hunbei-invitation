@@ -263,6 +263,7 @@ import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
 import { loadFontsForElements } from '@/utils/font-loader'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
@@ -421,7 +422,14 @@ onMounted(async () => {
 
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
-    loadFontsForElements(editorStore.editableElements as any)
+    // 根据模板类型加载对应模式的元素字体（与编辑器保持一致）
+    if (editorStore.templateType === 'flip') {
+      editorStore.flipPages.forEach(p => loadFontsForElements(p.elements as any))
+    } else if (editorStore.templateType === 'page') {
+      loadFontsForElements(editorStore.pageSections as any)
+    } else {
+      loadFontsForElements(editorStore.editableElements as any)
+    }
     nextTick(() => {
       trackTimer(() => updateCardSize(), 100)
       trackTimer(() => measureZoomHeight(), 150)
@@ -709,14 +717,17 @@ function getFlipElementStyle(el: any): Record<string, string> {
 
 function getFlipTextStyle(el: any): Record<string, string> {
   const style = el.style || {}
+  const isRtl = el.text && RTL_CHAR_REGEX.test(el.text)
   return {
     fontFamily: style.font || 'sans-serif',
     fontSize: (style.fontSize || 28) + 'rpx',
     color: style.color || '#333333',
-    letterSpacing: (style.spacing || 0) + 'rpx',
+    letterSpacing: isRtl ? 'normal' : (style.spacing || 0) + 'rpx',
     lineHeight: style.lineHeight || 1.5,
     fontWeight: style.fontWeight || 'normal',
-    textAlign: style.textAlign || 'center',
+    textAlign: isRtl ? (style.textAlign || 'right') : (style.textAlign || 'center'),
+    direction: isRtl ? 'rtl' : 'ltr',
+    unicodeBidi: isRtl ? 'isolate' : 'normal',
   }
 }
 

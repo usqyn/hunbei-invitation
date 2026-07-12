@@ -2,7 +2,9 @@ import { API_BASE } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 
 // ============ 字体加载 ============
-const SYSTEM_FONTS = ['sans-serif', 'serif', 'monospace', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', 'Georgia', 'KaiTi', 'KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq']
+// 注意：KazakhSoftAsilya 和 KazakhSoftAsilyaQaniq 不能放在此列表中
+// 它们需要通过 JS 加载器下载字体文件，不能依赖 CSS @font-face（小程序中不稳定）
+const SYSTEM_FONTS = ['sans-serif', 'serif', 'monospace', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', 'Georgia', 'KaiTi']
 const loadedFonts = new Set<string>()
 let fontMap: Record<string, string> | null = null
 let fontMapLoading = false
@@ -45,7 +47,10 @@ function loadCustomFont(fontFamily: string) {
   if (SYSTEM_FONTS.some(f => fontFamily.includes(f))) return
   if (!fontMap) { fetchFontMap().then(() => loadCustomFont(fontFamily)); return }
   const fontUrl = fontMap[fontFamily]
-  if (!fontUrl) return
+  if (!fontUrl) {
+    console.warn(`[FontLoader] Font not in map: ${fontFamily}`)
+    return
+  }
   const fullUrl = fontUrl.startsWith('http') ? fontUrl : API_BASE + fontUrl
 
   // #ifdef MP-WEIXIN
@@ -73,30 +78,87 @@ function loadCustomFont(fontFamily: string) {
     uni.loadFontFace({
       family: fontFamily,
       source: `url("${fullUrl}")`,
-      success: () => { loadedFonts.add(fontFamily) },
+      success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`) },
       fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err) },
     } as any)
   } catch (e) { console.warn(`[FontLoader] Error: ${fontFamily}`, e) }
   // #endif
 }
 
-export function loadFontsForElements(elements: Array<{ type: string; style?: { font?: string } }>) {
+/** 从样式中提取主字体名 */
+function extractPrimaryFont(fontStr?: string): string | null {
+  if (!fontStr) return null
+  const primary = fontStr.split(',')[0].trim().replace(/['"]/g, '')
+  return primary || null
+}
+
+/** 检测文字是否包含 RTL 字符（阿拉伯/哈萨克等），如是则加入对应字体 */
+function checkAndAddRtlFonts(text: string | undefined, fontSet: Set<string>) {
+  if (text && RTL_CHAR_REGEX.test(text)) {
+    fontSet.add('KazakhSoftAsilya')
+    fontSet.add('KazakhSoftAsilyaQaniq')
+  }
+}
+
+export function loadFontsForElements(elements: Array<{ type?: string; style?: { font?: string }; text?: string }>) {
   const fontSet = new Set<string>()
 
   elements.forEach(el => {
-    if (el.type === 'text') {
-      if (el.style?.font) {
-        const primary = el.style.font.split(',')[0].trim().replace(/['"]/g, '')
-        if (primary) fontSet.add(primary)
-      }
-      if (el.text && RTL_CHAR_REGEX.test(el.text)) {
-        fontSet.add('KazakhSoftAsilya')
-        fontSet.add('KazakhSoftAsilyaQaniq')
-      }
-    }
+    // 处理所有包含文字的元素类型（text, title, date, location, rsvp 等）
+    const fontStyle = el.style?.font
+    const primary = extractPrimaryFont(fontStyle)
+    if (primary) fontSet.add(primary)
+
+    // 检测 RTL 文字，加载阿拉伯/哈萨克字体
+    checkAndAddRtlFonts(el.text, fontSet)
   })
+
+  if (fontSet.size === 0) return
 
   fetchFontMap().then(() => {
     fontSet.forEach(f => loadCustomFont(f))
+  })
+}
+
+/** 加载完成后触发回调，用于重新渲染 */
+export function loadFontsForElementsWithCallback(
+  elements: Array<{ type?: string; style?: { font?: string }; text?: string }>,
+  onComplete?: () => void
+) {
+  const fontSet = new Set<string>()
+
+  elements.forEach(el => {
+    const fontStyle = el.style?.font
+    const primary = extractPrimaryFont(fontStyle)
+    if (primary) fontSet.add(primary)
+    checkAndAddRtlFonts(el.text, fontSet)
+  })
+
+  if (fontSet.size === 0) {
+    onComplete?.()
+    return
+  }
+
+  fetchFontMap().then(() => {
+    let remaining = fontSet.size
+    fontSet.forEach(f => {
+      // 检查是否已加载
+      if (loadedFonts.has(f)) {
+        remaining--
+        if (remaining === 0) onComplete?.()
+        return
+      }
+      // 标记为待加载
+      remaining--
+      if (remaining === 0) {
+        // 所有字体已派发，延迟回调让 loadFontFace 有机会执行
+        loadCustomFont(f)
+        setTimeout(() => onComplete?.(), 500)
+      } else {
+        loadCustomFont(f)
+      }
+    })
+    // 如果所有字体都已加载
+    if (remaining === fontSet.size) onComplete?.()
   })
 }
