@@ -83,7 +83,7 @@ export const useUserStore = defineStore('user', () => {
     persist()
   }
 
-  function logout() {
+  async function logout(navigateToLogin = true) {
     isLoggedIn.value = false
     nickname.value = ''
     avatar.value = ''
@@ -93,6 +93,15 @@ export const useUserStore = defineStore('user', () => {
     vipExpireAt.value = 0
     vipPlan.value = ''
     try { uni.removeStorageSync(STORAGE_KEY); uni.removeStorageSync('token') } catch {}
+    // 清除作品数据，防止下个用户看到上个用户的作品
+    try {
+      const { useWorksStore } = await import('@/stores/works')
+      const worksStore = useWorksStore()
+      worksStore.reset()
+    } catch {}
+    if (navigateToLogin) {
+      uni.reLaunch({ url: '/pages/login/index' })
+    }
   }
 
   async function doLogin(loginData: { phone?: string; code?: string; encryptedData?: string; iv?: string }) {

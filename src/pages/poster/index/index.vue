@@ -158,6 +158,7 @@ function onSelectCategory(catId: string) {
 }
 
 function onSelectTemplate(template: PosterTemplate) {
+  if (!userStore.requireLogin()) return
   if (!template.is_free) {
     if (template.is_vip && !userStore.isVip()) {
       uni.showModal({

@@ -89,7 +89,7 @@
         </view>
 
         <view class="alt-login">
-          <view class="alt-item" @click="showSmsForm = true">
+          <view class="alt-item" @click="openSmsForm">
             <view class="alt-icon-wrapper">
               <text class="alt-icon">📱</text>
             </view>
@@ -217,6 +217,14 @@ const toggleAgreement = () => {
   agreed.value = !agreed.value
 }
 
+const openSmsForm = () => {
+  if (!agreed.value) {
+    feedbackWarning('请先同意用户协议')
+    return
+  }
+  showSmsForm.value = true
+}
+
 const goBack = useGoBack()
 
 const loginSuccess = async () => {
@@ -317,6 +325,10 @@ const sendCode = async () => {
 }
 
 const handleSmsLogin = async () => {
+  if (!agreed.value) {
+    feedbackWarning('请先同意用户协议')
+    return
+  }
   if (!phoneValid.value) {
     feedbackWarning('请输入正确的手机号')
     return

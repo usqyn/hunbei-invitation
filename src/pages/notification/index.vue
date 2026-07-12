@@ -73,6 +73,7 @@ const handleClick = async (item: Notification) => {
       item.isRead = true
     } catch (e) {
       console.error('标记已读失败', e)
+      uni.showToast({ title: '操作失败', icon: 'none' })
     }
   }
 }

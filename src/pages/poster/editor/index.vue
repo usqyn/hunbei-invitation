@@ -1095,6 +1095,7 @@ onMounted(async () => {
       }
     } catch (e) {
       console.warn('加载作品失败:', e)
+      uni.showToast({ title: '加载作品失败', icon: 'none' })
       if (templateId) {
         await posterStore.loadTemplate(templateId)
       }

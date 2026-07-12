@@ -494,18 +494,7 @@ function handleLocation() {
 }
 
 function handleSave() {
-  const editorData = {
-    elements: JSON.parse(JSON.stringify(editorStore.editableElements)),
-    pageSections: JSON.parse(JSON.stringify(editorStore.pageSections)),
-    flipPages: JSON.parse(JSON.stringify(editorStore.flipPages)),
-    background: JSON.parse(JSON.stringify(editorStore.background)),
-    canvasSize: JSON.parse(JSON.stringify(editorStore.canvasSize)),
-    templateType: editorStore.templateType,
-    templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
-    basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
-    settings: JSON.parse(JSON.stringify(templateStore.settings)),
-    currentFlipPageIndex: editorStore.currentFlipPageIndex,
-  }
+  const editorData = editorStore.buildEditorData()
   const musicId = templateStore.selectedMusicId
   if (editorStore.currentWorkId) {
     const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
@@ -513,7 +502,9 @@ function handleSave() {
       existing.title = templateStore.templateData.coverTitle || '未命名作品'
       existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
       existing.image = templateStore.templateData.coverImage
-      existing.templateType = editorStore.currentTemplateId
+      existing.cover = templateStore.templateData.coverImage
+      existing.templateId = editorStore.currentTemplateId
+      existing.templateType = editorStore.templateType
       existing.musicId = musicId
       existing.data = editorData
       existing.updatedAt = new Date().toISOString()
@@ -531,7 +522,9 @@ function handleSave() {
     title: templateStore.templateData.coverTitle || '未命名作品',
     date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
     image: templateStore.templateData.coverImage,
-    templateType: editorStore.currentTemplateId,
+    cover: templateStore.templateData.coverImage,
+    templateId: editorStore.currentTemplateId,
+    templateType: editorStore.templateType,
     musicId,
     status: 'draft',
     data: editorData,

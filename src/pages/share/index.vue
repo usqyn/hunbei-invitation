@@ -231,7 +231,7 @@ function onSelectTemplate(item: string) {
 // 分享渠道
 async function onShareMoments() {
   const workId = editorStore.currentWorkId
-  if (!workId) return
+  if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
   uni.showLoading({ title: '生成海报中...' })
   try {
     const res = await generatePoster(workId)
@@ -255,7 +255,7 @@ async function onShareMoments() {
 
 async function onSharePoster() {
   const workId = editorStore.currentWorkId
-  if (!workId) return
+  if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
   uni.showLoading({ title: '生成海报中...' })
   try {
     const res = await generatePoster(workId)

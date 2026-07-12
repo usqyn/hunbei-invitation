@@ -32,30 +32,37 @@
       </view>
 
       <view class="submit-wrap">
-        <view class="submit-btn" :class="{ disabled: !form.content.trim() }" @click="handleSubmit">提交反馈</view>
+        <view class="submit-btn" :class="{ disabled: !form.content.trim() || submitting }" :disabled="submitting || !form.content.trim()" @click="handleSubmit">提交反馈</view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { ref, reactive } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
+import { useUserStore } from '@/stores/user'
 import { submitFeedback } from '@/api'
 
 const goBack = useGoBack()
+const userStore = useUserStore()
 
 const form = reactive({
   content: '',
   contact: ''
 })
 
+const submitting = ref(false)
+
 const handleSubmit = async () => {
+  if (submitting.value) return
+  if (!userStore.requireLogin()) return
   if (!form.content.trim()) {
     uni.showToast({ title: '请输入反馈内容', icon: 'none' })
     return
   }
 
+  submitting.value = true
   try {
     await submitFeedback(form.content.trim(), form.contact.trim() || undefined)
     uni.showToast({ title: '提交成功', icon: 'success' })
@@ -64,6 +71,8 @@ const handleSubmit = async () => {
     }, 1500)
   } catch (e) {
     uni.showToast({ title: '提交失败', icon: 'none' })
+  } finally {
+    submitting.value = false
   }
 }
 </script>

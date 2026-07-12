@@ -98,7 +98,8 @@ const handleLogout = () => {
     content: '确定要退出登录吗？',
     success: (res) => {
       if (res.confirm) {
-        userStore.logout()
+        // logout(false) 不跳转，由这里统一跳转到首页
+        userStore.logout(false)
         uni.reLaunch({ url: '/pages/index/index' })
       }
     }

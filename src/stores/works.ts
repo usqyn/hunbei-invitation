@@ -118,7 +118,7 @@ export const useWorksStore = defineStore('works', () => {
             works.value.push(mappedWork)
           }
         })
-        debouncedPersist()
+        persist()
       }
     } catch (e) {
       console.warn('sync works from server failed', e)
@@ -214,7 +214,8 @@ export const useWorksStore = defineStore('works', () => {
     works.value = works.value.filter(w => w.id !== id)
     drafts.value = drafts.value.filter(w => w.id !== id)
     favorites.value = favorites.value.filter(w => w.id !== id)
-    debouncedPersist()
+    // 删除是不可逆操作，同步持久化
+    persist()
     uni.showToast({ title: '删除成功', icon: 'success' })
   }
 
@@ -236,7 +237,8 @@ export const useWorksStore = defineStore('works', () => {
         const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
         if (work) favorites.value.unshift(work)
       }
-      debouncedPersist()
+      // 收藏状态变更同步持久化
+      persist()
 
       if (userStore.isLoggedIn) {
         try {
@@ -306,10 +308,19 @@ export const useWorksStore = defineStore('works', () => {
     }
   }
 
+  /** 清空所有本地数据（登出时调用） */
+  function reset() {
+    works.value = []
+    drafts.value = []
+    favorites.value = []
+    try { uni.removeStorageSync(STORAGE_KEY) } catch {}
+  }
+
   return {
     works, drafts, favorites, loading,
     addWork, updateWork, renameWork, deleteWork, addDraft,
     toggleFavorite, isFavorite, saveAsWork, loadAll,
     syncFavoritesFromServer, syncWorksFromServer, syncWorksToServer,
+    reset,
   }
 })

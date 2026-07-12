@@ -246,6 +246,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
@@ -526,6 +527,8 @@ function handleRedo() {
 const editProgress = ref(0)
 const hasShownProgressPopup = ref(false)
 const editStartTime = ref(Date.now())
+// 标记模板是否已加载完成（用于 onShow 检测登录返回后是否需要重新加载）
+const templateLoaded = ref(false)
 
 const basicInfo = computed(() => templateStore.basicInfo)
 
@@ -987,19 +990,8 @@ function findWork(workId: string): Work | undefined {
   return undefined
 }
 
-onMounted(async () => {
-  editStartTime.value = Date.now()
-
-  // 安全兜底：如果未登录，重定向到登录页
-  if (!userStore.isLoggedIn) {
-    userStore.requireLogin()
-    return
-  }
-
-  const pages = getCurrentPages()
-  const curPage = pages[pages.length - 1] as any
-  const options = curPage?.options || {}
-
+// 提取模板加载逻辑为可复用函数，供 onMounted 与 onShow 调用
+async function loadEditorData(options: any) {
   const workId = options.workId
   if (workId) {
     const work = findWork(workId)
@@ -1029,10 +1021,41 @@ onMounted(async () => {
       track('edit_start', { template_id: editorStore.currentTemplateId })
     }
   }
+  templateLoaded.value = true
+}
+
+onMounted(async () => {
+  editStartTime.value = Date.now()
+
+  // 安全兜底：如果未登录，重定向到登录页
+  if (!userStore.isLoggedIn) {
+    userStore.requireLogin()
+    return
+  }
+
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  const options = curPage?.options || {}
+
+  await loadEditorData(options)
 
   nextTick(() => {
     _mountTimers.push(setTimeout(() => updateCardSize(), 100))
   })
+})
+
+// 用户从登录页返回后，如果模板尚未加载，则重新触发加载，避免空白页
+onShow(() => {
+  if (userStore.isLoggedIn && !templateLoaded.value) {
+    const pages = getCurrentPages()
+    const curPage = pages[pages.length - 1] as any
+    const options = curPage?.options || {}
+    loadEditorData(options).then(() => {
+      nextTick(() => {
+        _mountTimers.push(setTimeout(() => updateCardSize(), 100))
+      })
+    })
+  }
 })
 
 watch(isLandscape, () => {

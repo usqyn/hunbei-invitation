@@ -82,7 +82,7 @@
     <!-- 底部支付按钮 -->
     <view class="vip-footer">
       <view class="footer-bg"></view>
-      <button class="pay-btn" @click="handlePay">
+      <button class="pay-btn" :disabled="paying" @click="handlePay">
         <text class="pay-btn-text">立即开通 {{ currentPlan.price }}元</text>
       </button>
       <text class="pay-tip">开通即表示同意《VIP服务协议》</text>
@@ -115,6 +115,7 @@ const plans = [
 
 const selectedPlan = ref('yearly')
 const currentPlan = computed(() => plans.find(p => p.key === selectedPlan.value)!)
+const paying = ref(false)
 
 const compareList = [
   { feature: '模板数量', free: '30套', vip: '全站500+' },
@@ -126,6 +127,9 @@ const compareList = [
 ]
 
 async function handlePay() {
+  if (paying.value) return
+  if (!userStore.requireLogin()) return
+  paying.value = true
   track('vip_click_pay', { plan: selectedPlan.value, price: currentPlan.value.price })
   uni.showLoading({ title: '创建订单中...' })
   try {
@@ -152,13 +156,18 @@ async function handlePay() {
         } else {
           uni.showToast({ title: '支付成功', icon: 'success' })
         }
+        paying.value = false
         setTimeout(() => uni.navigateBack(), 1500)
       },
-      fail: () => uni.showToast({ title: '支付取消', icon: 'none' }),
+      fail: () => {
+        uni.showToast({ title: '支付取消', icon: 'none' })
+        paying.value = false
+      },
     })
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: '创建订单失败', icon: 'none' })
+    paying.value = false
   }
 }
 

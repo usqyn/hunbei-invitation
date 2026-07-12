@@ -176,6 +176,7 @@ const handleSetting = () => {
 }
 
 const handleBell = () => {
+  if (!userStore.requireLogin()) return
   uni.navigateTo({ url: '/pages/notification/index' })
 }
 
@@ -191,10 +192,12 @@ const handleQuickAction = (item: any) => {
   if (item.name === '收藏') {
     uni.switchTab({ url: '/pages/works/index' })
   } else if (item.name === '足迹') {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/footprint/index' })
   } else if (item.name === '卡券包') {
     uni.showToast({ title: '暂无优惠券', icon: 'none' })
   } else if (item.name === '回收站') {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/recycle/index' })
   }
 }
@@ -210,10 +213,12 @@ const handleToolClick = (tool: any) => {
   } else if (tool.name === '收到的请柬') {
     uni.navigateTo({ url: '/pages/footprint/index' })
   } else if (tool.name === '朋友圈图片') {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/share/index' })
   } else if (tool.name === '迎宾海报') {
     uni.navigateTo({ url: '/pages/poster/index/index' })
   } else if (tool.name === '我的海报') {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/poster/works/index' })
   } else if (tool.name === '一键出片') {
     if (!userStore.requireLogin()) return
@@ -223,10 +228,12 @@ const handleToolClick = (tool: any) => {
 
 const handleMenuItemClick = (item: any) => {
   if (item.id === 1) {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/mall/orders' })
   } else if (item.id === 2) {
     uni.openCustomerServiceConversation({})
   } else if (item.id === 3) {
+    if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/feedback/index' })
   } else if (item.id === 4) {
     uni.navigateTo({ url: '/pages/settings/index' })

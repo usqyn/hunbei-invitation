@@ -56,6 +56,12 @@ export function request<T = any>(options: string | {
             try {
               uni.removeStorageSync('token')
               uni.removeStorageSync('hunbei_user')
+              // 延迟重置 userStore 内存状态（避免循环依赖）
+              import('@/stores/user').then(({ useUserStore }) => {
+                try {
+                  useUserStore().logout(false)
+                } catch {}
+              }).catch(() => {})
             } catch {}
             uni.reLaunch({
               url: '/pages/login/index',
