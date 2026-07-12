@@ -88,6 +88,11 @@ export interface EditableElement {
   zIndex?: number
   rotation?: number
   opacity?: number
+  // 用户端图片调整
+  imageScale?: number       // 图片缩放比例（1=原始大小，0.5=50%，2=200%）
+  imageOffsetX?: number     // 图片在容器内 X 偏移（百分比 -50~50）
+  imageOffsetY?: number     // 图片在容器内 Y 偏移（百分比 -50~50）
+  borderRadius?: number     // 圆角（rpx）
   // admin 端控制是否允许用户编辑
   editable?: boolean
   // 是否为付费/VIP 专属素材
@@ -136,6 +141,11 @@ export interface PageSection {
   dataKey?: keyof TemplateData
   style?: ElementStyle
   editable?: boolean
+  // 用户端图片调整（仅 image 类型 section）
+  imageScale?: number
+  rotation?: number
+  opacity?: number
+  borderRadius?: number
 }
 
 // 翻页模式 - 页面类型

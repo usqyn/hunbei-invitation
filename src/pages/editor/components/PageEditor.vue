@@ -37,6 +37,7 @@
               class="section-image"
               :src="sec.image || '/static/images/icons/img-placeholder.svg'"
               mode="aspectFit"
+              :style="getImageSectionStyle(sec)"
               @error="onImageError"
             />
             <view v-if="!sec.image" class="image-placeholder">
@@ -108,6 +109,10 @@
           <text class="ctx-icon">🖼️</text>
           <text class="ctx-label">换图</text>
         </view>
+        <view v-if="activeSection?.type === 'image'" class="ctx-btn" @click="showImagePanel = true">
+          <text class="ctx-icon">⚙️</text>
+          <text class="ctx-label">调整</text>
+        </view>
         <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
           <text class="ctx-icon">↩</text>
           <text class="ctx-label">撤销</text>
@@ -178,6 +183,15 @@
       @update="onSmartFieldUpdate"
       @location="handleLocation"
     />
+
+    <!-- 图片属性调整面板 -->
+    <ImagePropertyPanel
+      :visible="showImagePanel"
+      :element="activeSection as any"
+      @close="showImagePanel = false"
+      @update="onImagePropUpdate"
+      @reset="onImagePropReset"
+    />
   </view>
 </template>
 
@@ -191,12 +205,16 @@ import { useGoBack } from '@/composables/useGoBack'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
+import ImagePropertyPanel from './ImagePropertyPanel.vue'
 import type { PageSection, Work } from '@/types'
 
 const editorStore = useEditorStore()
 const templateStore = useTemplateStore()
 const worksStore = useWorksStore()
 const goBack = useGoBack()
+
+// 图片属性面板显示控制
+const showImagePanel = ref(false)
 
 // 组件挂载状态标记，用于异步操作中判断组件是否已卸载
 let _isMounted = true
@@ -230,6 +248,40 @@ function onSectionClick(sec: PageSection) {
 
 function deselectSection() {
   editorStore.activeSectionId = null
+}
+
+// 图片 section 的变换样式
+function getImageSectionStyle(sec: PageSection): Record<string, string> {
+  const style: Record<string, string> = {}
+  // 透明度
+  if (sec.opacity != null) style.opacity = String(sec.opacity)
+  // 构建复合 transform：旋转 + 缩放
+  const transforms: string[] = []
+  if (sec.rotation) transforms.push(`rotate(${sec.rotation}deg)`)
+  if (sec.imageScale && sec.imageScale !== 1) transforms.push(`scale(${sec.imageScale})`)
+  if (transforms.length > 0) style.transform = transforms.join(' ')
+  // 圆角
+  if (sec.borderRadius) {
+    style.borderRadius = `${sec.borderRadius}rpx`
+  }
+  return style
+}
+
+// 图片属性面板更新回调
+function onImagePropUpdate(field: string, value: number) {
+  if (!activeSection.value) return
+  ;(activeSection.value as any)[field] = value
+  editorStore.pushHistory()
+}
+
+// 图片属性面板重置回调
+function onImagePropReset() {
+  if (!activeSection.value) return
+  activeSection.value.imageScale = 1
+  activeSection.value.rotation = 0
+  activeSection.value.opacity = 1
+  activeSection.value.borderRadius = 0
+  editorStore.pushHistory()
 }
 
 function handleEditSection() {

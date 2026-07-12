@@ -152,6 +152,11 @@
           <text class="ctx-label">换图</text>
         </view>
         <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
+        <view v-if="selectedElType === 'image'" class="ctx-btn" @click="showImagePanel = true">
+          <text class="ctx-icon ctx-icon--bounce">⚙️</text>
+          <text class="ctx-label">调整</text>
+        </view>
+        <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
         <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
           <text class="ctx-icon ctx-icon--bounce">↩</text>
           <text class="ctx-label">撤销</text>
@@ -241,6 +246,15 @@
       @location="handleLocation"
     />
 
+    <!-- 图片属性调整面板 -->
+    <ImagePropertyPanel
+      :visible="showImagePanel"
+      :element="selectedImageElement"
+      @close="showImagePanel = false"
+      @update="onImagePropUpdate"
+      @reset="onImagePropReset"
+    />
+
   </view>
 </template>
 
@@ -263,6 +277,7 @@ import PageEditor from './components/PageEditor.vue'
 import FlipEditor from './components/FlipEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import UnifiedEditForm from './components/UnifiedEditForm.vue'
+import ImagePropertyPanel from './components/ImagePropertyPanel.vue'
 import type { EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -309,17 +324,41 @@ function getOverlayElementStyle(el: EditableElement): Record<string, string> {
   if (el.x == null || el.y == null || el.width == null || el.height == null) return {}
   const cw = editorStore.canvasSize?.width || 375
   const ch = editorStore.canvasSize?.height || 667
-  return {
+  const style: Record<string, string> = {
     position: 'absolute',
     left: `${(el.x / cw) * 100}%`,
     top: `${(el.y / ch) * 100}%`,
     width: `${(el.width / cw) * 100}%`,
     height: `${(el.height / ch) * 100}%`,
+    opacity: String(el.opacity ?? 1),
   }
+  // 构建复合 transform：旋转 + 图片缩放
+  const transforms: string[] = []
+  if (el.rotation) transforms.push(`rotate(${el.rotation}deg)`)
+  if (el.type === 'image' && el.imageScale && el.imageScale !== 1) transforms.push(`scale(${el.imageScale})`)
+  if (transforms.length > 0) style.transform = transforms.join(' ')
+  // 图片圆角
+  const br = el.borderRadius ?? el.style?.borderRadius
+  if (el.type === 'image' && br) {
+    style.borderRadius = `${br}rpx`
+    style.overflow = 'hidden'
+  }
+  return style
 }
 
 // 标记 renderedImage 已过期（用户编辑后需要重新渲染）
 const renderedImageStale = ref(false)
+
+// 图片属性面板显示控制
+const showImagePanel = ref(false)
+
+// 当前选中的图片元素（用于 ImagePropertyPanel）
+const selectedImageElement = computed(() => {
+  if (editorStore.selectedElement === null) return null
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el || el.type !== 'image') return null
+  return el
+})
 
 // 编辑文本后标记过期
 function onTextEditorConfirm() {
@@ -545,6 +584,29 @@ const selectedElType = computed(() => {
 // 取消选中元素
 function deselectElement() {
   editorStore.selectedElement = null
+}
+
+// 图片属性面板更新回调
+function onImagePropUpdate(field: string, value: number) {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el) return
+  ;(el as any)[field] = value
+  editorStore.pushHistory()
+  renderedImageStale.value = true
+}
+
+// 图片属性面板重置回调
+function onImagePropReset() {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el) return
+  el.imageScale = 1
+  el.rotation = 0
+  el.opacity = 1
+  el.borderRadius = 0
+  editorStore.pushHistory()
+  renderedImageStale.value = true
 }
 
 function resolveText(text: string): string {

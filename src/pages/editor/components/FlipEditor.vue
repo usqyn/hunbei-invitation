@@ -86,6 +86,10 @@
           <text class="ctx-icon">🖼️</text>
           <text class="ctx-label">换图</text>
         </view>
+        <view v-if="selectedElement.type === 'image'" class="ctx-btn" @click="showImagePanel = true">
+          <text class="ctx-icon">⚙️</text>
+          <text class="ctx-label">调整</text>
+        </view>
         <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
           <text class="ctx-icon">↩</text>
           <text class="ctx-label">撤销</text>
@@ -156,6 +160,15 @@
       @update="onSmartFieldUpdate"
       @location="handleLocation"
     />
+
+    <!-- 图片属性调整面板 -->
+    <ImagePropertyPanel
+      :visible="showImagePanel"
+      :element="selectedElement as any"
+      @close="showImagePanel = false"
+      @update="onImagePropUpdate"
+      @reset="onImagePropReset"
+    />
   </view>
 </template>
 
@@ -170,6 +183,7 @@ import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
+import ImagePropertyPanel from './ImagePropertyPanel.vue'
 import type { Work } from '@/types'
 
 const editorStore = useEditorStore()
@@ -185,6 +199,7 @@ const { getTextStyle } = useCanvasRender({
 
 const activeElementIndex = ref(-1)
 const selectedElement = ref<any>(null)
+const showImagePanel = ref(false)
 let _formSnapshot: any = null
 // 组件挂载状态标记，用于异步操作中判断组件是否已卸载
 let _isMounted = true
@@ -221,6 +236,23 @@ function onElementClick(el: any, idx: number) {
 function deselectElement() {
   activeElementIndex.value = -1
   selectedElement.value = null
+}
+
+// 图片属性面板更新回调
+function onImagePropUpdate(field: string, value: number) {
+  if (!selectedElement.value) return
+  ;(selectedElement.value as any)[field] = value
+  editorStore.pushHistory()
+}
+
+// 图片属性面板重置回调
+function onImagePropReset() {
+  if (!selectedElement.value) return
+  selectedElement.value.imageScale = 1
+  selectedElement.value.rotation = 0
+  selectedElement.value.opacity = 1
+  selectedElement.value.borderRadius = 0
+  editorStore.pushHistory()
 }
 
 function handleEditText() {
@@ -338,16 +370,27 @@ function getPageBgStyle(page: any): Record<string, string> {
 
 function getElementStyle(el: any): Record<string, string> {
   const cs = editorStore.canvasSize
-  return {
+  const style: Record<string, string> = {
     position: 'absolute',
     left: (el.x / cs.width * 100) + '%',
     top: (el.y / cs.height * 100) + '%',
     width: (el.width / cs.width * 100) + '%',
     height: (el.height / cs.height * 100) + '%',
-    transform: `rotate(${el.rotation || 0}deg)`,
     opacity: el.opacity ?? 1,
     zIndex: el.zIndex || 1,
   }
+  // 构建复合 transform：旋转 + 图片缩放
+  const transforms: string[] = []
+  if (el.rotation) transforms.push(`rotate(${el.rotation}deg)`)
+  if (el.type === 'image' && el.imageScale && el.imageScale !== 1) transforms.push(`scale(${el.imageScale})`)
+  if (transforms.length > 0) style.transform = transforms.join(' ')
+  // 图片圆角
+  const br = el.borderRadius ?? el.style?.borderRadius
+  if (el.type === 'image' && br) {
+    style.borderRadius = `${br}rpx`
+    style.overflow = 'hidden'
+  }
+  return style
 }
 
 function addFlipPage() {

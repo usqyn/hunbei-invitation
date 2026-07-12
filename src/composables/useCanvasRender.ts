@@ -112,12 +112,23 @@ export function useCanvasRender(options: {
       style.overflow = 'hidden'
     }
 
+    // 构建复合 transform：旋转 + 图片缩放 + 图片偏移
+    const transforms: string[] = []
     if (el.rotation) {
-      style.transform = `rotate(${el.rotation}deg)`
+      transforms.push(`rotate(${el.rotation}deg)`)
+    }
+    if (el.type === 'image' && el.imageScale && el.imageScale !== 1) {
+      transforms.push(`scale(${el.imageScale})`)
+    }
+    if (transforms.length > 0) {
+      style.transform = transforms.join(' ')
     }
 
-    if (el.type === 'image' && el.style?.borderRadius) {
-      style.borderRadius = `${el.style.borderRadius}rpx`
+    // 图片圆角：优先用 element 级别 borderRadius，回退到 style.borderRadius
+    const br = el.borderRadius ?? el.style?.borderRadius
+    if (el.type === 'image' && br) {
+      style.borderRadius = `${br}rpx`
+      style.overflow = 'hidden'
     }
 
     return style
