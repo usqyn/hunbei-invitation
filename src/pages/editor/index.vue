@@ -1,5 +1,10 @@
 <template>
   <view class="editor-page">
+    <!-- 自动保存提示条 -->
+    <view v-if="autoSaveToast" class="autosave-toast">
+      <text class="autosave-icon">✓</text>
+      <text class="autosave-text">已自动保存</text>
+    </view>
     <!-- Header -->
     <view class="editor-header animate-slide-down-fade">
       <view class="header-back" @click="goBack">
@@ -55,6 +60,11 @@
       <FlipEditor />
     </view>
     <view v-else class="editor-body" :class="{ 'editor-body--landscape': isLandscape }">
+      <!-- 首次编辑引导提示 -->
+      <view v-if="showEditHint" class="edit-hint-bubble animate-fade-in" @click="dismissEditHint">
+        <text class="edit-hint-icon">👆</text>
+        <text class="edit-hint-text">点击文字或图片进行编辑</text>
+      </view>
       <!-- 画布模式：全屏画布（去除右侧面板，最大化预览区） -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
         <scroll-view class="preview-scroll" scroll-y>
@@ -230,7 +240,10 @@
               <view class="btn-spinner"></view>
               <text class="action-btn-text">保存中</text>
             </view>
-            <text v-else class="action-btn-text">保存</text>
+            <view v-else class="save-btn-content">
+              <view class="save-status-dot" :class="hasUnsavedChanges ? 'save-status-dot--unsaved' : 'save-status-dot--saved'"></view>
+              <text class="action-btn-text">保存</text>
+            </view>
           </view>
           <view
             class="footer-action-btn footer-share-btn footer-share-btn--enhanced"
@@ -380,6 +393,42 @@ const hasUnsavedChanges = ref(false)
 const loadError = ref(false)
 // 自动保存定时器
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
+// 自动保存提示
+const autoSaveToast = ref(false)
+
+// 首次编辑引导提示
+const showEditHint = ref(false)
+let editHintTimer: ReturnType<typeof setTimeout> | null = null
+
+function tryShowEditHint() {
+  try {
+    const shown = uni.getStorageSync('editor_hint_shown')
+    if (!shown) {
+      showEditHint.value = true
+      editHintTimer = setTimeout(() => {
+        showEditHint.value = false
+      }, 5000)
+    }
+  } catch {
+    showEditHint.value = true
+    editHintTimer = setTimeout(() => {
+      showEditHint.value = false
+    }, 5000)
+  }
+}
+
+function dismissEditHint() {
+  showEditHint.value = false
+  if (editHintTimer) {
+    clearTimeout(editHintTimer)
+    editHintTimer = null
+  }
+  try {
+    uni.setStorageSync('editor_hint_shown', true)
+  } catch {
+    // ignore
+  }
+}
 
 // 图片属性面板显示控制
 const showImagePanel = ref(false)
@@ -504,6 +553,8 @@ function onElementTap(idx: number) {
   // 第一次点击：仅选中元素，不打开编辑器
   editorStore.selectedElement = idx
   haptic('light')
+  // 用户首次点击元素时关闭引导提示
+  if (showEditHint.value) dismissEditHint()
   lastTapIdx = idx
   lastTapTime = now
 }
@@ -1070,6 +1121,11 @@ async function handleSave() {
     worksStore.saveAsWork(work)
   }, { successMessage: '已保存', minLoadingDuration: 400 })
   hasUnsavedChanges.value = false
+  // 显示自动保存提示
+  autoSaveToast.value = true
+  setTimeout(() => {
+    if (_isMounted) autoSaveToast.value = false
+  }, 1500)
 }
 
 // 轻量自动保存（无 toast、无 loading，静默持久化）
@@ -1113,6 +1169,11 @@ async function autoSaveWork() {
     }
     worksStore.saveAsWork(work)
     hasUnsavedChanges.value = false
+    // 显示自动保存提示
+    autoSaveToast.value = true
+    setTimeout(() => {
+      if (_isMounted) autoSaveToast.value = false
+    }, 1500)
   } catch (e) {
     console.warn('自动保存失败:', e)
   }
@@ -1316,6 +1377,10 @@ async function loadEditorData(options: any) {
       }
     }
     templateLoaded.value = true
+    // 模板加载成功后，延迟显示首次编辑引导
+    setTimeout(() => {
+      if (_isMounted) tryShowEditHint()
+    }, 800)
   } catch (e) {
     console.error('loadEditorData failed:', e)
     loadError.value = true
@@ -1402,6 +1467,7 @@ onUnmounted(() => {
   if (smartEditTimer) clearTimeout(smartEditTimer)
   if (propPanelTimer) clearTimeout(propPanelTimer)
   if (autoSaveTimer) clearInterval(autoSaveTimer)
+  if (editHintTimer) clearTimeout(editHintTimer)
   _mountTimers.forEach(t => clearTimeout(t))
   _mountTimers = []
 })
@@ -1415,6 +1481,45 @@ onUnmounted(() => {
   height: 100vh;
   background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
   overflow: hidden;
+}
+
+/* ===== 首次编辑引导提示 ===== */
+.edit-hint-bubble {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 20rpx 36rpx;
+  background: rgba(44, 44, 44, 0.92);
+  border-radius: 48rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  animation: hintFloat 2s ease-in-out infinite alternate;
+}
+
+.edit-hint-icon {
+  font-size: 36rpx;
+  animation: hintPoint 1.2s ease-in-out infinite;
+}
+
+.edit-hint-text {
+  font-size: 26rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+@keyframes hintFloat {
+  from { transform: translateX(-50%) translateY(0); }
+  to { transform: translateX(-50%) translateY(-8rpx); }
+}
+
+@keyframes hintPoint {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(8rpx); }
 }
 
 /* ===== 入场动画定义 ===== */
@@ -2103,6 +2208,76 @@ onUnmounted(() => {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* ===== 保存按钮状态指示 ===== */
+.save-btn-content {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.save-status-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  transition: background 0.3s;
+}
+
+.save-status-dot--unsaved {
+  background: #ff4d4f;
+  box-shadow: 0 0 8rpx rgba(255, 77, 79, 0.5);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+
+.save-status-dot--saved {
+  background: #52c41a;
+  box-shadow: 0 0 6rpx rgba(82, 196, 26, 0.4);
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ===== 自动保存提示条 ===== */
+.autosave-toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 80rpx);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 28rpx;
+  background: rgba(82, 196, 26, 0.95);
+  border-radius: 36rpx;
+  box-shadow: 0 4rpx 16rpx rgba(82, 196, 26, 0.3);
+  animation: toastSlideDown 0.3s ease-out;
+}
+
+.autosave-icon {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.autosave-text {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+@keyframes toastSlideDown {
+  from {
+    transform: translateX(-50%) translateY(-20rpx);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
 }
 
 /* ===== 按钮 loading 态 ===== */
