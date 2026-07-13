@@ -21,3 +21,4 @@ server/uploads/*.ogg
 server/uploads/*.aac
 monetization-funnel/_shared/fonts/
 monetization-funnel/_shared/js/
+.uploads/
