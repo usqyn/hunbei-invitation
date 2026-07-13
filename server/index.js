@@ -958,10 +958,12 @@ app.get('/api/templates/:id', (req, res) => {
 // 上传文件
 app.post('/api/upload', uploadLimiter, requireAuth, upload.array('images', 10), (req, res) => {
   try {
+    const protocol = req.protocol
+    const host = req.get('host')
     const files = req.files.map(f => ({
       filename: f.filename,
       originalName: f.originalname,
-      url: `/uploads/${f.filename}`,
+      url: `${protocol}://${host}/uploads/${f.filename}`,
       size: f.size,
     }))
     res.json({ success: true, data: files })
@@ -1009,10 +1011,12 @@ const fontUpload = multer({
 
 app.post('/api/fonts/upload', uploadLimiter, requireAuth, fontUpload.array('fonts', 10), (req, res) => {
   try {
+    const protocol = req.protocol
+    const host = req.get('host')
     const files = req.files.map(f => ({
       filename: f.filename,
       originalName: f.originalname,
-      url: `/uploads/fonts/${f.filename}`,
+      url: `${protocol}://${host}/uploads/fonts/${f.filename}`,
       size: f.size,
     }))
     // 更新字体映射表
@@ -1071,10 +1075,12 @@ const musicUpload = multer({
 
 app.post('/api/music/upload', uploadLimiter, requireAuth, musicUpload.array('music', 10), (req, res) => {
   try {
+    const protocol = req.protocol
+    const host = req.get('host')
     const files = req.files.map(f => ({
       filename: f.filename,
       originalName: f.originalname,
-      url: `/uploads/music/${f.filename}`,
+      url: `${protocol}://${host}/uploads/music/${f.filename}`,
       size: f.size,
     }))
     files.forEach(f => {

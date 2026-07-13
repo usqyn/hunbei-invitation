@@ -627,6 +627,8 @@ router.delete('/works/:id', requireWorkOwner, (req, res) => {
 router.get('/stickers', (req, res) => {
   try {
     const stickersDir = path.join(__dirname, '..', 'uploads', 'poster', 'stickers')
+    const protocol = req.protocol
+    const host = req.get('host')
     let stickers = []
     if (fs.existsSync(stickersDir)) {
       stickers = fs.readdirSync(stickersDir)
@@ -634,7 +636,7 @@ router.get('/stickers', (req, res) => {
         .map(f => ({
           id: f.replace(/\.[^.]+$/, ''),
           name: f.replace(/\.[^.]+$/, ''),
-          url: `/uploads/poster/stickers/${f}`,
+          url: `${protocol}://${host}/uploads/poster/stickers/${f}`,
         }))
     }
     res.json({ success: true, data: stickers, total: stickers.length })

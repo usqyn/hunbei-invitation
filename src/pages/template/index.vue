@@ -163,6 +163,7 @@ import { TEMPLATE_LIST } from '@/constants/templates-data'
 import { HOME_CATEGORIES } from '@/constants/categories'
 import { TEMPLATE_PAGE_CONFIG } from '@/config'
 import { request } from '@/utils/request'
+import { resolveUrl } from '@/utils/url'
 import { useUserStore } from '@/stores/user'
 import { useFeedback } from '@/composables/useFeedback'
 
@@ -394,11 +395,10 @@ function onSelectTemplate(template: TemplateItem) {
 }
 
 function getImageUrl(template: TemplateItem): string {
-  if (template.cover) return template.cover
-  if ((template as any).data?.coverImage) return (template as any).data.coverImage
-  // fallback: 用第一个图片元素作为封面
+  if (template.cover) return resolveUrl(template.cover)
+  if ((template as any).data?.coverImage) return resolveUrl((template as any).data.coverImage)
   const firstImg = template.elements?.find((e: any) => e.type === 'image')
-  if (firstImg?.text) return firstImg.text
+  if (firstImg?.text) return resolveUrl(firstImg.text)
   return '/static/images/templates/wedding-1.svg'
 }
 
