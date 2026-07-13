@@ -67,10 +67,15 @@
       </view>
       <!-- 画布模式：全屏画布（去除右侧面板，最大化预览区） -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
-        <scroll-view class="preview-scroll" scroll-y>
+        <scroll-view 
+          class="preview-scroll" 
+          :class="{ 'preview-scroll--landscape': isLandscape }"
+          :scroll-y="!isLandscape" 
+          :scroll-x="isLandscape"
+        >
           <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
           <template v-if="editorStore.renderedImage && !renderedImageStale">
-            <view class="rendered-image-container animate-fade-in-scale">
+            <view class="rendered-image-container animate-fade-in-scale" :class="{ 'rendered-image-container--landscape': isLandscape }">
               <image
                 class="rendered-image"
                 :src="editorStore.renderedImage"
@@ -118,7 +123,7 @@
                 <text class="empty-decor-dot"></text>
               </view>
             </view>
-            <view v-else class="preview-card preview-card--canvas animate-fade-in-scale" :style="[canvasCardStyle, canvasBackgroundStyle]">
+            <view v-else class="preview-card preview-card--canvas animate-fade-in-scale" :class="{ 'preview-card--landscape': isLandscape }" :style="[canvasCardStyle, canvasBackgroundStyle]">
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="el.id || ('el-' + idx)"
                 class="canvas-element"
@@ -1848,6 +1853,15 @@ onUnmounted(() => {
   border: 2rpx solid rgba(255, 255, 255, 0.8);
 }
 
+.rendered-image-container--landscape {
+  flex-shrink: 0;
+  height: 100%;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0;
+  border-radius: 16rpx;
+}
+
 .rendered-image {
   width: 100%;
   display: block;
@@ -2038,6 +2052,26 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
   padding: 20rpx 16rpx;
   min-height: 0;
+}
+
+.preview-scroll--landscape {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.preview-card--landscape {
+  flex-shrink: 0;
+  height: 100%;
+  max-height: calc(100vh - 200rpx);
+  width: auto !important;
+  max-width: none !important;
+  margin: 0;
+  border-radius: 16rpx;
+  padding: 16rpx;
+  overflow: visible;
 }
 
 /* ===== 底部工具栏 ===== */

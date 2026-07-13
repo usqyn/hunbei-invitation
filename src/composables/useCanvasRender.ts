@@ -58,6 +58,15 @@ export function useCanvasRender(options: {
   const canvasCardStyle = computed(() => {
     const w = canvasWidth.value
     const h = canvasHeight.value
+    if (isLandscape.value) {
+      return {
+        aspectRatio: `${w} / ${h}`,
+        height: '100%',
+        width: 'auto',
+        margin: '0',
+        maxWidth: 'none',
+      }
+    }
     return {
       aspectRatio: `${w} / ${h}`,
       height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined,
