@@ -1088,18 +1088,18 @@ onMounted(() => {
 }
 
 .stagger-list-horizontal {
-  > * {
+  > view {
     opacity: 0;
     transform: translateY(16rpx);
     animation: fadeInUp 0.4s ease forwards;
   }
 
-  > *:nth-child(1) { animation-delay: 0.05s; }
-  > *:nth-child(2) { animation-delay: 0.1s; }
-  > *:nth-child(3) { animation-delay: 0.15s; }
-  > *:nth-child(4) { animation-delay: 0.2s; }
-  > *:nth-child(5) { animation-delay: 0.25s; }
-  > *:nth-child(6) { animation-delay: 0.3s; }
+  > view:nth-child(1) { animation-delay: 0.05s; }
+  > view:nth-child(2) { animation-delay: 0.1s; }
+  > view:nth-child(3) { animation-delay: 0.15s; }
+  > view:nth-child(4) { animation-delay: 0.2s; }
+  > view:nth-child(5) { animation-delay: 0.25s; }
+  > view:nth-child(6) { animation-delay: 0.3s; }
 }
 
 @keyframes fadeInUp {
@@ -1548,21 +1548,21 @@ onMounted(() => {
 
 /* 错峰入场 */
 .stagger-list {
-  > * {
+  > view {
     opacity: 0;
     transform: translateY(20rpx);
     animation: fadeInUp 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
 
-  > *:nth-child(1) { animation-delay: 0.05s; }
-  > *:nth-child(2) { animation-delay: 0.1s; }
-  > *:nth-child(3) { animation-delay: 0.15s; }
-  > *:nth-child(4) { animation-delay: 0.2s; }
-  > *:nth-child(5) { animation-delay: 0.25s; }
-  > *:nth-child(6) { animation-delay: 0.3s; }
-  > *:nth-child(7) { animation-delay: 0.35s; }
-  > *:nth-child(8) { animation-delay: 0.4s; }
-  > *:nth-child(9) { animation-delay: 0.45s; }
+  > view:nth-child(1) { animation-delay: 0.05s; }
+  > view:nth-child(2) { animation-delay: 0.1s; }
+  > view:nth-child(3) { animation-delay: 0.15s; }
+  > view:nth-child(4) { animation-delay: 0.2s; }
+  > view:nth-child(5) { animation-delay: 0.25s; }
+  > view:nth-child(6) { animation-delay: 0.3s; }
+  > view:nth-child(7) { animation-delay: 0.35s; }
+  > view:nth-child(8) { animation-delay: 0.4s; }
+  > view:nth-child(9) { animation-delay: 0.45s; }
 }
 
 /* 底部安全区 */
