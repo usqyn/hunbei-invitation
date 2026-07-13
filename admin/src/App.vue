@@ -1,5 +1,8 @@
 <template>
   <div class="app" @keydown="onKeyDown" tabindex="0" ref="appRootRef">
+    <!-- ============ 管理员登录页 ============ -->
+    <AdminLogin v-if="!isLoggedIn" @success="onLoginSuccess" />
+    <template v-else>
     <!-- 全局 Toast 通知 -->
     <Teleport to="body">
       <transition name="toast-fade">
@@ -62,6 +65,8 @@
         <button class="tb-btn" @click="saveToServer" title="保存到服务器 (Ctrl+S)">💾 保存</button>
         <button class="tb-btn publish-btn" @click="showPublishWizard = true" title="发布模板">🚀 发布</button>
         <button class="tb-btn" @click="onExportPNG" title="导出 PNG">📥 导出</button>
+        <span class="toolbar-divider"></span>
+        <button class="tb-btn" @click="onLogout" title="退出登录">🚪 退出</button>
       </div>
     </header>
 
@@ -896,6 +901,7 @@
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
+    </template>
   </div>
 </template>
 
@@ -915,8 +921,10 @@ import {
   initApi,
   createTemplate,
   updateTemplate,
+  clearAdminToken,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
+import AdminLogin from './components/AdminLogin.vue'
 import PosterManager from './views/PosterManager.vue'
 import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot, PageMode } from './types/canvas'
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
@@ -1095,6 +1103,38 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
   toast.type = type
   toast.visible = true
   toastTimer = setTimeout(() => { toast.visible = false }, 2500)
+}
+
+// ============ 登录状态 ============
+// 未登录时显示管理员登录页；登录成功后挂载编辑器主体
+const isLoggedIn = ref(false)
+
+function initEditorAfterAuth() {
+  nextTick(() => {
+    if (!restoreDraftFromLocal()) {
+      pushHistory('init')
+    }
+    autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
+    loadTemplateList()
+    loadUploadedFonts()
+    setTimeout(() => appRootRef.value?.focus(), 50)
+  })
+}
+
+function onLoginSuccess(_token: string) {
+  isLoggedIn.value = true
+  initEditorAfterAuth()
+  showToast('登录成功 ✅')
+}
+
+function onLogout() {
+  clearAdminToken()
+  isLoggedIn.value = false
+  if (autoSaveTimer.value) {
+    clearInterval(autoSaveTimer.value)
+    autoSaveTimer.value = null
+  }
+  showToast('已退出登录')
 }
 
 // 发布成功事件处理器（提升到组件作用域，便于 onBeforeUnmount 统一清理）
@@ -1962,15 +2002,13 @@ function onWheel(e: WheelEvent) {
 
 // ============ 聚焦根元素以接收键盘事件 ============
 onMounted(async () => {
-  await initApi()
-  setTimeout(() => appRootRef.value?.focus(), 50)
-  if (!restoreDraftFromLocal()) {
-    pushHistory('init')
-  }
-  autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
-  loadTemplateList()
-  loadUploadedFonts()
+  // 校验本地保存的管理员 token；有效则直接进入编辑器
+  const ok = await initApi()
   window.addEventListener('publish-success', onPublishSuccess)
+  if (ok) {
+    isLoggedIn.value = true
+    initEditorAfterAuth()
+  }
 })
 </script>
 

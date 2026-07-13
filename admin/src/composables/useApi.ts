@@ -2,8 +2,6 @@ import axios from 'axios'
 import type { TemplateItem, Category } from '../types/template'
 
 export const API_BASE = import.meta.env.VITE_API_BASE || ''
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || '13800138000'
-const DEV_CODE = import.meta.env.VITE_DEV_CODE || '000000'
 
 export const api = axios.create({
   baseURL: API_BASE,
@@ -23,20 +21,69 @@ export function getAdminToken(): string {
   return adminToken || localStorage.getItem('admin_token') || ''
 }
 
+export function clearAdminToken() {
+  adminToken = ''
+  delete api.defaults.headers.common['Authorization']
+  localStorage.removeItem('admin_token')
+}
+
+// 解析 JWT payload（不校验签名，仅用于本地判断 role / 过期时间）
+function decodeJwtPayload(token: string): { role?: string; phone?: string; exp?: number } | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payloadStr = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+    const payload = JSON.parse(payloadStr)
+    return payload
+  } catch (_) {
+    return null
+  }
+}
+
+// 校验本地保存的 token 是否仍有效且具备 admin 角色
+export function verifyAdminToken(): boolean {
+  const token = getAdminToken()
+  if (!token) return false
+  const payload = decodeJwtPayload(token)
+  if (!payload) return false
+  if (payload.role !== 'admin') return false
+  if (payload.exp && payload.exp * 1000 < Date.now()) return false
+  return true
+}
+
+// 初始化：仅校验本地 token，不再静默使用普通用户登录接口
 export async function initApi(): Promise<boolean> {
-  const saved = localStorage.getItem('admin_token')
-  if (saved) {
-    setAdminToken(saved)
+  if (verifyAdminToken()) {
+    setAdminToken(getAdminToken())
     return true
   }
+  // 本地无有效管理员 token，清空可能残留的普通用户 token
+  clearAdminToken()
+  return false
+}
+
+// 发送管理员手机号验证码
+export async function sendSmsCode(phone: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await api.post('/api/user/login', { phone: ADMIN_PHONE, code: DEV_CODE })
+    const res = await api.post('/api/sms/send', { phone })
+    return { success: !!res.data.success, error: res.data.error }
+  } catch (e: any) {
+    return { success: false, error: e?.response?.data?.error || e?.message || '发送失败' }
+  }
+}
+
+// 管理员登录：调用专用 /api/admin/login 接口签发带 role:'admin' 的 JWT
+export async function adminLogin(phone: string, code: string): Promise<{ success: boolean; token?: string; error?: string }> {
+  try {
+    const res = await api.post('/api/admin/login', { phone, code })
     if (res.data.success && res.data.data?.token) {
       setAdminToken(res.data.data.token)
-      return true
+      return { success: true, token: res.data.data.token }
     }
-  } catch (_) {}
-  return false
+    return { success: false, error: res.data.error || '登录失败' }
+  } catch (e: any) {
+    return { success: false, error: e?.response?.data?.error || e?.message || '登录失败' }
+  }
 }
 
 // ============ 模板 API ============
