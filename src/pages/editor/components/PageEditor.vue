@@ -438,17 +438,22 @@ function onImagePropReset() {
 
 // ===== 文字样式面板回调 =====
 let pageTextStyleTimer: ReturnType<typeof setTimeout> | null = null
-let _pageInitialTextStyle: { fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null = null
+const _pageInitialTextStyle = ref<{ fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null>(null)
+
+function capturePageTextStyleSnapshot(el: any) {
+  if (!el || !el.style) return
+  if (!_pageInitialTextStyle.value) {
+    _pageInitialTextStyle.value = {
+      fontSize: el.style.fontSize,
+      color: el.style.color,
+      fontWeight: el.style.fontWeight,
+    }
+  }
+}
 
 function onTextStyleUpdate(field: string, value: string | number) {
   if (!activeSection.value || !activeSection.value.style) return
-  if (!_pageInitialTextStyle) {
-    _pageInitialTextStyle = {
-      fontSize: activeSection.value.style.fontSize,
-      color: activeSection.value.style.color,
-      fontWeight: activeSection.value.style.fontWeight,
-    }
-  }
+  capturePageTextStyleSnapshot(activeSection.value)
   ;(activeSection.value.style as any)[field] = value
   hasUnsavedChanges.value = true
   if (pageTextStyleTimer) clearTimeout(pageTextStyleTimer)
@@ -460,18 +465,24 @@ function onTextStyleUpdate(field: string, value: string | number) {
 
 function onTextStylePreview(field: string, value: string | number) {
   if (!activeSection.value || !activeSection.value.style) return
+  capturePageTextStyleSnapshot(activeSection.value)
   ;(activeSection.value.style as any)[field] = value
 }
 
 function onTextStyleReset() {
-  if (!activeSection.value || !activeSection.value.style || !_pageInitialTextStyle) return
-  activeSection.value.style.fontSize = _pageInitialTextStyle.fontSize
-  activeSection.value.style.color = _pageInitialTextStyle.color
-  activeSection.value.style.fontWeight = _pageInitialTextStyle.fontWeight
-  _pageInitialTextStyle = null
+  if (!activeSection.value || !activeSection.value.style || !_pageInitialTextStyle.value) return
+  activeSection.value.style.fontSize = _pageInitialTextStyle.value.fontSize
+  activeSection.value.style.color = _pageInitialTextStyle.value.color
+  activeSection.value.style.fontWeight = _pageInitialTextStyle.value.fontWeight
+  _pageInitialTextStyle.value = null
   editorStore.pushHistory()
   hasUnsavedChanges.value = true
 }
+
+// 切换选中 section 时清除快照
+watch(() => editorStore.activeSectionId, () => {
+  _pageInitialTextStyle.value = null
+})
 
 function handleEditSection() {
   if (!activeSection.value) {
@@ -504,6 +515,8 @@ function chooseImage(sectionId: string) {
     } catch (e) {
       console.warn('图片上传失败:', e)
       editorStore.updatePageSectionImage(sectionId, tempPath)
+      editorStore.pushHistory()
+      hasUnsavedChanges.value = true
       if (_isMounted) uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     } finally {
       if (_isMounted) uni.hideLoading()

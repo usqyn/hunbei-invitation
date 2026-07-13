@@ -501,17 +501,22 @@ function onImagePropReset() {
 
 // ===== 文字样式面板回调 =====
 let flipTextStyleTimer: ReturnType<typeof setTimeout> | null = null
-let _flipInitialTextStyle: { fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null = null
+const _flipInitialTextStyle = ref<{ fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null>(null)
+
+function captureFlipTextStyleSnapshot(el: any) {
+  if (!el || !el.style) return
+  if (!_flipInitialTextStyle.value) {
+    _flipInitialTextStyle.value = {
+      fontSize: el.style.fontSize,
+      color: el.style.color,
+      fontWeight: el.style.fontWeight,
+    }
+  }
+}
 
 function onTextStyleUpdate(field: string, value: string | number) {
   if (!selectedElement.value || !selectedElement.value.style) return
-  if (!_flipInitialTextStyle) {
-    _flipInitialTextStyle = {
-      fontSize: selectedElement.value.style.fontSize,
-      color: selectedElement.value.style.color,
-      fontWeight: selectedElement.value.style.fontWeight,
-    }
-  }
+  captureFlipTextStyleSnapshot(selectedElement.value)
   ;(selectedElement.value.style as any)[field] = value
   hasUnsavedChanges.value = true
   if (flipTextStyleTimer) clearTimeout(flipTextStyleTimer)
@@ -523,18 +528,24 @@ function onTextStyleUpdate(field: string, value: string | number) {
 
 function onTextStylePreview(field: string, value: string | number) {
   if (!selectedElement.value || !selectedElement.value.style) return
+  captureFlipTextStyleSnapshot(selectedElement.value)
   ;(selectedElement.value.style as any)[field] = value
 }
 
 function onTextStyleReset() {
-  if (!selectedElement.value || !selectedElement.value.style || !_flipInitialTextStyle) return
-  selectedElement.value.style.fontSize = _flipInitialTextStyle.fontSize
-  selectedElement.value.style.color = _flipInitialTextStyle.color
-  selectedElement.value.style.fontWeight = _flipInitialTextStyle.fontWeight
-  _flipInitialTextStyle = null
+  if (!selectedElement.value || !selectedElement.value.style || !_flipInitialTextStyle.value) return
+  selectedElement.value.style.fontSize = _flipInitialTextStyle.value.fontSize
+  selectedElement.value.style.color = _flipInitialTextStyle.value.color
+  selectedElement.value.style.fontWeight = _flipInitialTextStyle.value.fontWeight
+  _flipInitialTextStyle.value = null
   editorStore.pushHistory()
   hasUnsavedChanges.value = true
 }
+
+// 切换选中元素或关闭面板时清除快照
+watch(selectedElement, () => {
+  _flipInitialTextStyle.value = null
+})
 
 function handleEditText() {
   if (!selectedElement.value || selectedElement.value.type !== 'text') {
@@ -573,26 +584,30 @@ function onTextEditorConfirm() {
 
 async function applySelectedImage(tempFilePath: string) {
   if (!selectedElement.value) return
+  // 捕获当前选中的元素引用，防止异步上传期间选中元素被切换
+  const targetElement = selectedElement.value
   uni.showLoading({ title: '上传中 0%' })
   try {
     const permanentUrl = await uploadImage(tempFilePath, (progress: number) => {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
-    if (_isMounted && selectedElement.value) {
-      selectedElement.value.text = permanentUrl
-      if (selectedElement.value.dataKey) {
-        editorStore.syncFieldToAllModes(selectedElement.value.dataKey, permanentUrl)
+    if (_isMounted && targetElement) {
+      targetElement.text = permanentUrl
+      if (targetElement.dataKey) {
+        editorStore.syncFieldToAllModes(targetElement.dataKey, permanentUrl)
       }
       editorStore.pushHistory()
       hasUnsavedChanges.value = true
     }
   } catch (e) {
     console.warn('图片上传失败:', e)
-    if (_isMounted && selectedElement.value) {
-      selectedElement.value.text = tempFilePath
-      if (selectedElement.value.dataKey) {
-        editorStore.syncFieldToAllModes(selectedElement.value.dataKey, tempFilePath)
+    if (_isMounted && targetElement) {
+      targetElement.text = tempFilePath
+      if (targetElement.dataKey) {
+        editorStore.syncFieldToAllModes(targetElement.dataKey, tempFilePath)
       }
+      editorStore.pushHistory()
+      hasUnsavedChanges.value = true
       uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     }
   } finally {
@@ -731,6 +746,7 @@ function onUnifiedEditConfirm() {
   editorStore.syncBasicInfoToElements()
   editorStore.closeBasicInfoEditor()
   _formSnapshot = null
+  hasUnsavedChanges.value = true
 }
 
 function onUnifiedEditCancel() {

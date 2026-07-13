@@ -836,21 +836,27 @@ function onImagePropReset() {
 }
 
 // ===== 文字样式面板回调 =====
-// 保存初始样式快照（用于重置）
-let _initialTextStyle: { fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null = null
+// 保存初始样式快照（用于重置）—— 使用 ref 以响应元素切换
+const _initialTextStyle = ref<{ fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null>(null)
+
+// 捕获当前选中元素的初始样式快照
+function captureTextStyleSnapshot(el: any) {
+  if (!el || !el.style) return
+  if (!_initialTextStyle.value) {
+    _initialTextStyle.value = {
+      fontSize: el.style.fontSize,
+      color: el.style.color,
+      fontWeight: el.style.fontWeight,
+    }
+  }
+}
 
 function onTextStyleUpdate(field: string, value: string | number) {
   if (editorStore.selectedElement === null) return
   const el = editorStore.editableElements[editorStore.selectedElement]
   if (!el || !el.style) return
   // 记录初始样式（首次修改时）
-  if (!_initialTextStyle) {
-    _initialTextStyle = {
-      fontSize: el.style.fontSize,
-      color: el.style.color,
-      fontWeight: el.style.fontWeight,
-    }
-  }
+  captureTextStyleSnapshot(el)
   ;(el.style as any)[field] = value
   renderedImageStale.value = true
   hasUnsavedChanges.value = true
@@ -866,6 +872,8 @@ function onTextStylePreview(field: string, value: string | number) {
   if (editorStore.selectedElement === null) return
   const el = editorStore.editableElements[editorStore.selectedElement]
   if (!el || !el.style) return
+  // 拖动滑块时也要捕获快照，否则重置会失效
+  captureTextStyleSnapshot(el)
   ;(el.style as any)[field] = value
   renderedImageStale.value = true
 }
@@ -874,15 +882,20 @@ function onTextStylePreview(field: string, value: string | number) {
 function onTextStyleReset() {
   if (editorStore.selectedElement === null) return
   const el = editorStore.editableElements[editorStore.selectedElement]
-  if (!el || !el.style || !_initialTextStyle) return
-  el.style.fontSize = _initialTextStyle.fontSize
-  el.style.color = _initialTextStyle.color
-  el.style.fontWeight = _initialTextStyle.fontWeight
-  _initialTextStyle = null
+  if (!el || !el.style || !_initialTextStyle.value) return
+  el.style.fontSize = _initialTextStyle.value.fontSize
+  el.style.color = _initialTextStyle.value.color
+  el.style.fontWeight = _initialTextStyle.value.fontWeight
+  _initialTextStyle.value = null
   editorStore.pushHistory()
   renderedImageStale.value = true
   hasUnsavedChanges.value = true
 }
+
+// 切换选中元素或关闭面板时清除快照
+watch(() => editorStore.selectedElement, () => {
+  _initialTextStyle.value = null
+})
 
 function resolveText(text: string): string {
   return resolveDatePlaceholders(text, templateStore.templateData)
@@ -980,12 +993,14 @@ function chooseLocalImage(idx: number) {
       if (!_isMounted) return
       editorStore.applyImageToElement(idx, permanentUrl)
       renderedImageStale.value = true
+      hasUnsavedChanges.value = true
     } catch (e) {
       if (!_isMounted) return
       // 上传失败时回退到临时路径（至少当前会话可用）
       console.warn('图片上传失败，使用临时路径:', e)
       editorStore.applyImageToElement(idx, tempPath)
       renderedImageStale.value = true
+      hasUnsavedChanges.value = true
       uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     } finally {
       if (_isMounted) uni.hideLoading()
@@ -1191,8 +1206,8 @@ async function handleSave() {
       updatedAt: new Date().toISOString(),
     }
     worksStore.saveAsWork(work)
+    hasUnsavedChanges.value = false
   }, { successMessage: '已保存', minLoadingDuration: 400 })
-  hasUnsavedChanges.value = false
   // 显示自动保存提示
   autoSaveToast.value = true
   setTimeout(() => {
@@ -1203,6 +1218,7 @@ async function handleSave() {
 // 轻量自动保存（无 toast、无 loading，静默持久化）
 async function autoSaveWork() {
   if (!hasUnsavedChanges.value) return
+  if (savingLoading.value) return // 避免与手动保存并发
   try {
     const editorData = editorStore.buildEditorData()
     const musicId = templateStore.selectedMusicId
@@ -1389,6 +1405,7 @@ function handleLocation() {
       editorStore.syncSmartField('location', res.name)
       editorStore.syncSmartField('address', res.address)
       renderedImageStale.value = true
+      hasUnsavedChanges.value = true
     },
     fail: (err) => {
       if (!err.errMsg?.includes('cancel')) {

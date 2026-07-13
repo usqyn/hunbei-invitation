@@ -48,7 +48,8 @@ export const useEditorStore = defineStore('editor', () => {
   const MAX_HISTORY = 30
 
   // 初始模板快照：loadTemplateById / restoreFromWorkData 完成后保存，resetToInitial 使用
-  let _initialSnapshot: any = null
+  // 使用 ref 保证 canReset computed 能正确响应
+  const _initialSnapshot = ref<any>(null)
 
   function snapshotCurrent(): any {
     return {
@@ -96,13 +97,14 @@ export const useEditorStore = defineStore('editor', () => {
 
   function restoreSnapshot(snap: any) {
     if (snap && Array.isArray(snap.elements)) {
-      editableElements.splice(0, editableElements.length, ...snap.elements)
+      // 深拷贝避免还原后编辑操作污染原始快照
+      editableElements.splice(0, editableElements.length, ...JSON.parse(JSON.stringify(snap.elements)))
     }
     if (snap && Array.isArray(snap.pageSections)) {
-      pageSections.splice(0, pageSections.length, ...snap.pageSections)
+      pageSections.splice(0, pageSections.length, ...JSON.parse(JSON.stringify(snap.pageSections)))
     }
     if (snap && Array.isArray(snap.flipPages)) {
-      flipPages.splice(0, flipPages.length, ...snap.flipPages)
+      flipPages.splice(0, flipPages.length, ...JSON.parse(JSON.stringify(snap.flipPages)))
     }
     if (snap && snap.background) {
       background.value = JSON.parse(JSON.stringify(snap.background))
@@ -140,20 +142,23 @@ export const useEditorStore = defineStore('editor', () => {
 
   /** 保存初始模板快照（模板加载/作品恢复完成后调用） */
   function saveInitialSnapshot() {
-    _initialSnapshot = snapshotCurrent()
+    _initialSnapshot.value = snapshotCurrent()
   }
 
   /** 重置到初始模板状态 */
   function resetToInitial() {
-    if (!_initialSnapshot) return false
-    restoreSnapshot(_initialSnapshot)
-    // 重置后清空历史，以初始状态为起点
-    history.value = [_initialSnapshot]
+    if (!_initialSnapshot.value) return false
+    // 深拷贝初始快照，避免还原后编辑操作污染 _initialSnapshot
+    const snapCopy = JSON.parse(JSON.stringify(_initialSnapshot.value))
+    restoreSnapshot(snapCopy)
+    // 重置后清空历史，以初始状态为起点（用副本，不共享引用）
+    history.value = [snapCopy]
     historyIndex.value = 0
+    debouncedPersist()
     return true
   }
 
-  const canReset = computed(() => _initialSnapshot !== null)
+  const canReset = computed(() => _initialSnapshot.value !== null)
 
   // 请求计数器，用于忽略过期请求（避免 restoreTemplate 与 onMounted 竞争）
   let _loadReqId = 0
@@ -695,9 +700,9 @@ export const useEditorStore = defineStore('editor', () => {
       if (idx === null) return
     }
 
-    if (idx === null || idx < 0) return
+    if (idx === null || idx < 0 || idx >= editableElements.length) return
     const el = editableElements[idx]
-    if (el.type !== 'image') return
+    if (!el || el.type !== 'image') return
     el.text = imageUrl
     // 同步到所有模式（canvas/page/flip），而非仅更新 templateData
     if (el.dataKey) {

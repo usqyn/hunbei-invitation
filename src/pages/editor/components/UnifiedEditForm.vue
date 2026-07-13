@@ -240,10 +240,10 @@ const extraFields = computed(() => {
     }
   })
 
-  // 添加日期占位符全局字段
+  // 添加日期占位符全局字段（仅在模板使用了对应占位符时显示）
   if (props.templateData) {
     DATE_PLACEHOLDER_KEYS.forEach(key => {
-      if (!seen.has(key) && key in SMART_FIELD_META) {
+      if (!seen.has(key) && key in SMART_FIELD_META && hasField(key)) {
         seen.add(key)
         const meta = SMART_FIELD_META[key]
         result.push({
