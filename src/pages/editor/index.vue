@@ -118,7 +118,7 @@
                 <text class="empty-decor-dot"></text>
               </view>
             </view>
-            <view v-else class="preview-card preview-card--canvas animate-fade-in-scale" :style="canvasBackgroundStyle">
+            <view v-else class="preview-card preview-card--canvas animate-fade-in-scale" :style="[canvasCardStyle, canvasBackgroundStyle]">
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="el.id || ('el-' + idx)"
                 class="canvas-element"
@@ -342,6 +342,7 @@ const { loading: sharingLoading, run: runShare } = useAsyncAction()
 const {
   isCanvasMode,
   isLandscape,
+  canvasCardStyle,
   canvasBackgroundStyle,
   updateCardHeight,
   getCanvasElementStyle,
