@@ -1,72 +1,44 @@
 <template>
   <view class="page">
-    <!-- 顶部标题栏 -->
+    <!-- 顶部标题栏（融合搜索入口） -->
     <view class="header">
       <view class="back-btn" @click="onBack">
         <text class="back-icon">‹</text>
       </view>
       <view class="header-title">{{ pageConfig.headerTitle }}</view>
-      <view class="header-right"></view>
-    </view>
-
-    <!-- 搜索栏 -->
-    <view class="search-bar">
-      <view class="search-input-wrap">
-        <text class="search-icon">🔍</text>
-        <input
-          class="search-input"
-          type="text"
-          v-model="searchKeyword"
-          placeholder="搜索模板名称、分类或标签"
-          placeholder-style="color:#bbbbbb"
-          confirm-type="search"
-        />
-        <view v-if="searchKeyword" class="search-clear" @click="searchKeyword = ''">
-          <text class="clear-icon">×</text>
+      <view class="header-right">
+        <view class="header-icon-btn" @click="openSearch">
+          <text class="header-icon-text">🔍</text>
         </view>
       </view>
     </view>
 
-    <!-- 分类标签栏（横向滚动）-->
-    <scroll-view class="category-scroll" scroll-x enable-flex>
-      <view class="category-list">
-        <view
-          v-for="cat in categoryList"
-          :key="cat.id"
-          class="category-item"
-          :class="{ active: activeCategory === cat.id }"
-          @click="onSelectCategory(cat.id)"
-        >
-          <image class="category-icon-image" :src="cat.icon" mode="aspectFit" />
-          <text class="category-name">{{ cat.name }}</text>
-          <text class="category-count">{{ cat.count }}</text>
+    <!-- 分类栏 + 排序/筛选操作（合并单行） -->
+    <view class="filter-row">
+      <scroll-view class="category-scroll" scroll-x enable-flex>
+        <view class="category-list">
+          <view
+            v-for="cat in categoryList"
+            :key="cat.id"
+            class="category-item"
+            :class="{ active: activeCategory === cat.id }"
+            @click="onSelectCategory(cat.id)"
+          >
+            <image class="category-icon-image" :src="cat.icon" mode="aspectFit" />
+            <text class="category-name">{{ cat.name }}</text>
+            <text v-if="cat.count" class="category-count">{{ cat.count }}</text>
+          </view>
         </view>
-      </view>
-    </scroll-view>
-
-    <!-- 筛选标签栏 -->
-    <view class="filter-bar">
-      <view
-        v-for="filter in filters"
-        :key="filter.value"
-        class="filter-item"
-        :class="{ active: activeFilter === filter.value }"
-        @click="activeFilter = filter.value"
-      >
-        <text>{{ filter.label }}</text>
-      </view>
-    </view>
-
-    <!-- 排序标签栏 -->
-    <view class="sort-bar">
-      <view
-        v-for="sort in sortOptions"
-        :key="sort.value"
-        class="sort-item"
-        :class="{ active: activeSort === sort.value }"
-        @click="activeSort = sort.value"
-      >
-        <text>{{ sort.label }}</text>
+      </scroll-view>
+      <view class="filter-actions">
+        <view class="action-btn" @click="showSortSheet = true">
+          <text class="action-text">{{ getSortLabel(activeSort) }}</text>
+          <text class="action-arrow">▾</text>
+        </view>
+        <view class="action-btn" :class="{ 'action-btn--active': activeFilter !== 'all' }" @click="showFilterSheet = true">
+          <text class="action-text">筛选</text>
+          <text v-if="activeFilter !== 'all'" class="action-dot">·</text>
+        </view>
       </view>
     </view>
 
@@ -75,7 +47,7 @@
       <text class="loading-text">{{ pageConfig.loadingText }}</text>
     </view>
 
-    <!-- 错误状态：API失败且无可用模板时才显示 -->
+    <!-- 错误状态 -->
     <view v-else-if="loadError && filteredTemplates.length === 0" class="error-state" @click="loadTemplates">
       <image class="error-icon-image" :src="pageConfig.errorIcon" mode="aspectFit" />
       <text class="error-text">{{ pageConfig.errorText }}</text>
@@ -95,55 +67,34 @@
           class="template-card"
           @click="onSelectTemplate(template)"
         >
-          <!-- 模板封面图 -->
-          <image
-            class="template-cover"
-            :src="getImageUrl(template)"
-            mode="aspectFill"
-            lazy-load
-            @error="onImageError($event, template)"
-          ></image>
-
-          <!-- 封面图上的渐变遮罩 -->
-          <view class="cover-gradient"></view>
-
-          <!-- 左上角标签组 -->
-          <view class="tag-group">
-            <view class="template-tag" :style="{ background: template.primaryColor || '#e84a6e' }">
-              <text class="tag-text">{{ getCategoryName(template.category) }}</text>
+          <!-- 模板封面图（按真实比例显示） -->
+          <view class="cover-wrap" :style="getCoverStyle(template)">
+            <image
+              class="template-cover"
+              :src="getImageUrl(template)"
+              mode="aspectFit"
+              lazy-load
+              @error="onImageError($event, template)"
+            ></image>
+            <!-- 渐变遮罩 - 底部 -->
+            <view class="cover-gradient"></view>
+            <!-- 右上角价格/VIP标签 -->
+            <view class="price-badge">
+              <view v-if="template.is_paid && template.is_premium" class="vip-badge">
+                <text class="vip-badge-text">VIP</text>
+              </view>
+              <view v-else-if="template.is_paid" class="price-tag">
+                <text class="price-tag-text">¥{{ template.price }}</text>
+              </view>
+              <view v-else class="free-tag">
+                <text class="free-tag-text">免费</text>
+              </view>
             </view>
-            <view v-if="template.orientation === 'landscape' || (template.canvasSize && template.canvasSize.width > template.canvasSize.height)" class="template-tag landscape-tag">
-              <text class="tag-text">横版</text>
+            <!-- 底部信息浮层 -->
+            <view class="cover-info">
+              <text class="cover-title">{{ template.name }}</text>
+              <text v-if="template.subtitle" class="cover-subtitle">{{ template.subtitle }}</text>
             </view>
-          </view>
-
-          <!-- 右上角价格/VIP标签 -->
-          <view class="price-badge-group">
-            <view v-if="template.is_paid && template.is_premium" class="vip-badge">
-              <text class="vip-badge-text">VIP</text>
-            </view>
-            <view v-else-if="template.is_paid" class="price-tag">
-              <text class="price-tag-text">¥{{ template.price }}</text>
-            </view>
-            <view v-else class="free-tag">
-              <text class="free-tag-text">免费</text>
-            </view>
-          </view>
-
-          <!-- 底部信息浮层 -->
-          <view class="cover-info">
-            <text class="cover-title">{{ template.name }}</text>
-            <text class="cover-subtitle">{{ template.subtitle }}</text>
-            <view class="cover-meta">
-              <text class="meta-text">{{ template.pageCount }}页</text>
-              <text class="meta-dot">·</text>
-              <text class="meta-text">{{ formatLikes(template.likes) }}人喜欢</text>
-            </view>
-          </view>
-
-          <!-- 悬浮制作按钮 -->
-          <view class="template-select-btn">
-            <text class="select-btn-text">立即制作</text>
           </view>
         </view>
       </view>
@@ -153,6 +104,108 @@
         <text class="bottom-hint">{{ pageConfig.bottomHint }}</text>
       </view>
     </scroll-view>
+
+    <!-- 搜索浮层 -->
+    <view v-if="showSearchPanel" class="search-panel" @click.self="closeSearch">
+      <view class="search-panel-content">
+        <view class="search-panel-header">
+          <view class="search-input-wrap search-input-wrap--focused">
+            <text class="search-icon">🔍</text>
+            <input
+              class="search-input"
+              type="text"
+              v-model="searchKeyword"
+              placeholder="搜索模板名称、分类或标签"
+              placeholder-style="color:#bbbbbb"
+              confirm-type="search"
+              :focus="showSearchPanel"
+              @confirm="closeSearch"
+            />
+            <view v-if="searchKeyword" class="search-clear" @click="searchKeyword = ''">
+              <text class="clear-icon">×</text>
+            </view>
+          </view>
+          <view class="search-cancel" @click="closeSearch">
+            <text class="cancel-text">取消</text>
+          </view>
+        </view>
+        <view v-if="!searchKeyword" class="search-suggest">
+          <view class="suggest-section">
+            <text class="suggest-title">热门搜索</text>
+            <view class="suggest-tags">
+              <view class="suggest-tag" @click="searchKeyword = '婚礼'">
+                <text class="suggest-tag-text">婚礼</text>
+              </view>
+              <view class="suggest-tag" @click="searchKeyword = '满月'">
+                <text class="suggest-tag-text">满月</text>
+              </view>
+              <view class="suggest-tag" @click="searchKeyword = '升学'">
+                <text class="suggest-tag-text">升学</text>
+              </view>
+              <view class="suggest-tag" @click="searchKeyword = '中式'">
+                <text class="suggest-tag-text">中式</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 排序底部 Sheet -->
+    <view v-if="showSortSheet" class="sheet-mask" @click.self="showSortSheet = false">
+      <view class="sheet">
+        <view class="sheet-header">
+          <text class="sheet-title">排序方式</text>
+          <view class="sheet-close" @click="showSortSheet = false">
+            <text class="sheet-close-icon">×</text>
+          </view>
+        </view>
+        <view class="sheet-list">
+          <view
+            v-for="sort in sortOptions"
+            :key="sort.value"
+            class="sheet-item"
+            :class="{ active: activeSort === sort.value }"
+            @click="activeSort = sort.value; showSortSheet = false"
+          >
+            <text class="sheet-item-text">{{ sort.label }}</text>
+            <text v-if="activeSort === sort.value" class="sheet-item-check">✓</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 筛选底部 Sheet -->
+    <view v-if="showFilterSheet" class="sheet-mask" @click.self="showFilterSheet = false">
+      <view class="sheet">
+        <view class="sheet-header">
+          <text class="sheet-title">筛选</text>
+          <view class="sheet-close" @click="showFilterSheet = false">
+            <text class="sheet-close-icon">×</text>
+          </view>
+        </view>
+        <view class="sheet-list">
+          <view
+            v-for="filter in filters"
+            :key="filter.value"
+            class="sheet-item"
+            :class="{ active: activeFilter === filter.value }"
+            @click="activeFilter = filter.value"
+          >
+            <text class="sheet-item-text">{{ filter.label }}</text>
+            <text v-if="activeFilter === filter.value" class="sheet-item-check">✓</text>
+          </view>
+        </view>
+        <view class="sheet-footer">
+          <view class="sheet-btn sheet-btn--reset" @click="activeFilter = 'all'; showFilterSheet = false">
+            <text class="sheet-btn-text">重置</text>
+          </view>
+          <view class="sheet-btn sheet-btn--confirm" @click="showFilterSheet = false">
+            <text class="sheet-btn-text">完成</text>
+          </view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -211,6 +264,11 @@ const sortOptions = [
 const activeSort = ref<string>('likes')
 const userStore = useUserStore()
 const navigating = ref(false)
+
+// 弹层显隐
+const showSearchPanel = ref(false)
+const showSortSheet = ref(false)
+const showFilterSheet = ref(false)
 
 // ============ 计算属性 ============
 const filteredTemplates = computed<TemplateItem[]>(() => {
@@ -385,6 +443,11 @@ function formatLikes(num: number): string {
   return String(num)
 }
 
+function getSortLabel(value: string): string {
+  const s = sortOptions.find(o => o.value === value)
+  return s ? s.label : '排序'
+}
+
 function onSelectTemplate(template: TemplateItem) {
   if (navigating.value) return
   // 登录拦截：未登录时跳转登录页
@@ -429,8 +492,28 @@ function getImageUrl(template: TemplateItem): string {
   return '/static/images/templates/wedding-1.svg'
 }
 
+// 根据模板真实比例计算卡片高度
+// 竖版（375x667）→ 比例 0.562 → 卡片宽 339rpx * 1.778 = 603rpx 高
+// 横版（750x375）→ 比例 2.0 → 卡片宽 339rpx * 0.5 = 170rpx 高（过矮，使用 min-height）
+function getCoverStyle(template: TemplateItem): Record<string, string> {
+  const cs = template.canvasSize
+  // 没有尺寸信息时用默认竖版比例
+  if (!cs || !cs.width || !cs.height) {
+    return { aspectRatio: '375 / 667' }
+  }
+  return { aspectRatio: `${cs.width} / ${cs.height}` }
+}
+
 function onImageError(e: any, template: TemplateItem) {
   template.cover = '/static/images/templates/wedding-1.svg'
+}
+
+function openSearch() {
+  showSearchPanel.value = true
+}
+
+function closeSearch() {
+  showSearchPanel.value = false
 }
 
 function onBack() {
@@ -451,7 +534,7 @@ function onBack() {
   flex-direction: column;
 }
 
-/* 顶部标题栏 - 毛玻璃 */
+/* ===== 顶部标题栏 ===== */
 .header {
   display: flex;
   align-items: center;
@@ -497,88 +580,53 @@ function onBack() {
   letter-spacing: 1rpx;
 }
 
-.header-right { width: 80rpx; }
-
-/* 搜索栏 */
-.search-bar {
-  padding: 16rpx 30rpx 20rpx;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
-  box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.03);
-}
-
-.search-input-wrap {
+.header-right {
+  width: 80rpx;
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 40rpx;
-  padding: 14rpx 24rpx;
-  border: 2rpx solid transparent;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  &:focus-within {
-    background: #ffffff;
-    border-color: rgba(232, 74, 110, 0.35);
-    box-shadow: 0 6rpx 20rpx rgba(232, 74, 110, 0.14);
-
-    .search-icon {
-      opacity: 0.9;
-    }
-  }
+  justify-content: flex-end;
 }
 
-.search-icon {
-  font-size: 28rpx;
-  margin-right: 14rpx;
-  opacity: 0.55;
-  transition: opacity 0.3s ease;
-}
-
-.search-input {
-  flex: 1;
-  font-size: 28rpx;
-  color: #1a1a2e;
-  height: 44rpx;
-  line-height: 44rpx;
-}
-
-.search-clear {
-  width: 40rpx;
-  height: 40rpx;
+.header-icon-btn {
+  width: 64rpx;
+  height: 64rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: 8rpx;
   border-radius: 50%;
   transition: background 0.2s ease, transform 0.2s ease;
 
   &:active {
     background: rgba(0, 0, 0, 0.06);
-    transform: scale(0.9);
+    transform: scale(0.92);
   }
 }
 
-.clear-icon {
-  font-size: 36rpx;
-  color: #9a9aa8;
+.header-icon-text {
+  font-size: 32rpx;
   line-height: 1;
 }
 
-/* 分类标签栏 */
-.category-scroll {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.72);
+/* ===== 分类栏 + 排序/筛选操作（合并单行） ===== */
+.filter-row {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20rpx);
   -webkit-backdrop-filter: blur(20rpx);
-  padding: 20rpx 0;
   box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.03);
+  padding: 16rpx 24rpx;
+  gap: 16rpx;
+}
+
+.category-scroll {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
 }
 
 .category-list {
   display: inline-flex;
-  padding: 0 20rpx;
   gap: 14rpx;
 }
 
@@ -586,7 +634,7 @@ function onBack() {
   display: inline-flex;
   align-items: center;
   gap: 10rpx;
-  padding: 16rpx 26rpx;
+  padding: 14rpx 24rpx;
   background: rgba(0, 0, 0, 0.04);
   border-radius: 50rpx;
   flex-shrink: 0;
@@ -639,68 +687,60 @@ function onBack() {
   color: #ffffff;
 }
 
-/* 筛选标签栏 */
-.filter-bar {
+/* 右侧排序/筛选按钮 */
+.filter-actions {
   display: flex;
-  gap: 16rpx;
-  padding: 20rpx 30rpx;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
-  box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.03);
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
 }
 
-.filter-item {
-  padding: 12rpx 28rpx;
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 12rpx 18rpx;
   background: rgba(0, 0, 0, 0.04);
   border-radius: 30rpx;
-  font-size: 24rpx;
-  color: #6e6e80;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 
   &:active {
     transform: scale(0.94);
+    background: rgba(0, 0, 0, 0.08);
   }
 
-  &.active {
+  &.action-btn--active {
     background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-    color: #ffffff;
-    font-weight: 500;
-    box-shadow: 0 6rpx 16rpx rgba(232, 74, 110, 0.3);
-  }
-}
-
-/* 排序标签栏 */
-.sort-bar {
-  display: flex;
-  gap: 16rpx;
-  padding: 12rpx 30rpx 20rpx;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20rpx);
-  -webkit-backdrop-filter: blur(20rpx);
-}
-
-.sort-item {
-  padding: 8rpx 24rpx;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 24rpx;
-  font-size: 24rpx;
-  color: #6e6e80;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-
-  &:active {
-    transform: scale(0.94);
-  }
-
-  &.active {
-    background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-    color: #ffffff;
-    font-weight: 500;
     box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.25);
+
+    .action-text,
+    .action-dot {
+      color: #ffffff;
+    }
   }
 }
 
-/* 状态视图 */
+.action-text {
+  font-size: 24rpx;
+  color: #4a4a5a;
+  font-weight: 500;
+}
+
+.action-arrow {
+  font-size: 20rpx;
+  color: #9a9aa8;
+  line-height: 1;
+}
+
+.action-dot {
+  font-size: 32rpx;
+  color: #e84a6e;
+  line-height: 0.5;
+  margin-left: 2rpx;
+  font-weight: 700;
+}
+
+/* ===== 状态视图 ===== */
 .loading-state,
 .error-state {
   flex: 1;
@@ -765,7 +805,7 @@ function onBack() {
   }
 }
 
-/* 模板网格 */
+/* ===== 模板网格 ===== */
 .template-scroll {
   flex: 1;
   height: 0;
@@ -799,81 +839,54 @@ function onBack() {
   }
 }
 
+/* 封面容器：按真实比例显示 */
+.cover-wrap {
+  position: relative;
+  width: 100%;
+  background: linear-gradient(135deg, #f0f0f5 0%, #e8e8f0 100%);
+  overflow: hidden;
+}
+
 /* 封面图 */
 .template-cover {
   width: 100%;
-  height: 420rpx;
-  background: linear-gradient(135deg, #f0f0f5 0%, #e8e8f0 100%);
+  height: 100%;
   display: block;
 }
 
-/* 渐变遮罩 - 底部到顶部 */
+/* 渐变遮罩 - 仅底部信息区 */
 .cover-gradient {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
-  height: 420rpx;
+  height: 50%;
   background: linear-gradient(to bottom,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0) 25%,
-    rgba(0, 0, 0, 0) 50%,
-    rgba(0, 0, 0, 0.5) 80%,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.45) 70%,
     rgba(0, 0, 0, 0.75) 100%);
   pointer-events: none;
   z-index: 1;
 }
 
-/* 左上角标签组 */
-.tag-group {
-  position: absolute;
-  top: 20rpx;
-  left: 20rpx;
-  display: flex;
-  gap: 8rpx;
-  z-index: 2;
-}
-
-.template-tag {
-  padding: 8rpx 18rpx;
-  border-radius: 10rpx;
-  flex-shrink: 0;
-  backdrop-filter: blur(12rpx);
-  -webkit-backdrop-filter: blur(12rpx);
-  background: rgba(232, 74, 110, 0.85);
-  box-shadow: 0 4rpx 14rpx rgba(0, 0, 0, 0.15);
-  border: 1rpx solid rgba(255, 255, 255, 0.2);
-}
-
-.template-tag.landscape-tag {
-  background: rgba(142, 36, 170, 0.85) !important;
-}
-
-.tag-text {
-  font-size: 20rpx;
-  color: #ffffff;
-  font-weight: 600;
-  letter-spacing: 1rpx;
-}
-
 /* 右上角价格/VIP标签 */
-.price-badge-group {
+.price-badge {
   position: absolute;
-  top: 20rpx;
-  right: 20rpx;
+  top: 16rpx;
+  right: 16rpx;
   z-index: 2;
 }
 
 .price-tag {
   background: linear-gradient(135deg, #ff7a5c 0%, #e84a6e 55%, #c93660 100%);
-  padding: 8rpx 20rpx;
+  padding: 6rpx 16rpx;
   border-radius: 100rpx;
-  box-shadow: 0 6rpx 18rpx rgba(192, 54, 96, 0.45);
+  box-shadow: 0 4rpx 14rpx rgba(192, 54, 96, 0.4);
   border: 1rpx solid rgba(255, 255, 255, 0.25);
 }
 
 .price-tag-text {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #ffffff;
   font-weight: 700;
   letter-spacing: 1rpx;
@@ -881,36 +894,36 @@ function onBack() {
 
 .vip-badge {
   background: linear-gradient(135deg, #ffd700 0%, #ffb700 50%, #ff9f00 100%);
-  padding: 8rpx 20rpx;
+  padding: 6rpx 16rpx;
   border-radius: 100rpx;
-  box-shadow: 0 6rpx 18rpx rgba(255, 183, 0, 0.45);
+  box-shadow: 0 4rpx 14rpx rgba(255, 183, 0, 0.4);
   border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .vip-badge-text {
-  font-size: 20rpx;
+  font-size: 18rpx;
   color: #5a3500;
   font-weight: 800;
   letter-spacing: 2rpx;
 }
 
 .free-tag {
-  background: rgba(76, 175, 80, 0.9);
-  padding: 8rpx 18rpx;
+  background: rgba(76, 175, 80, 0.92);
+  padding: 6rpx 14rpx;
   border-radius: 100rpx;
   backdrop-filter: blur(12rpx);
   -webkit-backdrop-filter: blur(12rpx);
-  box-shadow: 0 4rpx 14rpx rgba(76, 175, 80, 0.3);
+  box-shadow: 0 4rpx 12rpx rgba(76, 175, 80, 0.3);
   border: 1rpx solid rgba(255, 255, 255, 0.2);
 }
 
 .free-tag-text {
-  font-size: 20rpx;
+  font-size: 18rpx;
   color: #ffffff;
   font-weight: 600;
 }
 
-/* 底部信息浮层 - 叠加在封面图上 */
+/* 底部信息浮层 */
 .cover-info {
   position: absolute;
   bottom: 0;
@@ -921,19 +934,19 @@ function onBack() {
 }
 
 .cover-title {
-  font-size: 30rpx;
+  font-size: 28rpx;
   font-weight: 700;
   color: #ffffff;
   line-height: 1.3;
   display: block;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .cover-subtitle {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: rgba(255, 255, 255, 0.82);
   line-height: 1.4;
   margin-top: 4rpx;
@@ -941,45 +954,6 @@ function onBack() {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.cover-meta {
-  display: flex;
-  align-items: center;
-  margin-top: 8rpx;
-}
-
-.meta-text {
-  font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.meta-dot {
-  margin: 0 8rpx;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-/* 制作按钮 */
-.template-select-btn {
-  margin: 0 20rpx 20rpx;
-  padding: 20rpx 0;
-  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
-  border-radius: 44rpx;
-  text-align: center;
-  box-shadow: 0 8rpx 22rpx rgba(232, 74, 110, 0.32);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-
-  &:active {
-    transform: scale(0.95);
-    box-shadow: 0 4rpx 12rpx rgba(232, 74, 110, 0.24);
-  }
-}
-
-.select-btn-text {
-  font-size: 26rpx;
-  color: #ffffff;
-  font-weight: 600;
-  letter-spacing: 3rpx;
 }
 
 /* 空状态 */
@@ -1006,6 +980,303 @@ function onBack() {
 /* 底部 */
 .page-bottom { padding: 60rpx 0 40rpx; text-align: center; }
 .bottom-hint { font-size: 24rpx; color: #a8a8b4; }
+
+/* ===== 搜索浮层 ===== */
+.search-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+.search-panel-content {
+  background: #ffffff;
+  border-bottom-left-radius: 24rpx;
+  border-bottom-right-radius: 24rpx;
+  padding: calc(env(safe-area-inset-top) + 20rpx) 24rpx 24rpx;
+  animation: slideDown 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.search-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.search-input-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 40rpx;
+  padding: 14rpx 24rpx;
+  border: 2rpx solid transparent;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.search-input-wrap--focused {
+    background: #ffffff;
+    border-color: rgba(232, 74, 110, 0.35);
+    box-shadow: 0 6rpx 20rpx rgba(232, 74, 110, 0.14);
+
+    .search-icon {
+      opacity: 0.9;
+    }
+  }
+}
+
+.search-icon {
+  font-size: 28rpx;
+  margin-right: 14rpx;
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
+}
+
+.search-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #1a1a2e;
+  height: 44rpx;
+  line-height: 44rpx;
+}
+
+.search-clear {
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8rpx;
+  border-radius: 50%;
+  transition: background 0.2s ease, transform 0.2s ease;
+
+  &:active {
+    background: rgba(0, 0, 0, 0.06);
+    transform: scale(0.9);
+  }
+}
+
+.clear-icon {
+  font-size: 36rpx;
+  color: #9a9aa8;
+  line-height: 1;
+}
+
+.search-cancel {
+  padding: 8rpx 12rpx;
+}
+
+.cancel-text {
+  font-size: 28rpx;
+  color: #e84a6e;
+  font-weight: 500;
+}
+
+/* 搜索建议 */
+.search-suggest {
+  padding: 32rpx 8rpx 8rpx;
+}
+
+.suggest-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.suggest-title {
+  font-size: 24rpx;
+  color: #9a9aa8;
+  font-weight: 500;
+}
+
+.suggest-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.suggest-tag {
+  padding: 12rpx 28rpx;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 30rpx;
+  transition: all 0.25s ease;
+
+  &:active {
+    background: rgba(232, 74, 110, 0.08);
+    transform: scale(0.95);
+  }
+}
+
+.suggest-tag-text {
+  font-size: 26rpx;
+  color: #4a4a5a;
+}
+
+/* ===== 底部 Sheet ===== */
+.sheet-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  animation: fadeIn 0.2s ease;
+}
+
+.sheet {
+  width: 100%;
+  background: #ffffff;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: slideUp 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32rpx 32rpx 20rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.05);
+}
+
+.sheet-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.sheet-close {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s ease;
+
+  &:active {
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+.sheet-close-icon {
+  font-size: 40rpx;
+  color: #9a9aa8;
+  line-height: 1;
+}
+
+.sheet-list {
+  padding: 16rpx 32rpx;
+}
+
+.sheet-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 0;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &.active {
+    .sheet-item-text {
+      color: #e84a6e;
+      font-weight: 600;
+    }
+
+    .sheet-item-check {
+      opacity: 1;
+    }
+  }
+}
+
+.sheet-item-text {
+  font-size: 30rpx;
+  color: #2c2c2c;
+}
+
+.sheet-item-check {
+  font-size: 32rpx;
+  color: #e84a6e;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-weight: 700;
+}
+
+.sheet-footer {
+  display: flex;
+  gap: 16rpx;
+  padding: 24rpx 32rpx 32rpx;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.05);
+}
+
+.sheet-btn {
+  flex: 1;
+  padding: 24rpx 0;
+  border-radius: 44rpx;
+  text-align: center;
+  transition: transform 0.2s ease;
+
+  &:active {
+    transform: scale(0.96);
+  }
+}
+
+.sheet-btn--reset {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.sheet-btn--confirm {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  box-shadow: 0 8rpx 22rpx rgba(232, 74, 110, 0.32);
+}
+
+.sheet-btn-text {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.sheet-btn--reset .sheet-btn-text {
+  color: #4a4a5a;
+}
+
+.sheet-btn--confirm .sheet-btn-text {
+  color: #ffffff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
 
 @keyframes template-skeleton-shimmer {
   0% {
