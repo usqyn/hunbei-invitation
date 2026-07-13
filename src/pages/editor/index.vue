@@ -205,6 +205,11 @@
           <text class="quick-icon">↺</text>
           <text class="quick-label">重置</text>
         </view>
+        <view class="quick-divider"></view>
+        <view class="quick-btn quick-btn--watermark" @click="handleRemoveWatermark">
+          <text class="quick-icon">👑</text>
+          <text class="quick-label">去水印</text>
+        </view>
       </view>
       <!-- 底部 Tab + 操作区 -->
       <view class="footer-main footer-stagger-anim">
@@ -775,6 +780,25 @@ function handleReset() {
       }
     },
   })
+}
+
+function handleRemoveWatermark() {
+  if (userStore.isVip()) {
+    doExport({ watermark: false, quality: 'high' })
+  } else {
+    uni.showModal({
+      title: '高清无水印导出',
+      content: '开通VIP即可享受高清无水印导出，还能解锁更多高级模板和专属权益',
+      confirmText: '开通VIP',
+      confirmColor: '#e84a6e',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          uni.navigateTo({ url: '/pages/vip/index' })
+        }
+      },
+    })
+  }
 }
 
 const editProgress = ref(0)
@@ -2182,6 +2206,23 @@ onUnmounted(() => {
   height: 40rpx;
   background: rgba(0, 0, 0, 0.08);
   margin: 0 16rpx;
+}
+
+.quick-btn--watermark {
+  padding: 8rpx 16rpx;
+  background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
+  border-radius: 20rpx;
+  border: 1rpx solid rgba(255, 193, 7, 0.4);
+}
+
+.quick-btn--watermark .quick-icon {
+  font-size: 28rpx;
+}
+
+.quick-btn--watermark .quick-label {
+  font-size: 22rpx;
+  color: #f59e0b;
+  font-weight: 600;
 }
 
 /* ===== 底部主区域 ===== */
