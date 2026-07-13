@@ -459,9 +459,17 @@ async function loadFeaturedTemplates() {
   try {
     // page=1&limit=8 已在服务端按 updatedAt DESC 排序
     // 这里取 published 模板（默认就过滤 published），转成卡片数据
+    // 字段裁剪：只保留 featuredCards computed 实际使用的字段，避免完整 TemplateItem 进 setData
     const data = await request<any[]>({ url: '/api/templates?page=1&limit=8', hideLoading: true })
     if (Array.isArray(data)) {
-      featuredTemplates.value = data
+      featuredTemplates.value = data.map(t => ({
+        id: t.id,
+        name: t.name,
+        subtitle: t.subtitle,
+        cover: t.cover,
+        image: t.image,
+        likes: t.likes,
+      }))
     }
   } catch (e) {
     console.warn('加载精选模板失败:', e)

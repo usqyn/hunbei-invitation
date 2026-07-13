@@ -30,124 +30,201 @@
       "style": {
         "navigationBarTitleText": "模板广场"
       }
-    },
-    {
-      "path": "pages/editor/index",
-      "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "编辑器"
-      }
-    },
-    {
-      "path": "pages/music/index",
-      "style": {
-        "navigationBarTitleText": "音乐库"
-      }
-    },
-    {
-      "path": "pages/preview/index",
-      "style": {
-        "navigationBarTitleText": "请帖预览"
-      }
-    },
-    {
-      "path": "pages/share/index",
-      "style": {
-        "navigationBarTitleText": "分享"
-      }
-    },
-    {
-      "path": "pages/mall/index",
-      "style": {
-        "navigationBarTitleText": "婚礼商城"
-      }
-    },
-    {
-      "path": "pages/mall/cart",
-      "style": {
-        "navigationBarTitleText": "购物车"
-      }
-    },
-    {
-      "path": "pages/mall/order-confirm",
-      "style": {
-        "navigationBarTitleText": "确认订单"
-      }
-    },
-    {
-      "path": "pages/mall/orders",
-      "style": {
-        "navigationBarTitleText": "我的订单"
-      }
-    },
-    {
-      "path": "pages/mall/pay-result",
-      "style": {
-        "navigationBarTitleText": "支付结果"
-      }
-    },
-    {
-      "path": "pages/vip/index",
-      "style": {
-        "navigationBarTitleText": "开通VIP"
-      }
-    },
-    {
-      "path": "pages/settings/index",
-      "style": {
-        "navigationBarTitleText": "设置"
-      }
-    },
-    {
-      "path": "pages/notification/index",
-      "style": {
-        "navigationBarTitleText": "通知"
-      }
-    },
-    {
-      "path": "pages/footprint/index",
-      "style": {
-        "navigationBarTitleText": "我的足迹"
-      }
-    },
-    {
-      "path": "pages/recycle/index",
-      "style": {
-        "navigationBarTitleText": "回收站"
-      }
-    },
-    {
-      "path": "pages/feedback/index",
-      "style": {
-        "navigationBarTitleText": "意见反馈"
-      }
-    },
-    {
-      "path": "pages/agreement/index",
-      "style": {
-        "navigationBarTitleText": "用户协议"
-      }
-    },
-    {
-      "path": "pages/poster/index/index",
-      "style": {
-        "navigationBarTitleText": "海报模板"
-      }
-    },
-    {
-      "path": "pages/poster/editor/index",
-      "style": {
-        "navigationBarTitleText": "海报编辑器",
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/poster/works/index",
-      "style": {
-        "navigationBarTitleText": "我的海报"
-      }
     }
   ],
+  "subPackages": [
+    {
+      "root": "pages/editor",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationStyle": "custom",
+            "navigationBarTitleText": "编辑器"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/preview",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "请帖预览"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/share",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "分享"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/music",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "音乐库"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/mall",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "婚礼商城"
+          }
+        },
+        {
+          "path": "cart",
+          "style": {
+            "navigationBarTitleText": "购物车"
+          }
+        },
+        {
+          "path": "order-confirm",
+          "style": {
+            "navigationBarTitleText": "确认订单"
+          }
+        },
+        {
+          "path": "orders",
+          "style": {
+            "navigationBarTitleText": "我的订单"
+          }
+        },
+        {
+          "path": "pay-result",
+          "style": {
+            "navigationBarTitleText": "支付结果"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/vip",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "开通VIP"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/settings",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "设置"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/notification",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "通知"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/footprint",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "我的足迹"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/recycle",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "回收站"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/feedback",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "意见反馈"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/agreement",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "用户协议"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pages/poster",
+      "pages": [
+        {
+          "path": "index/index",
+          "style": {
+            "navigationBarTitleText": "海报模板"
+          }
+        },
+        {
+          "path": "editor/index",
+          "style": {
+            "navigationBarTitleText": "海报编辑器",
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "works/index",
+          "style": {
+            "navigationBarTitleText": "我的海报"
+          }
+        }
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/template/index": {
+      "network": "all",
+      "packages": ["pages/editor"]
+    },
+    "pages/index/index": {
+      "network": "all",
+      "packages": ["pages/preview", "pages/share"]
+    }
+  },
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "婚贝",

@@ -508,6 +508,8 @@ function onUnifiedEditCancel() {
 
 // 智能字段更新后标记过期（输入时防抖记录历史）
 let smartEditTimer: any = null
+// updateCardSize 节流定时器
+let _sizeTimer: ReturnType<typeof setTimeout> | null = null
 // 跟踪 onMounted 与 templateLoading watcher 中的 setTimeout，卸载时统一清理
 let _mountTimers: ReturnType<typeof setTimeout>[] = []
 function onSmartFieldUpdate(key: string, value: string) {
@@ -904,17 +906,23 @@ function resolveText(text: string): string {
 
 function updateCardSize() {
   if (!isCanvasMode.value) return
-  nextTick(() => {
-    const query = uni.createSelectorQuery()
-    query
-      .select('.preview-card--canvas')
-      .boundingClientRect((rect: any) => {
-        if (rect && rect.width > 0) {
-          updateCardHeight(rect.width)
-        }
-      })
-      .exec()
-  })
+  // 节流：onMounted / onShow / templateLoading / editableElements.length / isLandscape
+  // 都可能触发 updateCardSize，合并 100ms 内的多次调用为单次执行
+  if (_sizeTimer) clearTimeout(_sizeTimer)
+  _sizeTimer = setTimeout(() => {
+    _sizeTimer = null
+    nextTick(() => {
+      const query = uni.createSelectorQuery()
+      query
+        .select('.preview-card--canvas')
+        .boundingClientRect((rect: any) => {
+          if (rect && rect.width > 0) {
+            updateCardHeight(rect.width)
+          }
+        })
+        .exec()
+    })
+  }, 100)
 }
 
 function calculateProgress(): number {
@@ -1555,6 +1563,7 @@ watch(() => editorStore.editableElements.length, () => {
 onUnmounted(() => {
   _isMounted = false
   if (smartEditTimer) clearTimeout(smartEditTimer)
+  if (_sizeTimer) clearTimeout(_sizeTimer)
   if (propPanelTimer) clearTimeout(propPanelTimer)
   if (textStyleTimer) clearTimeout(textStyleTimer)
   if (autoSaveTimer) clearInterval(autoSaveTimer)

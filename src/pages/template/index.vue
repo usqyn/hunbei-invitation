@@ -318,14 +318,16 @@ async function loadTemplates() {
   try {
     const data = await request<TemplateItem[]>({ url: '/api/templates', hideLoading: true })
     if (data && Array.isArray(data)) {
-      allTemplates.value = data
+      // 字段裁剪：列表页只需卡片展示字段，避免把完整 elements/sections/pages/renderedImage
+      // setData 到页面（实测可从 1170KB 降到 < 100KB）
+      allTemplates.value = data.map(pickCardFields)
     }
 
-    // 合并 API 模板 + 本地模板（不重复），深拷贝避免污染静态导入数据
+    // 合并 API 模板 + 本地模板（不重复），仅保留卡片字段
     const existingIds = new Set(allTemplates.value.map(t => t.id))
     TEMPLATE_LIST.forEach(t => {
       if (!existingIds.has(t.id)) {
-        allTemplates.value.push({ ...t })
+        allTemplates.value.push(pickCardFields(t))
         existingIds.add(t.id)
       }
     })
@@ -339,6 +341,31 @@ async function loadTemplates() {
   } finally {
     loading.value = false
   }
+}
+
+// 模板列表卡片展示所需字段（避免把 elements/sections/pages/renderedImage 等大字段塞进 setData）
+function pickCardFields(t: TemplateItem): TemplateItem {
+  return {
+    id: t.id,
+    name: t.name,
+    subtitle: t.subtitle,
+    category: t.category,
+    cover: t.cover,
+    image: t.image,
+    primaryColor: t.primaryColor,
+    likes: t.likes,
+    pageCount: t.pageCount,
+    is_paid: t.is_paid,
+    is_premium: t.is_premium,
+    price: t.price,
+    vip_free: t.vip_free,
+    orientation: t.orientation,
+    canvasSize: t.canvasSize,
+    tags: t.tags,
+    templateType: t.templateType,
+    updatedAt: t.updatedAt,
+    createdAt: t.createdAt,
+  } as TemplateItem
 }
 
 // ============ 方法 ============

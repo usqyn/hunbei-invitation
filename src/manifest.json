@@ -17,6 +17,7 @@
       "urlCheck": false
     },
     "usingComponents": true,
+    "lazyCodeLoading": "requiredComponents",
     "networkTimeout": {
       "request": 10000,
       "downloadFile": 10000

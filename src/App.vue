@@ -17,6 +17,5 @@ onShow(() => {
 </script>
 
 <style lang="scss">
-@use './styles/fonts.scss';
 @use './styles/global.scss' as *;
 </style>
