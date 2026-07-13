@@ -229,8 +229,21 @@ const { haptic } = useFeedback()
 // 缓存系统屏幕信息，避免每次 touchmove 都调用 getSystemInfoSync
 const _screenInfo = (() => {
   try {
-    const info = uni.getSystemInfoSync()
-    return { width: info.windowWidth || 375, height: info.windowHeight || 667 }
+    // 优先使用新 API getWindowInfo，避免 deprecated 警告
+    let width = 0, height = 0
+    // @ts-ignore uni.getWindowInfo 在部分平台不支持
+    if (typeof uni.getWindowInfo === 'function') {
+      // @ts-ignore
+      const info = uni.getWindowInfo()
+      width = info?.windowWidth || 0
+      height = info?.windowHeight || 0
+    }
+    if (!width || !height) {
+      const info = uni.getSystemInfoSync()
+      width = info.windowWidth || 375
+      height = info.windowHeight || 667
+    }
+    return { width, height }
   } catch {
     return { width: 375, height: 667 }
   }

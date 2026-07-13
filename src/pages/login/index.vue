@@ -200,8 +200,18 @@ function onPhoneInput() {
 }
 
 try {
-  const info = uni.getSystemInfoSync()
-  isMpWeixin.value = info.uniPlatform === 'mp-weixin'
+  // 优先使用新的 getAppBaseInfo，避免 deprecated getSystemInfoSync 警告
+  let uniPlatform = ''
+  // @ts-ignore uni.getAppBaseInfo 在部分平台不支持
+  if (typeof uni.getAppBaseInfo === 'function') {
+    // @ts-ignore
+    uniPlatform = uni.getAppBaseInfo().uniPlatform || ''
+  }
+  if (!uniPlatform) {
+    const info = uni.getSystemInfoSync()
+    uniPlatform = info.uniPlatform as string || ''
+  }
+  isMpWeixin.value = uniPlatform === 'mp-weixin'
 } catch (_) {}
 
 onUnmounted(() => {

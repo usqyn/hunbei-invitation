@@ -26,9 +26,26 @@ let _platformCache: string | null = null
 function getPlatform(): string {
   if (_platformCache !== null) return _platformCache
   try {
-    const sysInfo = uni.getSystemInfoSync()
-    // @ts-ignore
-    _platformCache = sysInfo.uniPlatform || 'unknown'
+    // 优先使用新的 uni.getAppBaseInfo（小程序基础库 2.20.2+），失败则回退到 getSystemInfoSync
+    let uniPlatform = ''
+    // @ts-ignore uni.getAppBaseInfo 在部分平台不支持，需做兜底
+    if (typeof uni.getAppBaseInfo === 'function') {
+      // @ts-ignore
+      const info = uni.getAppBaseInfo()
+      uniPlatform = info?.uniPlatform || ''
+    }
+    if (!uniPlatform && typeof uni.getDeviceInfo === 'function') {
+      // @ts-ignore
+      const info = uni.getDeviceInfo()
+      uniPlatform = info?.platform || ''
+    }
+    if (!uniPlatform) {
+      // 兜底：旧基础库仍可使用 getSystemInfoSync（已废弃但不影响功能）
+      const sysInfo = uni.getSystemInfoSync()
+      // @ts-ignore
+      uniPlatform = sysInfo?.uniPlatform || sysInfo?.platform || ''
+    }
+    _platformCache = uniPlatform || 'unknown'
   } catch (e) {
     _platformCache = 'unknown'
   }

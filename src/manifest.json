@@ -22,12 +22,12 @@
       "downloadFile": 10000
     },
     "permission": {
-      "scope.writePhotosAlbum": {
-        "desc": "保存请柬图片到您的相册"
-      },
       "scope.userLocation": {
         "desc": "用于在请柬中显示婚礼地点"
       }
-    }
+    },
+    "requiredPrivateInfos": [
+      "chooseLocation"
+    ]
   }
 }
