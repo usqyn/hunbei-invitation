@@ -926,10 +926,10 @@ app.get('/api/templates/similar', (req, res) => {
 // 获取单个模板
 app.get('/api/templates/:id', (req, res) => {
   try {
-    // 非管理员不返回已软删除的模板；管理员可查看以便管理/恢复
+    // 普通用户只能访问已发布模板；管理员可访问任意状态（含 draft/deleted）以便编辑
     const sql = isRequestFromAdmin(req)
       ? "SELECT * FROM templates WHERE id = ?"
-      : "SELECT * FROM templates WHERE id = ? AND status != 'deleted'"
+      : "SELECT * FROM templates WHERE id = ? AND status = 'published'"
     const result = db.exec(sql, [req.params.id])
     if (!result.length || !result[0].values.length) {
       return res.status(404).json({ success: false, error: '模板不存在' })

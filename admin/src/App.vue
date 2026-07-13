@@ -1627,6 +1627,7 @@ async function saveToServer() {
       try { coverDataUrl = canvas.toDataURL('image/jpeg', 0.85) } catch (_) {}
     }
 
+    // status 处理：新建时为 draft；更新已有模板时保留原状态，避免误把 published 改回 draft
     const payload: any = {
       name,
       subtitle: currentTemplateSubtitle.value || '',
@@ -1636,7 +1637,7 @@ async function saveToServer() {
       primaryColor: '#e84a6e',
       likes: 0,
       pageCount: 10,
-      status: 'draft',
+      status: currentTemplateId.value ? undefined : 'draft',
       templateType: pageMode.value === 'flip' ? 'flip' : 'canvas',
       isPaid: form.isPaid || 0,
       isPremium: form.isPremium || 0,

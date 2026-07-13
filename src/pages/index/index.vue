@@ -294,13 +294,39 @@ const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
 const paidTemplates = ref<any[]>([])
 const posterTemplates = ref<any[]>([])
+// 精选卡片：优先用 API 已发布模板；接口失败或不足时回退到本地静态卡片
+const featuredTemplates = ref<any[]>([])
 const isSearchFocused = ref(false)
 const userStore = useUserStore()
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
-const featuredCards = HOME_FEATURED_CARDS
 const homeConfig = HOME_CONFIG
+
+// 计算属性：API 返回的模板优先，不足时用本地静态卡片补齐
+const featuredCards = computed(() => {
+  const apiCards = featuredTemplates.value.map(t => ({
+    id: t.id,
+    title: t.name || '未命名',
+    templateId: t.id,
+    date: t.subtitle || '',
+    image: resolveUrl(t.cover || t.image || ''),
+    isHot: (t.likes || 0) > 1000,
+    views: t.likes || 0,
+  }))
+  if (apiCards.length >= 8) return apiCards.slice(0, 8)
+  // 不足 8 个，用本地静态卡片补齐（保留旧数据兼容性）
+  const staticCards = HOME_FEATURED_CARDS.map(c => ({
+    id: c.id,
+    title: c.title,
+    templateId: c.type,
+    date: c.date,
+    image: c.image,
+    isHot: false,
+    views: 0,
+  }))
+  return [...apiCards, ...staticCards].slice(0, 8)
+})
 
 const greetingText = computed(() => {
   const hour = new Date().getHours()
@@ -387,8 +413,11 @@ const handleCategoryClick = (item: any) => {
 const handleCardClick = (card: any) => {
   // 登录拦截：未登录时跳转登录页
   if (!userStore.requireLogin()) return
+  // 优先使用 API 模板真实 ID；fallback 到旧静态卡片的 type 字段
+  const templateId = card.templateId || card.type
+  if (!templateId) return
   uni.navigateTo({
-    url: `/pages/editor/index?templateId=${card.type}`,
+    url: `/pages/editor/index?templateId=${templateId}`,
   })
 }
 
@@ -422,6 +451,20 @@ async function loadPaidTemplates() {
   } catch (e) {
     console.warn('加载付费模板失败:', e)
     uni.showToast({ title: '加载失败', icon: 'none' })
+  }
+}
+
+// 精选模板：取已发布的、按 likes 降序的前 8 个
+async function loadFeaturedTemplates() {
+  try {
+    // page=1&limit=8 已在服务端按 updatedAt DESC 排序
+    // 这里取 published 模板（默认就过滤 published），转成卡片数据
+    const data = await request<any[]>({ url: '/api/templates?page=1&limit=8', hideLoading: true })
+    if (Array.isArray(data)) {
+      featuredTemplates.value = data
+    }
+  } catch (e) {
+    console.warn('加载精选模板失败:', e)
   }
 }
 
@@ -489,6 +532,7 @@ function goToMall() {
 }
 
 onMounted(() => {
+  loadFeaturedTemplates()
   loadPaidTemplates()
   loadPosterTemplates()
 })
