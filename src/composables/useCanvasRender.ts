@@ -62,8 +62,8 @@ export function useCanvasRender(options: {
       aspectRatio: `${w} / ${h}`,
       height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined,
       width: '100%',
-      margin: '0',
-      maxWidth: '100%',
+      margin: '0 auto',
+      maxWidth: '680rpx',
     }
   })
 

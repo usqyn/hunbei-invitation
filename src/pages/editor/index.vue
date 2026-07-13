@@ -1823,6 +1823,11 @@ onUnmounted(() => {
   flex: 1;
   height: 100%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx 0;
 }
 
 .preview-card {
@@ -1840,7 +1845,7 @@ onUnmounted(() => {
 .rendered-image-container {
   position: relative;
   width: 100%;
-  margin: 24rpx auto;
+  margin: auto;
   max-width: 680rpx;
   border-radius: 24rpx;
   overflow: hidden;
@@ -1881,8 +1886,6 @@ onUnmounted(() => {
   margin: 0 auto;
   max-width: 720rpx;
   width: calc(100% - 48rpx);
-  margin-top: 24rpx;
-  border-radius: 24rpx;
   box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 16rpx rgba(232, 74, 110, 0.04);
   border: 2rpx solid rgba(255, 255, 255, 0.9);
 }
