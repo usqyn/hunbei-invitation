@@ -47,6 +47,9 @@ export const useEditorStore = defineStore('editor', () => {
   const historyIndex = ref(-1)
   const MAX_HISTORY = 30
 
+  // 初始模板快照：loadTemplateById / restoreFromWorkData 完成后保存，resetToInitial 使用
+  let _initialSnapshot: any = null
+
   function snapshotCurrent(): any {
     return {
       elements: JSON.parse(JSON.stringify(editableElements)),
@@ -134,6 +137,23 @@ export const useEditorStore = defineStore('editor', () => {
 
   const canUndo = computed(() => historyIndex.value > 0)
   const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+
+  /** 保存初始模板快照（模板加载/作品恢复完成后调用） */
+  function saveInitialSnapshot() {
+    _initialSnapshot = snapshotCurrent()
+  }
+
+  /** 重置到初始模板状态 */
+  function resetToInitial() {
+    if (!_initialSnapshot) return false
+    restoreSnapshot(_initialSnapshot)
+    // 重置后清空历史，以初始状态为起点
+    history.value = [_initialSnapshot]
+    historyIndex.value = 0
+    return true
+  }
+
+  const canReset = computed(() => _initialSnapshot !== null)
 
   // 请求计数器，用于忽略过期请求（避免 restoreTemplate 与 onMounted 竞争）
   let _loadReqId = 0
@@ -317,6 +337,8 @@ export const useEditorStore = defineStore('editor', () => {
     // 重置撤销/重做历史，记录模板初始状态作为基线
     resetHistory()
     pushHistory()
+    // 保存初始快照用于「重置」功能
+    saveInitialSnapshot()
   }
 
   function persistTemplate() {
@@ -418,6 +440,7 @@ export const useEditorStore = defineStore('editor', () => {
         // 重置历史，以恢复的状态为基线
         resetHistory()
         pushHistory()
+        saveInitialSnapshot()
         return true
       }
     } catch (e) {
@@ -510,6 +533,8 @@ export const useEditorStore = defineStore('editor', () => {
     // 重置历史，以当前作品状态为基线
     resetHistory()
     pushHistory()
+    // 保存初始快照用于「重置」功能
+    saveInitialSnapshot()
 
     // 恢复后重新加载字体（解决重新编辑时字体不正确的问题）
     reloadFontsAfterRestore()
@@ -734,12 +759,12 @@ export const useEditorStore = defineStore('editor', () => {
     editableElements, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
     templateType, pageSections, activeSectionId,
     flipPages, currentFlipPageIndex,
-    history, historyIndex, canUndo, canRedo,
+    history, historyIndex, canUndo, canRedo, canReset,
     loadTemplateById, restoreTemplate, restoreFromWorkData, openSectionTextEditor, closeTextEditor, closeSectionTextEditor, confirmTextEdit,
     closeBasicInfoEditor, syncSmartField, syncBasicInfoToElements, syncFieldToAllModes,
     selectMaterial, applyImageToElement: selectMaterial, setCurrentWorkId,
     buildEditorData,
     updatePageSection, updatePageSectionText, updatePageSectionImage,
-    pushHistory, undo, redo,
+    pushHistory, undo, redo, resetToInitial, saveInitialSnapshot,
   }
 })

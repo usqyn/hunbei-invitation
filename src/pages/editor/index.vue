@@ -172,19 +172,28 @@
           <text class="ctx-label">调整</text>
         </view>
         <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
-        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
-          <text class="ctx-icon ctx-icon--bounce">↩</text>
-          <text class="ctx-label">撤销</text>
+        <view v-if="selectedElType === 'image'" class="ctx-btn" @click="showImagePanel = true">
+          <text class="ctx-icon ctx-icon--bounce">⚙️</text>
+          <text class="ctx-label">调整</text>
         </view>
-        <view class="ctx-divider"></view>
-        <view class="ctx-btn" :class="{ 'ctx-btn--disabled': !editorStore.canRedo }" @click="handleRedo">
-          <text class="ctx-icon ctx-icon--bounce">↪</text>
-          <text class="ctx-label">重做</text>
-        </view>
-        <view class="ctx-divider"></view>
+        <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
         <view class="ctx-btn ctx-btn--danger" @click="deselectElement">
           <text class="ctx-icon ctx-icon--bounce">✕</text>
           <text class="ctx-label">取消</text>
+        </view>
+      </view>
+      <!-- 常驻快捷操作栏：撤销/重做/重置（始终可见） -->
+      <view class="quick-toolbar">
+        <view class="quick-btn" :class="{ 'quick-btn--disabled': !editorStore.canUndo }" @click="handleUndo">
+          <text class="quick-icon">↩</text>
+        </view>
+        <view class="quick-btn" :class="{ 'quick-btn--disabled': !editorStore.canRedo }" @click="handleRedo">
+          <text class="quick-icon">↪</text>
+        </view>
+        <view class="quick-divider"></view>
+        <view class="quick-btn" :class="{ 'quick-btn--disabled': !editorStore.canReset }" @click="handleReset">
+          <text class="quick-icon">↺</text>
+          <text class="quick-label">重置</text>
         </view>
       </view>
       <!-- 底部 Tab + 操作区 -->
@@ -670,6 +679,25 @@ function handleRedo() {
   if (!editorStore.canRedo) return
   editorStore.redo()
   renderedImageStale.value = true
+}
+
+function handleReset() {
+  if (!editorStore.canReset) return
+  uni.showModal({
+    title: '重置确认',
+    content: '确定要重置到模板初始状态吗？当前所有修改将丢失。',
+    confirmText: '重置',
+    confirmColor: '#e84a6e',
+    success: (res) => {
+      if (res.confirm) {
+        editorStore.resetToInitial()
+        renderedImageStale.value = true
+        hasUnsavedChanges.value = true
+        haptic('medium')
+        uni.showToast({ title: '已重置', icon: 'none' })
+      }
+    },
+  })
 }
 
 const editProgress = ref(0)
@@ -1897,6 +1925,55 @@ onUnmounted(() => {
 .ctx-btn--danger .ctx-label {
   color: #e84a6e;
   font-weight: 600;
+}
+
+/* ===== 常驻快捷操作栏 ===== */
+.quick-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 8rpx 24rpx;
+  background: rgba(250, 250, 252, 0.95);
+  border-top: 1rpx solid rgba(0, 0, 0, 0.04);
+}
+
+.quick-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 12rpx 20rpx;
+  border-radius: 12rpx;
+  transition: all 0.2s;
+}
+
+.quick-btn:active {
+  background: rgba(232, 74, 110, 0.08);
+}
+
+.quick-btn--disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.quick-icon {
+  font-size: 36rpx;
+  color: #2c2c2c;
+  line-height: 1;
+}
+
+.quick-label {
+  font-size: 22rpx;
+  color: #5a5a6a;
+  font-weight: 500;
+}
+
+.quick-divider {
+  width: 1rpx;
+  height: 40rpx;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 0 16rpx;
 }
 
 /* ===== 底部主区域 ===== */
