@@ -184,6 +184,7 @@
       :basic-info="templateStore.basicInfo"
       :elements="editorStore.pageSections as any"
       :template-data="templateStore.templateData"
+      :template-data-keys="allTemplateDataKeys"
       @close="onUnifiedEditCancel"
       @confirm="onUnifiedEditConfirm"
       @update="onSmartFieldUpdate"
@@ -226,6 +227,17 @@ const { haptic } = useFeedback()
 const showImagePanel = ref(false)
 const savingLoading = ref(false)
 const hasUnsavedChanges = ref(false)
+
+// 收集模板中所有元素的 dataKey（跨 canvas/page/flip 三种模式），用于 UnifiedEditForm 按需显示字段
+const allTemplateDataKeys = computed(() => {
+  const keys = new Set<string>()
+  editorStore.editableElements.forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
+  editorStore.pageSections.forEach(sec => { if (sec.dataKey) keys.add(sec.dataKey) })
+  editorStore.flipPages.forEach(page => {
+    (page.elements || []).forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
+  })
+  return Array.from(keys)
+})
 
 // 同步 hasUnsavedChanges 到 isDirty，用于返回前确认
 watch(hasUnsavedChanges, (val) => {

@@ -13,14 +13,14 @@
 
       <scroll-view class="popup-scroll" scroll-y>
         <view class="form-container">
-          <!-- 新人信息 -->
-          <view class="form-section">
+          <!-- 新人信息（仅当模板包含对应字段时显示） -->
+          <view v-if="hasBasicInfoFields" class="form-section">
             <view class="section-title">
               <text class="title-icon">💑</text>
               <text class="title-text">新人信息</text>
             </view>
 
-            <view class="form-item">
+            <view v-if="hasField('groomName')" class="form-item">
               <view class="form-label">
                 <text class="required">*</text>
                 <text class="label-name">新郎姓名</text>
@@ -38,7 +38,7 @@
               </view>
             </view>
 
-            <view class="form-item">
+            <view v-if="hasField('brideName')" class="form-item">
               <view class="form-label">
                 <text class="required">*</text>
                 <text class="label-name">新娘姓名</text>
@@ -57,14 +57,14 @@
             </view>
           </view>
 
-          <!-- 婚礼信息 -->
-          <view class="form-section">
+          <!-- 婚礼信息（仅当模板包含对应字段时显示） -->
+          <view v-if="hasWeddingInfoFields" class="form-section">
             <view class="section-title">
               <text class="title-icon">📅</text>
               <text class="title-text">婚礼信息</text>
             </view>
 
-            <view class="form-item">
+            <view v-if="hasField('date')" class="form-item">
               <view class="form-label">
                 <text class="label-name">婚礼时间</text>
               </view>
@@ -77,7 +77,7 @@
               </picker>
             </view>
 
-            <view class="form-item" @click="$emit('location')">
+            <view v-if="hasField('location')" class="form-item" @click="$emit('location')">
               <view class="form-label">
                 <text class="label-name">婚礼地点</text>
               </view>
@@ -91,7 +91,7 @@
               </view>
             </view>
 
-            <view class="form-item">
+            <view v-if="hasField('address')" class="form-item">
               <view class="form-label">
                 <text class="label-name">详细地址</text>
               </view>
@@ -133,9 +133,16 @@
             </view>
           </view>
 
+          <!-- 无可编辑字段时的空状态提示 -->
+          <view v-if="!hasBasicInfoFields && !hasWeddingInfoFields && extraFields.length === 0" class="empty-state">
+            <text class="empty-icon">📋</text>
+            <text class="empty-text">此模板暂无可编辑的信息字段</text>
+            <text class="empty-sub">请在画布上直接点击文字或图片进行编辑</text>
+          </view>
+
           <view class="tip-box">
             <text class="tip-icon">💡</text>
-            <text class="tip-text">填写完整的信息可以让您的婚礼邀请函更加温馨动人</text>
+            <text class="tip-text">填写完整的信息可以让您的邀请函更加温馨动人</text>
           </view>
         </view>
       </scroll-view>
@@ -161,7 +168,7 @@ const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholde
   day: { label: '日', icon: '📅', placeholder: '例如: 15' },
 }
 
-// 基础字段 key（始终显示，值从 basicInfo 读取）
+// 基础字段 key（值从 basicInfo 读取，但仅在模板中存在对应 dataKey 时显示）
 const BASIC_FIELD_KEYS = ['groomName', 'brideName', 'date', 'location', 'address']
 
 // 日期占位符全局字段
@@ -172,6 +179,8 @@ const props = defineProps<{
   basicInfo: BasicInfo
   elements: EditableElement[]
   templateData?: Record<string, string | undefined>
+  /** 模板中所有元素的 dataKey 集合（跨 canvas/page/flip 三种模式） */
+  templateDataKeys?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -180,6 +189,37 @@ const emit = defineEmits<{
   location: []
   update: [key: string, value: string]
 }>()
+
+/**
+ * 收集模板中实际使用的所有 dataKey（跨三种模式）
+ * 优先使用父组件传入的 templateDataKeys（完整集合），否则从 elements prop 回退
+ */
+const allAvailableKeys = computed(() => {
+  if (props.templateDataKeys && props.templateDataKeys.length > 0) {
+    return new Set(props.templateDataKeys)
+  }
+  // 回退：仅从当前 elements prop 收集（不如父组件传入的完整）
+  const keys = new Set<string>()
+  props.elements.forEach(el => {
+    if (el.dataKey) keys.add(el.dataKey)
+  })
+  return keys
+})
+
+/** 检查模板是否包含某个 dataKey 的元素 */
+function hasField(key: string): boolean {
+  return allAvailableKeys.value.has(key)
+}
+
+/** 新人信息区块是否至少有一个字段需要显示 */
+const hasBasicInfoFields = computed(() => {
+  return hasField('groomName') || hasField('brideName')
+})
+
+/** 婚礼信息区块是否至少有一个字段需要显示 */
+const hasWeddingInfoFields = computed(() => {
+  return hasField('date') || hasField('location') || hasField('address')
+})
 
 // 额外字段（从 elements 的 dataKey 收集，排除基础字段）
 const extraFields = computed(() => {
@@ -229,11 +269,12 @@ function onDateChange(e: any) {
 }
 
 function onConfirm() {
-  if (!props.basicInfo.groomName?.trim()) {
+  // 仅验证当前显示的必填字段
+  if (hasField('groomName') && !props.basicInfo.groomName?.trim()) {
     showToast('请输入新郎姓名', 'warning')
     return
   }
-  if (!props.basicInfo.brideName?.trim()) {
+  if (hasField('brideName') && !props.basicInfo.brideName?.trim()) {
     showToast('请输入新娘姓名', 'warning')
     return
   }
@@ -438,5 +479,29 @@ function onConfirm() {
   font-size: 24rpx;
   color: #8a6d3b;
   line-height: 1.5;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60rpx 24rpx;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 64rpx;
+  margin-bottom: 16rpx;
+}
+
+.empty-text {
+  font-size: 28rpx;
+  color: var(--color-text-primary);
+  margin-bottom: 8rpx;
+}
+
+.empty-sub {
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
 }
 </style>
