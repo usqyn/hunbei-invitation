@@ -182,11 +182,11 @@
           <text class="ctx-label">调整</text>
         </view>
         <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
-        <view v-if="selectedElType === 'image'" class="ctx-btn" @click="showImagePanel = true">
-          <text class="ctx-icon ctx-icon--bounce">⚙️</text>
-          <text class="ctx-label">调整</text>
+        <view v-if="selectedElType === 'text' || selectedElType === 'basic'" class="ctx-btn" @click="showTextStylePanel = true">
+          <text class="ctx-icon ctx-icon--bounce">🎨</text>
+          <text class="ctx-label">样式</text>
         </view>
-        <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
+        <view v-if="selectedElType === 'text' || selectedElType === 'basic'" class="ctx-divider"></view>
         <view class="ctx-btn ctx-btn--danger" @click="deselectElement">
           <text class="ctx-icon ctx-icon--bounce">✕</text>
           <text class="ctx-label">取消</text>
@@ -294,6 +294,16 @@
       @reset="onImagePropReset"
     />
 
+    <!-- 文字样式面板 -->
+    <TextStylePanel
+      :visible="showTextStylePanel"
+      :element="selectedTextElement"
+      @close="showTextStylePanel = false"
+      @update="onTextStyleUpdate"
+      @preview="onTextStylePreview"
+      @reset="onTextStyleReset"
+    />
+
   </view>
 </template>
 
@@ -317,6 +327,7 @@ import FlipEditor from './components/FlipEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import UnifiedEditForm from './components/UnifiedEditForm.vue'
 import ImagePropertyPanel from './components/ImagePropertyPanel.vue'
+import TextStylePanel from './components/TextStylePanel.vue'
 import type { EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -432,6 +443,10 @@ function dismissEditHint() {
 
 // 图片属性面板显示控制
 const showImagePanel = ref(false)
+// 文字样式面板显示控制
+const showTextStylePanel = ref(false)
+// 文字样式防抖定时器
+let textStyleTimer: ReturnType<typeof setTimeout> | null = null
 
 // 收集模板中所有元素的 dataKey（跨 canvas/page/flip 三种模式），用于 UnifiedEditForm 按需显示字段
 const allTemplateDataKeys = computed(() => {
@@ -449,6 +464,14 @@ const selectedImageElement = computed(() => {
   if (editorStore.selectedElement === null) return null
   const el = editorStore.editableElements[editorStore.selectedElement]
   if (!el || el.type !== 'image') return null
+  return el
+})
+
+// 当前选中的文字元素（用于 TextStylePanel）
+const selectedTextElement = computed(() => {
+  if (editorStore.selectedElement === null) return null
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el || (el.type !== 'text' && el.type !== 'basic')) return null
   return el
 })
 
@@ -807,6 +830,55 @@ function onImagePropReset() {
   el.rotation = 0
   el.opacity = 1
   el.borderRadius = 0
+  editorStore.pushHistory()
+  renderedImageStale.value = true
+  hasUnsavedChanges.value = true
+}
+
+// ===== 文字样式面板回调 =====
+// 保存初始样式快照（用于重置）
+let _initialTextStyle: { fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null = null
+
+function onTextStyleUpdate(field: string, value: string | number) {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el || !el.style) return
+  // 记录初始样式（首次修改时）
+  if (!_initialTextStyle) {
+    _initialTextStyle = {
+      fontSize: el.style.fontSize,
+      color: el.style.color,
+      fontWeight: el.style.fontWeight,
+    }
+  }
+  ;(el.style as any)[field] = value
+  renderedImageStale.value = true
+  hasUnsavedChanges.value = true
+  if (textStyleTimer) clearTimeout(textStyleTimer)
+  textStyleTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    textStyleTimer = null
+  }, 500)
+}
+
+// 文字样式面板预览回调（实时更新但不记录历史）
+function onTextStylePreview(field: string, value: string | number) {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el || !el.style) return
+  ;(el.style as any)[field] = value
+  renderedImageStale.value = true
+}
+
+// 文字样式面板重置回调
+function onTextStyleReset() {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el || !el.style || !_initialTextStyle) return
+  el.style.fontSize = _initialTextStyle.fontSize
+  el.style.color = _initialTextStyle.color
+  el.style.fontWeight = _initialTextStyle.fontWeight
+  _initialTextStyle = null
   editorStore.pushHistory()
   renderedImageStale.value = true
   hasUnsavedChanges.value = true
@@ -1466,6 +1538,7 @@ onUnmounted(() => {
   _isMounted = false
   if (smartEditTimer) clearTimeout(smartEditTimer)
   if (propPanelTimer) clearTimeout(propPanelTimer)
+  if (textStyleTimer) clearTimeout(textStyleTimer)
   if (autoSaveTimer) clearInterval(autoSaveTimer)
   if (editHintTimer) clearTimeout(editHintTimer)
   _mountTimers.forEach(t => clearTimeout(t))

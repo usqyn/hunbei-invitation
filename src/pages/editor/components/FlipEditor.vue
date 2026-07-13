@@ -97,6 +97,10 @@
           <text class="ctx-icon">⚙️</text>
           <text class="ctx-label">调整</text>
         </view>
+        <view v-if="selectedElement.type === 'text' || selectedElement.type === 'basic'" class="ctx-btn" @click="showTextStylePanel = true">
+          <text class="ctx-icon">🎨</text>
+          <text class="ctx-label">样式</text>
+        </view>
         <view class="ctx-btn ctx-btn--danger" @click="deselectElement">
           <text class="ctx-icon">✕</text>
           <text class="ctx-label">取消</text>
@@ -188,6 +192,15 @@
       @preview="onImagePropPreview"
       @reset="onImagePropReset"
     />
+    <!-- 文字样式面板 -->
+    <TextStylePanel
+      :visible="showTextStylePanel"
+      :element="selectedElement as any"
+      @close="showTextStylePanel = false"
+      @update="onTextStyleUpdate"
+      @preview="onTextStylePreview"
+      @reset="onTextStyleReset"
+    />
   </view>
 </template>
 
@@ -204,6 +217,7 @@ import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
+import TextStylePanel from './TextStylePanel.vue'
 import type { Work } from '@/types'
 
 const editorStore = useEditorStore()
@@ -231,6 +245,7 @@ const { getTextStyle } = useCanvasRender({
 const activeElementIndex = ref(-1)
 const selectedElement = ref<any>(null)
 const showImagePanel = ref(false)
+const showTextStylePanel = ref(false)
 const savingLoading = ref(false)
 const hasUnsavedChanges = ref(false)
 const flipDragging = ref(false)
@@ -480,6 +495,43 @@ function onImagePropReset() {
   selectedElement.value.rotation = 0
   selectedElement.value.opacity = 1
   selectedElement.value.borderRadius = 0
+  editorStore.pushHistory()
+  hasUnsavedChanges.value = true
+}
+
+// ===== 文字样式面板回调 =====
+let flipTextStyleTimer: ReturnType<typeof setTimeout> | null = null
+let _flipInitialTextStyle: { fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null = null
+
+function onTextStyleUpdate(field: string, value: string | number) {
+  if (!selectedElement.value || !selectedElement.value.style) return
+  if (!_flipInitialTextStyle) {
+    _flipInitialTextStyle = {
+      fontSize: selectedElement.value.style.fontSize,
+      color: selectedElement.value.style.color,
+      fontWeight: selectedElement.value.style.fontWeight,
+    }
+  }
+  ;(selectedElement.value.style as any)[field] = value
+  hasUnsavedChanges.value = true
+  if (flipTextStyleTimer) clearTimeout(flipTextStyleTimer)
+  flipTextStyleTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    flipTextStyleTimer = null
+  }, 500)
+}
+
+function onTextStylePreview(field: string, value: string | number) {
+  if (!selectedElement.value || !selectedElement.value.style) return
+  ;(selectedElement.value.style as any)[field] = value
+}
+
+function onTextStyleReset() {
+  if (!selectedElement.value || !selectedElement.value.style || !_flipInitialTextStyle) return
+  selectedElement.value.style.fontSize = _flipInitialTextStyle.fontSize
+  selectedElement.value.style.color = _flipInitialTextStyle.color
+  selectedElement.value.style.fontWeight = _flipInitialTextStyle.fontWeight
+  _flipInitialTextStyle = null
   editorStore.pushHistory()
   hasUnsavedChanges.value = true
 }
@@ -879,6 +931,7 @@ onUnmounted(() => {
   _formSnapshot = null
   if (textInputTimer) clearTimeout(textInputTimer)
   if (flipPropTimer) clearTimeout(flipPropTimer)
+  if (flipTextStyleTimer) clearTimeout(flipTextStyleTimer)
   if (flipSmartEditTimer) clearTimeout(flipSmartEditTimer)
 })
 </script>

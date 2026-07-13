@@ -115,6 +115,10 @@
           <text class="ctx-icon">⚙️</text>
           <text class="ctx-label">调整</text>
         </view>
+        <view v-if="activeSection?.type === 'text' || activeSection?.type === 'basic'" class="ctx-btn" @click="showTextStylePanel = true">
+          <text class="ctx-icon">🎨</text>
+          <text class="ctx-label">样式</text>
+        </view>
         <view class="ctx-btn ctx-btn--danger" @click="deselectSection">
           <text class="ctx-icon">✕</text>
           <text class="ctx-label">取消</text>
@@ -206,6 +210,15 @@
       @preview="onImagePropPreview"
       @reset="onImagePropReset"
     />
+    <!-- 文字样式面板 -->
+    <TextStylePanel
+      :visible="showTextStylePanel"
+      :element="activeSection as any"
+      @close="showTextStylePanel = false"
+      @update="onTextStyleUpdate"
+      @preview="onTextStylePreview"
+      @reset="onTextStyleReset"
+    />
   </view>
 </template>
 
@@ -221,6 +234,7 @@ import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
+import TextStylePanel from './TextStylePanel.vue'
 import type { PageSection, Work } from '@/types'
 
 const editorStore = useEditorStore()
@@ -231,6 +245,7 @@ const { haptic } = useFeedback()
 
 // 图片属性面板显示控制
 const showImagePanel = ref(false)
+const showTextStylePanel = ref(false)
 const savingLoading = ref(false)
 const hasUnsavedChanges = ref(false)
 
@@ -256,6 +271,7 @@ onUnmounted(() => {
   _isMounted = false
   _snapshotBeforeEdit = null
   if (pagePropTimer) clearTimeout(pagePropTimer)
+  if (pageTextStyleTimer) clearTimeout(pageTextStyleTimer)
   if (pageSmartEditTimer) clearTimeout(pageSmartEditTimer)
 })
 
@@ -416,6 +432,43 @@ function onImagePropReset() {
   activeSection.value.rotation = 0
   activeSection.value.opacity = 1
   activeSection.value.borderRadius = 0
+  editorStore.pushHistory()
+  hasUnsavedChanges.value = true
+}
+
+// ===== 文字样式面板回调 =====
+let pageTextStyleTimer: ReturnType<typeof setTimeout> | null = null
+let _pageInitialTextStyle: { fontSize?: number; color?: string; fontWeight?: 'normal' | 'bold' } | null = null
+
+function onTextStyleUpdate(field: string, value: string | number) {
+  if (!activeSection.value || !activeSection.value.style) return
+  if (!_pageInitialTextStyle) {
+    _pageInitialTextStyle = {
+      fontSize: activeSection.value.style.fontSize,
+      color: activeSection.value.style.color,
+      fontWeight: activeSection.value.style.fontWeight,
+    }
+  }
+  ;(activeSection.value.style as any)[field] = value
+  hasUnsavedChanges.value = true
+  if (pageTextStyleTimer) clearTimeout(pageTextStyleTimer)
+  pageTextStyleTimer = setTimeout(() => {
+    editorStore.pushHistory()
+    pageTextStyleTimer = null
+  }, 500)
+}
+
+function onTextStylePreview(field: string, value: string | number) {
+  if (!activeSection.value || !activeSection.value.style) return
+  ;(activeSection.value.style as any)[field] = value
+}
+
+function onTextStyleReset() {
+  if (!activeSection.value || !activeSection.value.style || !_pageInitialTextStyle) return
+  activeSection.value.style.fontSize = _pageInitialTextStyle.fontSize
+  activeSection.value.style.color = _pageInitialTextStyle.color
+  activeSection.value.style.fontWeight = _pageInitialTextStyle.fontWeight
+  _pageInitialTextStyle = null
   editorStore.pushHistory()
   hasUnsavedChanges.value = true
 }
