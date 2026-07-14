@@ -33,7 +33,11 @@ function fetchFontMap(): Promise<void> {
       timeout: 5000,
       success: (res: any) => {
         const data = res.data
-        fontMap = (data?.success && data.data) || {}
+        const raw = (data?.success && data.data) || {}
+        // 服务端返回 [{filename, url}] 数组，转为 {filename: url} 映射
+        fontMap = Array.isArray(raw)
+          ? raw.reduce((m: Record<string, string>, f: any) => { m[f.filename] = f.url; return m }, {} as Record<string, string>)
+          : raw
         fontMapLoading = false
         resolve()
       },

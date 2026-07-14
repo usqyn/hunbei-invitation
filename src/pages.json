@@ -36,6 +36,30 @@
       "style": {
         "navigationBarTitleText": "婚礼商城"
       }
+    },
+    {
+      "path": "pages/mall/cart",
+      "style": {
+        "navigationBarTitleText": "购物车"
+      }
+    },
+    {
+      "path": "pages/mall/order-confirm",
+      "style": {
+        "navigationBarTitleText": "确认订单"
+      }
+    },
+    {
+      "path": "pages/mall/orders",
+      "style": {
+        "navigationBarTitleText": "我的订单"
+      }
+    },
+    {
+      "path": "pages/mall/pay-result",
+      "style": {
+        "navigationBarTitleText": "支付结果"
+      }
     }
   ],
   "subPackages": [
@@ -80,35 +104,6 @@
           "path": "index",
           "style": {
             "navigationBarTitleText": "音乐库"
-          }
-        }
-      ]
-    },
-    {
-      "root": "pages/mall",
-      "pages": [
-        {
-          "path": "cart",
-          "style": {
-            "navigationBarTitleText": "购物车"
-          }
-        },
-        {
-          "path": "order-confirm",
-          "style": {
-            "navigationBarTitleText": "确认订单"
-          }
-        },
-        {
-          "path": "orders",
-          "style": {
-            "navigationBarTitleText": "我的订单"
-          }
-        },
-        {
-          "path": "pay-result",
-          "style": {
-            "navigationBarTitleText": "支付结果"
           }
         }
       ]
