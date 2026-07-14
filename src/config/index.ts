@@ -1,6 +1,8 @@
 // API 基地址（生产环境通过 .env.production 覆盖）
 // 注意：生产环境必须使用 HTTPS 保证传输安全
-export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
+// H5 dev 环境下 .env.development 设置 VITE_API_BASE=（空字符串），走 vite proxy 避免跨域
+const _envBase = import.meta.env.VITE_API_BASE
+export const API_BASE = _envBase !== undefined ? _envBase : 'http://localhost:3001'
 
 // ============ 应用版本 ============
 // 从 package.json 读取版本号，避免硬编码导致版本不一致
@@ -67,7 +69,7 @@ export const WORKS_CONFIG = {
 
 // ============ 模板页配置 ============
 export const TEMPLATE_PAGE_CONFIG = {
-  headerTitle: '选择模板',
+  headerTitle: '模板广场',
   loadingText: '加载中...',
   errorText: '加载失败，点击重试',
   errorIcon: '/static/images/icons/warning.svg',
