@@ -18,6 +18,7 @@ const {
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
   getVersion, bumpVersion,
+  resolveCloudFields, resolveCloudUrlsDeep,
 } = require('./_shared')
 
 // ============ 分类 ============
@@ -74,9 +75,12 @@ const listTemplates = async (ctx) => {
   let q = collection('templates').where(conditions).orderBy('updatedAt', 'desc')
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
+    // 解析顶层 cloud:// URL（cover/backgroundImage/renderedImage）
+    await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
     return paginateResponse(res.data || [], page, limit, total)
   }
   const res = await q.limit(1000).get()
+  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   // 无分页时返回全部 + total 字段（与原实现一致）
   return Object.assign(ok(res.data || []), { total: (res.data || []).length })
 }
@@ -93,6 +97,7 @@ const listSimilarTemplates = async (ctx) => {
     .orderBy('likes', 'desc')
     .limit(6)
     .get()
+  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   return ok(res.data || [])
 }
 
@@ -103,16 +108,22 @@ const getTemplate = async (ctx) => {
   if (!isRequestFromAdmin(ctx.event)) conditions.status = 'published'
   const res = await collection('templates').where(conditions).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('模板不存在', 404)
+  const template = res.data[0]
+  // 解析顶层 cloud:// URL + 嵌套 JSON 中的 cloud:// URL（data/elements/pages）
+  await resolveCloudFields(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  await resolveCloudUrlsDeep(template.data)
+  await resolveCloudUrlsDeep(template.elements)
+  await resolveCloudUrlsDeep(template.pages)
   // 自动记录足迹
   const user = getUser(ctx.event)
   if (user && user.phone) {
     await collection('footprints').add({ data: {
       phone: user.phone, template_id: id,
-      template_name: res.data[0].name || '', template_cover: res.data[0].cover || '',
+      template_name: template.name || '', template_cover: template.cover || '',
       timestamp: Date.now(),
     } }).catch(() => {})
   }
-  return ok(res.data[0])
+  return ok(template)
 }
 
 // ============ 模板 CRUD（管理员） ============

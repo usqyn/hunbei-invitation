@@ -65,9 +65,9 @@
             @click="onElementClick(el, eIdx)"
             @longpress="onElementLongPress(el, eIdx)"
           >
-            <image
+            <CloudImage
               v-if="el.type === 'image'"
-              class="flip-image"
+              custom-class="flip-image"
               :src="el.text || '/static/images/templates/wedding-1.svg'"
               mode="aspectFit"
             />
@@ -218,6 +218,7 @@ import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
 import TextStylePanel from './TextStylePanel.vue'
+import CloudImage from '@/components/CloudImage.vue'
 import type { Work } from '@/types'
 
 const editorStore = useEditorStore()

@@ -24,10 +24,12 @@ const {
   parseBody,
 } = require('./_shared')
 
-// 30 天前的时间戳（毫秒）
+// 30 天前的时间戳（毫秒，用于 timestamp/expireAt 等数字字段）
 const THIRTY_DAYS_AGO = () => nowMs() - 30 * 24 * 60 * 60 * 1000
-// 90 天前的时间戳（毫秒）
-const NINETY_DAYS_AGO = () => nowMs() - 90 * 24 * 60 * 60 * 1000
+// 30 天前的 ISO 字符串（用于 deletedAt/createdAt 等字符串字段）
+const THIRTY_DAYS_AGO_ISO = () => new Date(nowMs() - 30 * 24 * 60 * 60 * 1000).toISOString()
+// 90 天前的 ISO 字符串（用于 notifications.createdAt）
+const NINETY_DAYS_AGO_ISO = () => new Date(nowMs() - 90 * 24 * 60 * 60 * 1000).toISOString()
 
 // 单次删除上限（云数据库单次 remove 上限 1000 条）
 const BATCH_LIMIT = 1000
@@ -82,9 +84,9 @@ const runCleanup = async () => {
     console.error('[cleanup] footprints failed:', e)
   }
 
-  // 4. recycle_bin：删除 30 天前的回收站记录（按 deletedAt 字段过滤）
+  // 4. recycle_bin：删除 30 天前的回收站记录（deletedAt 是 ISO 字符串）
   try {
-    const removed = await removeInBatches('recycle_bin', { deletedAt: _.lt(THIRTY_DAYS_AGO().toString()) })
+    const removed = await removeInBatches('recycle_bin', { deletedAt: _.lt(THIRTY_DAYS_AGO_ISO()) })
     stats.recycle_bin = removed
     console.log(`[cleanup] recycle_bin 删除 ${removed} 条`)
   } catch (e) {
@@ -92,9 +94,9 @@ const runCleanup = async () => {
     console.error('[cleanup] recycle_bin failed:', e)
   }
 
-  // 5. recycle_bin_poster：删除 30 天前的回收站记录（按 deleted_at 字段过滤）
+  // 5. recycle_bin_poster：删除 30 天前的回收站记录（deleted_at 是 ISO 字符串）
   try {
-    const removed = await removeInBatches('recycle_bin_poster', { deleted_at: _.lt(THIRTY_DAYS_AGO().toString()) })
+    const removed = await removeInBatches('recycle_bin_poster', { deleted_at: _.lt(THIRTY_DAYS_AGO_ISO()) })
     stats.recycle_bin_poster = removed
     console.log(`[cleanup] recycle_bin_poster 删除 ${removed} 条`)
   } catch (e) {
@@ -102,11 +104,11 @@ const runCleanup = async () => {
     console.error('[cleanup] recycle_bin_poster failed:', e)
   }
 
-  // 6. notifications：删除 90 天前的已读通知
+  // 6. notifications：删除 90 天前的已读通知（createdAt 是 ISO 字符串）
   try {
     const removed = await removeInBatches('notifications', {
       read: 1,
-      createdAt: _.lt(NINETY_DAYS_AGO().toString()),
+      createdAt: _.lt(NINETY_DAYS_AGO_ISO()),
     })
     stats.notifications = removed
     console.log(`[cleanup] notifications 删除 ${removed} 条`)

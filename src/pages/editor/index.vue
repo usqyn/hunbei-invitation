@@ -137,9 +137,9 @@
                 @click="el.editable === false ? null : onElementTap(idx)"
                 @longpress="el.editable === false ? null : onElementLongPress(idx)"
               >
-                <image
+                <CloudImage
                   v-if="el.type === 'image'"
-                  class="canvas-image"
+                  custom-class="canvas-image"
                   :src="el.text"
                   mode="aspectFit"
                   @error="onImageError"
@@ -335,6 +335,7 @@ import TextEditorPopup from './components/TextEditorPopup.vue'
 import UnifiedEditForm from './components/UnifiedEditForm.vue'
 import ImagePropertyPanel from './components/ImagePropertyPanel.vue'
 import TextStylePanel from './components/TextStylePanel.vue'
+import CloudImage from '@/components/CloudImage.vue'
 import type { EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()

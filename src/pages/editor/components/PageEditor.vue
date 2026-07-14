@@ -34,11 +34,11 @@
             <text class="section-date" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || 'YYYY/MM/DD' }}</text>
           </template>
           <template v-else-if="sec.type === 'image'">
-            <image
-              class="section-image"
+            <CloudImage
+              custom-class="section-image"
               :src="sec.image || '/static/images/icons/img-placeholder.svg'"
               mode="aspectFit"
-              :style="getImageSectionStyle(sec)"
+              :custom-style="getImageSectionStyle(sec)"
               @error="onImageError"
             />
             <view v-if="!sec.image" class="image-placeholder">
@@ -235,6 +235,7 @@ import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
 import TextStylePanel from './TextStylePanel.vue'
+import CloudImage from '@/components/CloudImage.vue'
 import type { PageSection, Work } from '@/types'
 
 const editorStore = useEditorStore()

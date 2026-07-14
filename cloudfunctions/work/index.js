@@ -15,25 +15,34 @@ const {
   getUser, requireAuth,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
+  resolveCloudFields, resolveCloudUrlsDeep,
 } = require('./_shared')
 
 // ============ 作品 CRUD ============
 
 // GET /api/works — 当前用户作品列表（按 updated_at 倒序）
+// works.cover 存的是 cloud:// fileID，需解析为 https 临时 URL
 const listWorks = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
   const res = await collection('works').where({ phone: auth.user.phone }).orderBy('updated_at', 'desc').limit(1000).get()
+  await resolveCloudFields(res.data || [], ['cover'])
   return ok(res.data || [])
 }
 
 // GET /api/works/:id — 作品详情（需校验所有权）
+// works.cover 和 works.data（嵌套 JSON）中的 cloud:// URL 需解析
 const getWork = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
   const res = await collection('works').where({ id: ctx.params.id, phone: auth.user.phone }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('作品不存在', 404)
-  return ok(res.data[0])
+  const work = res.data[0]
+  // 解析顶层 cloud:// URL
+  await resolveCloudFields(work, ['cover'])
+  // 解析嵌套 JSON 中的 cloud:// URL（data 内含元素图片 URL）
+  await resolveCloudUrlsDeep(work.data)
+  return ok(work)
 }
 
 // POST /api/works — 创建/覆盖作品（INSERT OR REPLACE 语义）

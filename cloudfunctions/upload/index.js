@@ -49,7 +49,8 @@ const buildCloudPath = (category, ext, originalName) => {
 
 // POST /api/upload — 多文件上传（base64 数组，最多 10 个）
 // 请求体：{ images: ['data:image/png;base64,...', ...], names?: ['a.png', ...] }
-// 响应：{ success, data: [{ filename, originalName, url, cloudFileID, size }] }
+// 响应：{ success, data: [{ filename, originalName, url, httpsUrl, cloudFileID, size }] }
+// 注意：url 返回 fileID（cloud://，永久），httpsUrl 返回临时 https URL（约 2h 过期，仅供即时显示）
 const uploadMultiple = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -68,7 +69,8 @@ const uploadMultiple = async (ctx) => {
     results.push({
       filename: cloudPath.split('/').pop(),
       originalName,
-      url: httpsUrl,
+      url: fileID,        // 永久引用（cloud://），前端存储此值
+      httpsUrl,           // 临时 https URL，仅供即时显示（约 2h 过期）
       cloudFileID: fileID,
       cloudUrl: fileID,
       size: parsed.buffer.length,
@@ -79,7 +81,9 @@ const uploadMultiple = async (ctx) => {
 
 // POST /api/upload/image — 单图上传（base64）
 // 请求体：{ image: 'data:image/png;base64,...' }
-// 响应：{ success, url }（与原实现一致；额外返回 cloudFileID）
+// 响应：{ success, data: { url, httpsUrl, cloudFileID } }
+//   url: fileID（cloud://，永久，前端应存储此值）
+//   httpsUrl: 临时 https URL（约 2h 过期，仅供即时显示）
 const uploadSingleImage = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -91,8 +95,8 @@ const uploadSingleImage = async (ctx) => {
   const cloudPath = buildCloudPath('images', parsed.ext)
   const fileID = await uploadToCloud(parsed.buffer, cloudPath, parsed.mime)
   const httpsUrl = await getCloudUrl(fileID)
-  // 返回 url（与原 Express 兼容）+ cloudFileID
-  return Object.assign(ok({ url: httpsUrl }), { cloudFileID: fileID })
+  // url 返回 fileID（永久引用），httpsUrl 供即时显示
+  return ok({ url: fileID, httpsUrl, cloudFileID: fileID })
 }
 
 // ============ 字体上传 ============
@@ -123,12 +127,13 @@ const uploadFonts = async (ctx) => {
     const cloudPath = `uploads/fonts/${uuid()}.${parsed.ext}`
     const fileID = await uploadToCloud(parsed.buffer, cloudPath, parsed.mime)
     const httpsUrl = await getCloudUrl(fileID)
-    // 更新字体映射：name → httpsUrl
-    fontMap[fontName] = httpsUrl
+    // 字体映射存 fileID（永久引用 cloud://），运行时按需用 getCloudUrl 换取临时 URL
+    fontMap[fontName] = fileID
     results.push({
       filename: cloudPath.split('/').pop(),
       originalName,
-      url: httpsUrl,
+      url: fileID,         // 永久引用（cloud://）
+      httpsUrl,            // 临时 https URL（约 2h 过期，仅供即时显示）
       cloudFileID: fileID,
       cloudUrl: fileID,
       size: parsed.buffer.length,
@@ -143,14 +148,19 @@ const uploadFonts = async (ctx) => {
   return ok(results)
 }
 
-// GET /api/fonts — 字体列表（从 settings.font_map 读取）
+// GET /api/fonts — 字体列表（从 settings.font_map 读取，并把 fileID 转为临时 https URL）
 const listFonts = async (ctx) => {
   const res = await collection('settings').doc('font_map').get().catch(() => ({ data: null }))
   let fontMap = (res.data && res.data.value) || {}
   if (typeof fontMap === 'string') { try { fontMap = JSON.parse(fontMap) } catch (_) { fontMap = {} } }
-  // 转为数组 [{ filename, url, size }]，与原 Admin 端格式一致
-  const list = Object.entries(fontMap).map(([name, url]) => ({
-    filename: name, url, size: 0,
+  // font_map 存的是 fileID（cloud://），批量换取临时 https URL 供前端即时使用
+  const fileIDs = Object.values(fontMap).filter(v => typeof v === 'string' && v.startsWith('cloud://'))
+  const httpsUrls = fileIDs.length ? await getCloudUrls(fileIDs) : []
+  const urlMap = {}
+  fileIDs.forEach((f, i) => { urlMap[f] = httpsUrls[i] || '' })
+  // 转为数组 [{ filename, url, size }]，url 为 https 临时 URL
+  const list = Object.entries(fontMap).map(([name, fileID]) => ({
+    filename: name, url: (typeof fileID === 'string' && fileID.startsWith('cloud://')) ? (urlMap[fileID] || fileID) : fileID, size: 0,
   }))
   return ok(list)
 }
@@ -177,15 +187,16 @@ const uploadMusic = async (ctx) => {
     const cloudPath = `uploads/music/${uuid()}.${parsed.ext}`
     const fileID = await uploadToCloud(parsed.buffer, cloudPath, parsed.mime)
     const httpsUrl = await getCloudUrl(fileID)
-    // 写入 music 集合
+    // music.src 存 fileID（永久引用 cloud://），listMusic 时按需换取临时 URL
     await collection('music').add({ data: {
       name: originalName.replace(/\.[^.]+$/, ''), tag: '本地上传',
-      src: httpsUrl, hot: 0, fileID,
+      src: fileID, hot: 0, fileID,
     } })
     results.push({
       filename: cloudPath.split('/').pop(),
       originalName,
-      url: httpsUrl,
+      url: fileID,         // 永久引用（cloud://）
+      httpsUrl,            // 临时 https URL（约 2h 过期，仅供即时显示）
       cloudFileID: fileID,
       cloudUrl: fileID,
       size: parsed.buffer.length,
@@ -195,6 +206,7 @@ const uploadMusic = async (ctx) => {
 }
 
 // GET /api/music — 音乐列表（分页 + tag 过滤）
+// music.src 存的是 fileID（cloud://），需批量换取临时 https URL 返回前端
 const listMusic = async (ctx) => {
   const conditions = {}
   if (ctx.query.tag && ctx.query.tag !== '全部') conditions.tag = ctx.query.tag
@@ -204,17 +216,25 @@ const listMusic = async (ctx) => {
   const countRes = await q.count()
   const total = countRes.total || 0
   q = q.orderBy('hot', 'desc').orderBy('_id', 'asc')
+  let rawList
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
-    const list = (res.data || []).map(m => ({
-      id: m._id, name: m.name, tag: m.tag, src: m.src, hot: !!m.hot,
-    }))
-    return paginateResponse(list, page, limit, total)
+    rawList = res.data || []
+  } else {
+    const res = await q.limit(1000).get()
+    rawList = res.data || []
   }
-  const res = await q.limit(1000).get()
-  const list = (res.data || []).map(m => ({
-    id: m._id, name: m.name, tag: m.tag, src: m.src, hot: !!m.hot,
+  // 批量把 fileID（cloud://）转为临时 https URL
+  const fileIDs = rawList.map(m => m.src).filter(s => typeof s === 'string' && s.startsWith('cloud://'))
+  const httpsUrls = fileIDs.length ? await getCloudUrls(fileIDs) : []
+  const urlMap = {}
+  fileIDs.forEach((f, i) => { urlMap[f] = httpsUrls[i] || '' })
+  const list = rawList.map(m => ({
+    id: m._id, name: m.name, tag: m.tag,
+    src: (typeof m.src === 'string' && m.src.startsWith('cloud://')) ? (urlMap[m.src] || m.src) : m.src,
+    hot: !!m.hot,
   }))
+  if (hasPaging) return paginateResponse(list, page, limit, total)
   return ok(list)
 }
 

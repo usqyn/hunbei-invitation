@@ -4,6 +4,8 @@
     :mode="mode"
     :lazy-load="lazyLoad"
     :fade-show="fadeShow"
+    :style="customStyle"
+    :class="customClass"
     @error="handleError"
     @load="handleLoad"
   />
@@ -18,12 +20,21 @@ const props = withDefaults(defineProps<{
   mode?: string
   lazyLoad?: boolean
   fadeShow?: boolean
+  customStyle?: string | Record<string, any>
+  customClass?: string
 }>(), {
   src: '',
   mode: 'aspectFill',
   lazyLoad: true,
   fadeShow: true,
+  customStyle: '',
+  customClass: '',
 })
+
+const emit = defineEmits<{
+  (e: 'load'): void
+  (e: 'error'): void
+}>()
 
 const displayUrl = ref('')
 const retryCount = ref(0)
@@ -59,8 +70,14 @@ watch(() => props.src, () => {
 
 // 图片加载失败处理：cloud:// URL 清缓存重试一次
 function handleError() {
-  if (retryCount.value >= MAX_RETRY) return
-  if (!isCloudUrl(props.src)) return
+  if (retryCount.value >= MAX_RETRY) {
+    emit('error')
+    return
+  }
+  if (!isCloudUrl(props.src)) {
+    emit('error')
+    return
+  }
   retryCount.value++
   // 清除缓存后重新换取
   invalidateCloudUrl(props.src)
@@ -70,5 +87,6 @@ function handleError() {
 function handleLoad() {
   // 加载成功重置重试计数
   retryCount.value = 0
+  emit('load')
 }
 </script>

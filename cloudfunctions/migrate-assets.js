@@ -33,6 +33,7 @@ try { cloud = require('wx-server-sdk') } catch (e) {
 const ENV_ID = process.env.TCB_ENV_ID || 'cloud1-d1g9id3fjffcefe0d'
 const SERVER_DIR = path.resolve(__dirname, '..', 'server')
 const UPLOADS_DIR = path.join(SERVER_DIR, 'uploads')
+const MUSIC_DIR = path.join(SERVER_DIR, 'music')
 const MANIFEST_PATH = path.join(__dirname, 'manifest.json')
 
 // 支持的文件扩展名
@@ -45,6 +46,63 @@ const MIME_MAP = {
   '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.aac': 'audio/aac',
   '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2',
+}
+
+// ============ URL 归一化 ============
+// 把各种形态的本地 URL 归一化为 /uploads/xxx 形式，用于 urlMap 匹配
+// 支持：
+//   /uploads/xxx          → /uploads/xxx
+//   uploads/xxx           → /uploads/xxx
+//   http://host/uploads/xxx  → /uploads/xxx
+//   https://host/uploads/xxx → /uploads/xxx
+//   已是 cloud:// 或非 uploads 路径 → 返回 null（不需替换）
+const normalizeLocalPath = (url) => {
+  if (typeof url !== 'string' || !url) return null
+  // cloud:// 已是永久引用，跳过
+  if (url.startsWith('cloud://')) return null
+  // data: URL 跳过
+  if (url.startsWith('data:')) return null
+  // 剥离 http(s)://host 前缀
+  let p = url
+  const m = p.match(/^https?:\/\/[^/]+(\/.*)$/i)
+  if (m) p = m[1]
+  // 现在 p 应该是 /uploads/xxx 或 uploads/xxx 或 /xxx
+  if (!p.startsWith('/uploads/') && !p.startsWith('uploads/')) {
+    // 非 uploads 路径（如 /static/xxx），跳过
+    return null
+  }
+  // 统一为 /uploads/xxx
+  if (!p.startsWith('/')) p = '/' + p
+  return p
+}
+
+// 递归遍历对象/数组，把所有匹配 urlMap 的本地 URL 字符串替换为 fileID
+// 返回 { obj: 修改后的对象, changed: 是否有改动 }
+const replaceUrlsDeep = (obj, urlMap) => {
+  let changed = false
+  if (obj === null || obj === undefined) return { obj, changed }
+  if (typeof obj === 'string') {
+    const normalized = normalizeLocalPath(obj)
+    if (normalized && urlMap[normalized]) {
+      return { obj: urlMap[normalized], changed: true }
+    }
+    return { obj, changed }
+  }
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      const res = replaceUrlsDeep(obj[i], urlMap)
+      if (res.changed) { obj[i] = res.obj; changed = true }
+    }
+    return { obj, changed }
+  }
+  if (typeof obj === 'object') {
+    for (const key of Object.keys(obj)) {
+      const res = replaceUrlsDeep(obj[key], urlMap)
+      if (res.changed) { obj[key] = res.obj; changed = true }
+    }
+    return { obj, changed }
+  }
+  return { obj, changed }
 }
 
 // ============ 递归遍历目录，返回所有文件相对路径 ============
@@ -90,7 +148,8 @@ const getTempUrl = async (fileID) => {
 }
 
 // ============ 处理 font-map.json ============
-// 把本地 url 替换为云存储 URL，写入云数据库 settings.font_map
+// 把本地 url 替换为 cloud:// fileID（永久引用），写入云数据库 settings.font_map
+// 运行时 listFonts 会用 getCloudUrls 批量换取临时 https URL
 const migrateFontMap = async (manifest, db) => {
   const fontMapPath = path.join(UPLOADS_DIR, 'fonts', 'font-map.json')
   if (!fs.existsSync(fontMapPath)) {
@@ -98,26 +157,24 @@ const migrateFontMap = async (manifest, db) => {
     return
   }
   let fontMap = JSON.parse(fs.readFileSync(fontMapPath, 'utf-8'))
-  // 用 manifest 中的映射替换本地 url
-  const uploadsPrefix = 'uploads/'
+  // 用 manifest 中的 fileID 替换本地 url
   Object.keys(fontMap).forEach(name => {
     const url = fontMap[name]
     if (typeof url !== 'string') return
-    // 若是本地路径（/uploads/xxx 或 uploads/xxx），找到对应 manifest 记录
-    let relPath = url
-    if (relPath.startsWith('/uploads/')) relPath = relPath.slice(1)
-    else if (relPath.startsWith('uploads/')) { /* 已是相对路径 */ }
-    else return  // 已是 https URL，跳过
+    // 归一化本地路径：剥离 protocol://host，统一为 /uploads/xxx 形式
+    const normalized = normalizeLocalPath(url)
+    if (!normalized) return  // 已是 https/cloud URL，跳过
     // 找到 manifest 中 cloudPath 匹配的记录
-    const record = manifest.find(m => m.cloudPath === relPath)
+    const record = manifest.find(m => '/' + m.cloudPath === normalized)
     if (record) {
-      fontMap[name] = record.httpsUrl || record.fileID
-      console.log(`  字体 ${name}: ${url} → ${fontMap[name]}`)
+      // 存 fileID（cloud://，永久），而非临时 https URL（2h 过期）
+      fontMap[name] = record.fileID
+      console.log(`  字体 ${name}: ${url} → ${record.fileID}`)
     }
   })
-  // 写入云数据库 settings.font_map（upsert）
+  // 写入云数据库 settings.font_map（upsert：用 set 原子替换）
   try {
-    await db.collection('settings').doc('font_map').update({ data: { value: fontMap } })
+    await db.collection('settings').doc('font_map').set({ data: { value: fontMap } })
   } catch (_) {
     await db.collection('settings').add({ data: { _id: 'font_map', value: fontMap } })
   }
@@ -125,6 +182,7 @@ const migrateFontMap = async (manifest, db) => {
 }
 
 // ============ 更新贴纸列表到 settings.poster_stickers ============
+// 贴纸 url 存 fileID（cloud://，永久），运行时按需换取临时 URL
 const migrateStickers = async (manifest, db) => {
   // 从 manifest 中筛选 uploads/poster/stickers/ 的记录
   const stickers = manifest
@@ -132,7 +190,7 @@ const migrateStickers = async (manifest, db) => {
     .map(m => ({
       id: path.basename(m.cloudPath, path.extname(m.cloudPath)),
       name: path.basename(m.cloudPath, path.extname(m.cloudPath)),
-      url: m.httpsUrl || m.fileID,
+      url: m.fileID,           // 存 fileID（永久引用 cloud://）
       cloudFileID: m.fileID,
     }))
   if (stickers.length === 0) {
@@ -140,7 +198,7 @@ const migrateStickers = async (manifest, db) => {
     return
   }
   try {
-    await db.collection('settings').doc('poster_stickers').update({ data: { value: stickers } })
+    await db.collection('settings').doc('poster_stickers').set({ data: { value: stickers } })
   } catch (_) {
     await db.collection('settings').add({ data: { _id: 'poster_stickers', value: stickers } })
   }
@@ -148,43 +206,134 @@ const migrateStickers = async (manifest, db) => {
 }
 
 // ============ 更新数据库中的 url 字段 ============
-// 把 poster_templates / poster_works 表中所有 url 字段更新为云存储 URL
+// 把 poster_templates / poster_works / templates / works / music 集合中的本地 URL
+// 替换为 cloud:// fileID（永久引用）。运行时各列表接口用 resolveCloudFields 按需换取临时 URL。
 const updateDatabaseUrls = async (manifest, db) => {
-  // 构建「本地路径 → https URL」映射
+  // 构建「归一化本地路径 → fileID」映射
   const urlMap = {}
   manifest.forEach(m => {
-    // 本地路径形如 /uploads/poster/templates/wedding_1.jpg
+    if (!m.fileID) return
+    // cloudPath 形如 uploads/poster/templates/wedding_1.jpg
     const localPath = '/' + m.cloudPath
-    urlMap[localPath] = m.httpsUrl || m.fileID
+    urlMap[localPath] = m.fileID
   })
+  console.log(`  urlMap 含 ${Object.keys(urlMap).length} 条映射`)
 
-  // 更新 poster_templates 的 cover_url 和 background_url
-  const templates = await db.collection('poster_templates').limit(1000).get()
+  // 分页读取工具（云数据库单次最多 100 条）
+  const getAll = async (collName) => {
+    const PAGE = 100
+    const countRes = await db.collection(collName).count()
+    const total = countRes.total || 0
+    const all = []
+    for (let i = 0; i < total; i += PAGE) {
+      const res = await db.collection(collName).skip(i).limit(PAGE).get()
+      all.push(...(res.data || []))
+    }
+    return all
+  }
+
+  // ---- 1. poster_templates: cover_url, background_url, config（嵌套 JSON） ----
+  console.log('  更新 poster_templates...')
+  const pTemplates = await getAll('poster_templates')
   let updatedTpls = 0
-  for (const t of (templates.data || [])) {
+  for (const t of pTemplates) {
     const fields = {}
-    if (t.cover_url && urlMap[t.cover_url]) fields.cover_url = urlMap[t.cover_url]
-    if (t.background_url && urlMap[t.background_url]) fields.background_url = urlMap[t.background_url]
+    // 顶层字段
+    if (t.cover_url !== undefined) {
+      const r = replaceUrlsDeep(t.cover_url, urlMap); if (r.changed) fields.cover_url = r.obj
+    }
+    if (t.background_url !== undefined) {
+      const r = replaceUrlsDeep(t.background_url, urlMap); if (r.changed) fields.background_url = r.obj
+    }
+    // config 嵌套 JSON（可能含图片 URL）
+    if (t.config !== undefined) {
+      const r = replaceUrlsDeep(t.config, urlMap); if (r.changed) fields.config = r.obj
+    }
     if (Object.keys(fields).length > 0) {
       await db.collection('poster_templates').where({ id: t.id }).update({ data: fields })
       updatedTpls++
     }
   }
-  console.log(`  ✅ poster_templates: 更新 ${updatedTpls} 条 url 字段`)
+  console.log(`  ✅ poster_templates: 更新 ${updatedTpls} 条`)
 
-  // 更新 poster_works 的 cover_url 和 poster_url
-  const works = await db.collection('poster_works').limit(1000).get()
-  let updatedWorks = 0
-  for (const w of (works.data || [])) {
+  // ---- 2. poster_works: cover_url, poster_url, content（嵌套 JSON） ----
+  console.log('  更新 poster_works...')
+  const pWorks = await getAll('poster_works')
+  let updatedPWorks = 0
+  for (const w of pWorks) {
     const fields = {}
-    if (w.cover_url && urlMap[w.cover_url]) fields.cover_url = urlMap[w.cover_url]
-    if (w.poster_url && urlMap[w.poster_url]) fields.poster_url = urlMap[w.poster_url]
+    if (w.cover_url !== undefined) {
+      const r = replaceUrlsDeep(w.cover_url, urlMap); if (r.changed) fields.cover_url = r.obj
+    }
+    if (w.poster_url !== undefined) {
+      const r = replaceUrlsDeep(w.poster_url, urlMap); if (r.changed) fields.poster_url = r.obj
+    }
+    if (w.content !== undefined) {
+      const r = replaceUrlsDeep(w.content, urlMap); if (r.changed) fields.content = r.obj
+    }
     if (Object.keys(fields).length > 0) {
       await db.collection('poster_works').where({ id: w.id }).update({ data: fields })
+      updatedPWorks++
+    }
+  }
+  console.log(`  ✅ poster_works: 更新 ${updatedPWorks} 条`)
+
+  // ---- 3. templates: cover, backgroundImage, renderedImage, data/elements/pages（嵌套 JSON） ----
+  console.log('  更新 templates...')
+  const templates = await getAll('templates')
+  let updatedTemplates = 0
+  for (const t of templates) {
+    const fields = {}
+    for (const f of ['cover', 'backgroundImage', 'renderedImage', 'thumbnail']) {
+      if (t[f] !== undefined) {
+        const r = replaceUrlsDeep(t[f], urlMap); if (r.changed) fields[f] = r.obj
+      }
+    }
+    // data / elements / pages 是嵌套 JSON，递归替换其中的图片 URL
+    for (const f of ['data', 'elements', 'pages', 'tags']) {
+      if (t[f] !== undefined) {
+        const r = replaceUrlsDeep(t[f], urlMap); if (r.changed) fields[f] = r.obj
+      }
+    }
+    if (Object.keys(fields).length > 0) {
+      await db.collection('templates').where({ id: t.id }).update({ data: fields })
+      updatedTemplates++
+    }
+  }
+  console.log(`  ✅ templates: 更新 ${updatedTemplates} 条`)
+
+  // ---- 4. works: cover, data（嵌套 JSON） ----
+  console.log('  更新 works...')
+  const works = await getAll('works')
+  let updatedWorks = 0
+  for (const w of works) {
+    const fields = {}
+    if (w.cover !== undefined) {
+      const r = replaceUrlsDeep(w.cover, urlMap); if (r.changed) fields.cover = r.obj
+    }
+    if (w.data !== undefined) {
+      const r = replaceUrlsDeep(w.data, urlMap); if (r.changed) fields.data = r.obj
+    }
+    if (Object.keys(fields).length > 0) {
+      await db.collection('works').where({ id: w.id }).update({ data: fields })
       updatedWorks++
     }
   }
-  console.log(`  ✅ poster_works: 更新 ${updatedWorks} 条 url 字段`)
+  console.log(`  ✅ works: 更新 ${updatedWorks} 条`)
+
+  // ---- 5. music: src ----
+  console.log('  更新 music.src...')
+  const musics = await getAll('music')
+  let updatedMusic = 0
+  for (const m of musics) {
+    if (m.src === undefined) continue
+    const r = replaceUrlsDeep(m.src, urlMap)
+    if (r.changed) {
+      await db.collection('music').doc(m._id).update({ data: { src: r.obj } })
+      updatedMusic++
+    }
+  }
+  console.log(`  ✅ music: 更新 ${updatedMusic} 条 src`)
 }
 
 // ============ 主流程 ============
@@ -202,8 +351,18 @@ const main = async () => {
   const db = cloud.database()
 
   // 遍历所有文件
+  // 1. server/uploads/ 下的所有文件（字体/贴纸/海报模板/海报作品/用户上传图片）
   const files = walkDir(UPLOADS_DIR)
-  console.log(`\n📦 发现 ${files.length} 个文件待迁移`)
+  // 2. server/music/ 下的音乐文件（原 Express 用 /uploads/music 别名提供，实际在 server/music/）
+  //    cloudPath 统一为 uploads/music/<filename>，与 DB 中存的 /uploads/music/xxx.mp3 对齐
+  if (fs.existsSync(MUSIC_DIR)) {
+    const musicBase = MUSIC_DIR // server/music/
+    const musicFiles = walkDir(musicBase) // baseDir 默认为 musicBase，relPath 为 xxx.mp3
+    // 把 cloudPath 从 uploads/xxx.mp3 改为 uploads/music/xxx.mp3
+    musicFiles.forEach(f => { f.cloudPath = `uploads/music/${f.cloudPath.replace(/^uploads\//, '')}` })
+    files.push(...musicFiles)
+  }
+  console.log(`\n📦 发现 ${files.length} 个文件待迁移（含 ${fs.existsSync(MUSIC_DIR) ? 'music 目录' : '无 music 目录'}）`)
 
   const manifest = []
   let success = 0

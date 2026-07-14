@@ -190,6 +190,84 @@ const deleteCloudFile = async (fileID) => {
   try { await cloud.deleteFile({ fileList: [fileID] }) } catch (e) { console.error('deleteCloudFile 失败:', e) }
 }
 
+// 解析记录中指定字段的 cloud:// URL 为 https 临时 URL
+// 用法：await resolveCloudFields(record, ['cover_url', 'poster_url'])
+// 或：await resolveCloudFields(recordsArray, ['cover_url', 'poster_url'])
+// 就地修改 record，同时返回 record
+const resolveCloudFields = async (records, fields) => {
+  if (!records) return records
+  const arr = Array.isArray(records) ? records : [records]
+  // 收集所有 cloud:// fileID
+  const fileIDs = new Set()
+  for (const rec of arr) {
+    if (!rec || typeof rec !== 'object') continue
+    for (const f of fields) {
+      const v = rec[f]
+      if (typeof v === 'string' && v.startsWith('cloud://')) fileIDs.add(v)
+    }
+  }
+  if (!fileIDs.size) return records
+  // 批量换取临时 URL
+  const ids = Array.from(fileIDs)
+  const urls = await getCloudUrls(ids)
+  const urlMap = {}
+  ids.forEach((id, i) => { if (urls[i]) urlMap[id] = urls[i] })
+  // 就地替换
+  for (const rec of arr) {
+    if (!rec || typeof rec !== 'object') continue
+    for (const f of fields) {
+      const v = rec[f]
+      if (typeof v === 'string' && urlMap[v]) rec[f] = urlMap[v]
+    }
+  }
+  return records
+}
+
+// 递归遍历对象/数组，把所有 cloud:// URL 替换为 https 临时 URL
+// 用于嵌套 JSON 字段（如 works.data、templates.elements/pages）
+// 就地修改对象，同时返回对象
+const resolveCloudUrlsDeep = async (obj) => {
+  if (!obj) return obj
+  // 1. 收集所有 cloud:// fileID
+  const fileIDs = new Set()
+  const collect = (v) => {
+    if (v === null || v === undefined) return
+    if (typeof v === 'string') {
+      if (v.startsWith('cloud://')) fileIDs.add(v)
+    } else if (Array.isArray(v)) {
+      v.forEach(collect)
+    } else if (typeof v === 'object') {
+      Object.values(v).forEach(collect)
+    }
+  }
+  collect(obj)
+  if (!fileIDs.size) return obj
+  // 2. 批量换取临时 URL
+  const ids = Array.from(fileIDs)
+  const urls = await getCloudUrls(ids)
+  const urlMap = {}
+  ids.forEach((id, i) => { if (urls[i]) urlMap[id] = urls[i] })
+  if (!Object.keys(urlMap).length) return obj
+  // 3. 递归替换
+  const replace = (v) => {
+    if (v === null || v === undefined) return v
+    if (typeof v === 'string') {
+      return urlMap[v] || v
+    }
+    if (Array.isArray(v)) {
+      for (let i = 0; i < v.length; i++) v[i] = replace(v[i])
+      return v
+    }
+    if (typeof v === 'object') {
+      for (const k of Object.keys(v)) v[k] = replace(v[k])
+      return v
+    }
+    return v
+  }
+  replace(obj)
+  return obj
+}
+
 // ============ 短信验证码（云数据库存储，替代原内存对象） ============
 // 写入 sms_codes 集合，5分钟过期；同一手机号覆盖旧记录
 const setSmsCode = async (phone, code) => {
@@ -343,6 +421,8 @@ module.exports = {
   getCloudUrl,
   getCloudUrls,
   deleteCloudFile,
+  resolveCloudFields,
+  resolveCloudUrlsDeep,
   // 短信验证码
   setSmsCode,
   getSmsCode,

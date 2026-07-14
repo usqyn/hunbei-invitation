@@ -33,13 +33,17 @@ const BATCH_SIZE = 100
 
 // 主库表 → 集合映射（表名: 集合名, 主键字段）
 // SQL 表名与集合名一致，主键字段用于去重
+// pk 设为 'id' 时，云端 _id = String(id)，保留原 id 连续性（works.music_id 等外键引用不中断）
+// pk 为 null 时，云端 _id 自动生成（仅用于无外键引用的日志/记录类表）
 const TABLE_MAP = [
   { table: 'templates', collection: 'templates', pk: 'id', jsonFields: ['data', 'elements', 'tags', 'canvasSize', 'background', 'pages'] },
   { table: 'categories', collection: 'categories', pk: 'id', jsonFields: [] },
-  { table: 'music', collection: 'music', pk: null, jsonFields: [] },
+  // music 用 'id' 作 _id：works.music_id 引用原数字 id，必须保持一致
+  { table: 'music', collection: 'music', pk: 'id', jsonFields: [] },
   { table: 'users', collection: 'users', pk: 'id', jsonFields: [] },
   { table: 'works', collection: 'works', pk: 'id', jsonFields: ['data'] },
   { table: 'orders', collection: 'orders', pk: 'id', jsonFields: ['items'] },
+  // 以下表无外键引用，用自动 _id 即可；保留原 id 字段供查询
   { table: 'favorites', collection: 'favorites', pk: null, jsonFields: [] },
   { table: 'footprints', collection: 'footprints', pk: null, jsonFields: [] },
   { table: 'notifications', collection: 'notifications', pk: null, jsonFields: [] },
@@ -78,6 +82,8 @@ const deserializeJsonFields = (obj, jsonFields) => {
 }
 
 // ============ 迁移单张表 ============
+// 策略：有主键的表用 doc(_id).set() 原子 upsert（避免先删后插的数据缺失窗口）
+//       无主键的表用 add（自动生成 _id）
 const migrateTable = async (sqlDb, tableMap, db, stats) => {
   const { table, collection: collName, pk, jsonFields } = tableMap
   console.log(`\n📋 迁移表 ${table} → 集合 ${collName}`)
@@ -90,38 +96,25 @@ const migrateTable = async (sqlDb, tableMap, db, stats) => {
     return
   }
 
-  // 按主键去重：先删除已存在记录
-  if (pk) {
-    console.log(`   按主键 ${pk} 去重（先删后插）`)
-    const pkValues = rows.map(r => r[pk]).filter(Boolean)
-    // 分批删除（云数据库 in 查询上限 500）
-    for (let i = 0; i < pkValues.length; i += BATCH_SIZE) {
-      const batch = pkValues.slice(i, i + BATCH_SIZE)
-      try {
-        await db.collection(collName).where({ [pk]: db.command.in(batch) }).remove()
-      } catch (e) {
-        console.warn(`   删除批次 ${i} 失败（可忽略，可能集合为空）:`, e.errMsg || e.message)
-      }
-    }
-  }
-
-  // 反序列化 JSON 字段 + 批量插入
+  // 反序列化 JSON 字段 + upsert/insert
   let migrated = 0
   let failed = 0
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE).map(r => deserializeJsonFields(r, jsonFields))
     for (const doc of batch) {
       try {
-        // 若有主键，把它设为 _id（云数据库 _id 是默认主键）
-        // 注意：_id 不能是数字类型，需转字符串
         const data = { ...doc }
         if (pk && data[pk] !== undefined && data[pk] !== null) {
+          // 有主键：用 doc(_id).set() 原子替换（upsert 语义，不存在则创建，存在则替换）
+          // _id 不能是数字类型，需转字符串
           data._id = String(data[pk])
+          await db.collection(collName).doc(data._id).set({ data })
+        } else {
+          // 无主键：直接 add（_id 自动生成）
+          await db.collection(collName).add({ data })
         }
-        await db.collection(collName).add({ data })
         migrated++
       } catch (e) {
-        // 主键冲突等错误跳过
         console.warn(`   插入失败 (表 ${table}):`, e.errMsg || e.message)
         failed++
       }

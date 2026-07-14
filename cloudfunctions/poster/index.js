@@ -25,7 +25,7 @@ const {
   getUser, requireAuth, requireAdmin, isRequestFromAdmin,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
-  uploadToCloud, getCloudUrl,
+  uploadToCloud, getCloudUrl, getCloudUrls, resolveCloudFields,
 } = require('./_shared')
 
 // ============ 贴纸资源集合（云存储路径前缀） ============
@@ -59,6 +59,8 @@ const listPosterTemplates = async (ctx) => {
   q = q.orderBy('use_count', 'desc').orderBy('like_count', 'desc')
   const res = await q.skip(skip).limit(limit).get()
   const templates = res.data || []
+  // 把 cover_url/background_url 的 cloud:// fileID 转为临时 https URL
+  await resolveCloudFields(templates, ['cover_url', 'background_url'])
   return {
     success: true,
     data: templates,
@@ -78,7 +80,9 @@ const listHotPosterTemplates = async (ctx) => {
     .orderBy('like_count', 'desc')
     .limit(limit)
     .get()
-  return ok(res.data || [])
+  const templates = res.data || []
+  await resolveCloudFields(templates, ['cover_url', 'background_url'])
+  return ok(templates)
 }
 
 // GET /api/poster/templates/:id — 模板详情
@@ -88,12 +92,14 @@ const getPosterTemplate = async (ctx) => {
   const template = res.data[0]
   // 非管理员不能查看已下架模板
   if (!template.is_active && !isRequestFromAdmin(ctx.event)) return httpFail('模板不存在', 404)
+  await resolveCloudFields(template, ['cover_url', 'background_url'])
   return ok(template)
 }
 
 // ============ 作品 CRUD ============
 
 // GET /api/poster/works — 用户作品列表（分页）
+// poster_works 中 cover_url/poster_url 存的是 cloud:// fileID，需批量转为 https 临时 URL
 const listPosterWorks = async (ctx) => {
   const user = getUser(ctx.event)
   if (!user || !user.phone) return httpFail('请先登录', 401)
@@ -102,12 +108,18 @@ const listPosterWorks = async (ctx) => {
   const countRes = await collection('poster_works').where({ user_id: userId }).count()
   const total = countRes.total || 0
   let q = collection('poster_works').where({ user_id: userId }).orderBy('created_at', 'desc')
+  let data
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
-    return paginateResponse(res.data || [], page, limit, total)
+    data = res.data || []
+  } else {
+    const res = await q.limit(1000).get()
+    data = res.data || []
   }
-  const res = await q.limit(1000).get()
-  return Object.assign(ok(res.data || []), { total: (res.data || []).length })
+  // 把 cover_url/poster_url 的 cloud:// fileID 转为临时 https URL
+  await resolveCloudFields(data, ['cover_url', 'poster_url'])
+  if (hasPaging) return paginateResponse(data, page, limit, total)
+  return Object.assign(ok(data), { total: data.length })
 }
 
 // GET /api/poster/works/recycle — 回收站列表
@@ -120,12 +132,18 @@ const listPosterRecycleBin = async (ctx) => {
   const countRes = await collection('recycle_bin_poster').where({ user_id: userId }).count()
   const total = countRes.total || 0
   let q = collection('recycle_bin_poster').where({ user_id: userId }).orderBy('deleted_at', 'desc')
+  let data
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
-    return paginateResponse(res.data || [], page, limit, total)
+    data = res.data || []
+  } else {
+    const res = await q.limit(1000).get()
+    data = res.data || []
   }
-  const res = await q.limit(1000).get()
-  return ok(res.data || [])
+  // 回收站 work_data 内可能含 cloud:// URL，一并解析
+  await resolveCloudFields(data, ['poster_url', 'cover_url'])
+  if (hasPaging) return paginateResponse(data, page, limit, total)
+  return ok(data)
 }
 
 // GET /api/poster/works/:id — 作品详情（需校验所有权）
@@ -134,7 +152,9 @@ const getPosterWork = async (ctx) => {
   if (!user || !user.phone) return httpFail('请先登录', 401)
   const res = await collection('poster_works').where({ id: ctx.params.id, user_id: user.phone }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('作品不存在', 404)
-  return ok(res.data[0])
+  const work = res.data[0]
+  await resolveCloudFields(work, ['cover_url', 'poster_url'])
+  return ok(work)
 }
 
 // POST /api/poster/works — 保存作品（同时更新模板使用次数）
@@ -205,8 +225,9 @@ const uploadPosterWorkImage = async (ctx) => {
   const cloudPath = `uploads/poster/works/${workId}.${ext}`
   const fileID = await uploadToCloud(buf, cloudPath, `image/${m[1].toLowerCase()}`)
   const httpsUrl = await getCloudUrl(fileID)
-  await collection('poster_works').where({ id: workId }).update({ data: { poster_url: httpsUrl } })
-  return ok({ url: httpsUrl, cloudFileID: fileID })
+  // poster_url 存 fileID（永久引用 cloud://），运行时按需换取临时 URL
+  await collection('poster_works').where({ id: workId }).update({ data: { poster_url: fileID } })
+  return ok({ url: fileID, httpsUrl, cloudFileID: fileID })
 }
 
 // PUT /api/poster/works/:id/restore — 从回收站恢复
