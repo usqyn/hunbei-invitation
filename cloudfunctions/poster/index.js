@@ -215,7 +215,8 @@ const restorePosterWork = async (ctx) => {
   if (!user || !user.phone) return httpFail('请先登录', 401)
   const userId = user.phone
   const id = ctx.params.id
-  const res = await collection('recycle_bin_poster').where({ _id: id, user_id: userId }).limit(1).get()
+  // 按 work_id 查询回收站记录（软删除时存的是 work_id）
+  const res = await collection('recycle_bin_poster').where({ work_id: id, user_id: userId }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('记录不存在', 404)
   const item = res.data[0]
   let workData = item.work_data
@@ -229,7 +230,7 @@ const restorePosterWork = async (ctx) => {
         cover_url: workData.cover_url || '', content: workData.content || {},
         poster_url: workData.poster_url || '', created_at: workData.created_at || now(),
       } })
-      await transaction.collection('recycle_bin_poster').doc(id).remove()
+      await transaction.collection('recycle_bin_poster').doc(item._id).remove()
     })
   } catch (e) {
     console.error('restorePosterWork failed:', e)
@@ -242,7 +243,8 @@ const restorePosterWork = async (ctx) => {
 const permanentDeletePosterWork = async (ctx) => {
   const user = getUser(ctx.event)
   if (!user || !user.phone) return httpFail('请先登录', 401)
-  await collection('recycle_bin_poster').where({ _id: ctx.params.id, user_id: user.phone }).remove()
+  // 按 work_id 查询回收站记录（软删除时存的是 work_id）
+  await collection('recycle_bin_poster').where({ work_id: ctx.params.id, user_id: user.phone }).remove()
   return okMsg('已永久删除')
 }
 

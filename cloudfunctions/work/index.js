@@ -202,22 +202,17 @@ const deleteWork = async (ctx) => {
     return okMsg('已移入回收站')
   }
 
-  // 2. 永久删：主库 recycle_bin（兼容 work_id 和 _id）
-  // 云数据库 OR 查询：用 _.or 传入条件数组
-  const mainRecycleRes1 = await collection('recycle_bin').where({ work_id: id, phone }).limit(1).get()
-  const mainRecycleRes2 = await collection('recycle_bin').where({ _id: id, phone }).limit(1).get()
-  const mainRecycle = (mainRecycleRes1.data && mainRecycleRes1.data.length) ? mainRecycleRes1 : mainRecycleRes2
-  if (mainRecycle.data && mainRecycle.data.length) {
-    await collection('recycle_bin').doc(mainRecycle.data[0]._id).remove()
+  // 2. 永久删：主库 recycle_bin（按 work_id 查询）
+  const mainRecycleRes = await collection('recycle_bin').where({ work_id: id, phone }).limit(1).get()
+  if (mainRecycleRes.data && mainRecycleRes.data.length) {
+    await collection('recycle_bin').doc(mainRecycleRes.data[0]._id).remove()
     return okMsg('已永久删除')
   }
 
-  // 3. 永久删：poster 库 recycle_bin_poster
-  const posterRecycleRes1 = await collection('recycle_bin_poster').where({ work_id: id, user_id: phone }).limit(1).get()
-  const posterRecycleRes2 = await collection('recycle_bin_poster').where({ _id: id, user_id: phone }).limit(1).get()
-  const posterRecycle = (posterRecycleRes1.data && posterRecycleRes1.data.length) ? posterRecycleRes1 : posterRecycleRes2
-  if (posterRecycle.data && posterRecycle.data.length) {
-    await collection('recycle_bin_poster').doc(posterRecycle.data[0]._id).remove()
+  // 3. 永久删：poster 库 recycle_bin_poster（按 work_id 查询）
+  const posterRecycleRes = await collection('recycle_bin_poster').where({ work_id: id, user_id: phone }).limit(1).get()
+  if (posterRecycleRes.data && posterRecycleRes.data.length) {
+    await collection('recycle_bin_poster').doc(posterRecycleRes.data[0]._id).remove()
     return okMsg('已永久删除')
   }
 

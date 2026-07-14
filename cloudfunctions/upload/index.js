@@ -203,7 +203,7 @@ const listMusic = async (ctx) => {
   // 先按 hot 倒序，再按 _id 升序（与原 SQL "ORDER BY hot DESC, id ASC" 一致）
   const countRes = await q.count()
   const total = countRes.total || 0
-  q = q.orderBy('hot', 'desc')
+  q = q.orderBy('hot', 'desc').orderBy('_id', 'asc')
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
     const list = (res.data || []).map(m => ({
