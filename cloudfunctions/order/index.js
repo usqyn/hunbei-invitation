@@ -105,6 +105,7 @@ const updateOrderStatus = async (ctx) => {
 }
 
 // POST /api/orders/:id/pay — 订单支付（pending→paid，含 VIP 权益发放）
+// 改用事务：订单状态变更 + VIP 权益发放原子化，避免并发支付导致权益丢失
 const payOrder = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -115,31 +116,43 @@ const payOrder = async (ctx) => {
   const order = existing.data[0]
   if (order.status !== 'pending') return httpFail(`订单状态为 ${order.status}，无法支付`)
   const ts = now()
-  // 支付成功：更新订单状态
-  await collection('orders').where({ id }).update({ data: { status: 'paid', paid_at: ts, updatedAt: ts } })
-  // 若含 VIP 类型商品，发放 VIP 权益
+  // 若含 VIP 类型商品，发放 VIP 权益（事务保证）
   const vipItem = (order.items || []).find(it => it.type === 'vip')
   if (vipItem) {
     const plan = VIP_PLANS[vipItem.plan]
     const days = plan ? plan.days : 30
-    const nowMsec = Date.now()
-    const userRes = await collection('users').where({ phone }).limit(1).get()
-    let currentExpire = 0
-    if (userRes.data && userRes.data[0]) {
-      const u = userRes.data[0]
-      if (u.vip_status === 1 && u.vip_expire_at) currentExpire = parseInt(u.vip_expire_at, 10) || 0
+    try {
+      await db.runTransaction(async (transaction) => {
+        // 在事务内读取用户当前 VIP 状态，避免并发订单读到相同的到期时间
+        const userRes = await transaction.collection('users').where({ phone }).limit(1).get()
+        let currentExpire = 0
+        if (userRes.data && userRes.data[0]) {
+          const u = userRes.data[0]
+          if (u.vip_status === 1 && u.vip_expire_at) currentExpire = parseInt(u.vip_expire_at, 10) || 0
+        }
+        const baseExpire = Math.max(currentExpire, Date.now())
+        const newExpireAt = baseExpire + days * 24 * 60 * 60 * 1000
+        // 更新订单状态
+        await transaction.collection('orders').where({ id }).update({ data: { status: 'paid', paid_at: ts, updatedAt: ts } })
+        // 发放 VIP 权益
+        await transaction.collection('users').where({ phone }).update({ data: {
+          vip_status: 1, vip_expire_at: String(newExpireAt),
+          vip_plan: vipItem.plan, updatedAt: ts,
+        } })
+      })
+    } catch (e) {
+      console.error('payOrder transaction failed:', e)
+      return httpFail('支付失败', 500)
     }
-    const baseExpire = Math.max(currentExpire, nowMsec)
-    const newExpireAt = baseExpire + days * 24 * 60 * 60 * 1000
-    await collection('users').where({ phone }).update({ data: {
-      vip_status: 1, vip_expire_at: String(newExpireAt),
-      vip_plan: vipItem.plan, updatedAt: ts,
-    } })
+  } else {
+    // 非 VIP 订单：仅更新订单状态
+    await collection('orders').where({ id }).update({ data: { status: 'paid', paid_at: ts, updatedAt: ts } })
   }
   return ok({ prepayId: `prepay_${id}`, status: 'paid' })
 }
 
 // POST /api/vip/order — VIP 套餐购买（事务：建订单+升级用户）
+// 把用户状态读取移入事务内，避免并发订单读到相同到期时间导致续期丢失
 const createVipOrder = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -148,30 +161,32 @@ const createVipOrder = async (ctx) => {
   const planConfig = VIP_PLANS[plan]
   if (!planConfig) return httpFail('无效的套餐')
   const { days, price } = planConfig
-  const nowMsec = Date.now()
   const orderId = uuid()
   const ts = now()
   const orderItems = [{ type: 'vip', plan, days, price }]
-  // 查询当前 VIP 状态计算新到期时间
-  const userRes = await collection('users').where({ phone }).limit(1).get()
-  let currentExpire = 0
-  if (userRes.data && userRes.data[0]) {
-    const u = userRes.data[0]
-    if (u.vip_status === 1 && u.vip_expire_at) currentExpire = parseInt(u.vip_expire_at, 10) || 0
-  }
-  const baseExpire = Math.max(currentExpire, nowMsec)
-  const newExpireAt = baseExpire + days * 24 * 60 * 60 * 1000
-  // 使用云数据库原生事务：建订单 + 升级用户，保证原子性
+  // 使用云数据库原生事务：在事务内读取用户当前状态 + 建订单 + 升级用户
+  // 保证原子性，避免并发订单读到相同到期时间
+  let newExpireAt = 0
   try {
-    await db.runTransaction(async (transaction) => {
+    newExpireAt = await db.runTransaction(async (transaction) => {
+      // 在事务内读取用户当前 VIP 状态
+      const userRes = await transaction.collection('users').where({ phone }).limit(1).get()
+      let currentExpire = 0
+      if (userRes.data && userRes.data[0]) {
+        const u = userRes.data[0]
+        if (u.vip_status === 1 && u.vip_expire_at) currentExpire = parseInt(u.vip_expire_at, 10) || 0
+      }
+      const baseExpire = Math.max(currentExpire, Date.now())
+      const expireAt = baseExpire + days * 24 * 60 * 60 * 1000
       await transaction.collection('orders').add({ data: {
         id: orderId, phone, items: orderItems, totalAmount: String(price),
         status: 'paid', contactName: '', contactPhone: '', address: '', note: '',
         paid_at: ts, createdAt: ts, updatedAt: ts,
       } })
       await transaction.collection('users').where({ phone }).update({ data: {
-        vip_status: 1, vip_expire_at: String(newExpireAt), vip_plan: plan, updatedAt: ts,
+        vip_status: 1, vip_expire_at: String(expireAt), vip_plan: plan, updatedAt: ts,
       } })
+      return expireAt
     })
   } catch (e) {
     console.error('vip order transaction failed:', e)

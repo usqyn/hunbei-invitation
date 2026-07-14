@@ -11,7 +11,7 @@ const fs = require('fs')
 const path = require('path')
 
 const SHARED_SRC = path.join(__dirname, '_shared', 'index.js')
-const FUNCTIONS = ['common', 'user', 'template', 'work', 'order', 'upload', 'poster', 'export']
+const FUNCTIONS = ['common', 'user', 'template', 'work', 'order', 'upload', 'poster', 'export', 'cleanup']
 
 if (!fs.existsSync(SHARED_SRC)) {
   console.error('❌ 找不到 _shared/index.js，请先创建公共代码')

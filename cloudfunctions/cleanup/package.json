@@ -1,0 +1,11 @@
+{
+  "name": "cleanup",
+  "version": "1.0.0",
+  "description": "婚贝请柬 cleanup 云函数：定时清理过期数据（sms_codes/events/footprints/recycle_bin/notifications）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest",
+    "jsonwebtoken": "^9.0.0",
+    "uuid": "^9.0.0"
+  }
+}

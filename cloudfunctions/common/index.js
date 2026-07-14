@@ -21,6 +21,7 @@ const {
   ADMIN_PHONE, DEV_CODE, IS_DEV,
   setSmsCode, getSmsCode, clearExpiredSmsCodes,
   getVersion, bumpVersion,
+  getCloudUrl, getCloudUrls,
 } = require('./_shared')
 
 // ============ 路由处理函数 ============
@@ -216,6 +217,42 @@ const updateFeedback = async (ctx) => {
   return okMsg('状态已更新')
 }
 
+// ============ 云存储 URL 刷新 ============
+// 用于解决云存储临时 URL（getTempFileURL 返回的 https URL）2 小时过期问题。
+// 前端图片加载失败时，调用此接口用 fileID 重新换取临时 URL。
+
+// POST /api/refresh-url — 单个 fileID 换取新临时 URL
+// 请求体：{ fileID: 'cloud://xxx' }
+// 响应：{ success, data: { url, fileID } }
+const refreshUrl = async (ctx) => {
+  const auth = requireAuth(ctx.event)
+  if (!auth.ok) return auth.body
+  const { fileID } = ctx.body
+  if (!fileID || typeof fileID !== 'string') return httpFail('缺少 fileID')
+  // 仅支持 cloud:// 协议（https URL 无法刷新）
+  if (!fileID.startsWith('cloud://')) return ok({ url: fileID, fileID })
+  const url = await getCloudUrl(fileID)
+  if (!url) return httpFail('获取临时 URL 失败', 500)
+  return ok({ url, fileID })
+}
+
+// POST /api/refresh-urls — 批量 fileID 换取临时 URL（单次最多 50 个）
+// 请求体：{ fileIDs: ['cloud://xxx', ...] }
+// 响应：{ success, data: [{ url, fileID }] }
+const refreshUrls = async (ctx) => {
+  const auth = requireAuth(ctx.event)
+  if (!auth.ok) return auth.body
+  const { fileIDs } = ctx.body
+  if (!fileIDs || !Array.isArray(fileIDs)) return httpFail('缺少 fileIDs 数组')
+  if (fileIDs.length > 50) return httpFail('单次最多 50 个 fileID')
+  const urls = await getCloudUrls(fileIDs)
+  const result = fileIDs.map((f, i) => ({
+    fileID: f,
+    url: typeof f === 'string' && f.startsWith('cloud://') ? (urls[i] || '') : f,
+  }))
+  return ok(result)
+}
+
 // ============ 路由表（顺序敏感：静态路由放在动态 :id 之前） ============
 const routes = [
   ['GET', '/api/health', getHealth],
@@ -229,6 +266,8 @@ const routes = [
   ['POST', '/api/feedback', submitFeedback],
   ['GET', '/api/feedback', listFeedback],
   ['PUT', '/api/feedback/:id', updateFeedback],
+  ['POST', '/api/refresh-url', refreshUrl],
+  ['POST', '/api/refresh-urls', refreshUrls],
 ]
 
 // ============ 云函数入口 ============

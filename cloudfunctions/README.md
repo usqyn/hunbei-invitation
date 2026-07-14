@@ -37,17 +37,18 @@ cloudfunctions/
 ├── _shared/                          # 公共代码源（不部署，仅供 build.js 复制）
 │   ├── index.js                      # db/auth/response/utils/upload/sms/version
 │   └── README.md
-├── common/                           # 健康检查/版本/登录/短信/事件追踪/反馈 (11 路由)
+├── common/                           # 健康检查/版本/登录/短信/事件追踪/反馈/URL刷新 (13 路由)
 │   ├── index.js
 │   ├── package.json
 │   └── config.json
-├── user/                             # 用户信息/VIP/足迹/通知/收藏 (15 路由)
-├── template/                         # 模板列表/详情/CRUD/相似/分类/商品 (9 路由)
+├── user/                             # 用户信息/VIP/足迹/通知/收藏 (13 路由)
+├── template/                         # 模板列表/详情/CRUD/相似/分类/商品 (10 路由)
 ├── work/                             # 作品 CRUD + 回收站 (7 路由)
-├── order/                            # 订单 + VIP 购买 (7 路由)
-├── upload/                           # 图片/字体/音乐上传 (7 路由)
+├── order/                            # 订单 + VIP 购买 (6 路由)
+├── upload/                           # 图片/字体/音乐上传 (6 路由)
 ├── poster/                           # 海报模板/作品/贴纸/统计 (17 路由)
 ├── export/                           # 请柬/海报导出 (2 路由)
+├── cleanup/                          # 定时清理过期数据（sms_codes/events/footprints/recycle_bin）
 ├── build.js                          # 部署前同步 _shared 到各函数
 ├── migrate-data.js                   # SQL→NoSQL 数据迁移
 ├── migrate-assets.js                 # 静态资源→云存储迁移
@@ -56,11 +57,11 @@ cloudfunctions/
 
 ## 云函数与路由清单
 
-共 8 个云函数，75 个路由（覆盖原 Express 全部 60+ 路径）：
+共 9 个云函数，79 个路由（覆盖原 Express 全部 60+ 路径）：
 
 | 函数 | 路由数 | 主要职责 |
 |---|---|---|
-| common | 11 | health/version/sms/login/track/feedback |
+| common | 13 | health/version/sms/login/track/feedback/refresh-url |
 | user | 13 | user/info/profile/vip/status/favorites/footprints/notifications |
 | template | 10 | categories/templates CRUD/similar/products |
 | work | 7 | works CRUD/recycle/restore/两段式删除 |
@@ -68,6 +69,7 @@ cloudfunctions/
 | upload | 6 | upload/image/fonts/music |
 | poster | 17 | poster templates/works/stickers/stats |
 | export | 2 | invitation/poster export |
+| cleanup | 0（定时触发） | 定时清理 sms_codes/events/footprints/recycle_bin/notifications |
 
 ## 部署步骤
 
@@ -124,9 +126,10 @@ tcb fn deploy order
 tcb fn deploy upload
 tcb fn deploy poster
 tcb fn deploy export
+tcb fn deploy cleanup  # 定时清理函数（config.json 已配置 cron 触发器）
 
 # 或一次性部署全部（需在 cloudfunctions/ 目录）
-tcb fn deploy common user template work order upload poster export
+tcb fn deploy common user template work order upload poster export cleanup
 ```
 
 ### 6. 配置 HTTP 访问服务
@@ -355,18 +358,28 @@ OPTIONS 预检请求直接返回 200 + CORS 头。
 
 ### 已知限制与后续优化
 
-1. **上传接口**：云函数不支持 multipart/form-data，当前实现 base64 JSON 方式。
-   前端 `src/api/index.ts` 的 `uploadImage` 仍用 `uni.uploadFile`（multipart），云函数模式下需改造为：
-   - 方案 A：前端读取文件转 base64，用 `uni.request` POST JSON
-   - 方案 B：小程序端用 `wx.cloud.uploadFile` 直传云存储，再调云函数更新数据库
-   
-2. **临时 URL 过期**：`getTempFileURL` 返回的 URL 约 2 小时过期。若前端长期缓存图片 URL，建议改为缓存 `cloud://` fileID，按需换取临时 URL。
+1. **上传接口**：云函数不支持 multipart/form-data，已实现 base64 JSON 方式。
+   前端 `src/api/index.ts` 的 `uploadImage` 在云函数模式下自动用 `readFileAsBase64`
+   + `uni.request` POST JSON；非云函数模式继续用 `uni.uploadFile` multipart。
+
+2. **临时 URL 过期**：`getTempFileURL` 返回的 URL 约 2 小时过期。
+   已实现完整解决方案：
+   - 后端 `common` 函数新增 `/api/refresh-url` 和 `/api/refresh-urls` 路由，用 fileID 换取新临时 URL
+   - 前端 `src/utils/url.ts` 提供 `resolveCloudUrl` / `resolveCloudUrlSync` / `invalidateCloudUrl`
+   - 前端 `src/components/CloudImage.vue` 组件封装了 cloud:// URL 解析 + 加载失败重试
+   - 内存缓存 1.5 小时（留 30 分钟余量），过期自动重新换取
 
 3. **IP 限流**：原 Express 的 `rateLimit` 中间件未迁移到云函数。云函数并发限制 + 网关层（API 网关 / CDN WAF）可替代。
 
-4. **事务**：云数据库 `db.runTransaction` 仅支持同一环境内多集合事务，不支持跨环境。`order` 和 `poster` 函数的复合操作已用事务保证原子性。
+4. **事务**：云数据库 `db.runTransaction` 仅支持同一环境内多集合事务，不支持跨环境。`order`（订单支付/VIP 购买）和 `poster`（作品保存/删除/恢复）函数的复合操作已用事务保证原子性。VIP 订单的用户状态读取已移入事务内，避免并发订单读到相同到期时间。
 
-5. **数据库清理**：原 Express 的定时清理任务（清理 30 天前 events/footprints/recycle_bin）未迁移。建议创建一个定时触发器云函数执行清理。
+5. **数据库清理**：已实现 `cleanup` 云函数，通过 `config.json` 配置定时触发器每天凌晨 3 点执行，清理：
+   - sms_codes：已过期验证码
+   - events/footprints/recycle_bin/recycle_bin_poster：30 天前记录
+   - notifications：90 天前已读通知
+   也支持管理员通过 `POST /cleanup` 手动触发。
+
+6. **通知广播**：`POST /api/notifications/send` 广播模式已分批化，默认每批 100 用户，通过 `page`/`size` 参数分页调用，返回 `hasMore`/`nextPage` 提示前端继续调用，避免单次超过云函数 60 秒超时。
 
 ## 与原 Express 实现的差异
 

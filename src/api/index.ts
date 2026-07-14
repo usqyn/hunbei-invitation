@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import { API_BASE, getRequestUrl } from '@/config'
+import { API_BASE, getRequestUrl, USE_CLOUD_FUNCTIONS } from '@/config'
 import type { PosterTemplate, PosterWork, PosterEditableAreaRuntime, StickerItem } from '@/types/poster'
 
 // ========== 用户相关 ==========
@@ -19,8 +19,13 @@ export function checkVipStatus() {
 }
 
 // ========== 图片上传 ==========
+
 function normalizeImageUrl(url: string): string {
   if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  if (url.startsWith('cloud://')) {
+    // cloud:// 协议 URL 需要后续换取 https 临时链接，这里原样返回
     return url
   }
   if (url.startsWith('/')) {
@@ -29,15 +34,150 @@ function normalizeImageUrl(url: string): string {
   return `${API_BASE}/${url}`
 }
 
-/** 上传图片到服务器，返回永久 URL */
+// MIME 与扩展名映射
+const EXT_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+}
+
+// 从文件路径中提取扩展名（小写）
+function getExtFromPath(filePath: string): string {
+  const m = String(filePath).match(/\.([a-zA-Z0-9]+)$/)
+  return m ? m[1].toLowerCase() : 'png'
+}
+
+// 读取文件为 base64 字符串
+// 微信小程序/H5 双端兼容：MP 用 FileSystemManager，H5 用 XMLHttpRequest + FileReader
+function readFileAsBase64(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // #ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ
+    // 小程序端：用 getFileSystemManager().readFile
+    try {
+      const fs = uni.getFileSystemManager()
+      fs.readFile({
+        filePath,
+        encoding: 'base64',
+        success: (res: any) => resolve(res.data as string),
+        fail: (err: any) => reject(new Error(err.errMsg || '读取文件失败')),
+      })
+    } catch (e: any) {
+      reject(new Error(e.message || 'getFileSystemManager 不可用'))
+    }
+    // #endif
+    // #ifdef H5
+    // H5 端：filePath 通常是 blob: URL，用 XHR 读取
+    try {
+      const xhr = new XMLHttpRequest()
+      xhr.open('GET', filePath, true)
+      xhr.responseType = 'blob'
+      xhr.onload = () => {
+        if (xhr.status !== 200) {
+          reject(new Error(`读取文件失败: ${xhr.status}`))
+          return
+        }
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          const result = reader.result as string
+          // data:application/octet-stream;base64,xxx 或 data:image/png;base64,xxx
+          const idx = result.indexOf(',')
+          if (idx === -1) {
+            reject(new Error('FileReader 解析失败'))
+            return
+          }
+          resolve(result.substring(idx + 1))
+        }
+        reader.onerror = () => reject(new Error('FileReader 读取失败'))
+        reader.readAsDataURL(xhr.response)
+      }
+      xhr.onerror = () => reject(new Error('XHR 请求失败'))
+      xhr.send()
+    } catch (e: any) {
+      reject(new Error(e.message || 'H5 文件读取异常'))
+    }
+    // #endif
+    // #ifdef APP-PLUS
+    // App 端：用 plus.io 读文件
+    try {
+      // @ts-ignore
+      plus.io.resolveLocalFileSystemURL(filePath, (entry: any) => {
+        entry.file((file: any) => {
+          const reader = new plus.io.FileReader()
+          reader.onloadend = (e: any) => {
+            const result = e.target.result as string
+            const idx = result.indexOf(',')
+            if (idx === -1) {
+              reject(new Error('App FileReader 解析失败'))
+              return
+            }
+            resolve(result.substring(idx + 1))
+          }
+          reader.onerror = () => reject(new Error('App FileReader 读取失败'))
+          reader.readAsDataURL(file)
+        })
+      }, () => reject(new Error('plus.io 解析文件路径失败')))
+    } catch (e: any) {
+      reject(new Error(e.message || 'App 文件读取异常'))
+    }
+    // #endif
+  })
+}
+
+/**
+ * 上传图片到服务器，返回永久 URL
+ *
+ * 云函数模式（USE_CLOUD_FUNCTIONS=1）：
+ *   把文件读为 base64 → POST JSON { image: 'data:image/png;base64,...' }
+ *   云函数不支持 multipart/form-data，必须用 base64 JSON
+ *
+ * 非云函数模式（dev 走 vite proxy）：
+ *   用 uni.uploadFile multipart/form-data
+ */
 export function uploadImage(filePath: string, onProgress?: (progress: number) => void): Promise<string> {
+  // 云函数模式：base64 JSON 上传
+  if (USE_CLOUD_FUNCTIONS) {
+    return uploadImageViaBase64(filePath, onProgress)
+  }
+  // 非云函数模式：multipart 上传（兼容旧 Express）
+  return uploadImageViaMultipart(filePath, onProgress)
+}
+
+// 云函数模式：base64 JSON
+async function uploadImageViaBase64(filePath: string, onProgress?: (progress: number) => void): Promise<string> {
+  // 通知进度：读取阶段 30% → 上传阶段 100%
+  if (onProgress) onProgress(10)
+  const base64 = await readFileAsBase64(filePath)
+  if (onProgress) onProgress(40)
+  const ext = getExtFromPath(filePath)
+  const mime = EXT_MIME[ext] || 'image/jpeg'
+  const dataUrl = `data:${mime};base64,${base64}`
+  if (onProgress) onProgress(60)
+  try {
+    const res = await request<{ url: string; cloudFileID?: string }>({
+      url: '/api/upload/image',
+      method: 'POST',
+      data: { image: dataUrl },
+      hideLoading: true,
+    })
+    if (onProgress) onProgress(100)
+    if (!res || !res.url) throw new Error('上传响应缺少 url')
+    return normalizeImageUrl(res.url)
+  } catch (e) {
+    if (onProgress) onProgress(0)
+    throw e
+  }
+}
+
+// 非云函数模式：multipart/form-data（兼容旧 Express）
+function uploadImageViaMultipart(filePath: string, onProgress?: (progress: number) => void): Promise<string> {
   let uploadTask: UniApp.UploadTask | undefined
   return Promise.race([
     new Promise<string>((resolve, reject) => {
       const token = uni.getStorageSync('token') || ''
       uploadTask = uni.uploadFile({
-        // 云函数模式下按 path 前缀分发到 upload 云函数 HTTP 触发器；
-        // 非云函数模式退化为 API_BASE + path（走 vite proxy）
+        // 非云函数模式：API_BASE + path（走 vite proxy）
         url: getRequestUrl('/api/upload/image'),
         filePath,
         name: 'image',

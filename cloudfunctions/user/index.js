@@ -206,22 +206,40 @@ const deleteNotification = async (ctx) => {
 }
 
 // POST /api/notifications/send (admin) — 发送通知（单用户或全体广播）
+// 广播模式分批处理：默认每批 100 用户，通过 page 参数分页调用，避免单次超过云函数 60 秒超时
 const sendNotification = async (ctx) => {
   const auth = requireAdmin(ctx.event)
   if (!auth.ok) return auth.body
-  const { phone, title, content, type } = ctx.body
+  const { phone, title, content, type, page, size } = ctx.body
   if (!title) return httpFail('缺少 title')
   const ts = now()
   if (phone) {
+    // 单发
     await collection('notifications').add({ data: { phone, title, content: content || '', type: type || 'system', read: 0, createdAt: ts } })
-  } else {
-    // 广播：遍历所有用户
-    const users = await collection('users').limit(1000).get()
-    for (const u of (users.data || [])) {
-      await collection('notifications').add({ data: { phone: u.phone, title, content: content || '', type: type || 'system', read: 0, createdAt: ts } })
-    }
+    return ok({ sent: 1, total: 1, hasMore: false, page: 1 })
   }
-  return okMsg('通知已发送')
+  // 广播：分批处理
+  const pageNum = Math.max(1, parseInt(page, 10) || 1)
+  const pageSize = Math.min(parseInt(size, 10) || 100, 500)
+  const skip = (pageNum - 1) * pageSize
+  const users = await collection('users').skip(skip).limit(pageSize).get()
+  for (const u of (users.data || [])) {
+    await collection('notifications').add({ data: {
+      phone: u.phone, title, content: content || '', type: type || 'system', read: 0, createdAt: ts,
+    } })
+  }
+  // 返回是否还有更多用户需要发送
+  const totalRes = await collection('users').count()
+  const totalUsers = totalRes.total || 0
+  const hasMore = skip + pageSize < totalUsers
+  return ok({
+    sent: (users.data || []).length,
+    total: totalUsers,
+    hasMore,
+    page: pageNum,
+    nextPage: hasMore ? pageNum + 1 : null,
+    message: hasMore ? `已发送第 ${pageNum} 批，请继续调用 page=${pageNum + 1}` : '全部发送完成',
+  })
 }
 
 // ============ 路由表 ============
