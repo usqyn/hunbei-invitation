@@ -68,6 +68,7 @@
       <!-- 画布模式：全屏画布（去除右侧面板，最大化预览区） -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
         <scroll-view class="preview-scroll" scroll-y>
+          <view class="preview-scroll__inner">
           <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
           <template v-if="editorStore.renderedImage && !renderedImageStale">
             <view class="rendered-image-container animate-fade-in-scale">
@@ -159,6 +160,7 @@
               </view>
             </view>
           </template>
+          </view>
         </scroll-view>
       </view>
     </view>
@@ -783,8 +785,12 @@ function handleReset() {
 }
 
 function handleRemoveWatermark() {
+  if (isExporting) return
   if (userStore.isVip()) {
-    doExport({ watermark: false, quality: 'high' })
+    isExporting = true
+    doExport({ watermark: false, quality: 'high' }).finally(() => {
+      isExporting = false
+    })
   } else {
     uni.showModal({
       title: '高清无水印导出',
@@ -1847,10 +1853,14 @@ onUnmounted(() => {
   flex: 1;
   height: 100%;
   min-height: 0;
+}
+
+.preview-scroll__inner {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 100%;
   padding: 24rpx 0;
 }
 
@@ -1902,11 +1912,11 @@ onUnmounted(() => {
 
 .preview-card--canvas {
   display: block;
+  box-sizing: border-box;
   padding: 24rpx;
-  gap: 0;
   position: relative;
-  border-radius: 0;
-  overflow: visible;
+  border-radius: 24rpx;
+  overflow: hidden;
   margin: 0 auto;
   max-width: 720rpx;
   width: calc(100% - 48rpx);

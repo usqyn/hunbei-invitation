@@ -58,12 +58,11 @@ export function useCanvasRender(options: {
   const canvasCardStyle = computed(() => {
     const w = canvasWidth.value
     const h = canvasHeight.value
+    // 只管尺寸比例，width/maxWidth/margin 交给 CSS 类控制
+    // 避免内联样式覆盖 CSS 导致 box-sizing + padding 溢出
     return {
       aspectRatio: `${w} / ${h}`,
       height: cardHeight.value > 0 ? cardHeight.value + 'px' : undefined,
-      width: '100%',
-      margin: '0 auto',
-      maxWidth: '680rpx',
     }
   })
 

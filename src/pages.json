@@ -30,6 +30,12 @@
       "style": {
         "navigationBarTitleText": "模板广场"
       }
+    },
+    {
+      "path": "pages/mall/index",
+      "style": {
+        "navigationBarTitleText": "婚礼商城"
+      }
     }
   ],
   "subPackages": [
@@ -81,12 +87,6 @@
     {
       "root": "pages/mall",
       "pages": [
-        {
-          "path": "index",
-          "style": {
-            "navigationBarTitleText": "婚礼商城"
-          }
-        },
         {
           "path": "cart",
           "style": {

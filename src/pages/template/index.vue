@@ -301,8 +301,6 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
       if (cat && cat.name.toLowerCase().includes(kw)) return true
       // 标签
       if (t.tags && t.tags.some(tag => tag.toLowerCase().includes(kw))) return true
-      // 元素内容（文字元素文本）
-      if (t.elements && t.elements.some(el => el.text && el.text.toLowerCase().includes(kw))) return true
       return false
     })
   }
@@ -486,9 +484,7 @@ function onSelectTemplate(template: TemplateItem) {
 
 function getImageUrl(template: TemplateItem): string {
   if (template.cover) return resolveUrl(template.cover)
-  if ((template as any).data?.coverImage) return resolveUrl((template as any).data.coverImage)
-  const firstImg = template.elements?.find((e: any) => e.type === 'image')
-  if (firstImg?.text) return resolveUrl(firstImg.text)
+  if (template.image) return resolveUrl(template.image)
   return '/static/images/templates/wedding-1.svg'
 }
 
@@ -499,9 +495,11 @@ function getCoverStyle(template: TemplateItem): Record<string, string> {
   const cs = template.canvasSize
   // 没有尺寸信息时用默认竖版比例
   if (!cs || !cs.width || !cs.height) {
-    return { aspectRatio: '375 / 667' }
+    return { paddingTop: '177.87%' }  // 667/375 * 100% = 177.87%
   }
-  return { aspectRatio: `${cs.width} / ${cs.height}` }
+  // 用 paddingTop 百分比代替 aspect-ratio（小程序兼容性更好）
+  const ratio = (cs.height / cs.width * 100).toFixed(2)
+  return { paddingTop: ratio + '%' }
 }
 
 function onImageError(e: any, template: TemplateItem) {
@@ -843,12 +841,16 @@ function onBack() {
 .cover-wrap {
   position: relative;
   width: 100%;
+  height: 0;  /* padding-top 撑高方案：height:0 + paddingTop% */
   background: linear-gradient(135deg, #f0f0f5 0%, #e8e8f0 100%);
   overflow: hidden;
 }
 
 /* 封面图 */
 .template-cover {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   display: block;

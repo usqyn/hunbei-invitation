@@ -193,6 +193,7 @@ export interface TemplateItem {
   renderedImage?: string
   // 付费相关字段
   is_paid?: boolean
+  is_premium?: boolean
   price?: number
   vip_free?: boolean
 }
