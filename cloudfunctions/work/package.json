@@ -1,0 +1,11 @@
+{
+  "name": "work",
+  "version": "1.0.0",
+  "description": "婚贝请柬 work 云函数：作品 CRUD + 回收站",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest",
+    "jsonwebtoken": "^9.0.0",
+    "uuid": "^9.0.0"
+  }
+}

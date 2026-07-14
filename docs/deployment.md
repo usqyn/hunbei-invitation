@@ -31,8 +31,8 @@
 ### 2.1 克隆代码
 
 ```bash
-git clone <your-repo-url> hunbei
-cd hunbei
+git clone <your-repo-url> TOYtamaxia
+cd TOYtamaxia
 ```
 
 ### 2.2 配置环境变量
@@ -198,7 +198,7 @@ docker compose restart nginx
 sudo certbot renew --dry-run
 
 # 添加定时任务（每天检查，每 60 天续期一次）
-echo "0 3 * * * certbot renew --quiet && docker compose -f /path/to/hunbei/docker-compose.yml restart nginx" | sudo tee /etc/cron.d/certbot-renew
+echo "0 3 * * * certbot renew --quiet && docker compose -f /path/to/TOYtamaxia/docker-compose.yml restart nginx" | sudo tee /etc/cron.d/certbot-renew
 ```
 
 ---
@@ -218,22 +218,22 @@ echo "0 3 * * * certbot renew --quiet && docker compose -f /path/to/hunbei/docke
 ```bash
 #!/bin/bash
 # backup.sh - 数据备份脚本
-BACKUP_DIR="/backup/hunbei/$(date +%Y%m%d_%H%M%S)"
+BACKUP_DIR="/backup/TOYtamaxia/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 
 # 备份数据库（从 Docker 卷复制）
-docker cp hunbei-server:/app/data.db "$BACKUP_DIR/data.db"
-docker cp hunbei-server:/app/poster.db "$BACKUP_DIR/poster.db"
+docker cp TOYtamaxia-server:/app/data.db "$BACKUP_DIR/data.db"
+docker cp TOYtamaxia-server:/app/poster.db "$BACKUP_DIR/poster.db"
 
 # 备份上传文件
-docker cp hunbei-server:/app/uploads "$BACKUP_DIR/uploads"
+docker cp TOYtamaxia-server:/app/uploads "$BACKUP_DIR/uploads"
 
 # 压缩
 tar -czf "$BACKUP_DIR.tar.gz" -C "$BACKUP_DIR" .
 rm -rf "$BACKUP_DIR"
 
 # 清理 7 天前的备份
-find /backup/hunbei -name "*.tar.gz" -mtime +7 -delete
+find /backup/TOYtamaxia -name "*.tar.gz" -mtime +7 -delete
 
 echo "备份完成: $BACKUP_DIR.tar.gz"
 ```
@@ -242,7 +242,7 @@ echo "备份完成: $BACKUP_DIR.tar.gz"
 
 ```bash
 # 每天凌晨 2 点自动备份
-echo "0 2 * * * /path/to/backup.sh >> /var/log/hunbei-backup.log 2>&1" | sudo tee /etc/cron.d/hunbei-backup
+echo "0 2 * * * /path/to/backup.sh >> /var/log/TOYtamaxia-backup.log 2>&1" | sudo tee /etc/cron.d/TOYtamaxia-backup
 ```
 
 ### 5.4 数据恢复
@@ -253,11 +253,11 @@ docker compose down
 
 # 恢复数据库
 docker compose up -d server
-docker cp /backup/data.db hunbei-server:/app/data.db
-docker cp /backup/poster.db hunbei-server:/app/poster.db
+docker cp /backup/data.db TOYtamaxia-server:/app/data.db
+docker cp /backup/poster.db TOYtamaxia-server:/app/poster.db
 
 # 恢复上传文件
-docker cp /backup/uploads/. hunbei-server:/app/uploads/
+docker cp /backup/uploads/. TOYtamaxia-server:/app/uploads/
 
 # 重启服务
 docker compose restart server
@@ -308,7 +308,7 @@ curl https://your-domain.com/health
 
 ```bash
 # 查看容器资源使用
-docker stats hunbei-server hunbei-nginx
+docker stats TOYtamaxia-server TOYtamaxia-nginx
 
 # 查看磁盘空间
 df -h
@@ -321,10 +321,10 @@ du -sh /var/lib/docker/volumes/*
 
 ```bash
 # 进入服务端容器
-docker exec -it hunbei-server sh
+docker exec -it TOYtamaxia-server sh
 
 # 进入 Nginx 容器
-docker exec -it hunbei-nginx sh
+docker exec -it TOYtamaxia-nginx sh
 ```
 
 ---
@@ -429,7 +429,7 @@ docker compose ps
 docker compose logs --tail=50 server
 
 # 检查服务端健康状态
-docker exec hunbei-server wget -qO- http://localhost:3001/api/health
+docker exec TOYtamaxia-server wget -qO- http://localhost:3001/api/health
 
 # 如果服务端未启动，重新启动
 docker compose up -d server
@@ -474,7 +474,7 @@ truncate -s 0 /var/lib/docker/containers/*/*-json.log
 ## 9. 目录结构说明
 
 ```
-hunbei/
+TOYtamaxia/
 ├── server/                 # Express 服务端
 │   ├── Dockerfile          # 服务端容器构建文件
 │   ├── .dockerignore       # Docker 构建忽略列表

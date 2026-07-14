@@ -1699,7 +1699,7 @@ function onExportPNG() {
   const dataUrl = canvas.toDataURL('image/png')
   const a = document.createElement('a')
   a.href = dataUrl
-  a.download = `hunbei-template-${Date.now()}.png`
+  a.download = `TOYtamaxia-template-${Date.now()}.png`
   a.click()
 }
 
@@ -1713,7 +1713,7 @@ function onTemplatePublished(data: { id: string; name: string; category: string;
 }
 
 // ============ 本地草稿自动保存 ============
-const DRAFT_KEY = 'hunbei-draft-v1'
+const DRAFT_KEY = 'TOYtamaxia-draft-v1'
 const AUTO_SAVE_INTERVAL = 30_000 // 30 秒
 
 function saveDraftToLocal() {

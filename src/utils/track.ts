@@ -15,7 +15,7 @@ function getSessionId(): string {
 
 function getUserId(): string {
   try {
-    const user = uni.getStorageSync('hunbei_user')
+    const user = uni.getStorageSync('TOYtamaxia_user')
     return user?.phone || ''
   } catch {
     return ''

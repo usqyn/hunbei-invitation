@@ -8,8 +8,8 @@ import { request } from '@/utils/request'
 import { getStorage, setStorage } from '@/utils/storage'
 import { loadFontsForElements } from '@/utils/font-loader'
 
-const STORAGE_KEY_TEMPLATE = 'hunbei_current_template'
-const STORAGE_KEY_TEMPLATE_DATA = 'hunbei_current_template_data'
+const STORAGE_KEY_TEMPLATE = 'TOYtamaxia_current_template'
+const STORAGE_KEY_TEMPLATE_DATA = 'TOYtamaxia_current_template_data'
 
 export const useEditorStore = defineStore('editor', () => {
   const showTextEditor = ref(false)

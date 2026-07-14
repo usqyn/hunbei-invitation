@@ -3,7 +3,7 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR = '/tmp/hunbei-invitation/uploads/poster/stickers'
+OUT_DIR = '/tmp/TOYtamaxia-invitation/uploads/poster/stickers'
 os.makedirs(OUT_DIR, exist_ok=True)
 
 SIZE = 256

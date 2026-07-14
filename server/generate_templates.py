@@ -4,7 +4,7 @@ import os
 import math
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR = '/tmp/hunbei-invitation/uploads/poster/templates'
+OUT_DIR = '/tmp/TOYtamaxia-invitation/uploads/poster/templates'
 os.makedirs(OUT_DIR, exist_ok=True)
 
 W, H = 750, 1334  # Poster size

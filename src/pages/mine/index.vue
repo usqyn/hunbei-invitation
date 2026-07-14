@@ -111,7 +111,7 @@
     </view>
 
     <view class="footer safe-area-bottom">
-      <text class="copyright">网页版 www.hunbei.com</text>
+      <text class="copyright">网页版 www.TOYtamaxia.com</text>
     </view>
   </view>
 </template>

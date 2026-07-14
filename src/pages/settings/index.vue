@@ -49,8 +49,8 @@
           </view>
           <view class="about-section">
             <text class="about-section-title">联系我们</text>
-            <text class="about-text">官方邮箱：support@hunbei.com</text>
-            <text class="about-text">官方微信：hunbei_official</text>
+            <text class="about-text">官方邮箱：support@TOYtamaxia.com</text>
+            <text class="about-text">官方微信：TOYtamaxia_official</text>
           </view>
           <view class="about-section">
             <text class="about-section-title">特别说明</text>
@@ -79,9 +79,9 @@ const handleClearCache = () => {
     success: (res) => {
       if (res.confirm) {
         // 只清除编辑器缓存和模板缓存，保留用户作品和登录态
-        uni.removeStorageSync('hunbei_current_template')
-        uni.removeStorageSync('hunbei_current_template_data')
-        uni.removeStorageSync('hunbei_template')
+        uni.removeStorageSync('TOYtamaxia_current_template')
+        uni.removeStorageSync('TOYtamaxia_current_template_data')
+        uni.removeStorageSync('TOYtamaxia_template')
         uni.removeStorageSync('mall_cart')
         uni.removeStorageSync('mall_orders')
         uni.removeStorageSync('track_queue')

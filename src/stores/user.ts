@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { request } from '@/utils/request'
 import { resolveUrl } from '@/utils/url'
 
-const STORAGE_KEY = 'hunbei_user'
+const STORAGE_KEY = 'TOYtamaxia_user'
 
 export const useUserStore = defineStore('user', () => {
   const isLoggedIn = ref(false)

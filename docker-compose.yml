@@ -5,7 +5,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: hunbei-server
+    container_name: TOYtamaxia-server
     restart: unless-stopped
     ports:
       - "3001:3001"
@@ -28,7 +28,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: hunbei-nginx
+    container_name: TOYtamaxia-nginx
     restart: unless-stopped
     ports:
       - "80:80"

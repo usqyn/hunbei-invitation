@@ -381,7 +381,7 @@ function onCopyLink() {
   const query = params.length ? '?' + params.join('&') : ''
   const previewPath = '/pages/preview/index' + query
   // 优先使用当前 H5 站点真实地址，无法获取时回退到默认域名
-  let link = 'https://h5.hunbei.com/#' + previewPath
+  let link = 'https://h5.TOYtamaxia.com/#' + previewPath
   try {
     const w = (typeof window !== 'undefined' ? window : null) as any
     if (w && w.location && w.location.origin) {

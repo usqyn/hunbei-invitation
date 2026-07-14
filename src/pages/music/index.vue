@@ -105,7 +105,7 @@ import type { Music } from '@/types'
 const templateStore = useTemplateStore()
 const { haptic } = useFeedback()
 
-const UPLOADED_MUSIC_STORAGE_KEY = 'hunbei_uploaded_music'
+const UPLOADED_MUSIC_STORAGE_KEY = 'TOYtamaxia_uploaded_music'
 
 // 页面标题（支持从导航参数设置）
 const pageTitle = ref('音乐库')

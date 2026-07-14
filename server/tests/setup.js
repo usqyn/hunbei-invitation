@@ -16,7 +16,7 @@ const jwt = require('jsonwebtoken')
 
 // ===== 关键：环境变量必须在 require('../index') 之前设置 =====
 // 与服务端共享同一个 JWT_SECRET，以便测试签发的 token 能通过服务端校验
-process.env.JWT_SECRET = 'hunbei-test-secret'
+process.env.JWT_SECRET = 'TOYtamaxia-test-secret'
 process.env.NODE_ENV = 'test'
 // 管理员手机号（与 middleware/auth.js 默认值保持一致）
 process.env.ADMIN_PHONE = process.env.ADMIN_PHONE || '13800138000'
@@ -24,7 +24,7 @@ process.env.ADMIN_PHONE = process.env.ADMIN_PHONE || '13800138000'
 process.env.DEV_CODE = process.env.DEV_CODE || '000000'
 
 // 每个测试进程使用独立的临时数据库文件，绝不触碰真实的 data.db / poster.db
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hunbei-test-'))
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'TOYtamaxia-test-'))
 process.env.DB_PATH = path.join(tmpDir, 'test-data.db')
 process.env.POSTER_DB_PATH = path.join(tmpDir, 'test-poster.db')
 

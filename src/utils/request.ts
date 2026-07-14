@@ -1,4 +1,4 @@
-import { API_BASE } from '@/config'
+import { getRequestUrl } from '@/config'
 
 let loadingCount = 0
 
@@ -36,7 +36,9 @@ export function request<T = any>(options: string | {
   if (!options.hideLoading) showLoadingSafe()
   return new Promise((resolve, reject) => {
     uni.request({
-      url: API_BASE + options.url,
+      // 云函数模式下按 path 前缀分发到对应云函数 HTTP 触发器；
+      // 非云函数模式（dev）退化为 API_BASE + path（走 vite proxy）
+      url: getRequestUrl(options.url),
       method: (options.method as any) || 'GET',
       data: options.data,
       header,
@@ -55,7 +57,7 @@ export function request<T = any>(options: string | {
             _isRedirecting = true
             try {
               uni.removeStorageSync('token')
-              uni.removeStorageSync('hunbei_user')
+              uni.removeStorageSync('TOYtamaxia_user')
               // 延迟重置 userStore 内存状态（避免循环依赖）
               import('@/stores/user').then(({ useUserStore }) => {
                 try {

@@ -6,7 +6,7 @@ export interface UseAutoSaveOptions {
 }
 
 export function useAutoSave(options: UseAutoSaveOptions) {
-  const DRAFT_KEY = 'hunbei-draft-v1'
+  const DRAFT_KEY = 'TOYtamaxia-draft-v1'
   const AUTO_SAVE_INTERVAL = 30_000
 
   const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)

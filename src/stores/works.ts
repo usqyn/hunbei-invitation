@@ -5,7 +5,7 @@ import { useUserStore } from './user'
 import { addFavorite, removeFavorite, fetchFavorites, saveWorkApi, updateWorkApi, fetchWorksApi, deleteWorkApi } from '@/api'
 import { resolveUrl } from '@/utils/url'
 
-const STORAGE_KEY = 'hunbei_works'
+const STORAGE_KEY = 'TOYtamaxia_works'
 
 export const useWorksStore = defineStore('works', () => {
   const works = ref<Work[]>([])

@@ -1,0 +1,11 @@
+{
+  "name": "order",
+  "version": "1.0.0",
+  "description": "婚贝请柬 order 云函数：订单 + VIP 购买 + 商品",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest",
+    "jsonwebtoken": "^9.0.0",
+    "uuid": "^9.0.0"
+  }
+}

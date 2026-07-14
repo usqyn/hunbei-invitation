@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import { API_BASE } from '@/config'
+import { API_BASE, getRequestUrl } from '@/config'
 import type { PosterTemplate, PosterWork, PosterEditableAreaRuntime, StickerItem } from '@/types/poster'
 
 // ========== 用户相关 ==========
@@ -36,7 +36,9 @@ export function uploadImage(filePath: string, onProgress?: (progress: number) =>
     new Promise<string>((resolve, reject) => {
       const token = uni.getStorageSync('token') || ''
       uploadTask = uni.uploadFile({
-        url: `${API_BASE}/api/upload/image`,
+        // 云函数模式下按 path 前缀分发到 upload 云函数 HTTP 触发器；
+        // 非云函数模式退化为 API_BASE + path（走 vite proxy）
+        url: getRequestUrl('/api/upload/image'),
         filePath,
         name: 'image',
         header: token ? { Authorization: `Bearer ${token}` } : {},

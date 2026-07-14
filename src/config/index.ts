@@ -10,6 +10,88 @@ export const API_BASE = _envBase !== undefined ? _envBase : 'http://localhost:30
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:3001'
 // #endif
 
+// ============ 云开发（CloudBase）配置 ============
+// 云函数 HTTP 触发器 URL 形如：https://{envId}.service.tcloudbase.com/{functionName}
+// 当 VITE_USE_CLOUD=1 时启用云函数模式，请求会按 path 前缀分发到对应云函数。
+// H5 dev 默认关闭（走 vite proxy → 旧 Express 服务），生产环境通过 .env.production 开启。
+const CLOUD_ENV_ID = import.meta.env.VITE_CLOUD_ENV_ID || 'cloud1-d1g9id3fjffcefe0d'
+export const CLOUD_BASE = import.meta.env.VITE_CLOUD_BASE || `https://${CLOUD_ENV_ID}.service.tcloudbase.com`
+export const USE_CLOUD_FUNCTIONS = import.meta.env.VITE_USE_CLOUD === '1' || import.meta.env.VITE_USE_CLOUD === 'true'
+
+// 8 个云函数名常量
+export const FN = {
+  common: 'common',
+  user: 'user',
+  template: 'template',
+  work: 'work',
+  order: 'order',
+  upload: 'upload',
+  poster: 'poster',
+  export: 'export',
+} as const
+
+// 根据 API path 返回对应的云函数名
+// 路由分发规则（按 path 前缀匹配，注意顺序：更具体的路径优先）：
+//   /api/poster/*           → poster
+//   /api/export*            → export
+//   /api/upload*            → upload
+//   /api/fonts*             → upload
+//   /api/music*             → upload
+//   /api/orders*            → order
+//   /api/vip/order          → order（注意：/api/vip/status 归 user）
+//   /api/works*             → work
+//   /api/categories         → template
+//   /api/templates*         → template
+//   /api/products*         → template
+//   /api/user/login        → common（登录走 common 函数）
+//   /api/user/info         → user
+//   /api/user/profile      → user
+//   /api/vip/status        → user
+//   /api/favorites*        → user
+//   /api/footprints*       → user
+//   /api/notifications*    → user
+//   其余（health/version/sms/admin/login/track/feedback）→ common
+export function getFunctionName(path: string): string {
+  // 优先匹配更具体的路径
+  if (path.startsWith('/api/poster/')) return FN.poster
+  if (path.startsWith('/api/export')) return FN.export
+  if (path.startsWith('/api/upload')) return FN.upload
+  if (path.startsWith('/api/fonts')) return FN.upload
+  if (path.startsWith('/api/music')) return FN.upload
+  if (path.startsWith('/api/orders')) return FN.order
+  if (path === '/api/vip/order' || path.startsWith('/api/vip/order')) return FN.order
+  if (path.startsWith('/api/works')) return FN.work
+  if (path === '/api/categories' || path.startsWith('/api/templates') || path.startsWith('/api/products')) return FN.template
+  // /api/user/login 走 common；其余 /api/user/* 走 user
+  if (path === '/api/user/login') return FN.common
+  if (path.startsWith('/api/user/') || path === '/api/user/info' || path === '/api/user/profile') return FN.user
+  if (path === '/api/vip/status' || path.startsWith('/api/favorites') || path.startsWith('/api/footprints') || path.startsWith('/api/notifications')) return FN.user
+  // 其余路径（health/version/sms/send/admin/login/track/feedback）走 common
+  return FN.common
+}
+
+// 根据 API path 返回对应的云函数 URL（不含 api path 本身）
+// 例如 /api/poster/templates → https://xxx.service.tcloudbase.com/poster
+// 非云函数模式返回 API_BASE（dev 走 vite proxy）
+export function getCloudFunctionUrl(path: string): string {
+  if (USE_CLOUD_FUNCTIONS) {
+    const fn = getFunctionName(path)
+    return `${CLOUD_BASE}/${fn}`
+  }
+  return API_BASE
+}
+
+// 根据 API path 返回完整的请求 URL（云函数基址 + api path）
+// - 云函数模式：CLOUD_BASE + '/' + functionName + path
+//   例如 /api/poster/templates → https://xxx.service.tcloudbase.com/poster/api/poster/templates
+// - 非云函数模式（dev）：API_BASE + path（走 vite proxy 或旧服务）
+export function getRequestUrl(path: string): string {
+  if (USE_CLOUD_FUNCTIONS) {
+    return `${getCloudFunctionUrl(path)}${path}`
+  }
+  return `${API_BASE}${path}`
+}
+
 // ============ 应用版本 ============
 // 从 package.json 读取版本号，避免硬编码导致版本不一致
 import pkg from '../../package.json'

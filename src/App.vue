@@ -4,7 +4,7 @@ import { flushTrackQueue } from '@/utils/track'
 
 onLaunch(() => {
   try {
-    const saved = uni.getStorageSync('hunbei_user')
+    const saved = uni.getStorageSync('TOYtamaxia_user')
     if (saved?.token) {
       uni.setStorageSync('token', saved.token)
     }

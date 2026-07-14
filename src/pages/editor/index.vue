@@ -1459,7 +1459,7 @@ function findWork(workId: string): Work | undefined {
   const fromStore = worksStore.works.find(w => w.id === workId) || worksStore.drafts.find(w => w.id === workId)
   if (fromStore) return fromStore
   try {
-    const saved = uni.getStorageSync('hunbei_works')
+    const saved = uni.getStorageSync('TOYtamaxia_works')
     if (saved) {
       const all = [...(saved.works || []), ...(saved.drafts || [])]
       return all.find((w: Work) => w.id === workId)

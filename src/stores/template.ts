@@ -6,7 +6,7 @@ import { request } from '@/utils/request'
 import { resolveUrl } from '@/utils/url'
 import { useEditorStore } from './editor'
 
-const STORAGE_KEY = 'hunbei_template'
+const STORAGE_KEY = 'TOYtamaxia_template'
 
 export const useTemplateStore = defineStore('template', () => {
   const templateData = reactive<TemplateData>({ ...DEFAULT_TEMPLATE_DATA })
