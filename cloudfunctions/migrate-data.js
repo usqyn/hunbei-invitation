@@ -106,9 +106,11 @@ const migrateTable = async (sqlDb, tableMap, db, stats) => {
         const data = { ...doc }
         if (pk && data[pk] !== undefined && data[pk] !== null) {
           // 有主键：用 doc(_id).set() 原子替换（upsert 语义，不存在则创建，存在则替换）
-          // _id 不能是数字类型，需转字符串
-          data._id = String(data[pk])
-          await db.collection(collName).doc(data._id).set({ data })
+          // _id 不能是数字类型，需转字符串；set 时 data 中不应包含 _id
+          const _id = String(data[pk])
+          delete data._id
+          // 保留原始 pk 字段值作为普通字段写入
+          await db.collection(collName).doc(_id).set({ data })
         } else {
           // 无主键：直接 add（_id 自动生成）
           await db.collection(collName).add({ data })

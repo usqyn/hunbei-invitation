@@ -23,6 +23,42 @@ if (!JWT_SECRET) {
   process.exit(1)
 }
 
+// ============ 微信小程序配置 ============
+const WECHAT_APPID = process.env.WECHAT_APPID || ''
+const WECHAT_SECRET = process.env.WECHAT_SECRET || ''
+
+async function jscode2session(code) {
+  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(WECHAT_APPID)}&secret=${encodeURIComponent(WECHAT_SECRET)}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`
+  try {
+    const resp = await fetch(url)
+    const data = await resp.json()
+    if (data.errcode) {
+      throw new Error(`微信登录验证失败: ${data.errmsg || data.errcode}`)
+    }
+    return data
+  } catch (e) {
+    if (e.message.startsWith('微信登录验证失败')) throw e
+    throw new Error('调用微信登录验证接口失败')
+  }
+}
+
+function decryptWeChatData(sessionKey, encryptedData, iv) {
+  try {
+    const sessionKeyBuf = Buffer.from(sessionKey, 'base64')
+    const encryptedDataBuf = Buffer.from(encryptedData, 'base64')
+    const ivBuf = Buffer.from(iv, 'base64')
+    const decipher = crypto.createDecipheriv('aes-128-cbc', sessionKeyBuf, ivBuf)
+    decipher.setAutoPadding(false)
+    let decrypted = decipher.update(encryptedDataBuf)
+    decrypted = Buffer.concat([decrypted, decipher.final()])
+    const pad = decrypted[decrypted.length - 1]
+    decrypted = decrypted.slice(0, decrypted.length - pad)
+    return JSON.parse(decrypted.toString('utf8'))
+  } catch (e) {
+    throw new Error('解密微信手机号失败')
+  }
+}
+
 let SQL, db
 // 允许通过环境变量覆盖数据库路径（测试时指向临时文件，避免污染真实 data.db）
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data.db')
@@ -572,21 +608,20 @@ app.post('/api/sms/send', rateLimit(), (req, res) => {
 })
 
 // 用户登录
-app.post('/api/user/login', rateLimit(), (req, res) => {
+app.post('/api/user/login', rateLimit(), async (req, res) => {
   const { phone, code } = req.body
 
   // 微信小程序登录（encryptedData 模式）
   if (req.body.encryptedData && req.body.code) {
-    // TODO: 生产环境应调用微信 wx.login 接口进行服务端验签（jscode2session + 解密 encryptedData）
-    // 当前为演示环境，未做真正的微信服务端校验，仅做基本防护
-
-    // 基本防护 1：对 encryptedData 做格式校验（非空字符串且长度合理，防止恶意构造超大请求）
     const encryptedData = req.body.encryptedData
+    const iv = req.body.iv || ''
+
+    // 基本防护：对 encryptedData 做格式校验
     if (typeof encryptedData !== 'string' || encryptedData.length === 0 || encryptedData.length > 10 * 1024) {
       return res.status(400).json({ success: false, error: 'encryptedData 格式不正确' })
     }
 
-    // 基本防护 2：限制同一 IP 每小时最多创建 5 个微信用户，防止滥用
+    // 基本防护：限制同一 IP 每小时最多创建 5 个微信用户
     const clientIp = req.ip || (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || 'unknown'
     const nowMs = Date.now()
     const recentWxLogins = (wxLoginIpCounter[clientIp] || []).filter(t => nowMs - t < 3600000)
@@ -596,15 +631,63 @@ app.post('/api/user/login', rateLimit(), (req, res) => {
     recentWxLogins.push(nowMs)
     wxLoginIpCounter[clientIp] = recentWxLogins
 
-    // 用 encryptedData 的 hash 作为稳定标识，避免每次登录创建新用户
+    // 配置了微信 AppID/Secret 时进行真实服务端验签
+    if (WECHAT_APPID && WECHAT_SECRET) {
+      try {
+        const wxResult = await jscode2session(req.body.code)
+        const sessionKey = wxResult.session_key
+        const openid = wxResult.openid
+
+        let userPhone = ''
+        if (encryptedData && iv) {
+          try {
+            const decrypted = decryptWeChatData(sessionKey, encryptedData, iv)
+            userPhone = decrypted.phoneNumber || ''
+          } catch (e) {
+            console.warn('[微信] 解密手机号失败，使用 openid 作为标识')
+          }
+        }
+
+        const userId = userPhone || ('wx_' + openid)
+        const existingUser = db.exec("SELECT id, nickname, vip_status, vip_expire_at FROM users WHERE phone = ?", [userId])
+        const token = jwt.sign({ phone: userId, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
+        const now = new Date().toISOString()
+
+        if (existingUser.length && existingUser[0].values.length) {
+          return res.json({
+            success: true,
+            data: {
+              token,
+              nickname: existingUser[0].values[0][1] || '微信用户',
+              phone: userId,
+              vip_status: existingUser[0].values[0][2],
+              vip_expire_at: existingUser[0].values[0][3],
+            },
+          })
+        }
+
+        db.run(`INSERT INTO users (id, phone, nickname, avatar, vip_status, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+          uuidv4(), userId, '微信用户', '', 0, now, now,
+        ])
+        db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
+          [userId, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
+        saveDatabaseDebounced()
+        return res.json({ success: true, data: { token, nickname: '微信用户', phone: userId, vip_status: 0, vip_expire_at: null } })
+      } catch (e) {
+        console.error('[微信] 登录验证失败:', e.message)
+        return res.status(500).json({ success: false, error: e.message || '微信登录验证失败' })
+      }
+    }
+
+    // 未配置微信 AppID/Secret 时使用演示模式
+    console.warn('[微信] 未配置 WECHAT_APPID/WECHAT_SECRET，使用演示模式')
     const wechatId = 'wx_' + crypto.createHash('md5').update(encryptedData).digest('hex').slice(0, 16)
     const existingUser = db.exec("SELECT id, nickname, vip_status, vip_expire_at FROM users WHERE phone = ?", [wechatId])
     if (existingUser.length && existingUser[0].values.length) {
-      // 已有用户，直接签发token
       const token = jwt.sign({ phone: wechatId, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
       return res.json({ success: true, data: { token, nickname: existingUser[0].values[0][1], phone: wechatId, vip_status: existingUser[0].values[0][2], vip_expire_at: existingUser[0].values[0][3] } })
     }
-    // 新用户才 INSERT
     const token = jwt.sign({ phone: wechatId, role: 'user' }, JWT_SECRET, { expiresIn: '30d' })
     const now = new Date().toISOString()
     db.run(`INSERT INTO users (id, phone, nickname, avatar, vip_status, createdAt, updatedAt)

@@ -15,7 +15,9 @@
     "@dcloudio/uni-mp-weixin": "3.0.0-alpha-4080720251125001",
     "pinia": "^2.1.7",
     "sharp": "^0.35.2",
-    "vue": "^3.3.13"
+    "sql.js": "^1.14.1",
+    "vue": "^3.3.13",
+    "wx-server-sdk": "^4.0.2"
   },
   "devDependencies": {
     "@dcloudio/types": "^3.4.8",

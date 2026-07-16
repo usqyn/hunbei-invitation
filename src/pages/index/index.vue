@@ -2,10 +2,7 @@
   <view class="page animate-page-fade-in">
     <!-- 顶部状态栏区域 + 问候语 -->
     <view class="status-bar">
-      <view class="greeting-wrap">
-        <text class="greeting-text">{{ greetingText }}</text>
-        <text class="date-text">{{ dateText }}</text>
-      </view>
+
     </view>
 
     <!-- 顶部轮播图 -->
@@ -90,7 +87,7 @@
           <view class="icon-glow"></view>
         </view>
         <text class="category-name">{{ item.name }}</text>
-        <text class="category-count">{{ getCategoryCount(item.categoryId) }} 个模板</text>
+        <text class="category-count">{{ t('cat.' + item.categoryId) }}</text>
       </view>
     </view>
 
@@ -289,6 +286,9 @@ import { HOME_CONFIG } from '@/config'
 import { resolveUrl } from '@/utils/url'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
+import { t } from '@/locales'
+import '@/locales/kk'
+import '@/locales/zh-CN'
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
@@ -326,15 +326,6 @@ const featuredCards = computed(() => {
     views: 0,
   }))
   return [...apiCards, ...staticCards].slice(0, 8)
-})
-
-const greetingText = computed(() => {
-  const hour = new Date().getHours()
-  if (hour < 6) return '夜深了'
-  if (hour < 12) return '早上好'
-  if (hour < 14) return '中午好'
-  if (hour < 18) return '下午好'
-  return '晚上好'
 })
 
 const dateText = computed(() => {
@@ -593,19 +584,6 @@ onMounted(() => {
   z-index: 10;
 }
 
-.greeting-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.greeting-text {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #1c1c1e;
-  line-height: 1.4;
-}
-
 .date-text {
   font-size: 22rpx;
   color: #8e8e93;
@@ -754,35 +732,33 @@ onMounted(() => {
 
 .search-bar {
   padding: 20rpx 20rpx 20rpx 32rpx;
-  margin: -56rpx 24rpx 0;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(24rpx);
-  -webkit-backdrop-filter: blur(24rpx);
+  margin: 48rpx 24rpx 0;
+  background: transparent;
   border-radius: 32rpx;
-  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.1);
   position: relative;
   z-index: 2;
-  border: 1rpx solid rgba(255, 255, 255, 0.8);
   display: flex;
   align-items: center;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.search-bar:focus-within {
-  box-shadow: 0 16rpx 48rpx rgba(232, 74, 110, 0.18);
-  border-color: rgba(232, 74, 110, 0.3);
-  transform: translateY(-2rpx);
 }
 
 .search-input {
   flex: 1;
   height: 72rpx;
-  background: rgba(245, 245, 250, 0.6);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
   border-radius: 36rpx;
   padding: 0 24rpx 0 64rpx;
   font-size: 28rpx;
   box-sizing: border-box;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.search-input:focus {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(232, 74, 110, 0.3);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
 }
 
 .search-icon {
@@ -791,7 +767,7 @@ onMounted(() => {
   top: 50%;
   transform: translateY(-50%);
   font-size: 32rpx;
-  color: #c0c0d0;
+  color: rgba(255, 255, 255, 0.7);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 3;
 
