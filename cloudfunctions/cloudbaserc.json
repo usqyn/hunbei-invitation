@@ -1,0 +1,80 @@
+{
+  "envId": "cloud1-d1g9id3fjffcefe0d",
+  "functionRoot": ".",
+  "functions": [
+    {
+      "name": "common",
+      "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret",
+        "ADMIN_PHONE": "13800138000",
+        "DEV_CODE": "000000"
+      }
+    },
+    {
+      "name": "user",
+      "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "template",
+      "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "work",
+      "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "order",
+      "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "upload",
+      "timeout": 60,
+      "memorySize": 512,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "poster",
+      "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "export",
+      "timeout": 60,
+      "memorySize": 512,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "cleanup",
+      "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    }
+  ]
+}

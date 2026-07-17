@@ -1,0 +1,1 @@
+{"domain":"*","routes":[{"path":"/common","upstreamResourceType":"SCF","upstreamResourceName":"common","enablePathTransmission":true}]}

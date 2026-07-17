@@ -1,0 +1,1 @@
+[{"TableName":"test_coll","CommandType":"INSERT","Command":"{\"insert\":\"test_coll\",\"documents\":[{\"test\":1}]}"}]
