@@ -20,7 +20,7 @@
       <view class="address-form">
         <view class="addr-row">
           <text class="addr-label">姓名</text>
-          <input class="addr-input" v-model="address.name" placeholder="请输入收货人姓名" maxlength="20" />
+          <input class="addr-input" v-model="address.name" placeholder="请输入收货人姓名" maxlength="20" :class="{ 'rtl-input': nameRtl.isRtl.value }" />
         </view>
         <view class="addr-row">
           <text class="addr-label">手机号</text>
@@ -28,14 +28,14 @@
         </view>
         <view class="addr-row addr-row--top">
           <text class="addr-label">详细地址</text>
-          <textarea class="addr-textarea" v-model="address.detail" placeholder="请输入省市区及详细收货地址" maxlength="200" />
+          <textarea class="addr-textarea" v-model="address.detail" placeholder="请输入省市区及详细收货地址" maxlength="200" :class="{ 'rtl-input': addressRtl.isRtl.value }" />
         </view>
       </view>
     </view>
 
     <view class="remark-section">
       <view class="section-title">订单备注</view>
-      <textarea class="remark-input" placeholder="选填，请输入备注信息" v-model="remark" />
+      <textarea class="remark-input" placeholder="选填，请输入备注信息" v-model="remark" :class="{ 'rtl-input': noteRtl.isRtl.value }" />
     </view>
 
     <view class="price-section">
@@ -73,6 +73,7 @@ import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { createOrder } from '@/api'
 import { useUserStore } from '@/stores/user'
+import { useRtl } from '@/composables/useRtl'
 
 interface OrderItem {
   id: number
@@ -91,6 +92,11 @@ const userStore = useUserStore()
 
 // 收货地址
 const address = ref({ name: '', phone: '', detail: '' })
+
+// 哈萨克语阿拉伯文 RTL 输入支持
+const nameRtl = useRtl(() => address.value.name || '')
+const addressRtl = useRtl(() => address.value.detail || '')
+const noteRtl = useRtl(() => remark.value || '')
 
 // 加载已保存的收货地址（复用上次填写）
 function loadSavedAddress() {

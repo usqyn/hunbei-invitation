@@ -14,6 +14,7 @@
           <text class="form-label">反馈内容</text>
           <textarea
             class="form-textarea"
+            :class="{ 'rtl-input': contentRtl.isRtl.value }"
             v-model="form.content"
             placeholder="请输入您的意见和建议..."
             maxlength="500"
@@ -25,6 +26,7 @@
           <text class="form-label">联系方式</text>
           <input
             class="form-input"
+            :class="{ 'rtl-input': contactRtl.isRtl.value }"
             v-model="form.contact"
             placeholder="请输入手机号或邮箱（选填）"
           />
@@ -42,6 +44,7 @@
 import { ref, reactive } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { useUserStore } from '@/stores/user'
+import { useRtl } from '@/composables/useRtl'
 import { submitFeedback } from '@/api'
 
 const { goBack } = useGoBack()
@@ -51,6 +54,10 @@ const form = reactive({
   content: '',
   contact: ''
 })
+
+// 哈萨克语阿拉伯文 RTL 输入支持
+const contentRtl = useRtl(() => form.content || '')
+const contactRtl = useRtl(() => form.contact || '')
 
 const submitting = ref(false)
 

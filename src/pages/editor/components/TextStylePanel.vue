@@ -73,6 +73,34 @@
           </view>
         </view>
       </view>
+
+      <!-- 文字方向 -->
+      <view class="prop-row prop-row--toggle">
+        <text class="prop-label">方向</text>
+        <view class="toggle-group">
+          <view
+            class="toggle-btn"
+            :class="{ 'toggle-btn--active': currentDirection === 'auto' }"
+            @click="onDirectionSelect('auto')"
+          >
+            <text>自动</text>
+          </view>
+          <view
+            class="toggle-btn"
+            :class="{ 'toggle-btn--active': currentDirection === 'ltr' }"
+            @click="onDirectionSelect('ltr')"
+          >
+            <text>LTR</text>
+          </view>
+          <view
+            class="toggle-btn"
+            :class="{ 'toggle-btn--active': currentDirection === 'rtl' }"
+            @click="onDirectionSelect('rtl')"
+          >
+            <text class="rtl-text-inline">RTL</text>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -85,6 +113,7 @@ interface EditableElementLike {
     fontSize?: number
     color?: string
     fontWeight?: 'normal' | 'bold'
+    direction?: 'ltr' | 'rtl' | 'auto'
   }
 }
 
@@ -113,6 +142,7 @@ const presetColors = [
 const currentFontSize = computed(() => props.element?.style?.fontSize ?? 28)
 const currentColor = computed(() => props.element?.style?.color ?? '#333333')
 const currentFontWeight = computed<'normal' | 'bold'>(() => props.element?.style?.fontWeight ?? 'normal')
+const currentDirection = computed<'ltr' | 'rtl' | 'auto'>(() => props.element?.style?.direction ?? 'auto')
 
 function adjustFontSize(delta: number) {
   const newSize = Math.min(60, Math.max(20, currentFontSize.value + delta))
@@ -133,6 +163,10 @@ function onColorSelect(color: string) {
 
 function onFontWeightSelect(weight: 'normal' | 'bold') {
   emit('update', 'fontWeight', weight)
+}
+
+function onDirectionSelect(direction: 'ltr' | 'rtl' | 'auto') {
+  emit('update', 'direction', direction)
 }
 
 function onClose() {
@@ -332,5 +366,9 @@ function onReset() {
 
 .toggle-bold-text {
   font-weight: bold;
+}
+
+.rtl-text-inline {
+  font-family: 'KazakhSoftAsilya', 'Noto Sans Arabic', sans-serif;
 }
 </style>

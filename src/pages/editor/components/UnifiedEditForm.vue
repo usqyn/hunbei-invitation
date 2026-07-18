@@ -28,6 +28,7 @@
               <view class="input-wrapper">
                 <input
                   class="form-input"
+                  :class="{ 'rtl-input': groomNameRtl.isRtl.value }"
                   placeholder="请输入新郎真实姓名"
                   :value="basicInfo.groomName"
                   @input="(e: any) => onInput('groomName', e.detail.value)"
@@ -46,6 +47,7 @@
               <view class="input-wrapper">
                 <input
                   class="form-input"
+                  :class="{ 'rtl-input': brideNameRtl.isRtl.value }"
                   placeholder="请输入新娘真实姓名"
                   :value="basicInfo.brideName"
                   @input="(e: any) => onInput('brideName', e.detail.value)"
@@ -98,6 +100,7 @@
               <view class="input-wrapper">
                 <input
                   class="form-input"
+                  :class="{ 'rtl-input': addressRtl.isRtl.value }"
                   placeholder="例：婚贝大酒店9F幸福宴会厅"
                   :value="basicInfo.detailAddress"
                   @input="(e: any) => onInput('address', e.detail.value)"
@@ -123,6 +126,7 @@
               <view class="input-wrapper">
                 <input
                   class="form-input"
+                  :class="{ 'rtl-input': isFieldRtl(field.value || '') }"
                   :placeholder="field.placeholder"
                   :value="field.value"
                   @input="(e: any) => onInput(field.key, e.detail.value)"
@@ -154,6 +158,8 @@
 import { computed } from 'vue'
 import type { EditableElement, BasicInfo } from '@/types'
 import { showToast } from '@/composables/useFeedback'
+import { useRtl } from '@/composables/useRtl'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
 
 const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholder: string }> = {
   inviter: { label: '邀请者', icon: '👤', placeholder: '请输入邀请者姓名' },
@@ -259,6 +265,16 @@ const extraFields = computed(() => {
 
   return result
 })
+
+// 哈萨克语阿拉伯文 RTL 输入支持
+const groomNameRtl = useRtl(() => props.basicInfo.groomName || '')
+const brideNameRtl = useRtl(() => props.basicInfo.brideName || '')
+const addressRtl = useRtl(() => props.basicInfo.detailAddress || '')
+
+/** 动态字段 RTL 检测（v-for 循环内使用） */
+function isFieldRtl(text: string): boolean {
+  return RTL_CHAR_REGEX.test(text || '')
+}
 
 function onInput(key: string, value: string) {
   emit('update', key, value)

@@ -83,8 +83,29 @@ page {
   --transition-bounce: 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
   background-color: var(--color-bg-page);
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'KazakhSoftAsilya', 'Noto Sans Arabic', sans-serif;
   color: var(--color-text-primary);
+}
+
+/* ============================================================
+ * RTL 阿拉伯/哈萨克文支持
+ * ============================================================ */
+.rtl-text {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: isolate;
+  font-family: 'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.rtl-input {
+  direction: rtl;
+  text-align: right;
+  font-family: 'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.rtl-placeholder {
+  direction: rtl;
+  text-align: right;
 }
 
 /* ============================================================

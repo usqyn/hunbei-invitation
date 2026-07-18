@@ -87,7 +87,7 @@
           <view class="icon-glow"></view>
         </view>
         <text class="category-name">{{ item.name }}</text>
-        <text class="category-count">{{ t('cat.' + item.categoryId, 'kk') }}</text>
+        <text class="category-count rtl-text">{{ t('cat.' + item.categoryId, 'kk') }}</text>
       </view>
     </view>
 

@@ -34,6 +34,7 @@
       <view class="input-row">
         <input
           class="title-input"
+          :class="{ 'rtl-input': titleRtl.isRtl.value }"
           type="text"
           v-model="shareTitle"
           :maxlength="48"
@@ -48,6 +49,7 @@
         <view class="desc-left">
           <textarea
             class="desc-textarea"
+            :class="{ 'rtl-input': descRtl.isRtl.value }"
             v-model="shareDesc"
             :maxlength="60"
             placeholder="请输入分享描述"
@@ -144,6 +146,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
+import { useRtl } from '@/composables/useRtl'
 import { generatePoster } from '@/api'
 
 const templateStore = useTemplateStore()
@@ -157,6 +160,10 @@ const shareDesc = ref('')
 const coverImage = ref('')
 const showTemplateLib = ref(false)
 const isGenerating = ref(false)
+
+// 哈萨克语阿拉伯文 RTL 输入支持
+const titleRtl = useRtl(() => shareTitle.value || '')
+const descRtl = useRtl(() => shareDesc.value || '')
 
 // 预设文案库
 const templateList = ref([

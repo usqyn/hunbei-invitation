@@ -111,6 +111,7 @@
           <view class="form-item">
             <textarea
               class="form-textarea"
+              :class="{ 'rtl-input': textRtl.isRtl.value }"
               :value="selectedArea._text"
               placeholder="输入文字内容"
               auto-height
@@ -452,9 +453,11 @@ import { resolveUrl } from '@/utils/url'
 import { request } from '@/utils/request'
 import { uploadImage } from '@/api'
 import type { PosterEditableAreaRuntime, PosterWork } from '@/types/poster'
+import { useRtl } from '@/composables/useRtl'
 
 const posterStore = usePosterStore()
 const { goBack } = useGoBack()
+const textRtl = useRtl(() => selectedArea.value?._text || '')
 
 const alignOptions = [
   { value: 'left', icon: '⬅' },
