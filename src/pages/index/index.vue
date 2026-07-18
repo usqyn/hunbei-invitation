@@ -87,7 +87,7 @@
           <view class="icon-glow"></view>
         </view>
         <text class="category-name">{{ item.name }}</text>
-        <text class="category-count rtl-text">{{ t('cat.' + item.categoryId, 'kk') }}</text>
+        <text class="category-count rtl-text">{{ formatBiDi(t('cat.' + item.categoryId, 'kk')) }}</text>
       </view>
     </view>
 
@@ -297,6 +297,7 @@ import { useUserStore } from '@/stores/user'
 import { t } from '@/locales'
 import '@/locales/kk'
 import '@/locales/zh-CN'
+import { formatBiDi } from '@/utils/font-loader'
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)

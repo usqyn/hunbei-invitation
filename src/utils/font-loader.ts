@@ -133,3 +133,22 @@ export function loadFontsForElementsWithCallback(
   // 字体加载为异步且无法可靠追踪单个完成时机，固定延迟后触发回调
   setTimeout(() => onComplete?.(), 500)
 }
+
+/** 预加载哈萨克/阿拉伯字体，供非编辑器页面使用 */
+export function preloadRtlFonts() {
+  const rtlFonts = ['KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq']
+  fetchFontMap().then(() => {
+    rtlFonts.forEach(f => loadCustomFont(f))
+  })
+}
+
+/**
+ * BiDi 混排处理：用 Unicode 控制字符包裹阿拉伯文段，确保混合文本方向正确
+ * - 阿拉伯文段用 \u202B（RTL 嵌入）开头，\u202C（恢复）结尾
+ * - 数字段保持原样（数字天然 LTR）
+ */
+export function formatBiDi(text: string | undefined | null): string {
+  if (!text) return ''
+  // 匹配连续的阿拉伯文片段
+  return String(text).replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g, (m) => `\u202B${m}\u202C`)
+}
