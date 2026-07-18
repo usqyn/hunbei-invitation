@@ -295,6 +295,8 @@ import { resolveUrl } from '@/utils/url'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { t } from '@/locales'
+import '@/locales/kk'
+import '@/locales/zh-CN'
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
