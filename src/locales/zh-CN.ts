@@ -8,6 +8,6 @@ defineLocale('zh-CN', {
   'cat.poster': '耳环礼宴',
   'cat.baby': '宝宝周岁',
   'cat.study': '升学喜宴',
-  'cat.festival': '节日祝福',
+  'cat.festival-invitation': '节日祝福',
   'cat.house': '乔迁新居',
 })

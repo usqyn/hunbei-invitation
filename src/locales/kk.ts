@@ -8,6 +8,6 @@ defineLocale('kk', {
   'cat.poster': 'سرعا توي',
   'cat.baby': 'تۇساۋ كەسەر',
   'cat.study': 'وقۋ توي',
-  'cat.festival': 'مەرەكەلىك شاقىرىۋ',
+  'cat.festival-invitation': 'مەرەكەلىك شاقىرىۋ',
   'cat.house': 'قونىس اۋدارىۋ ',
 })

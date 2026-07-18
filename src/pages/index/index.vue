@@ -2,7 +2,7 @@
   <view class="page animate-page-fade-in">
     <!-- 顶部状态栏区域 + 问候语 -->
     <view class="status-bar">
-
+      <text class="date-text">{{ dateText }}</text>
     </view>
 
     <!-- 顶部轮播图 -->
@@ -94,10 +94,10 @@
     <!-- 特色功能区 - 快速进入制作 -->
     <view class="feature-section stagger-list">
       <view
-        v-for="card in homeConfig.featureCards"
+        v-for="(card, idx) in homeConfig.featureCards"
         :key="card.categoryId"
         class="feature-card"
-        :class="card.categoryId === 'wedding' ? 'invitation-card' : 'moments-card'"
+        :class="idx % 2 === 0 ? 'invitation-card' : 'moments-card'"
         @click="goToEditor(card.categoryId)"
       >
         <view class="feature-content">
@@ -161,7 +161,7 @@
     </view>
 
     <!-- 热门付费模板 -->
-    <view class="section animate-section-fade-in" v-if="paidTemplates.length > 0" style="animation-delay: 0.1s">
+    <view class="section animate-section-fade-in" v-if="paidTemplates.length > 0 || loadingPaid" style="animation-delay: 0.1s">
       <view class="section-header">
         <view class="section-title-wrap">
           <text class="section-title">热门付费模板</text>
@@ -195,12 +195,16 @@
               <text class="card-sub">{{ card.subtitle }}</text>
             </view>
           </view>
+          <!-- 加载骨架 -->
+          <view v-if="loadingPaid" class="scroll-card skeleton-card-item">
+            <view class="card-image skeleton-shimmer"></view>
+          </view>
         </view>
       </scroll-view>
     </view>
 
     <!-- 海报模板区 -->
-    <view class="section animate-section-fade-in" v-if="posterTemplates.length > 0" style="animation-delay: 0.2s">
+    <view class="section animate-section-fade-in" v-if="posterTemplates.length > 0 || loadingPoster" style="animation-delay: 0.2s">
       <view class="section-header">
         <view class="section-title-wrap">
           <text class="section-title">海报模板</text>
@@ -228,6 +232,10 @@
                 <text class="card-sub">{{ poster.category_name }}</text>
               </view>
             </view>
+          </view>
+          <!-- 加载骨架 -->
+          <view v-if="loadingPoster" class="scroll-card skeleton-card-item">
+            <view class="card-image poster-card-image skeleton-shimmer"></view>
           </view>
         </view>
       </scroll-view>
@@ -287,8 +295,6 @@ import { resolveUrl } from '@/utils/url'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { t } from '@/locales'
-import '@/locales/kk'
-import '@/locales/zh-CN'
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
@@ -297,13 +303,13 @@ const posterTemplates = ref<any[]>([])
 // 精选卡片：优先用 API 已发布模板；接口失败或不足时回退到本地静态卡片
 const featuredTemplates = ref<any[]>([])
 const isSearchFocused = ref(false)
+const loadingPaid = ref(true)
+const loadingPoster = ref(true)
 const userStore = useUserStore()
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
 const homeConfig = HOME_CONFIG
-
-// 计算属性：API 返回的模板优先，不足时用本地静态卡片补齐
 const featuredCards = computed(() => {
   const apiCards = featuredTemplates.value.map(t => ({
     id: t.id,
@@ -322,8 +328,8 @@ const featuredCards = computed(() => {
     templateId: c.type,
     date: c.date,
     image: c.image,
-    isHot: false,
-    views: 0,
+    isHot: (c as any).likes > 1000,
+    views: (c as any).likes || 0,
   }))
   return [...apiCards, ...staticCards].slice(0, 8)
 })
@@ -336,11 +342,6 @@ const dateText = computed(() => {
   const weekDay = weekDays[now.getDay()]
   return `${month}月${day}日 ${weekDay}`
 })
-
-function getCategoryCount(categoryId: string): number {
-  const cat = CATEGORY_LIST.find(c => c.id === categoryId)
-  return cat ? cat.templates.length : 0
-}
 
 function formatCount(count: number): string {
   if (count >= 10000) {
@@ -362,6 +363,7 @@ function getCategoryBg(id: string): string {
     baby: 'linear-gradient(135deg, #fdcb6e 0%, #f39c12 100%)',
     study: 'linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%)',
     festival: 'linear-gradient(135deg, #00b894 0%, #00cec9 100%)',
+    'festival-invitation': 'linear-gradient(135deg, #00b894 0%, #00cec9 100%)',
     house: 'linear-gradient(135deg, #00cec9 0%, #55a3ff 100%)',
   }
   return bgMap[id] || 'linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%)'
@@ -441,7 +443,8 @@ async function loadPaidTemplates() {
     }
   } catch (e) {
     console.warn('加载付费模板失败:', e)
-    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    loadingPaid.value = false
   }
 }
 
@@ -475,7 +478,8 @@ async function loadPosterTemplates() {
     }
   } catch (e) {
     console.warn('加载海报模板失败:', e)
-    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    loadingPoster.value = false
   }
 }
 
@@ -1596,5 +1600,23 @@ onMounted(() => {
 /* 底部安全区 */
 .bottom-safe-area {
   height: calc(120rpx + env(safe-area-inset-bottom));
+}
+
+/* 骨架屏占位 */
+.skeleton-card-item {
+  background: #f5f5f7;
+  border-radius: 28rpx;
+  overflow: hidden;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #ececee 25%, #f5f5f7 37%, #ececee 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }
 </style>
