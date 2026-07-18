@@ -211,6 +211,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import type { TemplateItem, TemplateCategory } from '@/types'
 import { TEMPLATE_LIST } from '@/constants/templates-data'
 import { HOME_CATEGORIES } from '@/constants/categories'
@@ -338,6 +339,11 @@ onMounted(async () => {
 
   await loadCategories()
   await loadTemplates()
+})
+
+// 用户从编辑器返回时重置导航锁，避免点击无响应
+onShow(() => {
+  navigating.value = false
 })
 
 async function loadCategories() {

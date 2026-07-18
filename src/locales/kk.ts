@@ -1,13 +1,13 @@
 import { defineLocale } from './index'
 
 defineLocale('kk', {
-  'cat.wedding': 'توي',
+  'cat.wedding': 'توي تاماش',
   'cat.engagement': 'قۇدا تۇسۋ',
-  'cat.creative': 'قۇدا تۇسۋ',
+  'cat.creative': 'اقلداسۋ شايى',
   'cat.birthday': 'سۇننەت توي',
-  'cat.poster': 'سىرعا توي',
-  'cat.baby': 'جاس توي',
+  'cat.poster': 'سرعا توي',
+  'cat.baby': 'تۇساۋ كەسەر',
   'cat.study': 'وقۋ توي',
-  'cat.festival': 'مەرەكە',
-  'cat.house': 'ۇي توي',
+  'cat.festival': 'مەرەكەلىك شاقىرىۋ',
+  'cat.house': 'قونىس اۋدارىۋ ',
 })
