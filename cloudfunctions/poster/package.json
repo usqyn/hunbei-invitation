@@ -1,7 +1,7 @@
 {
   "name": "poster",
   "version": "1.0.0",
-  "description": "婚贝请柬 poster 云函数：海报模板/作品/贴纸/统计",
+  "description": "TOYtamaxia poster 云函数：海报模板/作品/贴纸/统计",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "latest",

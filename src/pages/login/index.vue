@@ -27,7 +27,7 @@
             <image class="logo-icon" src="/static/images/logo.png" mode="aspectFit"></image>
           </view>
         </view>
-        <text class="app-name">婚贝请柬</text>
+        <text class="app-name">TOYtamaxia</text>
         <text class="app-desc">微信一键登录，制作专属婚礼请柬</text>
       </view>
     </view>

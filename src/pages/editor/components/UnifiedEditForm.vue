@@ -101,7 +101,7 @@
                 <input
                   class="form-input"
                   :class="{ 'rtl-input': addressRtl.isRtl.value }"
-                  placeholder="例：婚贝大酒店9F幸福宴会厅"
+                  placeholder="例：幸福大酒店9F幸福宴会厅"
                   :value="basicInfo.detailAddress"
                   @input="(e: any) => onInput('address', e.detail.value)"
                   maxlength="100"

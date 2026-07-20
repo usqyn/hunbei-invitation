@@ -20,7 +20,7 @@
           <text class="wechat-card-title">{{ shareTitle || '分享标题' }}</text>
           <text class="wechat-card-desc">{{ shareDesc || '分享描述' }}</text>
           <view class="wechat-card-source">
-            <text class="source-text">婚贝请柬</text>
+            <text class="source-text">TOYtamaxia</text>
           </view>
         </view>
       </view>
@@ -199,7 +199,7 @@ onShareAppMessage(() => {
   const workId = editorStore.currentWorkId
   const templateId = editorStore.currentTemplateId
   if (!workId && !templateId) {
-    return { title: '婚贝请柬', path: '/pages/index/index' }
+    return { title: 'TOYtamaxia', path: '/pages/index/index' }
   }
   let path = '/pages/preview/index'
   const params: string[] = []

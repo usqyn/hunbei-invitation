@@ -15,7 +15,7 @@
     <!-- ============ 顶部工具栏 ============ -->
     <header class="toolbar">
       <div class="toolbar-left">
-        <span class="logo">🎨 婚贝模板制作</span>
+        <span class="logo">🎨 TOYtamaxia</span>
         <span class="toolbar-divider"></span>
 
         <!-- 顶部页面切换 -->
@@ -918,7 +918,6 @@ import {
   fetchTemplate,
   deleteTemplate,
   fetchVersion,
-  initApi,
   createTemplate,
   updateTemplate,
   clearAdminToken,
@@ -1388,6 +1387,7 @@ async function onLoadTemplate(id: string) {
         shadowOffsetX: el.style?.shadowOffsetX ?? 0,
         shadowOffsetY: el.style?.shadowOffsetY ?? 0,
         shadowBlur: el.style?.shadowBlur ?? 0,
+        direction: el.style?.direction || 'auto',
         textDecoration: el.style?.textDecoration || 'none',
         src: el.type === 'image' ? (el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '') : '',
         scale: 'cover',
@@ -2002,14 +2002,10 @@ function onWheel(e: WheelEvent) {
 }
 
 // ============ 聚焦根元素以接收键盘事件 ============
-onMounted(async () => {
-  // 校验本地保存的管理员 token；有效则直接进入编辑器
-  const ok = await initApi()
+onMounted(() => {
+  // 清除本地 token，强制每次打开都先登录
+  clearAdminToken()
   window.addEventListener('publish-success', onPublishSuccess)
-  if (ok) {
-    isLoggedIn.value = true
-    initEditorAfterAuth()
-  }
 })
 </script>
 

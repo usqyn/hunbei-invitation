@@ -90,7 +90,7 @@ const userLogin = async (ctx) => {
     const token = signToken({ phone: wechatId, role: 'user' })
     const ts = now()
     await collection('users').add({ data: { id: uuid(), phone: wechatId, nickname: '微信用户', avatar: '', vip_status: 0, createdAt: ts, updatedAt: ts } })
-    await collection('notifications').add({ data: { phone: wechatId, title: '欢迎使用婚贝请柬', content: '感谢您的注册，快来制作您的第一张请柬吧！', type: 'system', read: 0, createdAt: ts } })
+    await collection('notifications').add({ data: { phone: wechatId, title: '欢迎使用TOYtamaxia', content: '感谢您的注册，快来制作您的第一张请柬吧！', type: 'system', read: 0, createdAt: ts } })
     return ok({ token, nickname: '微信用户', phone: wechatId, vip_status: 0, vip_expire_at: null })
   }
 
@@ -111,7 +111,7 @@ const userLogin = async (ctx) => {
     const userCheck = await collection('users').where({ phone }).limit(1).get()
     if (!userCheck.data || !userCheck.data.length) {
       await collection('users').add({ data: { id: uuid(), phone, nickname: phone.substring(0, 3) + '****' + phone.substring(7), avatar: '', vip_status: 0, createdAt: ts, updatedAt: ts } })
-      await collection('notifications').add({ data: { phone, title: '欢迎使用婚贝请柬', content: '感谢您的注册，快来制作您的第一张请柬吧！', type: 'system', read: 0, createdAt: ts } })
+      await collection('notifications').add({ data: { phone, title: '欢迎使用TOYtamaxia', content: '感谢您的注册，快来制作您的第一张请柬吧！', type: 'system', read: 0, createdAt: ts } })
     }
     // 返回用户 VIP 状态
     const u = (await collection('users').where({ phone }).limit(1).get()).data[0] || {}

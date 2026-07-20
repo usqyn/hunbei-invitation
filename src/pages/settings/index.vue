@@ -40,12 +40,12 @@
         </view>
         <scroll-view class="about-body" scroll-y>
           <view class="about-logo">
-            <text class="about-logo-text">婚贝</text>
+            <text class="about-logo-text">TOYtamaxia</text>
           </view>
           <text class="about-version">版本 v{{ APP_VERSION }}</text>
           <view class="about-section">
             <text class="about-section-title">团队介绍</text>
-            <text class="about-text">婚贝是一款专注于婚礼场景的创意工具小程序，致力于为新人提供精美的电子请柬、海报制作与一站式婚礼互动功能。我们希望通过简单的操作，让每对新人都能轻松制作出属于自己的婚礼记忆。</text>
+            <text class="about-text">TOYtamaxia 是一款专注于婚礼场景的创意工具小程序，致力于为新人提供精美的电子请柬、海报制作与一站式婚礼互动功能。我们希望通过简单的操作，让每对新人都能轻松制作出属于自己的婚礼记忆。</text>
           </view>
           <view class="about-section">
             <text class="about-section-title">运营主体</text>

@@ -1,7 +1,7 @@
 {
   "name": "TOYtamaxia-admin",
   "version": "1.0.0",
-  "description": "婚贝模板制作工具 - 可视化网格编辑器",
+  "description": "TOYtamaxia - 可视化网格编辑器",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

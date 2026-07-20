@@ -292,7 +292,7 @@ import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
 import { loadFontsForElements } from '@/utils/font-loader'
-import { RTL_CHAR_REGEX } from '@/constants/editor'
+import { RTL_CHAR_REGEX, FONT_FAMILY_BASE } from '@/constants/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
@@ -341,7 +341,7 @@ const displayTitle = computed(() => {
   const b = templateStore.basicInfo.brideName
   if (g && b) return g + ' · ' + b
   if (g || b) return g || b
-  return '婚贝请柬'
+  return 'TOYtamaxia'
 })
 
 const templateId = ref('')
@@ -532,7 +532,7 @@ onShareAppMessage(() => {
   const info = templateStore.basicInfo
   const groom = info.groomName || ''
   const bride = info.brideName || ''
-  const title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : '婚贝请柬'
+  const title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : 'TOYtamaxia'
   return {
     title,
     path,
@@ -776,17 +776,24 @@ function getFlipElementStyle(el: any): Record<string, string> {
 
 function getFlipTextStyle(el: any): Record<string, string> {
   const style = el.style || {}
-  const isRtl = el.text && RTL_CHAR_REGEX.test(el.text)
+  const detectedDirection = RTL_CHAR_REGEX.test(el.text) ? 'rtl' : 'ltr'
+  const direction = style.direction === 'auto' ? detectedDirection : (style.direction || 'ltr')
+  const isRtl = direction === 'rtl'
   return {
-    fontFamily: style.font || 'sans-serif',
+    fontFamily: style.font ? `"${style.font}", ${FONT_FAMILY_BASE}` : FONT_FAMILY_BASE,
     fontSize: (style.fontSize || 28) + 'rpx',
     color: style.color || '#333333',
     letterSpacing: isRtl ? 'normal' : (style.spacing || 0) + 'rpx',
     lineHeight: style.lineHeight || 1.5,
     fontWeight: style.fontWeight || 'normal',
+    fontStyle: style.fontStyle || 'normal',
     textAlign: isRtl ? (style.textAlign || 'right') : (style.textAlign || 'center'),
     direction: isRtl ? 'rtl' : 'ltr',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    writingMode: 'horizontal-tb',
     unicodeBidi: isRtl ? 'isolate' : 'normal',
+    textDecoration: style.textDecoration || 'none',
   }
 }
 
@@ -1322,7 +1329,7 @@ const onImageError = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  word-break: break-all;
+  word-break: break-word;
   white-space: pre-wrap;
 }
 

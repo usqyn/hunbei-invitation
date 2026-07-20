@@ -38,7 +38,7 @@
       <view class="vip-content">
         <view class="vip-icon">👑</view>
         <view class="vip-info">
-          <text class="vip-title">{{ userStore.isVip() ? 'VIP会员' : '婚贝VIP' }}</text>
+          <text class="vip-title">{{ userStore.isVip() ? 'VIP会员' : 'TOYtamaxia VIP' }}</text>
           <text class="vip-desc">{{ userStore.isVip() ? vipExpireText : '开通会员享6大权益' }}</text>
         </view>
       </view>

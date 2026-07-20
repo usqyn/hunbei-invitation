@@ -671,7 +671,7 @@ app.post('/api/user/login', rateLimit(), async (req, res) => {
           uuidv4(), userId, '微信用户', '', 0, now, now,
         ])
         db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
-          [userId, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
+          [userId, '欢迎使用TOYtamaxia', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
         saveDatabaseDebounced()
         return res.json({ success: true, data: { token, nickname: '微信用户', phone: userId, vip_status: 0, vip_expire_at: null } })
       } catch (e) {
@@ -695,7 +695,7 @@ app.post('/api/user/login', rateLimit(), async (req, res) => {
       uuidv4(), wechatId, '微信用户', '', 0, now, now,
     ])
     db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
-      [wechatId, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
+      [wechatId, '欢迎使用TOYtamaxia', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
     saveDatabaseDebounced()
     return res.json({ success: true, data: { token, nickname: '微信用户', phone: wechatId, vip_status: 0, vip_expire_at: null } })
   }
@@ -729,7 +729,7 @@ app.post('/api/user/login', rateLimit(), async (req, res) => {
         uuidv4(), phone, phone.substring(0, 3) + '****' + phone.substring(7), '', 0, now, now,
       ])
       db.run("INSERT INTO notifications (phone, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?)",
-        [phone, '欢迎使用婚贝请柬', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
+        [phone, '欢迎使用TOYtamaxia', '感谢您的注册，快来制作您的第一张请柬吧！', 'system', now])
       saveDatabaseDebounced()
     }
     // 查询用户 VIP 状态并返回
@@ -1241,14 +1241,14 @@ app.post('/api/templates', requireAdmin, (req, res) => {
     if (body.price !== undefined && body.price !== null && (typeof body.price !== 'number' || body.price < 0)) {
       return res.status(400).json({ success: false, error: '价格必须为非负数' })
     }
-    // 数据校验：JSON 字段序列化后长度上限 500KB，防止恶意超大 payload
-    const MAX_JSON_LENGTH = 500 * 1024
+    // 数据校验：JSON 字段序列化后长度上限 5MB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 5 * 1024 * 1024
     const jsonFields = { data: body.data, elements: body.elements, canvasSize: body.canvasSize, background: body.background, tags: body.tags }
     for (const [key, val] of Object.entries(jsonFields)) {
       if (val !== undefined && val !== null) {
         const str = JSON.stringify(val)
         if (str.length > MAX_JSON_LENGTH) {
-          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 500KB 限制` })
+          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 5MB 限制` })
         }
       }
     }
@@ -1317,14 +1317,14 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
     if (body.price !== undefined && body.price !== null && (typeof body.price !== 'number' || body.price < 0)) {
       return res.status(400).json({ success: false, error: '价格必须为非负数' })
     }
-    // 数据校验：JSON 字段序列化后长度上限 500KB，防止恶意超大 payload
-    const MAX_JSON_LENGTH = 500 * 1024
+    // 数据校验：JSON 字段序列化后长度上限 5MB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 5 * 1024 * 1024
     const jsonFields = { data: body.data, elements: body.elements, canvasSize: body.canvasSize, background: body.background, tags: body.tags }
     for (const [key, val] of Object.entries(jsonFields)) {
       if (val !== undefined && val !== null) {
         const str = JSON.stringify(val)
         if (str.length > MAX_JSON_LENGTH) {
-          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 500KB 限制` })
+          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 5MB 限制` })
         }
       }
     }
@@ -2694,7 +2694,7 @@ async function start() {
   // Wait for poster database to be ready before serving requests
   await posterRouter.posterReady
   server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🟢 婚贝 API 服务已启动`)
+    console.log(`\n🟢 TOYtamaxia API 服务已启动`)
     console.log(`   本地地址: http://localhost:${PORT}`)
     console.log(`   数据库: ${DB_PATH}`)
     console.log(`   上传目录: ${path.join(__dirname, 'uploads')}`)

@@ -1,7 +1,7 @@
 {
   "name": "export",
   "version": "1.0.0",
-  "description": "婚贝请柬 export 云函数：请柬导出/海报导出",
+  "description": "TOYtamaxia export 云函数：请柬导出/海报导出",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "latest",

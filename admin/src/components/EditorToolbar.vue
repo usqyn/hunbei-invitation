@@ -1,7 +1,7 @@
 <template>
   <header class="toolbar">
     <div class="toolbar-left">
-      <span class="logo">🎨 婚贝模板制作</span>
+      <span class="logo">🎨 TOYtamaxia</span>
       <span class="toolbar-divider"></span>
 
       <!-- 顶部页面切换 -->

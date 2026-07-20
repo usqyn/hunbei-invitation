@@ -1,7 +1,7 @@
 {
   "name": "template",
   "version": "1.0.0",
-  "description": "婚贝请柬 template 云函数：模板列表/详情/CRUD/相似推荐/分类/商品",
+  "description": "TOYtamaxia template 云函数：模板列表/详情/CRUD/相似推荐/分类/商品",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "latest",

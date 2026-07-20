@@ -1,7 +1,7 @@
 {
   "name": "upload",
   "version": "1.0.0",
-  "description": "婚贝请柬 upload 云函数：图片/字体/音乐上传与列表（base64 + 云存储）",
+  "description": "TOYtamaxia upload 云函数：图片/字体/音乐上传与列表（base64 + 云存储）",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "latest",

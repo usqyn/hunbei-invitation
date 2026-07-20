@@ -58,8 +58,7 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
   if (el.type === 'text') {
     const content = el.content || el.text || ''
     const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-    const detectedDirection = rtlChars.test(content) ? 'rtl' : 'ltr'
-    const direction = el.direction === 'auto' ? detectedDirection : (el.direction || 'ltr')
+    const direction = el.direction || 'ltr'
     const textAlign = el.textAlign || (direction === 'rtl' ? 'right' : 'center')
     const fontSize = el.fontSize != null ? Math.round(el.fontSize * pxToRpx) : undefined
 

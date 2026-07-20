@@ -3,7 +3,7 @@
     <div class="login-card">
       <div class="login-header">
         <div class="login-logo">🎨</div>
-        <h1 class="login-title">婚贝模板制作后台</h1>
+        <h1 class="login-title">TOYtamaxia 管理后台</h1>
         <p class="login-subtitle">请使用管理员账号登录</p>
       </div>
 

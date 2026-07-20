@@ -1,7 +1,7 @@
 {
   "name": "user",
   "version": "1.0.0",
-  "description": "婚贝请柬 user 云函数：用户信息/VIP/足迹/通知/反馈/收藏",
+  "description": "TOYtamaxia user 云函数：用户信息/VIP/足迹/通知/反馈/收藏",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "latest",
