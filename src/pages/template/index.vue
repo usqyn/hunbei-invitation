@@ -229,17 +229,17 @@ const isPurchased = computed(() => {
   return userStore.isVip()
 })
 
-// 分类列表（静态配置，可根据 API 动态拉取）
+// 分类列表（静态配置，与 HOME_CATEGORIES 的 categoryId 保持一致）
 const STATIC_CATEGORIES = [
   { id: 'wedding', name: '婚礼请柬', icon: '/static/images/categories/wedding.jpg' },
-  { id: 'proposal', name: '求婚', icon: '/static/images/categories/proposal.jpg' },
-  { id: 'consultation-tea', name: '商量茶', icon: '/static/images/categories/consultation-tea.jpg' },
-  { id: 'festival', name: '割礼', icon: '/static/images/categories/ceremony.jpg' },
-  { id: 'business', name: '耳环礼', icon: '/static/images/categories/earring.jpg' },
+  { id: 'engagement', name: '求婚', icon: '/static/images/categories/proposal.jpg' },
+  { id: 'creative', name: '商量茶', icon: '/static/images/categories/consultation-tea.jpg' },
+  { id: 'birthday', name: '割礼', icon: '/static/images/categories/ceremony.jpg' },
+  { id: 'poster', name: '耳环礼', icon: '/static/images/categories/earring.jpg' },
   { id: 'baby', name: '周岁宴', icon: '/static/images/categories/baby.jpg' },
-  { id: 'graduation', name: '升学宴', icon: '/static/images/categories/graduation.jpg' },
+  { id: 'study', name: '升学宴', icon: '/static/images/categories/graduation.jpg' },
   { id: 'festival-invitation', name: '节日请柬', icon: '/static/images/categories/festival-invitation.jpg' },
-  { id: 'housewarming', name: '乔迁', icon: '/static/images/categories/housewarming.jpg' },
+  { id: 'house', name: '乔迁', icon: '/static/images/categories/housewarming.jpg' },
 ]
 
 // ============ 状态 ============

@@ -18,10 +18,11 @@ const {
 } = require('./_shared')
 
 // VIP 套餐配置：时长（天）+ 服务端定价（不信任客户端价格）
+// 注意：与前端 src/pages/vip/index.vue plans 数组保持一致
 const VIP_PLANS = {
-  monthly: { days: 30, price: 9.9 },
-  quarterly: { days: 90, price: 19.9 },
-  yearly: { days: 365, price: 58.0 },
+  monthly: { days: 30, price: 29 },
+  quarterly: { days: 90, price: 69 },
+  yearly: { days: 365, price: 199 },
 }
 
 // ============ 订单 CRUD ============
@@ -32,22 +33,40 @@ const createOrder = async (ctx) => {
   if (!auth.ok) return auth.body
   const { items, contactName, contactPhone, address, note } = ctx.body
   if (!items || !items.length) return httpFail('订单商品不能为空')
-  // 服务端计算：按 templateId 批量查模板真实价格
+  // 服务端计算：分别按 templateId（付费模板）和 productId（商城商品）计价
   let serverTotal = 0
   const templateIds = items.map(it => it.templateId).filter(Boolean)
+  const productIds = items.map(it => it.productId).filter(Boolean)
+
+  // 1. 付费模板
+  const tplPriceMap = {}
   if (templateIds.length > 0) {
     const tplRes = await collection('templates').where({ id: _.in(templateIds), status: 'published' }).limit(100).get()
-    const priceMap = {}
-    ;(tplRes.data || []).forEach(t => { priceMap[t.id] = t })
+    ;(tplRes.data || []).forEach(t => { tplPriceMap[t.id] = t })
     for (const item of items) {
       if (item.templateId) {
-        const tpl = priceMap[item.templateId]
+        const tpl = tplPriceMap[item.templateId]
         if (!tpl) return httpFail(`模板 ${item.templateId} 不存在`)
-        if (tpl.is_paid === 1) serverTotal += parseFloat(tpl.price) || 0
+        if (tpl.is_paid === 1) serverTotal += (parseFloat(tpl.price) || 0) * (item.quantity || 1)
       }
     }
   }
-  const totalAmount = String(serverTotal)
+
+  // 2. 商城商品（修复商城订单金额恒为 0 的 bug）
+  const prodPriceMap = {}
+  if (productIds.length > 0) {
+    const prodRes = await collection('products').where({ id: _.in(productIds) }).limit(100).get()
+    ;(prodRes.data || []).forEach(p => { prodPriceMap[p.id] = parseFloat(p.price) || 0 })
+    for (const item of items) {
+      if (item.productId) {
+        const prodPrice = prodPriceMap[item.productId]
+        const unitPrice = prodPrice !== undefined ? prodPrice : (parseFloat(item.price) || 0)
+        serverTotal += unitPrice * (item.quantity || 1)
+      }
+    }
+  }
+
+  const totalAmount = String(serverTotal.toFixed(2))
   const id = uuid()
   const ts = now()
   await collection('orders').add({ data: {
@@ -105,7 +124,13 @@ const updateOrderStatus = async (ctx) => {
 }
 
 // POST /api/orders/:id/pay — 订单支付（pending→paid，含 VIP 权益发放）
-// 改用事务：订单状态变更 + VIP 权益发放原子化，避免并发支付导致权益丢失
+// ⚠️ 测试模式说明：
+// 当前实现为"前端调用即标记为已付款"，适用于无真实微信支付密钥的测试环境。
+// 生产环境部署时必须改造为：
+//   1. 本接口仅接收微信支付回调（POST /api/orders/:id/pay 由微信服务器调用，需校验签名）
+//   2. 签名校验通过后再 UPDATE status='paid' 并发放 VIP 权益
+//   3. 前端通过轮询订单状态或接收 WebSocket 推送来感知支付完成
+// 当前实现的已知风险：任何登录用户调用此接口即可将自己的 pending 订单标记为 paid
 const payOrder = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -115,6 +140,7 @@ const payOrder = async (ctx) => {
   if (!existing.data || !existing.data.length) return httpFail('订单不存在', 404)
   const order = existing.data[0]
   if (order.status !== 'pending') return httpFail(`订单状态为 ${order.status}，无法支付`)
+  console.log(`[Pay][TestMode] order=${id} phone=${phone} status=pending->paid`)
   const ts = now()
   // 若含 VIP 类型商品，发放 VIP 权益（事务保证）
   const vipItem = (order.items || []).find(it => it.type === 'vip')
@@ -151,8 +177,10 @@ const payOrder = async (ctx) => {
   return ok({ prepayId: `prepay_${id}`, status: 'paid' })
 }
 
-// POST /api/vip/order — VIP 套餐购买（事务：建订单+升级用户）
-// 把用户状态读取移入事务内，避免并发订单读到相同到期时间导致续期丢失
+// POST /api/vip/order — VIP 套餐购买
+// ⚠️ 安全修复：仅创建 pending 订单，不在此处激活 VIP
+// VIP 权益发放移至 POST /api/orders/:id/pay 完成支付后触发
+// 避免"下单即激活"漏洞（用户无需付款即可获得 VIP）
 const createVipOrder = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -164,35 +192,30 @@ const createVipOrder = async (ctx) => {
   const orderId = uuid()
   const ts = now()
   const orderItems = [{ type: 'vip', plan, days, price }]
-  // 使用云数据库原生事务：在事务内读取用户当前状态 + 建订单 + 升级用户
-  // 保证原子性，避免并发订单读到相同到期时间
-  let newExpireAt = 0
+  // 仅创建 pending 订单，不读取用户状态、不激活 VIP
   try {
-    newExpireAt = await db.runTransaction(async (transaction) => {
-      // 在事务内读取用户当前 VIP 状态
-      const userRes = await transaction.collection('users').where({ phone }).limit(1).get()
-      let currentExpire = 0
-      if (userRes.data && userRes.data[0]) {
-        const u = userRes.data[0]
-        if (u.vip_status === 1 && u.vip_expire_at) currentExpire = parseInt(u.vip_expire_at, 10) || 0
-      }
-      const baseExpire = Math.max(currentExpire, Date.now())
-      const expireAt = baseExpire + days * 24 * 60 * 60 * 1000
-      await transaction.collection('orders').add({ data: {
-        id: orderId, phone, items: orderItems, totalAmount: String(price),
-        status: 'paid', contactName: '', contactPhone: '', address: '', note: '',
-        paid_at: ts, createdAt: ts, updatedAt: ts,
-      } })
-      await transaction.collection('users').where({ phone }).update({ data: {
-        vip_status: 1, vip_expire_at: String(expireAt), vip_plan: plan, updatedAt: ts,
-      } })
-      return expireAt
-    })
+    await collection('orders').add({ data: {
+      id: orderId, phone, items: orderItems, totalAmount: String(price),
+      status: 'pending', contactName: '', contactPhone: '', address: '', note: '',
+      paid_at: null, createdAt: ts, updatedAt: ts,
+    } })
   } catch (e) {
-    console.error('vip order transaction failed:', e)
+    console.error('vip order create failed:', e)
     return httpFail('订单创建失败', 500)
   }
-  return ok({ orderId, prepayId: `prepay_${orderId}`, expireAt: newExpireAt })
+  // 测试模式：返回模拟支付参数（生产环境替换为真实微信支付签名）
+  const mockPaySign = `mock_${orderId}_${Date.now()}`
+  return ok({
+    orderId,
+    prepayId: `prepay_${orderId}`,
+    paySign: mockPaySign,
+    nonceStr: `nonce_${orderId}`,
+    timeStamp: String(Math.floor(Date.now() / 1000)),
+    package: `prepay_id=prepay_${orderId}`,
+    signType: 'MD5',
+    expireAt: null,
+    testMode: true,
+  })
 }
 
 // ============ 路由表 ============

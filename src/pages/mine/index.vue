@@ -239,11 +239,26 @@ const handleMenuItemClick = (item: any) => {
     if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/mall/orders' })
   } else if (item.id === 2) {
+    // 客服入口：优先调起微信小程序原生客服会话；非微信环境或未配置时，
+    // 兜底为拨打客服电话占位（上线前需在 settings/协议页填写真实客服电话）
+    // #ifdef MP-WEIXIN
     try {
       uni.openCustomerServiceConversation({})
-    } catch (e) {
-      uni.showToast({ title: '暂不支持在线客服', icon: 'none' })
-    }
+      return
+    } catch (e) { /* 落入下方兜底 */ }
+    // #endif
+    uni.showModal({
+      title: '联系客服',
+      content: '客服电话：________________（待填写）\n工作时间：周一至周五 9:00-18:00\n\n您也可以通过「设置 > 关于我们」查看更多联系方式，或使用「意见反馈」提交问题。',
+      confirmText: '去反馈',
+      cancelText: '关闭',
+      success: (res) => {
+        if (res.confirm) {
+          if (!userStore.requireLogin()) return
+          uni.navigateTo({ url: '/pages/feedback/index' })
+        }
+      },
+    })
   } else if (item.id === 3) {
     if (!userStore.requireLogin()) return
     uni.navigateTo({ url: '/pages/feedback/index' })

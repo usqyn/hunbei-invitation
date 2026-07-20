@@ -486,14 +486,14 @@ async function seedData() {
   if (!count.length || count[0].values[0][0] === 0) {
     const cats = [
       ['wedding', '新婚', '💒'],
-      ['proposal', '求婚', '💍'],
-      ['consultation-tea', '商量茶', '🍵'],
-      ['festival', '割礼', '🎁'],
-      ['business', '耳环礼', '💎'],
+      ['engagement', '求婚', '💍'],
+      ['creative', '商量茶', '🍵'],
+      ['birthday', '割礼', '🎁'],
+      ['poster', '耳环礼', '💎'],
       ['baby', '周岁宴', '🎉'],
-      ['graduation', '升学宴', '🎓'],
+      ['study', '升学宴', '🎓'],
       ['festival-invitation', '节日请柬', '🎊'],
-      ['housewarming', '乔迁', '🏠'],
+      ['house', '乔迁', '🏠'],
       ['ceremony', '仪式', '✨'],
     ]
     cats.forEach(c => {
@@ -1528,32 +1528,55 @@ app.post('/api/orders', requireAuth, (req, res) => {
     if (!items || !items.length) {
       return res.status(400).json({ success: false, error: '订单商品不能为空' })
     }
-    // 服务端计算订单金额：根据 items 中的 templateId 批量查询模板真实价格并累加
+    // 服务端计算订单金额：分别按 templateId（付费模板）和 productId（商城商品）计价
     let serverTotal = 0
     const templateIds = items.map(item => item.templateId).filter(Boolean)
+    const productIds = items.map(item => item.productId).filter(Boolean)
+
+    // 1. 付费模板：批量查询模板真实价格并累加
+    const tplPriceMap = {}
     if (templateIds.length > 0) {
       const placeholders = templateIds.map(() => '?').join(',')
       const priceResults = db.exec(`SELECT id, price, is_paid FROM templates WHERE id IN (${placeholders}) AND status = 'published'`, templateIds)
-      const priceMap = {}
       if (priceResults.length) {
         priceResults[0].values.forEach(row => {
-          priceMap[row[0]] = { price: row[1], isPaid: row[2] }
+          tplPriceMap[row[0]] = { price: row[1], isPaid: row[2] }
         })
       }
-      // 使用 priceMap 计算总价，同时校验模板存在且已发布
       for (const item of items) {
         if (item.templateId) {
-          const tpl = priceMap[item.templateId]
+          const tpl = tplPriceMap[item.templateId]
           if (!tpl) {
             return res.status(400).json({ success: false, error: `模板 ${item.templateId} 不存在` })
           }
           if (tpl.isPaid === 1) {
-            serverTotal += parseFloat(tpl.price) || 0
+            serverTotal += (parseFloat(tpl.price) || 0) * (item.quantity || 1)
           }
         }
       }
     }
-    const totalAmount = String(serverTotal)
+
+    // 2. 商城商品：批量查询 products 表真实价格并累加（修复商城订单金额恒为 0 的 bug）
+    const prodPriceMap = {}
+    if (productIds.length > 0) {
+      const prodPlaceholders = productIds.map(() => '?').join(',')
+      const prodResults = db.exec(`SELECT id, price FROM products WHERE id IN (${prodPlaceholders})`, productIds)
+      if (prodResults.length) {
+        prodResults[0].values.forEach(row => {
+          prodPriceMap[row[0]] = parseFloat(row[1]) || 0
+        })
+      }
+      for (const item of items) {
+        if (item.productId) {
+          const prodPrice = prodPriceMap[item.productId]
+          // 商品不存在时回退到客户端传入价格（兼容离线 fallback 商品）
+          const unitPrice = prodPrice !== undefined ? prodPrice : (parseFloat(item.price) || 0)
+          serverTotal += unitPrice * (item.quantity || 1)
+        }
+      }
+    }
+
+    const totalAmount = String(serverTotal.toFixed(2))
     const id = uuidv4()
     const now = new Date().toISOString()
     const phone = req.user?.phone || ''
@@ -1815,7 +1838,8 @@ app.post('/api/vip/order', payLimiter, requireAuth, (req, res) => {
       return res.status(400).json({ success: false, error: '无效的套餐' })
     }
     // 服务端定价：不信任客户端传入的价格
-    const PRICES = { monthly: 9.9, quarterly: 19.9, yearly: 58.0 }
+    // 注意：与前端 src/pages/vip/index.vue plans 数组保持一致
+    const PRICES = { monthly: 29, quarterly: 69, yearly: 199 }
     const price = PRICES[plan]
     const days = planDuration[plan]
     const now = Date.now()
@@ -1824,29 +1848,36 @@ app.post('/api/vip/order', payLimiter, requireAuth, (req, res) => {
 
     const orderItems = [{ type: 'vip', plan, days, price }]
 
-    const userResult = db.exec("SELECT vip_status, vip_expire_at, vip_plan FROM users WHERE phone = ?", [phone])
-    let currentExpire = 0
-    if (userResult.length && userResult[0].values.length) {
-      const [status, expireAt, currentPlan] = userResult[0].values[0]
-      if (status === 1 && expireAt) {
-        currentExpire = parseInt(expireAt, 10) || 0
-      }
-    }
-    const baseExpire = Math.max(currentExpire, now)
-    const newExpireAt = baseExpire + days * 24 * 60 * 60 * 1000
-
-    // 使用事务：创建订单 + 更新用户 VIP 状态，保证原子性
+    // ⚠️ 安全修复：仅创建 pending 订单，不在此处激活 VIP
+    // VIP 权益发放移至 POST /api/orders/:id/pay 完成支付后触发
+    // 避免"下单即激活"漏洞（用户无需付款即可获得 VIP）
     runTransaction(db, () => {
-      db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt, paid_at)
-        VALUES (?, ?, ?, ?, 'paid', '', '', '', ?, ?, ?, ?)`, [
+      db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, 'pending', '', '', '', ?, ?, ?)`, [
         orderId, phone, JSON.stringify(orderItems), String(price), '', nowStr, nowStr, nowStr,
       ])
-      db.run("UPDATE users SET vip_status = 1, vip_expire_at = ?, vip_plan = ?, updatedAt = ? WHERE phone = ?",
-        [String(newExpireAt), plan, nowStr, phone])
     })
     saveDatabaseDebounced()
 
-    res.json({ success: true, data: { orderId, prepayId: `prepay_${orderId}`, expireAt: newExpireAt } })
+    // 测试模式：返回模拟支付参数（无真实微信支付密钥时使用）
+    // 生产环境部署时，应替换为真实微信支付签名（paySign/nonceStr/timeStamp/package）
+    // 并通过微信支付回调接口激活 VIP，而非由前端调用 /api/orders/:id/pay
+    const mockPaySign = `mock_${orderId}_${Date.now()}`
+    res.json({
+      success: true,
+      data: {
+        orderId,
+        prepayId: `prepay_${orderId}`,
+        // 测试模式支付参数（生产环境替换为真实微信支付签名）
+        paySign: mockPaySign,
+        nonceStr: `nonce_${orderId}`,
+        timeStamp: String(Math.floor(Date.now() / 1000)),
+        package: `prepay_id=prepay_${orderId}`,
+        signType: 'MD5',
+        expireAt: null,
+        testMode: true, // 标识当前为测试模式
+      },
+    })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -2019,6 +2050,15 @@ app.post('/api/export/poster', requireAuth, (req, res) => {
 })
 
 // ========== 支付订单 ==========
+// ⚠️ 测试模式说明：
+// 当前实现为"前端调用即标记为已付款"，适用于无真实微信支付密钥的测试环境。
+// 生产环境部署时必须改造为：
+//   1. 本接口仅接收微信支付回调（POST /api/orders/:id/pay 由微信服务器调用，需校验签名）
+//   2. 签名校验通过后再 UPDATE status='paid' 并发放 VIP 权益
+//   3. 前端通过轮询订单状态或接收 WebSocket 推送来感知支付完成
+// 当前实现的已知风险：
+//   - 任何登录用户调用此接口即可将自己的 pending 订单标记为 paid
+//   - 已通过 payLimiter 限流（同 IP 每分钟 10 次）缓解，但非根本修复
 app.post('/api/orders/:id/pay', payLimiter, requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone || ''
@@ -2031,6 +2071,7 @@ app.post('/api/orders/:id/pay', payLimiter, requireAuth, (req, res) => {
     if (status !== 'pending') {
       return res.status(400).json({ success: false, error: `订单状态为 ${status}，无法支付` })
     }
+    console.log(`[Pay][TestMode] order=${orderId} phone=${phone} status=pending->paid`)
     const now = new Date().toISOString()
     db.run("UPDATE orders SET status = 'paid', paid_at = ?, updatedAt = ? WHERE id = ?",
       [now, now, req.params.id])

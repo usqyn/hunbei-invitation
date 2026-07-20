@@ -158,97 +158,42 @@ const payOrder = async (order: Order) => {
   if (paying.value === order.orderNo) return
   paying.value = order.orderNo
   try {
-  const confirm = await new Promise<boolean>((resolve) => {
-    uni.showModal({
-      title: '确认支付',
-      content: `确认支付 ¥${order.totalAmount}？`,
-      success: (res) => resolve(res.confirm),
-    })
-  })
-  if (!confirm) return
-
-  uni.showLoading({ title: '支付处理中...' })
-  let paid = false
-  let cancelled = false
-
-  // 1. 尝试通过后端获取支付参数
-  let payParams: any = null
-  try {
-    // 传 order.id（服务端UUID）而非 orderNo
-    const orderId = order.id || order.orderNo
-    payParams = await requestPayOrder(orderId)
-  } catch (e) {
-    payParams = null
-  }
-
-  // 2. 仅当后端返回完整支付参数时，才调用真实微信支付
-  if (payParams && payParams.paySign) {
-    // #ifdef MP-WEIXIN
-    try {
-      await new Promise<void>((resolve, reject) => {
-        uni.requestPayment({
-          provider: 'wxpay',
-          timeStamp: payParams.timeStamp || String(Math.floor(Date.now() / 1000)),
-          nonceStr: payParams.nonceStr || payParams.prepayId,
-          package: payParams.package || `prepay_id=${payParams.prepayId}`,
-          signType: payParams.signType || 'MD5',
-          paySign: payParams.paySign,
-          success: () => { paid = true; resolve() },
-          fail: (err: any) => {
-            if (err && /cancel/i.test(err.errMsg || '')) cancelled = true
-            reject(err)
-          },
-        } as any)
-      })
-    } catch (e) {
-      // 真实支付失败或取消，下面进入模拟支付
-    }
-    // #endif
-    // #ifndef MP-WEIXIN
-    // 非微信小程序环境无法调起 wxpay，进入模拟支付
-    // #endif
-  }
-
-  uni.hideLoading()
-
-  if (cancelled) {
-    uni.showToast({ title: '支付已取消', icon: 'none' })
-    return
-  }
-
-  // 3. 真实支付未完成 -> 回退到模拟支付（明确提示）
-  if (!paid) {
-    const simConfirm = await new Promise<boolean>((resolve) => {
+    const confirm = await new Promise<boolean>((resolve) => {
       uni.showModal({
-        title: '模拟支付',
-        content: '当前为测试环境，无法发起真实微信支付。\n点击「模拟支付」将模拟完成支付，订单状态会被标记为已付款。',
-        confirmText: '模拟支付',
-        cancelText: '取消',
+        title: '确认支付',
+        content: `确认支付 ¥${order.totalAmount}？`,
         success: (res) => resolve(res.confirm),
       })
     })
-    if (!simConfirm) return
-    uni.showLoading({ title: '支付中...' })
-    await new Promise<void>((resolve) => setTimeout(resolve, 600))
-    uni.hideLoading()
-    paid = true
-  }
+    if (!confirm) return
 
-  // 4. 更新订单状态为已付款
-  try {
-    const allOrders = uni.getStorageSync('mall_orders') || []
-    const idx = allOrders.findIndex((o: Order) => o.orderNo === order.orderNo)
-    if (idx !== -1) {
-      allOrders[idx].status = 'paid'
-      uni.setStorageSync('mall_orders', allOrders)
-    }
-  } catch (e) { /* ignore */ }
-  // 同步本地 reactive 状态
-  order.status = 'paid'
-  uni.showToast({ title: '支付成功', icon: 'success' })
-  payRedirectTimer = setTimeout(() => {
-    uni.redirectTo({ url: `/pages/mall/pay-result?orderNo=${order.orderNo}&amount=${order.totalAmount}&status=success` })
-  }, 500)
+    uni.showLoading({ title: '支付处理中...', mask: true })
+
+    // 调用后端支付接口（测试模式下后端直接将订单置为 paid，生产模式应替换为真实微信支付）
+    // 传 order.id（服务端UUID）而非 orderNo
+    const orderId = order.id || order.orderNo
+    await requestPayOrder(orderId)
+
+    uni.hideLoading()
+
+    // 更新本地订单状态
+    try {
+      const allOrders = uni.getStorageSync('mall_orders') || []
+      const idx = allOrders.findIndex((o: Order) => o.orderNo === order.orderNo)
+      if (idx !== -1) {
+        allOrders[idx].status = 'paid'
+        uni.setStorageSync('mall_orders', allOrders)
+      }
+    } catch (e) { /* ignore */ }
+    // 同步本地 reactive 状态
+    order.status = 'paid'
+    uni.showToast({ title: '支付成功', icon: 'success' })
+    payRedirectTimer = setTimeout(() => {
+      uni.redirectTo({ url: `/pages/mall/pay-result?orderNo=${order.orderNo}&amount=${order.totalAmount}&status=success` })
+    }, 500)
+  } catch (e) {
+    uni.hideLoading()
+    uni.showToast({ title: '支付失败，请稍后重试', icon: 'none' })
   } finally {
     paying.value = null
   }

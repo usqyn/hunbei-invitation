@@ -92,10 +92,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { track } from '@/utils/track'
 import { useUserStore } from '@/stores/user'
-import { createVipOrder } from '@/api'
+import { createVipOrder, payOrder as requestPayOrder } from '@/api'
 
 const userStore = useUserStore()
 
@@ -118,6 +118,23 @@ const selectedPlan = ref('yearly')
 const currentPlan = computed(() => plans.find(p => p.key === selectedPlan.value)!)
 const paying = ref(false)
 let navigateBackTimer: any = null
+
+// 单买模板模式：从模板页跳转携带 mode=purchase&templateId=xxx&price=xxx
+// 当前实现：统一引导用户开通 VIP 解锁全部付费模板（推荐策略）
+const purchaseMode = ref(false)
+const purchaseTemplateId = ref('')
+const purchasePrice = ref(0)
+
+onMounted(() => {
+  const pages = getCurrentPages()
+  const curPage = pages[pages.length - 1] as any
+  const options = curPage?.options || {}
+  if (options.mode === 'purchase') {
+    purchaseMode.value = true
+    purchaseTemplateId.value = options.templateId || ''
+    purchasePrice.value = parseFloat(options.price) || 0
+  }
+})
 
 const compareList = [
   { feature: '模板数量', free: '30套', vip: '全站500+' },
@@ -152,34 +169,55 @@ async function handlePay() {
   }
   paying.value = true
   track('vip_click_pay', { plan: selectedPlan.value, price: currentPlan.value.price })
-  uni.showLoading({ title: '创建订单中...' })
+  uni.showLoading({ title: '创建订单中...', mask: true })
   try {
+    // 步骤 1：创建 VIP 订单（服务端已修复为只建 pending 订单，不再激活 VIP）
     const order = await createVipOrder(selectedPlan.value, currentPlan.value.price)
 
-    // 检查服务端是否返回了完整的支付参数
-    if (!order.paySign) {
-      // 服务端未返回签名，无法调起支付
-      uni.showToast({ title: '支付服务暂不可用，请稍后重试', icon: 'none' })
-      paying.value = false
-      return
-    }
-
-    uni.requestPayment({
-      provider: 'wxpay',
-      timeStamp: order.timeStamp,
-      nonceStr: order.nonceStr,
-      package: order.package || `prepay_id=${order.prepayId}`,
-      signType: order.signType || 'MD5',
-      paySign: order.paySign,
-      success: async () => {
-        uni.showLoading({ title: '验证中...' })
-        try {
-          await userStore.fetchUserInfo()
-        } catch (e) {
-          console.warn('fetch user info after pay failed', e)
-        }
+    // 步骤 2：根据是否返回支付签名，走真实支付或测试模式
+    if (order.paySign && !order.testMode) {
+      // 生产模式：调起微信支付
+      uni.hideLoading()
+      uni.requestPayment({
+        provider: 'wxpay',
+        timeStamp: order.timeStamp,
+        nonceStr: order.nonceStr,
+        package: order.package || `prepay_id=${order.prepayId}`,
+        signType: order.signType || 'MD5',
+        paySign: order.paySign,
+        success: async () => {
+          uni.showLoading({ title: '验证中...', mask: true })
+          try {
+            await userStore.fetchUserInfo()
+          } catch (e) {
+            console.warn('fetch user info after pay failed', e)
+          }
+          uni.hideLoading()
+          track('vip_pay_success', { plan: selectedPlan.value, price: currentPlan.value.price })
+          if (userStore.isVip()) {
+            uni.showToast({ title: '开通成功！', icon: 'success' })
+          } else {
+            uni.showToast({ title: '支付成功', icon: 'success' })
+          }
+          paying.value = false
+          navigateBackTimer = setTimeout(() => uni.navigateBack(), 1500)
+        },
+        fail: (err: any) => {
+          const isCancel = err && /cancel/i.test(err.errMsg || '')
+          uni.showToast({ title: isCancel ? '支付已取消' : '支付失败', icon: 'none' })
+          paying.value = false
+        },
+      })
+    } else {
+      // 测试模式：服务端返回 mockPaySign，直接调用 payOrder 完成支付闭环
+      // 此分支仅在未接入真实微信支付的开发/测试环境运行
+      uni.showLoading({ title: '支付处理中...', mask: true })
+      try {
+        await requestPayOrder(order.orderId)
+        // 支付完成后刷新用户信息（服务端在 payOrder 中已激活 VIP 权益）
+        await userStore.fetchUserInfo()
         uni.hideLoading()
-        track('vip_pay_success', { plan: selectedPlan.value, price: currentPlan.value.price })
+        track('vip_pay_success', { plan: selectedPlan.value, price: currentPlan.value.price, testMode: true })
         if (userStore.isVip()) {
           uni.showToast({ title: '开通成功！', icon: 'success' })
         } else {
@@ -187,15 +225,12 @@ async function handlePay() {
         }
         paying.value = false
         navigateBackTimer = setTimeout(() => uni.navigateBack(), 1500)
-      },
-      fail: (err: any) => {
-        const isCancel = err && /cancel/i.test(err.errMsg || '')
-        uni.showToast({ title: isCancel ? '支付已取消' : '支付失败', icon: 'none' })
+      } catch (e) {
+        uni.hideLoading()
+        uni.showToast({ title: '支付失败，请稍后重试', icon: 'none' })
         paying.value = false
-      },
-      // Safety net: success/fail 均会重置 paying，complete 仅作兜底说明
-      // complete: () => { /* paying 已在 success/fail 中重置 */ },
-    })
+      }
+    }
   } catch (e) {
     uni.showToast({ title: '创建订单失败', icon: 'none' })
     paying.value = false

@@ -48,13 +48,27 @@
             <text class="about-text">婚贝是一款专注于婚礼场景的创意工具小程序，致力于为新人提供精美的电子请柬、海报制作与一站式婚礼互动功能。我们希望通过简单的操作，让每对新人都能轻松制作出属于自己的婚礼记忆。</text>
           </view>
           <view class="about-section">
+            <text class="about-section-title">运营主体</text>
+            <text class="about-text">运营公司：__________________（待填写）</text>
+            <text class="about-text">统一社会信用代码：__________（待填写）</text>
+            <text class="about-text">ICP 备案号：________________（待填写）</text>
+            <text class="about-text">办公地址：__________________（待填写）</text>
+          </view>
+          <view class="about-section">
             <text class="about-section-title">联系我们</text>
-            <text class="about-text">官方邮箱：support@TOYtamaxia.com</text>
-            <text class="about-text">官方微信：TOYtamaxia_official</text>
+            <text class="about-text">客服电话：__________________（待填写）</text>
+            <text class="about-text">官方邮箱：__________________（待填写）</text>
+            <text class="about-text">客服微信：__________________（待填写）</text>
+            <text class="about-text">工作时间：周一至周五 9:00-18:00</text>
           </view>
           <view class="about-section">
             <text class="about-section-title">特别说明</text>
-            <text class="about-text">本小程序所有模板素材版权归原作者所有，未经授权请勿用于商业用途。</text>
+            <text class="about-text">本小程序所有模板素材版权归原作者所有，未经授权请勿用于商业用途。如发现侵权内容，请通过上述联系方式举报，我们将在 24 小时内处理。</text>
+          </view>
+          <view class="about-section">
+            <text class="about-section-title">法律协议</text>
+            <text class="about-link" @click="goAgreement('user')">《用户协议》</text>
+            <text class="about-link" @click="goAgreement('privacy')">《隐私协议》</text>
           </view>
         </scroll-view>
       </view>
@@ -94,6 +108,11 @@ const handleClearCache = () => {
 
 const handleAbout = () => {
   showAbout.value = true
+}
+
+const goAgreement = (type: 'user' | 'privacy') => {
+  showAbout.value = false
+  uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
 }
 
 const handleLogout = () => {
@@ -304,6 +323,14 @@ const handleLogout = () => {
   display: block;
   font-size: 26rpx;
   color: #666666;
+  line-height: 1.7;
+  margin-bottom: 8rpx;
+}
+
+.about-link {
+  display: block;
+  font-size: 26rpx;
+  color: #e84a6e;
   line-height: 1.7;
   margin-bottom: 8rpx;
 }
