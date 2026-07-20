@@ -57,16 +57,30 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
 
   if (el.type === 'text') {
     const content = el.content || el.text || ''
-    const rtlChars = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-    const direction = el.direction || 'ltr'
+    // RTL 字符检测正则（阿拉伯/哈萨克文等）
+    const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+    const containsRtl = RTL_REGEX.test(content)
+    // 解析 direction: 'auto'，根据内容自动判定
+    // 修复死代码：原实现仅 `el.direction || 'ltr'` 未解析 auto
+    const rawDirection = el.direction || 'auto'
+    const direction = rawDirection === 'auto'
+      ? (containsRtl ? 'rtl' : 'ltr')
+      : rawDirection
+    // RTL 文本强制使用哈萨克字体，避免 fontFamily 为默认中文字体时字符不连写
+    const fontFamily = containsRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
+      ? 'KazakhSoftAsilya'
+      : el.fontFamily
+    // RTL 文本默认右对齐（仅当用户未显式设置时）
     const textAlign = el.textAlign || (direction === 'rtl' ? 'right' : 'center')
     const fontSize = el.fontSize != null ? Math.round(el.fontSize * pxToRpx) : undefined
+    // RTL 文本字间距强制为 0（连写要求）
+    const spacing = direction === 'rtl' ? 0 : Math.round((el.letterSpacing ?? 2) * pxToRpx)
 
     base.style = {
-      font: el.fontFamily,
+      font: fontFamily,
       color: el.color,
       fontSize: fontSize ?? 28,
-      spacing: Math.round((el.letterSpacing ?? 2) * pxToRpx),
+      spacing,
       lineHeight: el.lineHeight ?? 1.5,
       fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
       fontStyle: el.fontStyle ?? 'normal',

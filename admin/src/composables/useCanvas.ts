@@ -43,6 +43,37 @@ const MAX_HISTORY = 50
 // RTL 字符检测正则
 const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 
+/**
+ * 统一解析文本元素的 RTL 属性（GitHub bidi-shaper 方案在 Fabric.js IText 场景的对称实现）。
+ *
+ * 解决 admin 画布编辑态与 element-serializer.ts 不一致的死代码：
+ * - direction: 'auto' 根据 content 自动判定（原实现仅 el.direction || 'ltr'）
+ * - RTL 文本字体强制使用 KazakhSoftAsilya，避免中文字体下阿拉伯字符不连写
+ * - RTL 文本 charSpacing 强制为 0（连写要求）
+ */
+function resolveRtlTextOptions(el: {
+  direction?: string
+  content?: string
+  fontFamily?: string
+  letterSpacing?: number
+}): {
+  direction: 'rtl' | 'ltr'
+  fontFamily: string | undefined
+  charSpacing: number
+} {
+  const content = el.content || ''
+  const containsRtl = RTL_REGEX.test(content)
+  const rawDirection = el.direction || 'auto'
+  const direction: 'rtl' | 'ltr' = rawDirection === 'auto'
+    ? (containsRtl ? 'rtl' : 'ltr')
+    : (rawDirection as 'rtl' | 'ltr')
+  const fontFamily = containsRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
+    ? 'KazakhSoftAsilya'
+    : el.fontFamily
+  const charSpacing = direction === 'rtl' ? 0 : (el.letterSpacing ?? 2) * 10
+  return { direction, fontFamily, charSpacing }
+}
+
 export function useCanvas(opts: UseCanvasOptions) {
   // 对外暴露的响应式状态
   const canvasSize = ref<CanvasSize>(opts.initialSize ?? { ...DEFAULT_CANVAS_SIZE })
@@ -372,23 +403,25 @@ export function useCanvas(opts: UseCanvasOptions) {
       ...partial,
     }
 
-    const resolvedDirection = el.direction === 'auto'
-      ? (RTL_REGEX.test(el.content) ? 'rtl' : 'ltr')
-      : el.direction
+    const { direction: resolvedDirection, fontFamily: resolvedFontFamily, charSpacing: resolvedCharSpacing } = resolveRtlTextOptions(el)
+    // RTL 文本同步回 el.fontFamily，保证属性面板与画布渲染一致
+    if (resolvedDirection === 'rtl') {
+      el.fontFamily = resolvedFontFamily
+    }
 
     const text = new fabric.IText(el.content, {
       left: el.x,
       top: el.y,
       originX: 'center',
       originY: 'center',
-      fontFamily: el.fontFamily,
+      fontFamily: resolvedFontFamily,
       fontSize: el.fontSize,
       fontWeight: el.fontWeight,
       fontStyle: el.fontStyle,
       fill: el.color,
       textAlign: el.textAlign,
       lineHeight: el.lineHeight,
-      charSpacing: resolvedDirection === 'rtl' ? 0 : el.letterSpacing * 10,
+      charSpacing: resolvedCharSpacing,
       stroke: el.strokeColor,
       strokeWidth: el.strokeWidth,
       opacity: el.opacity,
@@ -712,21 +745,22 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
 
     if (newEl.type === 'text') {
-      const resolvedDirectionPaste = newEl.direction === 'auto'
-        ? (RTL_REGEX.test(newEl.content) ? 'rtl' : 'ltr')
-        : (newEl.direction || 'ltr')
+      const rtlPaste = resolveRtlTextOptions(newEl)
+      if (rtlPaste.direction === 'rtl') {
+        newEl.fontFamily = rtlPaste.fontFamily
+      }
 
       const t = new fabric.IText(newEl.content, {
         left: newEl.x, top: newEl.y,
         originX: 'center', originY: 'center',
-        fontFamily: newEl.fontFamily, fontSize: newEl.fontSize,
+        fontFamily: rtlPaste.fontFamily, fontSize: newEl.fontSize,
         fontWeight: newEl.fontWeight, fontStyle: newEl.fontStyle,
         fill: newEl.color, textAlign: newEl.textAlign,
         lineHeight: newEl.lineHeight,
-        charSpacing: resolvedDirectionPaste === 'rtl' ? 0 : newEl.letterSpacing * 10,
+        charSpacing: rtlPaste.charSpacing,
         stroke: newEl.strokeColor, strokeWidth: newEl.strokeWidth,
         opacity: newEl.opacity, angle: newEl.rotation,
-        direction: resolvedDirectionPaste,
+        direction: rtlPaste.direction,
         lockRotation: newEl.locked, selectable: !newEl.locked,
       })
       ;t.id = newEl.id
@@ -890,26 +924,32 @@ export function useCanvas(opts: UseCanvasOptions) {
         } as any)
       }
 
-      const resolvedDirectionUpdate = t.direction === 'auto'
-        ? (RTL_REGEX.test(t.content) ? 'rtl' : 'ltr')
-        : t.direction
+      // GitHub bidi-shaper 对称实现：updateSelected 时也要解析 RTL 字体
+      // 用 patch 应用后的最新 t（已经 Object.assign 过）来判断 direction / fontFamily
+      const rtlUpdate = resolveRtlTextOptions(t)
+      if (rtlUpdate.direction === 'rtl' && patch.fontFamily === undefined) {
+        // 用户未显式覆盖字体时，同步强制使用 KazakhSoftAsilya
+        t.fontFamily = rtlUpdate.fontFamily
+      }
+      const effectiveFontFamily = rtlUpdate.direction === 'rtl' ? rtlUpdate.fontFamily : (patch.fontFamily ?? t.fontFamily)
+      const effectiveCharSpacing = rtlUpdate.direction === 'rtl' ? 0 : (patch.letterSpacing ?? t.letterSpacing) * 10
 
       textObj.set({
         text: patch.content ?? t.content,
-        fontFamily: patch.fontFamily ?? t.fontFamily,
+        fontFamily: effectiveFontFamily,
         fontSize: patch.fontSize ?? t.fontSize,
         fontWeight: patch.fontWeight ?? t.fontWeight,
         fontStyle: patch.fontStyle ?? t.fontStyle,
         fill: fillValue,
         textAlign: patch.textAlign ?? t.textAlign,
         lineHeight: patch.lineHeight ?? t.lineHeight,
-        charSpacing: resolvedDirectionUpdate === 'rtl' ? 0 : (patch.letterSpacing ?? t.letterSpacing) * 10,
+        charSpacing: effectiveCharSpacing,
         stroke: patch.strokeColor ?? t.strokeColor,
         strokeWidth: patch.strokeWidth ?? t.strokeWidth,
         opacity: patch.opacity ?? t.opacity,
         angle: patch.rotation ?? t.rotation,
         textDecoration: patch.textDecoration ?? t.textDecoration,
-        direction: resolvedDirectionUpdate,
+        direction: rtlUpdate.direction,
       })
 
       // 阴影
@@ -1162,20 +1202,21 @@ export function useCanvas(opts: UseCanvasOptions) {
       // loadDraft 期望的坐标系与 Fabric 一致（中心原点）
       if (el.type === 'text') {
         const et = el as TextElement
-        const resolvedDirectionDraft = et.direction === 'auto'
-          ? (RTL_REGEX.test(el.content) ? 'rtl' : 'ltr')
-          : et.direction
+        const rtlDraft = resolveRtlTextOptions(et)
+        if (rtlDraft.direction === 'rtl') {
+          et.fontFamily = rtlDraft.fontFamily
+        }
 
         const t = new fabric.IText(el.content, {
           left: el.x, top: el.y,
           originX: 'center', originY: 'center',
-          fontFamily: el.fontFamily, fontSize: el.fontSize,
+          fontFamily: rtlDraft.fontFamily, fontSize: el.fontSize,
           fontWeight: el.fontWeight, fontStyle: el.fontStyle,
           fill: el.color, textAlign: el.textAlign,
-          lineHeight: el.lineHeight, charSpacing: resolvedDirectionDraft === 'rtl' ? 0 : el.letterSpacing * 10,
+          lineHeight: el.lineHeight, charSpacing: rtlDraft.charSpacing,
           stroke: el.strokeColor, strokeWidth: el.strokeWidth,
           opacity: el.opacity, angle: el.rotation,
-          direction: resolvedDirectionDraft,
+          direction: rtlDraft.direction,
           lockRotation: el.locked, selectable: !el.locked,
         })
         ;t.id = el.id

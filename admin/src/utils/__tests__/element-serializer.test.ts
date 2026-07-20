@@ -378,6 +378,41 @@ describe('serializeElement', () => {
       expect(ltrResult.style?.textAlign).toBe('center')
     })
 
+    it('RTL 文本应强制使用 KazakhSoftAsilya 字体并设字间距为 0', () => {
+      const rtlEl = {
+        id: 't-rtl-font',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        content: 'توي تاماش',
+        direction: 'rtl',
+        fontFamily: '思源宋体',
+        letterSpacing: 5,
+      }
+      const result = serializeElement(rtlEl)!
+      expect(result.style?.font).toBe('KazakhSoftAsilya')
+      expect(result.style?.spacing).toBe(0)
+    })
+
+    it('RTL 文本但用户已显式设置 KazakhSoftAsilya 字体时应保留', () => {
+      const rtlEl = {
+        id: 't-rtl-font-keep',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        content: 'توي تاماش',
+        direction: 'rtl',
+        fontFamily: 'KazakhSoftAsilyaQaniq',
+        letterSpacing: 2,
+      }
+      const result = serializeElement(rtlEl)!
+      expect(result.style?.font).toBe('KazakhSoftAsilyaQaniq')
+    })
+
     it('坐标与尺寸应四舍五入到两位小数', () => {
       // topLeftX = 100.123 - 33.333... / 2... 用奇数尺寸验证取整
       const el = {
