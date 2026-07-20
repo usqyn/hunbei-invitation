@@ -46,47 +46,57 @@ function fetchFontMap(): Promise<void> {
   })
 }
 
-function loadCustomFont(fontFamily: string) {
-  if (!fontFamily || loadedFonts.has(fontFamily)) return
-  if (SYSTEM_FONTS.some(f => fontFamily.includes(f))) return
-  if (!fontMap) { fetchFontMap().then(() => loadCustomFont(fontFamily)); return }
-  const fontUrl = fontMap[fontFamily]
-  if (!fontUrl) {
-    console.warn(`[FontLoader] Font not in map: ${fontFamily}`)
-    return
-  }
-  const fullUrl = fontUrl.startsWith('http') ? fontUrl : API_BASE + fontUrl
+function loadCustomFont(fontFamily: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (!fontFamily || loadedFonts.has(fontFamily)) { resolve(); return }
+    if (SYSTEM_FONTS.some(f => fontFamily.includes(f))) { resolve(); return }
+    if (!fontMap) {
+      fetchFontMap().then(() => loadCustomFont(fontFamily).then(resolve))
+      return
+    }
+    const fontUrl = fontMap[fontFamily]
+    if (!fontUrl) {
+      console.warn(`[FontLoader] Font not in map: ${fontFamily}`)
+      resolve()
+      return
+    }
+    const fullUrl = fontUrl.startsWith('http') ? fontUrl : API_BASE + fontUrl
 
-  // #ifdef MP-WEIXIN
-  // 微信小程序需要先下载字体文件再加载
-  const downloadTask = (wx as any).downloadFile({
-    url: fullUrl,
-    success: (res: any) => {
-      if (res.statusCode === 200) {
-        ;(wx as any).loadFontFace({
-          family: fontFamily,
-          source: `url("${res.tempFilePath}")`,
-          success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`) },
-          fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err) },
-        })
-      } else {
-        console.warn(`[FontLoader] Download failed: ${fontFamily}, status: ${res.statusCode}`)
-      }
-    },
-    fail: (err: any) => { console.warn(`[FontLoader] Download error: ${fontFamily}`, err) },
+    // #ifdef MP-WEIXIN
+    // 微信小程序需要先下载字体文件再加载
+    (wx as any).downloadFile({
+      url: fullUrl,
+      success: (res: any) => {
+        if (res.statusCode === 200) {
+          ;(wx as any).loadFontFace({
+            family: fontFamily,
+            source: `url("${res.tempFilePath}")`,
+            success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`); resolve() },
+            fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err); resolve() },
+          })
+        } else {
+          console.warn(`[FontLoader] Download failed: ${fontFamily}, status: ${res.statusCode}`)
+          resolve()
+        }
+      },
+      fail: (err: any) => { console.warn(`[FontLoader] Download error: ${fontFamily}`, err); resolve() },
+    })
+    // #endif
+
+    // #ifndef MP-WEIXIN
+    try {
+      uni.loadFontFace({
+        family: fontFamily,
+        source: `url("${fullUrl}")`,
+        success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`); resolve() },
+        fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err); resolve() },
+      } as any)
+    } catch (e) {
+      console.warn(`[FontLoader] Error: ${fontFamily}`, e)
+      resolve()
+    }
+    // #endif
   })
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  try {
-    uni.loadFontFace({
-      family: fontFamily,
-      source: `url("${fullUrl}")`,
-      success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`) },
-      fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err) },
-    } as any)
-  } catch (e) { console.warn(`[FontLoader] Error: ${fontFamily}`, e) }
-  // #endif
 }
 
 /** 从样式中提取主字体名 */
@@ -104,7 +114,7 @@ function checkAndAddRtlFonts(text: string | undefined, fontSet: Set<string>) {
   }
 }
 
-export function loadFontsForElements(elements: Array<{ type?: string; style?: { font?: string }; text?: string }>) {
+export function loadFontsForElements(elements: Array<{ type?: string; style?: { font?: string }; text?: string }>): Promise<void> {
   const fontSet = new Set<string>()
 
   elements.forEach(el => {
@@ -117,10 +127,11 @@ export function loadFontsForElements(elements: Array<{ type?: string; style?: { 
     checkAndAddRtlFonts(el.text, fontSet)
   })
 
-  if (fontSet.size === 0) return
+  if (fontSet.size === 0) return Promise.resolve()
 
-  fetchFontMap().then(() => {
-    fontSet.forEach(f => loadCustomFont(f))
+  // 等待 fontMap 就绪后逐个加载字体，全部完成才 resolve
+  return fetchFontMap().then(() => {
+    return Promise.all(Array.from(fontSet).map(f => loadCustomFont(f))).then(() => undefined)
   })
 }
 

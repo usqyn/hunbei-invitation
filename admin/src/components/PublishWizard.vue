@@ -230,6 +230,61 @@ import { ref, computed, reactive, watch } from 'vue'
 import { CATEGORIES } from '../types/template'
 import { createTemplate, updateTemplate, fetchVersion, API_BASE, uploadImages } from '../composables/useApi'
 import { serializeElement } from '../utils/element-serializer'
+import { shapeText, containsRtl } from '../utils/bidi'
+
+/**
+ * 等待浏览器 @font-face 加载完成（特别是哈萨克字体 KazakhSoftAsilya）
+ * 避免导出 PNG 时字体未就绪导致阿拉伯文固化成错乱字符
+ */
+async function waitForFontsLoaded(): Promise<void> {
+  try {
+    // document.fonts.ready 是浏览器原生 FontFaceSet API
+    // 等待所有 @font-face 声明的字体加载完成（或失败）
+    if (typeof document !== 'undefined' && (document as any).fonts) {
+      await (document as any).fonts.ready
+    }
+  } catch (e) {
+    console.warn('waitForFontsLoaded failed', e)
+  }
+}
+
+/**
+ * 在导出 PNG 前，临时把画布上所有阿拉伯文 IText 的 text 字段替换为
+ * bidi-shaper 处理后的视觉顺序字符串，导出完成后再恢复原始值。
+ * 这样既保证导出 PNG 正确，又不影响 admin 画布的编辑态显示。
+ */
+async function withBidiShapedText<T>(
+  fCanvas: any,
+  fn: () => Promise<T> | T
+): Promise<T> {
+  const originals: Array<{ obj: any; text: string }> = []
+  try {
+    const objects = fCanvas?.getObjects?.() || []
+    for (const obj of objects) {
+      // 只对含阿拉伯字符的文本元素做 shaping，避免无谓修改
+      if (obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text') {
+        const original = obj.text
+        if (original && containsRtl(original)) {
+          originals.push({ obj, text: original })
+          obj.set('text', shapeText(original))
+        }
+      }
+    }
+    fCanvas?.renderAll?.()
+  } catch (e) {
+    console.warn('[withBidiShapedText] apply failed', e)
+  }
+
+  try {
+    return await fn()
+  } finally {
+    // 恢复原始 text，避免影响后续编辑
+    for (const { obj, text } of originals) {
+      try { obj.set('text', text) } catch { /* ignore */ }
+    }
+    fCanvas?.renderAll?.()
+  }
+}
 
 const props = defineProps<{
   visible: boolean
@@ -463,12 +518,21 @@ async function doPublish() {
     const fCanvas = props.getFabricCanvas?.()
     if (fCanvas) {
       try {
-        const dataUrl = fCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
-        const res = await fetch(dataUrl)
-        const blob = await res.blob()
-        const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })
-        const urls = await uploadImages([file])
-        renderedImageUrl = urls[0] || ''
+        // 修复阿拉伯文显示混乱：导出前先等待字体加载完成，
+        // 避免字体未加载完成即固化 PNG 导致字符永久错乱
+        await waitForFontsLoaded()
+        // 导出前对阿拉伯文文本做 bidi-shaper shaping，导出后恢复
+        // 解决 Fabric.js Canvas 渲染阿拉伯文时不连写、顺序错乱的问题
+        renderedImageUrl = await withBidiShapedText(fCanvas, async () => {
+          // Fabric.js 需要重新渲染一次，确保字体生效后再 toDataURL
+          fCanvas.renderAll()
+          const dataUrl = fCanvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
+          const res = await fetch(dataUrl)
+          const blob = await res.blob()
+          const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })
+          const urls = await uploadImages([file])
+          return urls[0] || ''
+        })
       } catch (e) {
         console.error('renderedImage upload failed:', e)
       }

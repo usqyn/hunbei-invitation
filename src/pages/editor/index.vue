@@ -148,7 +148,7 @@
                   v-else-if="el.type === 'text'"
                   class="canvas-text"
                   :style="getTextStyle(el)"
-                >{{ resolveText(el.text) }}</text>
+                >{{ formatBiDi(resolveText(el.text)) }}</text>
                 <!-- 缩放手柄（选中时显示） -->
                 <view
                   v-if="editorStore.selectedElement === idx && el.editable !== false"
@@ -321,7 +321,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
 import { useUserStore } from '@/stores/user'
-import { loadFontsForElements } from '@/utils/font-loader'
+import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
@@ -1571,16 +1571,24 @@ watch(isLandscape, () => {
 
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
-    nextTick(() => {
+    nextTick(async () => {
       _mountTimers.push(setTimeout(() => updateCardSize(), 100))
       // 根据模板类型加载对应模式的元素字体
-      if (editorStore.templateType === 'flip') {
-        editorStore.flipPages.forEach(p => loadFontsForElements(p.elements as any))
-      } else if (editorStore.templateType === 'page') {
-        loadFontsForElements(editorStore.pageSections as any)
-      } else {
-        loadFontsForElements(editorStore.editableElements as any)
+      // 修复阿拉伯文显示混乱：必须等待字体加载完成后再渲染，
+      // 避免首次渲染用 fallback 字体（思源宋体不含连字规则）
+      try {
+        if (editorStore.templateType === 'flip') {
+          await Promise.all(editorStore.flipPages.map(p => loadFontsForElements(p.elements as any)))
+        } else if (editorStore.templateType === 'page') {
+          await loadFontsForElements(editorStore.pageSections as any)
+        } else {
+          await loadFontsForElements(editorStore.editableElements as any)
+        }
+      } catch (e) {
+        console.warn('[Editor] font load failed', e)
       }
+      // 字体加载完成后强制重新计算尺寸 + 触发响应式更新
+      updateCardSize()
     })
   }
 })

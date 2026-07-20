@@ -935,6 +935,56 @@ import { GRADIENT_CATEGORIES, GRADIENT_PRESETS, getGradientsByCategory } from '.
 import { COLOR_SCHEMES } from './constants/colorSchemes'
 import type { ColorScheme } from './constants/colorSchemes'
 import { serializeElement } from './utils/element-serializer'
+import { shapeText, containsRtl } from './utils/bidi'
+
+/**
+ * 等待浏览器 @font-face 加载完成（特别是哈萨克字体 KazakhSoftAsilya）
+ * 避免导出 PNG 时字体未就绪导致阿拉伯文固化成错乱字符
+ */
+async function waitForFontsLoaded(): Promise<void> {
+  try {
+    if (typeof document !== 'undefined' && (document as any).fonts) {
+      await (document as any).fonts.ready
+    }
+  } catch (e) {
+    console.warn('waitForFontsLoaded failed', e)
+  }
+}
+
+/**
+ * 在导出 PNG 前，临时把画布上所有阿拉伯文 IText 的 text 字段替换为
+ * bidi-shaper 处理后的视觉顺序字符串，导出完成后再恢复原始值。
+ * 既保证导出 PNG 字符连写与顺序正确，又不影响 admin 画布编辑态。
+ */
+async function withBidiShapedText<T>(
+  fCanvas: any,
+  fn: () => Promise<T> | T
+): Promise<T> {
+  const originals: Array<{ obj: any; text: string }> = []
+  try {
+    const objects = fCanvas?.getObjects?.() || []
+    for (const obj of objects) {
+      if (obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text') {
+        const original = obj.text
+        if (original && containsRtl(original)) {
+          originals.push({ obj, text: original })
+          obj.set('text', shapeText(original))
+        }
+      }
+    }
+    fCanvas?.renderAll?.()
+  } catch (e) {
+    console.warn('[withBidiShapedText] apply failed', e)
+  }
+  try {
+    return await fn()
+  } finally {
+    for (const { obj, text } of originals) {
+      try { obj.set('text', text) } catch { /* ignore */ }
+    }
+    fCanvas?.renderAll?.()
+  }
+}
 
 // 模板数据字段（用于 dataKey 绑定）
 const TEMPLATE_DATA_KEYS = [
@@ -1596,12 +1646,20 @@ async function generateRenderedImage(): Promise<string> {
   const canvas = getCanvasEl()
   if (!canvas) return ''
   try {
-    const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
-    const res = await fetch(dataUrl)
-    const blob = await res.blob()
-    const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })
-    const urls = await uploadImages([file])
-    return urls[0] || ''
+    // 修复阿拉伯文显示混乱：导出前等待字体加载完成，
+    // 避免字体未就绪即固化 PNG 导致字符永久错乱
+    await waitForFontsLoaded()
+    // 导出前对阿拉伯文文本做 bidi-shaper shaping，导出后恢复
+    return await withBidiShapedText(canvas, async () => {
+      // Fabric.js 重新渲染一次确保字体生效
+      canvas.renderAll()
+      const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 })
+      const res = await fetch(dataUrl)
+      const blob = await res.blob()
+      const file = new File([blob], `render-${Date.now()}.png`, { type: 'image/png' })
+      const urls = await uploadImages([file])
+      return urls[0] || ''
+    })
   } catch (e) {
     console.error('generateRenderedImage failed:', e)
     return ''
@@ -1693,10 +1751,15 @@ async function saveToServer() {
 }
 
 // ============ Phase 4: 发布与导出 ============
-function onExportPNG() {
+async function onExportPNG() {
   const canvas = getCanvasEl()
   if (!canvas) return
-  const dataUrl = canvas.toDataURL('image/png')
+  // 导出前等待字体加载完成 + 阿拉伯文 shaping
+  await waitForFontsLoaded()
+  const dataUrl = await withBidiShapedText(canvas, () => {
+    canvas.renderAll()
+    return canvas.toDataURL('image/png')
+  })
   const a = document.createElement('a')
   a.href = dataUrl
   a.download = `TOYtamaxia-template-${Date.now()}.png`

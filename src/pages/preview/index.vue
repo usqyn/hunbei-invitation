@@ -64,7 +64,7 @@
                     mode="aspectFit"
                     @error="onImageError"
                   />
-                  <text v-else-if="el.type === 'text'" class="flip-text-el" :style="getFlipTextStyle(el)">{{ resolveText(el.text) }}</text>
+                  <text v-else-if="el.type === 'text'" class="flip-text-el" :style="getFlipTextStyle(el)">{{ formatBiDi(resolveText(el.text)) }}</text>
                 </view>
               </view>
             </swiper-item>
@@ -141,7 +141,7 @@
               mode="aspectFit"
               @error="onImageError"
             />
-            <text v-else-if="el.type === 'text'" class="preview-text-el" :style="getTextStyle(el)">{{ resolveText(el.text) }}</text>
+            <text v-else-if="el.type === 'text'" class="preview-text-el" :style="getTextStyle(el)">{{ formatBiDi(resolveText(el.text)) }}</text>
           </view>
         </view>
       </template>
@@ -166,7 +166,7 @@
               v-else-if="el.type === 'text'"
               class="preview-section-text"
               :style="getTextStyle(el)"
-            >{{ resolveText(el.text) }}</text>
+            >{{ formatBiDi(resolveText(el.text)) }}</text>
           </view>
         </view>
       </template>
@@ -291,7 +291,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
-import { loadFontsForElements } from '@/utils/font-loader'
+import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
 import { RTL_CHAR_REGEX, FONT_FAMILY_BASE } from '@/constants/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
@@ -471,14 +471,19 @@ onMounted(() => {
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
     // 根据模板类型加载对应模式的元素字体（与编辑器保持一致）
-    if (editorStore.templateType === 'flip') {
-      editorStore.flipPages.forEach(p => loadFontsForElements(p.elements as any))
-    } else if (editorStore.templateType === 'page') {
-      loadFontsForElements(editorStore.pageSections as any)
-    } else {
-      loadFontsForElements(editorStore.editableElements as any)
-    }
-    nextTick(() => {
+    // 修复阿拉伯文显示混乱：等待字体加载完成后再触发尺寸计算
+    nextTick(async () => {
+      try {
+        if (editorStore.templateType === 'flip') {
+          await Promise.all(editorStore.flipPages.map(p => loadFontsForElements(p.elements as any)))
+        } else if (editorStore.templateType === 'page') {
+          await loadFontsForElements(editorStore.pageSections as any)
+        } else {
+          await loadFontsForElements(editorStore.editableElements as any)
+        }
+      } catch (e) {
+        console.warn('[Preview] font load failed', e)
+      }
       trackTimer(() => updateCardSize(), 100)
       trackTimer(() => measureZoomHeight(), 150)
     })

@@ -3,6 +3,7 @@ import { ref, reactive, computed } from 'vue'
 import { useTemplateStore } from './template'
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { resolveUrl } from '@/utils/url'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
 import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData } from '@/types'
 import { request } from '@/utils/request'
 import { getStorage, setStorage } from '@/utils/storage'
@@ -212,12 +213,32 @@ export const useEditorStore = defineStore('editor', () => {
     // 对必填字段加 fallback 默认值，防御 API 数据缺失
     const type = el.type || 'text'
     const text = el.text ?? ''
+    const isImage = type === 'image'
+    // 修复阿拉伯文显示混乱：检测 RTL 字符时强制使用哈萨克字体
+    // 避免因 style.font 默认继承思源宋体导致字符不连写
+    let style = el.style ? { ...el.style } : undefined
+    if (!isImage && text && RTL_CHAR_REGEX.test(text)) {
+      const currentFont = style?.font || ''
+      // 若当前字体不含 KazakhSoftAsilya，则替换为哈萨克字体优先栈
+      if (!currentFont.includes('KazakhSoftAsilya')) {
+        style = style ? { ...style } : {}
+        style.font = 'KazakhSoftAsilya'
+        // 方向兜底：若未显式设置 direction 或为 auto，则设为 rtl
+        if (!style.direction || style.direction === 'auto') {
+          style.direction = 'rtl'
+        }
+        // 对齐兜底：若未显式设置 textAlign，则设为 right
+        if (!style.textAlign) {
+          style.textAlign = 'right'
+        }
+      }
+    }
     return {
       type,
-      text: type === 'image' ? resolveUrl(text) : text,
+      text: isImage ? resolveUrl(text) : text,
       dataKey: el.dataKey,
       label: el.label,
-      style: el.style ? { ...el.style } : undefined,
+      style,
       x: el.x,
       y: el.y,
       width: el.width,
