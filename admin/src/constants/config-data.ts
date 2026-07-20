@@ -9,6 +9,8 @@ export const TEMPLATE_DATA_KEYS = [
   'inviter', 'invitee', 'date', 'time',
   'location', 'address', 'phone',
   'year', 'month', 'day',
+  // 哈萨克语阿拉伯文专用字段
+  'kzDate',
 ]
 
 /** 快捷字段配置 */
@@ -33,6 +35,9 @@ export const SMART_FIELDS: SmartFieldConfig[] = [
   { key: 'year', label: '年份', icon: '📅', placeholder: '2025', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   { key: 'month', label: '月份', icon: '📅', placeholder: '6', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   { key: 'day', label: '日期(日)', icon: '📅', placeholder: '15', fontSize: 14, fontWeight: 'normal', color: '#666666' },
+  // 哈萨克语阿拉伯文日期：默认占位文本使用哈萨克语常见表达
+  // placeholder 中 "توي كۇنى" = "婚礼日期"，触发 RTL 字体自动注入（见 useCanvas.resolveRtlTextOptions）
+  { key: 'kzDate', label: '哈语日期', icon: '📆', placeholder: 'توي كۇنى: 2024-05-20', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
 
 /** 文字样式预设 */

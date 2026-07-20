@@ -172,6 +172,8 @@ const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholde
   year: { label: '年份', icon: '📅', placeholder: '例如: 2025' },
   month: { label: '月份', icon: '📅', placeholder: '例如: 6' },
   day: { label: '日', icon: '📅', placeholder: '例如: 15' },
+  // 哈萨克语阿拉伯文日期字段（admin 端"哈语日期"按钮发布后由此识别）
+  kzDate: { label: '哈语日期', icon: '📆', placeholder: 'توي كۇنى: 2024-05-20' },
 }
 
 // 基础字段 key（值从 basicInfo 读取，但仅在模板中存在对应 dataKey 时显示）

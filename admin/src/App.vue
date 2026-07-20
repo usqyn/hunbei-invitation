@@ -995,6 +995,8 @@ const TEMPLATE_DATA_KEYS = [
   'inviter', 'invitee', 'date', 'time',
   'location', 'address', 'phone',
   'year', 'month', 'day',
+  // 哈萨克语阿拉伯文专用字段
+  'kzDate',
 ]
 
 // 快捷字段配置
@@ -1018,6 +1020,8 @@ const SMART_FIELDS: SmartFieldConfig[] = [
   { key: 'year', label: '年份', icon: '📅', placeholder: '2025', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   { key: 'month', label: '月份', icon: '📅', placeholder: '6', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   { key: 'day', label: '日期(日)', icon: '📅', placeholder: '15', fontSize: 14, fontWeight: 'normal', color: '#666666' },
+  // 哈萨克语阿拉伯文日期
+  { key: 'kzDate', label: '哈语日期', icon: '📆', placeholder: 'توي كۇنى: 2024-05-20', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
 
 // 日期占位符预览值
@@ -1816,6 +1820,10 @@ function addText(partial?: Partial<TextElement>) {
 
 // 快捷字段添加到画布
 function addSmartField(sf: SmartFieldConfig) {
+  // 哈萨克语阿拉伯文字段（kzDate 等）：自动注入 RTL 方向 + 哈语字体 + 右对齐
+  // 注意：useCanvas.resolveRtlTextOptions 也会根据 content 自动注入，但 textAlign 不在自动范围内
+  // 所以这里显式注入，避免 admin 画布上 textAlign 默认为 'center' 时显示位置不佳
+  const isRtlField = sf.placeholder && /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(sf.placeholder)
   canvasAddText({
     content: sf.placeholder,
     dataKey: sf.key,
@@ -1824,6 +1832,11 @@ function addSmartField(sf: SmartFieldConfig) {
     fontSize: sf.fontSize,
     fontWeight: sf.fontWeight,
     color: sf.color,
+    ...(isRtlField ? {
+      direction: 'rtl' as const,
+      textAlign: 'right' as const,
+      fontFamily: 'KazakhSoftAsilya',
+    } : {}),
   })
 }
 
