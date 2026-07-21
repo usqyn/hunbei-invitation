@@ -71,6 +71,11 @@ function loadCustomFont(fontFamily: string): Promise<void> {
           ;(wx as any).loadFontFace({
             family: fontFamily,
             source: `url("${res.tempFilePath}")`,
+            // global: 字体全局注册，跨页面（模板列表→编辑器→预览）不重复下载
+            global: true,
+            // scopes: 同时覆盖 WXML 渲染和 Canvas 渲染
+            // 缺 'canvas' 会导致用 Canvas 导出分享图时字体回退为系统字体
+            scopes: ['webview', 'canvas'],
             success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`); resolve() },
             fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err); resolve() },
           })
@@ -88,6 +93,8 @@ function loadCustomFont(fontFamily: string): Promise<void> {
       uni.loadFontFace({
         family: fontFamily,
         source: `url("${fullUrl}")`,
+        global: true,
+        scopes: ['webview', 'canvas'],
         success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`); resolve() },
         fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err); resolve() },
       } as any)
