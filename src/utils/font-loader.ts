@@ -54,37 +54,44 @@ function loadCustomFont(fontFamily: string): Promise<void> {
       fetchFontMap().then(() => loadCustomFont(fontFamily).then(resolve))
       return
     }
-    const fontUrl = fontMap[fontFamily]
-    if (!fontUrl) {
-      console.warn(`[FontLoader] Font not in map: ${fontFamily}`)
+    const rawFontUrl = fontMap[fontFamily]
+    if (typeof rawFontUrl !== 'string' || !rawFontUrl) {
+      console.warn(`[FontLoader] Font not in map or invalid: ${fontFamily}`, typeof rawFontUrl)
       resolve()
       return
     }
-    const fullUrl = fontUrl.startsWith('http') ? fontUrl : API_BASE + fontUrl
+    const fullUrl = rawFontUrl.startsWith('http') ? rawFontUrl : API_BASE + rawFontUrl
 
     // #ifdef MP-WEIXIN
-    // 微信小程序需要先下载字体文件再加载
-    (wx as any).downloadFile({
+    // 微信小程序：先 downloadFile 到本地再 loadFontFace（直接传远程 URL 在部分机型失败）
+    if (typeof wx === 'undefined' || typeof wx.downloadFile !== 'function') {
+      console.warn(`[FontLoader] wx.downloadFile not available, skip: ${fontFamily}`)
+      resolve()
+      return
+    }
+    wx.downloadFile({
       url: fullUrl,
       success: (res: any) => {
-        if (res.statusCode === 200) {
-          ;(wx as any).loadFontFace({
+        if (res.statusCode === 200 && res.tempFilePath) {
+          if (typeof wx.loadFontFace !== 'function') {
+            console.warn(`[FontLoader] wx.loadFontFace not available, skip: ${fontFamily}`)
+            resolve()
+            return
+          }
+          wx.loadFontFace({
             family: fontFamily,
-            source: `url("${res.tempFilePath}")`,
-            // global: 字体全局注册，跨页面（模板列表→编辑器→预览）不重复下载
+            source: 'url("' + res.tempFilePath + '")',
             global: true,
-            // scopes: 同时覆盖 WXML 渲染和 Canvas 渲染
-            // 缺 'canvas' 会导致用 Canvas 导出分享图时字体回退为系统字体
             scopes: ['webview', 'canvas'],
-            success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`); resolve() },
-            fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err); resolve() },
+            success: () => { loadedFonts.add(fontFamily); console.log('[FontLoader] Loaded: ' + fontFamily); resolve() },
+            fail: (err: any) => { console.warn('[FontLoader] Failed: ' + fontFamily, err); resolve() },
           })
         } else {
-          console.warn(`[FontLoader] Download failed: ${fontFamily}, status: ${res.statusCode}`)
+          console.warn('[FontLoader] Download failed: ' + fontFamily + ', status: ' + res.statusCode)
           resolve()
         }
       },
-      fail: (err: any) => { console.warn(`[FontLoader] Download error: ${fontFamily}`, err); resolve() },
+      fail: (err: any) => { console.warn('[FontLoader] Download error: ' + fontFamily, err); resolve() },
     })
     // #endif
 
@@ -92,14 +99,14 @@ function loadCustomFont(fontFamily: string): Promise<void> {
     try {
       uni.loadFontFace({
         family: fontFamily,
-        source: `url("${fullUrl}")`,
+        source: 'url("' + fullUrl + '")',
         global: true,
         scopes: ['webview', 'canvas'],
-        success: () => { loadedFonts.add(fontFamily); console.log(`[FontLoader] Loaded: ${fontFamily}`); resolve() },
-        fail: (err: any) => { console.warn(`[FontLoader] Failed: ${fontFamily}`, err); resolve() },
+        success: () => { loadedFonts.add(fontFamily); console.log('[FontLoader] Loaded: ' + fontFamily); resolve() },
+        fail: (err: any) => { console.warn('[FontLoader] Failed: ' + fontFamily, err); resolve() },
       } as any)
     } catch (e) {
-      console.warn(`[FontLoader] Error: ${fontFamily}`, e)
+      console.warn('[FontLoader] Error: ' + fontFamily, e)
       resolve()
     }
     // #endif
