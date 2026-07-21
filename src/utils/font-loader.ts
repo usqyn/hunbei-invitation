@@ -2,12 +2,12 @@ import { API_BASE } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 
 // ============ 字体加载 ============
-// 注意：KazakhSoftAsilya 和 KazakhSoftAsilyaQaniq 不能放在此列表中
-// 它们需要通过 JS 加载器下载字体文件，不能依赖 CSS @font-face（小程序中不稳定）
 const SYSTEM_FONTS = ['sans-serif', 'serif', 'monospace', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', 'Georgia', 'KaiTi']
 const loadedFonts = new Set<string>()
 let fontMap: Record<string, string> | null = null
 let fontMapLoading = false
+let fontLoadCallbacks: Array<() => void> = []
+let fontsLoading = 0
 
 function fetchFontMap(): Promise<void> {
   return new Promise((resolve) => {
@@ -46,6 +46,14 @@ function fetchFontMap(): Promise<void> {
   })
 }
 
+function notifyFontLoadComplete() {
+  fontsLoading = 0
+  fontLoadCallbacks.forEach(cb => {
+    try { cb() } catch (e) { console.warn('[FontLoader] Callback error:', e) }
+  })
+  fontLoadCallbacks = []
+}
+
 function loadCustomFont(fontFamily: string): Promise<void> {
   return new Promise<void>((resolve) => {
     if (!fontFamily || loadedFonts.has(fontFamily)) { resolve(); return }
@@ -62,10 +70,13 @@ function loadCustomFont(fontFamily: string): Promise<void> {
     }
     const fullUrl = rawFontUrl.startsWith('http') ? rawFontUrl : API_BASE + rawFontUrl
 
+    fontsLoading++
+
     // #ifdef MP-WEIXIN
-    // 微信小程序：先 downloadFile 到本地再 loadFontFace（直接传远程 URL 在部分机型失败）
     if (typeof wx === 'undefined' || typeof wx.downloadFile !== 'function') {
       console.warn(`[FontLoader] wx.downloadFile not available, skip: ${fontFamily}`)
+      fontsLoading--
+      if (fontsLoading <= 0) notifyFontLoadComplete()
       resolve()
       return
     }
@@ -75,6 +86,8 @@ function loadCustomFont(fontFamily: string): Promise<void> {
         if (res.statusCode === 200 && res.tempFilePath) {
           if (typeof wx.loadFontFace !== 'function') {
             console.warn(`[FontLoader] wx.loadFontFace not available, skip: ${fontFamily}`)
+            fontsLoading--
+            if (fontsLoading <= 0) notifyFontLoadComplete()
             resolve()
             return
           }
@@ -83,15 +96,33 @@ function loadCustomFont(fontFamily: string): Promise<void> {
             source: 'url("' + res.tempFilePath + '")',
             global: true,
             scopes: ['webview', 'canvas'],
-            success: () => { loadedFonts.add(fontFamily); console.log('[FontLoader] Loaded: ' + fontFamily); resolve() },
-            fail: (err: any) => { console.warn('[FontLoader] Failed: ' + fontFamily, err); resolve() },
+            success: () => {
+              loadedFonts.add(fontFamily)
+              console.log('[FontLoader] Loaded: ' + fontFamily)
+              fontsLoading--
+              if (fontsLoading <= 0) notifyFontLoadComplete()
+              resolve()
+            },
+            fail: (err: any) => {
+              console.warn('[FontLoader] Failed: ' + fontFamily, err)
+              fontsLoading--
+              if (fontsLoading <= 0) notifyFontLoadComplete()
+              resolve()
+            },
           })
         } else {
           console.warn('[FontLoader] Download failed: ' + fontFamily + ', status: ' + res.statusCode)
+          fontsLoading--
+          if (fontsLoading <= 0) notifyFontLoadComplete()
           resolve()
         }
       },
-      fail: (err: any) => { console.warn('[FontLoader] Download error: ' + fontFamily, err); resolve() },
+      fail: (err: any) => {
+        console.warn('[FontLoader] Download error: ' + fontFamily, err)
+        fontsLoading--
+        if (fontsLoading <= 0) notifyFontLoadComplete()
+        resolve()
+      },
     })
     // #endif
 
@@ -102,11 +133,24 @@ function loadCustomFont(fontFamily: string): Promise<void> {
         source: 'url("' + fullUrl + '")',
         global: true,
         scopes: ['webview', 'canvas'],
-        success: () => { loadedFonts.add(fontFamily); console.log('[FontLoader] Loaded: ' + fontFamily); resolve() },
-        fail: (err: any) => { console.warn('[FontLoader] Failed: ' + fontFamily, err); resolve() },
+        success: () => {
+          loadedFonts.add(fontFamily)
+          console.log('[FontLoader] Loaded: ' + fontFamily)
+          fontsLoading--
+          if (fontsLoading <= 0) notifyFontLoadComplete()
+          resolve()
+        },
+        fail: (err: any) => {
+          console.warn('[FontLoader] Failed: ' + fontFamily, err)
+          fontsLoading--
+          if (fontsLoading <= 0) notifyFontLoadComplete()
+          resolve()
+        },
       } as any)
     } catch (e) {
       console.warn('[FontLoader] Error: ' + fontFamily, e)
+      fontsLoading--
+      if (fontsLoading <= 0) notifyFontLoadComplete()
       resolve()
     }
     // #endif
@@ -149,21 +193,36 @@ export function loadFontsForElements(elements: Array<{ type?: string; style?: { 
   })
 }
 
-/** 加载完成后触发回调，用于重新渲染 */
+export function onFontLoadComplete(callback: () => void): () => void {
+  if (fontsLoading <= 0 && loadedFonts.has('KazakhSoftAsilya')) {
+    setTimeout(callback, 0)
+    return () => {}
+  }
+  fontLoadCallbacks.push(callback)
+  return () => {
+    const idx = fontLoadCallbacks.indexOf(callback)
+    if (idx > -1) fontLoadCallbacks.splice(idx, 1)
+  }
+}
+
 export function loadFontsForElementsWithCallback(
   elements: Array<{ type?: string; style?: { font?: string }; text?: string }>,
   onComplete?: () => void
 ) {
+  if (onComplete) {
+    const unsubscribe = onFontLoadComplete(() => {
+      unsubscribe()
+      onComplete!()
+    })
+  }
   loadFontsForElements(elements)
-  // 字体加载为异步且无法可靠追踪单个完成时机，固定延迟后触发回调
-  setTimeout(() => onComplete?.(), 500)
 }
 
-/** 预加载哈萨克/阿拉伯字体，供非编辑器页面使用 */
-export function preloadRtlFonts() {
+/** 预加载哈萨克/阿拉伯字体，供非编辑器页面使用（返回 Promise 支持等待） */
+export function preloadRtlFonts(): Promise<void> {
   const rtlFonts = ['KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq']
-  fetchFontMap().then(() => {
-    rtlFonts.forEach(f => loadCustomFont(f))
+  return fetchFontMap().then(() => {
+    return Promise.all(rtlFonts.map(f => loadCustomFont(f))).then(() => undefined)
   })
 }
 

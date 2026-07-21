@@ -102,6 +102,8 @@ export const useWorksStore = defineStore('works', () => {
               existing.musicId = serverWork.musicId ?? serverWork.music_id ?? existing.musicId
               existing.date = serverWork.date || existing.date
               existing.status = serverWork.status || existing.status
+              existing.price = serverWork.price ?? existing.price
+              existing.payStatus = serverWork.payStatus || serverWork.pay_status || existing.payStatus
               existing.updatedAt = serverWork.updatedAt || serverWork.updated_at || existing.updatedAt
             }
           } else if (!localIds.has(id)) {
@@ -117,6 +119,8 @@ export const useWorksStore = defineStore('works', () => {
               musicId: serverWork.musicId ?? serverWork.music_id ?? null,
               data: serverWork.data || {},
               status: serverWork.status || 'draft',
+              price: serverWork.price ?? 0,
+              payStatus: serverWork.payStatus || serverWork.pay_status || 'unpaid',
               updatedAt: serverWork.updatedAt || serverWork.updated_at || new Date().toISOString(),
             }
             works.value.push(mappedWork)

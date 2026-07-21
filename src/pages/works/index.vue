@@ -9,7 +9,7 @@
         <view class="header-btn" @click="handleBack">
           <text class="header-icon">‹</text>
         </view>
-        <text class="header-title">我的作品</text>
+        <text class="header-title">我的请帖</text>
         <view class="header-btn" @click="handleMore">
           <text class="header-icon">⋯</text>
         </view>
@@ -49,7 +49,7 @@
       </view>
 
       <view class="works-grid-wrap">
-        <view class="works-grid stagger-list" v-if="activeTab === 'all'">
+        <view class="works-list" v-if="activeTab === 'all'">
           <view v-if="batchMode" class="batch-bar">
             <view class="batch-action" @click="toggleSelectAll">
               <text class="batch-action-text">{{ isAllSelected ? '取消全选' : '全选' }}</text>
@@ -71,32 +71,51 @@
             <view v-if="batchMode" class="card-checkbox" :class="{ checked: selectedIds.includes(work.id) }" @click.stop="toggleSelect(work.id)">
               <text class="checkbox-icon">{{ selectedIds.includes(work.id) ? '✓' : '' }}</text>
             </view>
-            <view class="card-cover">
-              <image class="cover-image" lazy-load :src="work.image" mode="aspectFill" @error="onImageError" />
-              <view class="cover-gradient"></view>
-              <view class="card-badge category-badge">
-                <text>作品</text>
-              </view>
-              <view class="card-favorite" @click.stop="handleToggleFavorite(work)">
-                <text class="favorite-icon">{{ isFavoriteWork(work.id) ? '♥' : '♡' }}</text>
+            <view class="card-main">
+              <view class="card-cover">
+                <image class="cover-image" lazy-load :src="work.image" mode="aspectFill" @error="onImageError" />
+                <view class="cover-badge" :class="getBadgeClass(work)">
+                  <text>{{ getBadgeText(work) }}</text>
+                </view>
+                <view class="card-favorite" @click.stop="handleToggleFavorite(work)">
+                  <text class="favorite-icon">{{ isFavoriteWork(work.id) ? '♥' : '♡' }}</text>
+                </view>
               </view>
               <view class="card-info">
-                <text class="card-title">{{ work.title }}</text>
+                <view class="info-header">
+                  <text class="card-title">{{ work.title }}</text>
+                  <view class="price-tag" v-if="work.price">
+                    <text class="price-symbol">¥</text>
+                    <text class="price-value">{{ work.price.toFixed(2) }}</text>
+                  </view>
+                </view>
                 <text class="card-date">{{ work.date }}</text>
               </view>
             </view>
             <view class="card-actions">
-              <view class="action-item" @click.stop="handlePreview(work)">
-                <text class="action-icon">👁</text>
-                <text class="action-text">预览</text>
+              <view class="action-btn" @click.stop="handleDelete(work)">
+                <text class="action-icon">🗑</text>
+                <text class="action-text">删除</text>
               </view>
-              <view class="action-item primary" @click.stop="handleShare(work)">
+              <view class="action-btn" @click.stop="handlePreview(work)">
+                <text class="action-icon">👁</text>
+                <text class="action-text">查看</text>
+              </view>
+              <view class="action-btn" @click.stop="handleEdit(work)">
+                <text class="action-icon">✎</text>
+                <text class="action-text">编辑</text>
+              </view>
+              <view class="action-btn" @click.stop="handlePrint(work)">
+                <text class="action-icon">🖨</text>
+                <text class="action-text">印刷</text>
+              </view>
+              <view class="action-btn primary" @click.stop="handleShare(work)">
                 <text class="action-icon">↗</text>
                 <text class="action-text">分享</text>
               </view>
-              <view class="action-item" @click.stop="handleMoreMenu(work)">
-                <text class="action-icon">⋯</text>
-                <text class="action-text">更多</text>
+              <view class="action-btn pay-btn" :class="work.payStatus" @click.stop="handlePay(work)">
+                <text class="action-icon">{{ getPayIcon(work.payStatus) }}</text>
+                <text class="action-text">{{ getPayText(work.payStatus) }}</text>
               </view>
             </view>
           </view>
@@ -107,7 +126,7 @@
               <view class="empty-circle circle-2"></view>
               <image class="empty-icon-image" :src="worksConfig.emptyStates.all.icon" mode="aspectFit" />
             </view>
-            <text class="empty-title">还没有作品</text>
+            <text class="empty-title">还没有请帖</text>
             <text class="empty-text">{{ worksConfig.emptyStates.all.text }}</text>
             <view class="create-btn" @click="handleCreate">
               <text class="create-btn-text">{{ worksConfig.emptyStates.all.btnText }}</text>
@@ -116,35 +135,42 @@
           </view>
         </view>
 
-        <view class="works-grid stagger-list" v-if="activeTab === 'draft'">
+        <view class="works-list" v-if="activeTab === 'draft'">
           <view
             v-for="draft in worksStore.drafts"
             :key="draft.id"
             class="work-card"
             @click="handleDraftClick(draft)"
           >
-            <view class="card-cover">
-              <image class="cover-image" lazy-load :src="draft.image" mode="aspectFill" @error="onImageError" />
-              <view class="cover-gradient"></view>
-              <view class="card-badge draft-badge">
-                <text>草稿</text>
-              </view>
-              <view class="card-favorite" @click.stop="handleToggleFavorite(draft)">
-                <text class="favorite-icon">{{ isFavoriteWork(draft.id) ? '♥' : '♡' }}</text>
+            <view class="card-main">
+              <view class="card-cover">
+                <image class="cover-image" lazy-load :src="draft.image" mode="aspectFill" @error="onImageError" />
+                <view class="cover-badge draft-badge">
+                  <text>草稿</text>
+                </view>
+                <view class="card-favorite" @click.stop="handleToggleFavorite(draft)">
+                  <text class="favorite-icon">{{ isFavoriteWork(draft.id) ? '♥' : '♡' }}</text>
+                </view>
               </view>
               <view class="card-info">
-                <text class="card-title">{{ draft.title }}</text>
+                <view class="info-header">
+                  <text class="card-title">{{ draft.title }}</text>
+                </view>
                 <text class="card-date">草稿 · {{ draft.date }}</text>
               </view>
             </view>
             <view class="card-actions">
-              <view class="action-item primary" @click.stop="handleEdit(draft)">
-                <text class="action-icon">✎</text>
-                <text class="action-text">编辑</text>
-              </view>
-              <view class="action-item danger" @click.stop="handleDelete(draft)">
+              <view class="action-btn" @click.stop="handleDelete(draft)">
                 <text class="action-icon">🗑</text>
                 <text class="action-text">删除</text>
+              </view>
+              <view class="action-btn" @click.stop="handlePreview(draft)">
+                <text class="action-icon">👁</text>
+                <text class="action-text">查看</text>
+              </view>
+              <view class="action-btn primary" @click.stop="handleEdit(draft)">
+                <text class="action-icon">✎</text>
+                <text class="action-text">编辑</text>
               </view>
             </view>
           </view>
@@ -164,37 +190,52 @@
           </view>
         </view>
 
-        <view class="works-grid stagger-list" v-if="activeTab === 'favorite'">
+        <view class="works-list" v-if="activeTab === 'favorite'">
           <view
             v-for="fav in worksStore.favorites"
             :key="fav.id"
             class="work-card"
             @click="handleWorkClick(fav)"
           >
-            <view class="card-cover">
-              <image class="cover-image" lazy-load :src="fav.image" mode="aspectFill" @error="onImageError" />
-              <view class="cover-gradient"></view>
-              <view class="card-badge favorite-badge">
-                <text>♥ 收藏</text>
-              </view>
-              <view class="card-favorite active" @click.stop="handleToggleFavorite(fav)">
-                <text class="favorite-icon">♥</text>
+            <view class="card-main">
+              <view class="card-cover">
+                <image class="cover-image" lazy-load :src="fav.image" mode="aspectFill" @error="onImageError" />
+                <view class="cover-badge favorite-badge">
+                  <text>♥ 收藏</text>
+                </view>
+                <view class="card-favorite active" @click.stop="handleToggleFavorite(fav)">
+                  <text class="favorite-icon">♥</text>
+                </view>
               </view>
               <view class="card-info">
-                <text class="card-title">{{ fav.title }}</text>
+                <view class="info-header">
+                  <text class="card-title">{{ fav.title }}</text>
+                  <view class="price-tag" v-if="fav.price">
+                    <text class="price-symbol">¥</text>
+                    <text class="price-value">{{ fav.price.toFixed(2) }}</text>
+                  </view>
+                </view>
                 <text class="card-date">{{ fav.date }}</text>
               </view>
             </view>
             <view class="card-actions">
-              <view class="action-item" @click.stop="handlePreview(fav)">
+              <view class="action-btn" @click.stop="handlePreview(fav)">
                 <text class="action-icon">👁</text>
-                <text class="action-text">预览</text>
+                <text class="action-text">查看</text>
               </view>
-              <view class="action-item primary" @click.stop="handleShare(fav)">
+              <view class="action-btn" @click.stop="handleEdit(fav)">
+                <text class="action-icon">✎</text>
+                <text class="action-text">编辑</text>
+              </view>
+              <view class="action-btn" @click.stop="handlePrint(fav)">
+                <text class="action-icon">🖨</text>
+                <text class="action-text">印刷</text>
+              </view>
+              <view class="action-btn primary" @click.stop="handleShare(fav)">
                 <text class="action-icon">↗</text>
                 <text class="action-text">分享</text>
               </view>
-              <view class="action-item danger" @click.stop="handleRemoveFavorite(fav)">
+              <view class="action-btn danger" @click.stop="handleRemoveFavorite(fav)">
                 <text class="action-icon">♡</text>
                 <text class="action-text">取消</text>
               </view>
@@ -278,6 +319,40 @@ const handleToggleFavorite = (work: any) => {
   worksStore.toggleFavorite(work.id)
 }
 
+const getBadgeClass = (work: any) => {
+  if (work.status === 'draft') return 'draft-badge'
+  if (work.payStatus === 'paid') return 'paid-badge'
+  if (work.payStatus === 'printing') return 'printing-badge'
+  if (work.payStatus === 'completed') return 'completed-badge'
+  return 'default-badge'
+}
+
+const getBadgeText = (work: any) => {
+  if (work.status === 'draft') return '草稿'
+  if (work.payStatus === 'paid') return '已支付'
+  if (work.payStatus === 'printing') return '印刷中'
+  if (work.payStatus === 'completed') return '已完成'
+  return '请帖'
+}
+
+const getPayIcon = (payStatus?: string) => {
+  switch (payStatus) {
+    case 'paid': return '✓'
+    case 'printing': return '🖨'
+    case 'completed': return '✓'
+    default: return '💳'
+  }
+}
+
+const getPayText = (payStatus?: string) => {
+  switch (payStatus) {
+    case 'paid': return '已支付'
+    case 'printing': return '印刷中'
+    case 'completed': return '已完成'
+    default: return '支付'
+  }
+}
+
 onMounted(async () => {
   if (isLoggedIn.value) {
     await worksStore.loadAll()
@@ -336,7 +411,7 @@ const handleBatchDelete = () => {
   if (selectedIds.value.length === 0) return
   uni.showModal({
     title: '批量删除',
-    content: `确定要删除选中的 ${selectedIds.value.length} 个作品吗？删除后不可恢复。`,
+    content: `确定要删除选中的 ${selectedIds.value.length} 个请帖吗？删除后不可恢复。`,
     confirmColor: '#ef4444',
     success: (res) => {
       if (res.confirm) {
@@ -379,7 +454,8 @@ const handleEdit = (draft: any) => {
 const handleDelete = (draft: any) => {
   uni.showModal({
     title: '确认删除',
-    content: '确定要删除这个草稿吗？',
+    content: '确定要删除这个请帖吗？',
+    confirmColor: '#ef4444',
     success: (res) => {
       if (res.confirm) {
         haptic('medium')
@@ -390,53 +466,22 @@ const handleDelete = (draft: any) => {
   })
 }
 
-const handleMoreMenu = (work: any) => {
-  uni.showActionSheet({
-    itemList: ['重命名', '删除'],
-    success: (res) => {
-      if (res.tapIndex === 0) {
-        handleRename(work)
-      } else if (res.tapIndex === 1) {
-        handleDeleteWork(work)
-      }
-    },
-  })
+const handlePrint = (work: any) => {
+  uni.showToast({ title: '印刷功能开发中', icon: 'none' })
 }
 
-const handleRename = (work: any) => {
-  uni.showModal({
-    title: '重命名',
-    editable: true,
-    placeholderText: '请输入新的作品名称',
-    content: work.title,
-    success: (res) => {
-      if (res.confirm && res.content) {
-        worksStore.renameWork(work.id, res.content)
-        uni.showToast({ title: '已重命名', icon: 'success' })
-      }
-    },
-  })
-}
-
-const handleDeleteWork = (work: any) => {
-  uni.showModal({
-    title: '确认删除',
-    content: '确定要删除这个作品吗？删除后不可恢复。',
-    confirmColor: '#ef4444',
-    success: (res) => {
-      if (res.confirm) {
-        haptic('medium')
-        worksStore.deleteWork(work.id)
-        uni.showToast({ title: '已删除', icon: 'success' })
-      }
-    },
-  })
+const handlePay = (work: any) => {
+  if (work.payStatus === 'paid' || work.payStatus === 'printing' || work.payStatus === 'completed') {
+    uni.showToast({ title: getPayText(work.payStatus), icon: 'none' })
+    return
+  }
+  uni.showToast({ title: '支付功能开发中', icon: 'none' })
 }
 
 const handleRemoveFavorite = (fav: any) => {
   uni.showModal({
     title: '取消收藏',
-    content: '确定要取消收藏这个作品吗？',
+    content: '确定要取消收藏这个请帖吗？',
     success: (res) => {
       if (res.confirm) {
         worksStore.toggleFavorite(fav.id)
@@ -744,12 +789,12 @@ const onImageError = () => {
 }
 
 .works-grid-wrap {
-  padding: 8rpx 24rpx 40rpx;
+  padding: 20rpx 24rpx 40rpx;
 }
 
-.works-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.works-list {
+  display: flex;
+  flex-direction: column;
   gap: 20rpx;
 }
 
@@ -797,16 +842,24 @@ const onImageError = () => {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:active {
-    transform: translateY(-4rpx) scale(0.98);
+    transform: translateY(-4rpx);
     box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.1);
   }
 }
 
+.card-main {
+  display: flex;
+  gap: 20rpx;
+  padding: 16rpx;
+}
+
 .card-cover {
   position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 4;
+  width: 180rpx;
+  height: 240rpx;
+  border-radius: 16rpx;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .cover-image {
@@ -814,35 +867,40 @@ const onImageError = () => {
   height: 100%;
 }
 
-.cover-gradient {
+.cover-badge {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 60%;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.7) 100%);
-  pointer-events: none;
-}
-
-.card-badge {
-  position: absolute;
-  top: 16rpx;
-  left: 16rpx;
+  top: 12rpx;
+  left: 12rpx;
   padding: 6rpx 14rpx;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   font-size: 20rpx;
   font-weight: 600;
   z-index: 2;
   backdrop-filter: blur(10rpx);
   -webkit-backdrop-filter: blur(10rpx);
 
-  &.category-badge {
+  &.default-badge {
     background: rgba(232, 74, 110, 0.9);
     color: #ffffff;
   }
 
   &.draft-badge {
     background: rgba(255, 152, 0, 0.9);
+    color: #ffffff;
+  }
+
+  &.paid-badge {
+    background: rgba(46, 204, 113, 0.9);
+    color: #ffffff;
+  }
+
+  &.printing-badge {
+    background: rgba(52, 152, 219, 0.9);
+    color: #ffffff;
+  }
+
+  &.completed-badge {
+    background: rgba(155, 89, 182, 0.9);
     color: #ffffff;
   }
 
@@ -856,14 +914,12 @@ const onImageError = () => {
   position: absolute;
   top: 12rpx;
   right: 12rpx;
-  width: 56rpx;
-  height: 56rpx;
+  width: 48rpx;
+  height: 48rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(10rpx);
-  -webkit-backdrop-filter: blur(10rpx);
+  background: rgba(255, 255, 255, 0.8);
   border-radius: 50%;
   z-index: 2;
   transition: all 0.2s ease;
@@ -873,14 +929,13 @@ const onImageError = () => {
   }
 
   &.active {
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.95);
   }
 }
 
 .favorite-icon {
-  font-size: 28rpx;
-  color: #ffffff;
-  line-height: 1;
+  font-size: 24rpx;
+  color: #888;
 
   .active & {
     color: #e84a6e;
@@ -888,40 +943,64 @@ const onImageError = () => {
 }
 
 .card-info {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 20rpx 16rpx;
-  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8rpx 0;
+}
+
+.info-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
 .card-title {
-  display: block;
-  font-size: 28rpx;
+  font-size: 30rpx;
   font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 6rpx;
+  color: #1a1a2e;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.2);
+  margin-right: 16rpx;
+}
+
+.price-tag {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+}
+
+.price-symbol {
+  font-size: 24rpx;
+  color: #e84a6e;
+  font-weight: 600;
+}
+
+.price-value {
+  font-size: 32rpx;
+  color: #e84a6e;
+  font-weight: 700;
 }
 
 .card-date {
-  display: block;
-  font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.85);
+  font-size: 24rpx;
+  color: #8a8a9a;
 }
 
 .card-actions {
   display: flex;
   padding: 16rpx;
   gap: 12rpx;
+  border-top: 1rpx solid #f0f0f5;
+  flex-wrap: wrap;
 }
 
-.action-item {
+.action-btn {
   flex: 1;
+  min-width: 100rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -929,7 +1008,7 @@ const onImageError = () => {
   gap: 4rpx;
   padding: 12rpx 8rpx;
   background: #f5f6fa;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   transition: all 0.2s ease;
 
   &:active {
@@ -957,15 +1036,33 @@ const onImageError = () => {
     .action-text {
       color: #ef4444;
     }
+  }
 
-    &:active {
-      background: #fee2e2;
+  &.pay-btn {
+    &.unpaid {
+      background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+      .action-icon, .action-text { color: #ffffff; }
+    }
+
+    &.paid {
+      background: #e8f5e9;
+      .action-icon, .action-text { color: #2ecc71; }
+    }
+
+    &.printing {
+      background: #e3f2fd;
+      .action-icon, .action-text { color: #3498db; }
+    }
+
+    &.completed {
+      background: #f3e5f5;
+      .action-icon, .action-text { color: #9b59b6; }
     }
   }
 }
 
 .action-icon {
-  font-size: 28rpx;
+  font-size: 26rpx;
   color: #6e6e80;
   line-height: 1;
 }
@@ -977,7 +1074,6 @@ const onImageError = () => {
 }
 
 .empty-state {
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1013,9 +1109,7 @@ const onImageError = () => {
   font-weight: 500;
 }
 
-/* 批量管理模式 */
 .batch-bar {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -1024,9 +1118,6 @@ const onImageError = () => {
   border-radius: 20rpx;
   box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
   margin-bottom: 8rpx;
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
 .batch-action {

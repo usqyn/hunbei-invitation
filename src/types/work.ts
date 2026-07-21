@@ -26,4 +26,6 @@ export interface Work {
   musicId?: number | null
   updatedAt?: string
   data?: WorkEditorData
+  price?: number
+  payStatus?: 'unpaid' | 'paid' | 'printing' | 'completed'
 }
