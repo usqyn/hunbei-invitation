@@ -75,7 +75,7 @@
               v-else-if="el.type === 'text'"
               class="flip-text"
               :style="getTextStyle(el)"
-            >{{ resolveText(el.text) }}</text>
+            >{{ formatBiDi(resolveText(el.text)) }}</text>
           </view>
         </view>
       </swiper-item>
@@ -213,6 +213,7 @@ import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { formatBiDi } from '@/utils/font-loader'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'

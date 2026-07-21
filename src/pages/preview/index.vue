@@ -484,6 +484,21 @@ watch(() => editorStore.templateLoading, (loading) => {
       } catch (e) {
         console.warn('[Preview] font load failed', e)
       }
+      // 关键修复：字体加载完成后强制 <text> 重渲染（与 editor/index.vue 同步）
+      // wx.loadFontFace 注册字体后，已渲染的 <text> 不会自动应用新字体。
+      // 通过对 style 做浅拷贝替换触发 Vue 重算 :style 绑定。
+      if (editorStore.templateType === 'flip') {
+        editorStore.flipPages.forEach(page => {
+          const els = [...page.elements]
+          page.elements.splice(0, els.length, ...els.map(e => ({ ...e, style: e.style ? { ...e.style } : undefined })))
+        })
+      } else if (editorStore.templateType === 'page') {
+        const secs = [...editorStore.pageSections]
+        editorStore.pageSections.splice(0, secs.length, ...secs.map(s => ({ ...s, style: s.style ? { ...s.style } : undefined })))
+      } else {
+        const els = [...editorStore.editableElements]
+        editorStore.editableElements.splice(0, els.length, ...els.map(e => ({ ...e, style: e.style ? { ...e.style } : undefined })))
+      }
       trackTimer(() => updateCardSize(), 100)
       trackTimer(() => measureZoomHeight(), 150)
     })

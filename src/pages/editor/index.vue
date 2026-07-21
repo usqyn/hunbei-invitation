@@ -1587,8 +1587,29 @@ watch(() => editorStore.templateLoading, (loading) => {
       } catch (e) {
         console.warn('[Editor] font load failed', e)
       }
-      // 字体加载完成后强制重新计算尺寸 + 触发响应式更新
+      // 字体加载完成后强制重新计算尺寸
       updateCardSize()
+
+      // 关键修复：字体加载完成后必须强制 <text> 重渲染。
+      // wx.loadFontFace 注册字体后，已渲染的 <text> 节点不会自动应用新字体
+      // （不在 Vue 响应式系统内）。通过对每个元素的 style 做一次浅拷贝替换，
+      // 触发 Vue 重新计算 :style 绑定，让 <text> 重新应用 font-family。
+      // 否则首次渲染时 fallback 字体（PingFang SC / 思源宋体）会被"焊死"在 DOM 上，
+      // 即使字体注册成功也显示为不连写的孤立字形。
+      if (editorStore.templateType === 'flip') {
+        editorStore.flipPages.forEach(page => {
+          const els = [...page.elements]
+          page.elements.splice(0, els.length, ...els.map(e => ({ ...e, style: e.style ? { ...e.style } : undefined })))
+        })
+      } else if (editorStore.templateType === 'page') {
+        const secs = [...editorStore.pageSections]
+        editorStore.pageSections.splice(0, secs.length, ...secs.map(s => ({ ...s, style: s.style ? { ...s.style } : undefined })))
+      } else {
+        const els = [...editorStore.editableElements]
+        editorStore.editableElements.splice(0, els.length, ...els.map(e => ({ ...e, style: e.style ? { ...e.style } : undefined })))
+      }
+      // 二次重算尺寸：字体切换后文本尺寸可能变化
+      nextTick(() => updateCardSize())
     })
   }
 })

@@ -28,10 +28,10 @@
           @longpress="onSectionLongPress(sec)"
         >
           <template v-if="sec.type === 'title'">
-            <text class="section-title" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入标题' }}</text>
+            <text class="section-title" :style="getTextStyle(sec)">{{ formatBiDi(sec.text || sec.placeholder || '请输入标题') }}</text>
           </template>
           <template v-else-if="sec.type === 'date'">
-            <text class="section-date" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || 'YYYY/MM/DD' }}</text>
+            <text class="section-date" :style="getTextStyle(sec)">{{ formatBiDi(sec.text || sec.placeholder || 'YYYY/MM/DD') }}</text>
           </template>
           <template v-else-if="sec.type === 'image'">
             <CloudImage
@@ -47,12 +47,12 @@
             </view>
           </template>
           <template v-else-if="sec.type === 'text'">
-            <text class="section-text" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入正文内容' }}</text>
+            <text class="section-text" :style="getTextStyle(sec)">{{ formatBiDi(sec.text || sec.placeholder || '请输入正文内容') }}</text>
           </template>
           <template v-else-if="sec.type === 'location'">
             <view class="location-row">
               <text class="location-icon">📍</text>
-              <text class="location-text" :style="getTextStyle(sec)">{{ sec.text || sec.placeholder || '请输入地址' }}</text>
+              <text class="location-text" :style="getTextStyle(sec)">{{ formatBiDi(sec.text || sec.placeholder || '请输入地址') }}</text>
             </view>
           </template>
           <template v-else-if="sec.type === 'rsvp'">
@@ -231,6 +231,7 @@ import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { uploadImage } from '@/api'
+import { formatBiDi } from '@/utils/font-loader'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
