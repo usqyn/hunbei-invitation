@@ -1,25 +1,10 @@
 /**
- * 哈萨克语（阿拉伯文字母）日期转换工具
+ * 哈萨克语（阿拉伯字母）日期转换工具
  *
- * 哈萨克语用阿拉伯字母书写（RTL），数字用西方数字但置于 RTL 文本中。
- * 月份和星期用哈萨克语单词表达。
+ * 哈萨克语用阿拉伯字母书写（RTL），但数字沿用西方数字（0-9），不用阿拉伯-印度数字。
+ * 日期表达式：中文「2026年 1月 22日」→ 哈萨克语「2026 جىل 1 اي 22 كۇن」
+ *   жыл(年)→جىل  ай(月)→اي  күн(日)→كۇن
  */
-
-// 哈萨克语月份名（阿拉伯字母）
-const KZ_MONTHS = [
-  'قىڭعىراي',     // 1月
-  'ااقپان',       // 2月
-  'ناۋرىز',       // 3月
-  'ساۋىر',        // 4月
-  'مامىر',        // 5月
-  'ماءسىم',       // 6月
-  'شىلدە',        // 7月
-  'تامىز',        // 8月
-  'قىر كۇەك',     // 9月
-  'قىازان',       // 10月
-  'قىاراشا',      // 11月
-  'جەلتوقسان',    // 12月
-]
 
 // 哈萨克语星期（阿拉伯字母）— 0=周日
 const KZ_WEEKDAYS = [
@@ -34,62 +19,55 @@ const KZ_WEEKDAYS = [
 
 // 哈萨克语时间段
 const KZ_TIME_PERIODS: Record<string, string> = {
-  morning: 'تاڭە',       // 上午
-  noon: 'تۇستە',         // 中午
-  afternoon: 'تۇستەن كەيىن', // 下午
-  evening: 'كەشتە',      // 傍晚
-  night: 'تۇندە',        // 晚上
+  morning: 'تاڭە',            // 上午
+  noon: 'تۇستە',              // 中午
+  afternoon: 'تۇستەن كەيىن',  // 下午
+  evening: 'كەشتە',           // 傍晚
+  night: 'تۇندە',             // 晚上
 }
 
 export interface KzDateParts {
-  year: string    // 如 "٢٠٢٥" 或 "2025"
-  month: string   // 哈萨克语月名
-  day: string     // 如 "١٥" 或 "15"
-  weekday: string // 哈萨克语星期
-  fullDate: string // 组合后的完整哈语日期
-  time?: string   // 时间段
+  /** 哈语日期表达式，如 "2026 جىل 1 اي 22 كۇن" */
+  fullDate: string
+  /** 哈语星期名 */
+  weekday: string
 }
 
 /**
- * 将日期字符串/Date对象转为哈萨克语阿拉伯文日期各部分
+ * 将日期转为哈萨克语日期表达式
+ * 中文「2026年 1月 22日」→ 哈萨克语「2026 جىل 1 اي 22 كۇن」
+ * 数字保留西方数字，仅翻译年/月/日单位
  */
 export function toKazakhDate(date: string | Date): KzDateParts {
   const d = typeof date === 'string' ? new Date(date) : date
   if (isNaN(d.getTime())) {
-    return { year: '', month: '', day: '', weekday: '', fullDate: '' }
+    return { fullDate: '', weekday: '' }
   }
 
-  const year = String(d.getFullYear())
-  const monthIdx = d.getMonth()
-  const day = String(d.getDate())
-  const weekdayIdx = d.getDay()
+  const year = d.getFullYear()
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  const weekday = KZ_WEEKDAYS[d.getDay()] || ''
 
-  const kzMonth = KZ_MONTHS[monthIdx] || ''
-  const kzWeekday = KZ_WEEKDAYS[weekdayIdx] || ''
+  // 2026 جىل 1 اي 22 كۇن
+  const fullDate = `${year} جىل ${month} اي ${day} كۇن`
 
-  // 完整日期格式：توي كۇنى: 15 مامىر 2025 جىل / جەكسەنبى
-  const fullDate = `توي كۇنى: ${day} ${kzMonth} ${year} جىل / ${kzWeekday}`
-
-  return {
-    year,
-    month: kzMonth,
-    day,
-    weekday: kzWeekday,
-    fullDate,
-  }
+  return { fullDate, weekday }
 }
 
 /**
- * 根据日期 + 时间段生成完整哈萨克语日期时间
+ * 获取星期选项列表（中文标签供用户滚动选择，选中后取 kz 值写入占位符）
  */
-export function toKazakhDateTime(date: string | Date, timePeriod?: string): KzDateParts & { fullDateTime: string } {
-  const parts = toKazakhDate(date)
-  const kzTime = timePeriod ? (KZ_TIME_PERIODS[timePeriod] || '') : ''
-  const fullDateTime = kzTime
-    ? `${parts.fullDate} — ${kzTime}`
-    : parts.fullDate
-
-  return { ...parts, fullDateTime }
+export function getKzWeekdayOptions() {
+  return [
+    { label: '周一', kz: KZ_WEEKDAYS[1] },
+    { label: '周二', kz: KZ_WEEKDAYS[2] },
+    { label: '周三', kz: KZ_WEEKDAYS[3] },
+    { label: '周四', kz: KZ_WEEKDAYS[4] },
+    { label: '周五', kz: KZ_WEEKDAYS[5] },
+    { label: '周六', kz: KZ_WEEKDAYS[6] },
+    { label: '周日', kz: KZ_WEEKDAYS[0] },
+  ]
 }
 
 /**
@@ -97,10 +75,10 @@ export function toKazakhDateTime(date: string | Date, timePeriod?: string): KzDa
  */
 export function getTimePeriodOptions() {
   return [
-    { value: 'morning', label: '上午', kzLabel: KZ_TIME_PERIODS.morning },
-    { value: 'noon', label: '中午', kzLabel: KZ_TIME_PERIODS.noon },
-    { value: 'afternoon', label: '下午', kzLabel: KZ_TIME_PERIODS.afternoon },
-    { value: 'evening', label: '傍晚', kzLabel: KZ_TIME_PERIODS.evening },
-    { value: 'night', label: '晚上', kzLabel: KZ_TIME_PERIODS.night },
+    { label: '上午', kz: KZ_TIME_PERIODS.morning },
+    { label: '中午', kz: KZ_TIME_PERIODS.noon },
+    { label: '下午', kz: KZ_TIME_PERIODS.afternoon },
+    { label: '傍晚', kz: KZ_TIME_PERIODS.evening },
+    { label: '晚上', kz: KZ_TIME_PERIODS.night },
   ]
 }

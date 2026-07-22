@@ -9,10 +9,11 @@ export const TEMPLATE_DATA_KEYS = [
   'inviter', 'invitee', 'date', 'time',
   'location', 'address', 'phone',
   'year', 'month', 'day',
-  // 哈萨克语阿拉伯文专用字段（拆分为年/月/日/星期/时间段）
-  'kzYear', 'kzMonth', 'kzDay', 'kzWeekday', 'kzTime',
-  // 兼容旧模板：单文本哈语完整日期
-  'kzDate',
+  // 哈萨克语阿拉伯文专用字段
+  // kzDate：选日期后自动填入哈语表达式 "2026 جىل 1 اي 22 كۇن"
+  // kzWeekday：星期滚轮，选后填入哈语星期名
+  // kzTime：时间段滚轮，选后填入哈语时间段
+  'kzDate', 'kzWeekday', 'kzTime',
 ]
 
 /** 快捷字段配置 */
@@ -37,19 +38,14 @@ export const SMART_FIELDS: SmartFieldConfig[] = [
   { key: 'year', label: '年份', icon: '📅', placeholder: '2025', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   { key: 'month', label: '月份', icon: '📅', placeholder: '6', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   { key: 'day', label: '日期(日)', icon: '📅', placeholder: '15', fontSize: 14, fontWeight: 'normal', color: '#666666' },
-  // 哈萨克语阿拉伯文日期拆分字段：
-  // 在小程序编辑器中，选择中文日期/星期后会自动转换为哈语阿拉伯文写入对应占位符
-  // placeholder 使用哈语示例值，发布后小程序端会自动注入 RTL 字体（KazakhSoftAsilya）
-  { key: 'kzYear', label: '哈语年份', icon: '📆', placeholder: '٢٠٢٥', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzMonth', label: '哈语月份', icon: '📆', placeholder: 'مامىر', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzDay', label: '哈语日', icon: '📆', placeholder: '١٥', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  // 哈语星期占位符：小程序端提供周一-周日滚轮选择器，选后写入对应哈语星期名
+  // 哈萨克语阿拉伯文日期字段：
+  // kzDate：小程序端选日期后自动填入哈语表达式 "2026 جىل 1 اي 22 كۇن"（数字保留西方数字，翻译年月日单位）
+  // kzWeekday：小程序端提供周一-周日滚轮选择器，选后填入哈语星期名
+  // kzTime：小程序端提供时间段滚轮，选后填入哈语时间段
+  // 发布后小程序端会自动注入 RTL 字体（KazakhSoftAsilya）
+  { key: 'kzDate', label: '哈语日期', icon: '📆', placeholder: '2026 جىل 1 اي 22 كۇن', fontSize: 16, fontWeight: 'normal', color: '#666666' },
   { key: 'kzWeekday', label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  // 哈语时间段：上午/中午/下午/傍晚/晚上，选后写入对应哈语阿拉伯文
   { key: 'kzTime', label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  // 兼容旧模板：单文本哈语日期（选日期后自动填入完整哈语日期串）
-  // placeholder 中 "توي كۇنى" = "婚礼日期"，触发 RTL 字体自动注入（见 useCanvas.resolveRtlTextOptions）
-  { key: 'kzDate', label: '哈语日期(完整)', icon: '📆', placeholder: 'توي كۇنى: 2024-05-20', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
 
 /** 文字样式预设 */
