@@ -2,8 +2,9 @@
  * 哈萨克语（阿拉伯字母）日期转换工具
  *
  * 哈萨克语用阿拉伯字母书写（RTL），但数字沿用西方数字（0-9），不用阿拉伯-印度数字。
- * 日期表达式：中文「2026年 1月 22日」→ 哈萨克语「2026 جىل 1 اي 22 كۇن」
- *   жыл(年)→جىل  ай(月)→اي  күн(日)→كۇن
+ * 日期表达式（从属格形式）：
+ *   中文「2026年 1月 22日」→ 哈萨克语「2026 جىلعى 1 ايدىڭ 22 كۇنى」
+ *   жылы(年的...时)→جىلعى  айдың(月的)→ايدىڭ  күні(日)→كۇنى
  */
 
 // 哈萨克语星期（阿拉伯字母）— 0=周日
@@ -35,8 +36,8 @@ export interface KzDateParts {
 
 /**
  * 将日期转为哈萨克语日期表达式
- * 中文「2026年 1月 22日」→ 哈萨克语「2026 جىل 1 اي 22 كۇن」
- * 数字保留西方数字，仅翻译年/月/日单位
+ * 中文「2026年 1月 22日」→ 哈萨克语「2026 جىلعى 1 ايدىڭ 22 كۇنى」
+ * 数字保留西方数字，仅翻译年/月/日单位（从属格形式）
  */
 export function toKazakhDate(date: string | Date): KzDateParts {
   const d = typeof date === 'string' ? new Date(date) : date
@@ -49,8 +50,8 @@ export function toKazakhDate(date: string | Date): KzDateParts {
   const day = d.getDate()
   const weekday = KZ_WEEKDAYS[d.getDay()] || ''
 
-  // 2026 جىل 1 اي 22 كۇن
-  const fullDate = `${year} جىل ${month} اي ${day} كۇن`
+  // 2026 جىلعى 1 ايدىڭ 22 كۇنى
+  const fullDate = `${year} جىلعى ${month} ايدىڭ ${day} كۇنى`
 
   return { fullDate, weekday }
 }

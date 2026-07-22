@@ -258,8 +258,8 @@ const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholde
   month: { label: '月份', icon: '📅', placeholder: '例如: 6' },
   day: { label: '日', icon: '📅', placeholder: '例如: 15' },
   // 哈萨克语阿拉伯文日期字段（admin 端发布对应 dataKey 占位符后由此识别）
-  // kzDate：选日期后输出表达式 "2026 جىل 1 اي 22 كۇن"（数字保留西方数字，翻译年月日单位）
-  kzDate: { label: '哈语日期', icon: '📆', placeholder: '2026 جىل 1 اي 22 كۇن' },
+  // kzDate：选日期后输出表达式 "2026 جىلعى 1 ايدىڭ 22 كۇنى"（从属格形式）
+  kzDate: { label: '哈语日期', icon: '📆', placeholder: '2026 جىلعى 1 ايدىڭ 22 كۇنى' },
   // kzWeekday：星期滚轮选择，输出哈语星期名
   kzWeekday: { label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى' },
   // kzTime：时间段滚轮，输出哈语时间段

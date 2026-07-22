@@ -39,11 +39,11 @@ export const SMART_FIELDS: SmartFieldConfig[] = [
   { key: 'month', label: '月份', icon: '📅', placeholder: '6', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   { key: 'day', label: '日期(日)', icon: '📅', placeholder: '15', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   // 哈萨克语阿拉伯文日期字段：
-  // kzDate：小程序端选日期后自动填入哈语表达式 "2026 جىل 1 اي 22 كۇن"（数字保留西方数字，翻译年月日单位）
+  // kzDate：小程序端选日期后自动填入哈语表达式 "2026 جىلعى 1 ايدىڭ 22 كۇنى"（从属格形式）
   // kzWeekday：小程序端提供周一-周日滚轮选择器，选后填入哈语星期名
   // kzTime：小程序端提供时间段滚轮，选后填入哈语时间段
   // 发布后小程序端会自动注入 RTL 字体（KazakhSoftAsilya）
-  { key: 'kzDate', label: '哈语日期', icon: '📆', placeholder: '2026 جىل 1 اي 22 كۇن', fontSize: 16, fontWeight: 'normal', color: '#666666' },
+  { key: 'kzDate', label: '哈语日期', icon: '📆', placeholder: '2026 جىلعى 1 ايدىڭ 22 كۇنى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
   { key: 'kzWeekday', label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
   { key: 'kzTime', label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
