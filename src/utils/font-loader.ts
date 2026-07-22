@@ -1,6 +1,9 @@
 import { API_BASE } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 
+// re-export 供外部直接引用
+export { RTL_CHAR_REGEX }
+
 // ============ 字体加载 ============
 const SYSTEM_FONTS = ['sans-serif', 'serif', 'monospace', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', 'Georgia', 'KaiTi']
 const loadedFonts = new Set<string>()

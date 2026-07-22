@@ -321,7 +321,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
 import { useUserStore } from '@/stores/user'
-import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
+import { loadFontsForElements, formatBiDi, RTL_CHAR_REGEX } from '@/utils/font-loader'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
@@ -524,6 +524,10 @@ function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
   renderedImageStale.value = true
   hasUnsavedChanges.value = true
+  // 输入阿拉伯文时触发字体加载
+  if (RTL_CHAR_REGEX.test(value)) {
+    loadFontsForElements([{ type: 'text', text: value }])
+  }
   if (smartEditTimer) clearTimeout(smartEditTimer)
   smartEditTimer = setTimeout(() => {
     editorStore.pushHistory()

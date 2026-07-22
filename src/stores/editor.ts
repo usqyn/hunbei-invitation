@@ -613,6 +613,7 @@ export const useEditorStore = defineStore('editor', () => {
       const el = editableElements[selectedElement.value]
       if (el) {
         el.text = editingText.value
+        applyRtlStyleIfNeeded(el, editingText.value)
         if (el.dataKey) {
           templateStore.updateField(el.dataKey, editingText.value)
         }
@@ -631,11 +632,36 @@ export const useEditorStore = defineStore('editor', () => {
     showTextEditor.value = false
     showSectionTextEditor.value = false
     activeSectionId.value = null
+    // 文字变更后触发字体加载（阿拉伯文可能需要加载哈萨克字体）
+    reloadFontsAfterRestore()
     pushHistory()
   }
 
   function closeBasicInfoEditor() {
     showBasicInfoEditor.value = false
+  }
+
+  /** 当文字变为阿拉伯/哈萨克文时，自动切换字体和 RTL 方向；恢复中文时还原 */
+  function applyRtlStyleIfNeeded(el: EditableElement, newText: string) {
+    if (el.type !== 'text') return
+    const isRtl = RTL_CHAR_REGEX.test(newText)
+    if (!el.style) el.style = {} as any
+    const style = el.style
+    if (isRtl) {
+      // 阿拉伯文：强制哈萨克字体 + rtl + 右对齐
+      if (!style.font || !style.font.includes('KazakhSoftAsilya')) {
+        style.font = 'KazakhSoftAsilya'
+      }
+      style.direction = 'rtl'
+      if (!style.textAlign) style.textAlign = 'right'
+    } else {
+      // 中文/英文：若之前被自动切换过，还原为默认字体和 ltr
+      if (style.font === 'KazakhSoftAsilya') {
+        style.font = '思源宋体'
+      }
+      if (style.direction === 'rtl') style.direction = 'ltr'
+      if (style.textAlign === 'right') style.textAlign = 'center'
+    }
   }
 
   /** 将字段值同步到所有模式（canvas / page / flip）的对应元素中 */
@@ -646,13 +672,28 @@ export const useEditorStore = defineStore('editor', () => {
     editableElements.forEach(el => {
       if (el.dataKey === key) {
         el.text = value
+        applyRtlStyleIfNeeded(el, value)
       }
     })
     // page 模式：图片类型更新 image 字段，文本类型更新 text 字段
     pageSections.forEach(sec => {
       if (sec.dataKey === key) {
         if (sec.type === 'image') sec.image = resolveUrl(value)
-        else sec.text = value
+        else {
+          sec.text = value
+          if (sec.style) {
+            const isRtl = RTL_CHAR_REGEX.test(value)
+            if (isRtl) {
+              if (!sec.style.font || !sec.style.font.includes('KazakhSoftAsilya')) sec.style.font = 'KazakhSoftAsilya'
+              sec.style.direction = 'rtl'
+              if (!sec.style.textAlign) sec.style.textAlign = 'right'
+            } else {
+              if (sec.style.font === 'KazakhSoftAsilya') sec.style.font = '思源宋体'
+              if (sec.style.direction === 'rtl') sec.style.direction = 'ltr'
+              if (sec.style.textAlign === 'right') sec.style.textAlign = 'center'
+            }
+          }
+        }
       }
     })
     // flip 模式：遍历所有页面的元素
@@ -660,6 +701,7 @@ export const useEditorStore = defineStore('editor', () => {
       (page.elements || []).forEach(el => {
         if (el.dataKey === key) {
           el.text = value
+          applyRtlStyleIfNeeded(el, value)
         }
       })
     })
