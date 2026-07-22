@@ -212,11 +212,11 @@
   ],
   "preloadRule": {
     "pages/template/index": {
-      "network": "all",
+      "network": "wifi",
       "packages": ["pages/editor"]
     },
     "pages/index/index": {
-      "network": "all",
+      "network": "wifi",
       "packages": ["pages/preview", "pages/share"]
     }
   },

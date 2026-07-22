@@ -4,12 +4,45 @@ import { useTemplateStore } from './template'
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
 import { resolveUrl } from '@/utils/url'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
-import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData } from '@/types'
+import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData, ElementStyle } from '@/types'
 import { request } from '@/utils/request'
 import { getStorage, setStorage } from '@/utils/storage'
 import { loadFontsForElements } from '@/utils/font-loader'
+import { deepClone } from '@/utils/common'
+import { showToast } from '@/composables/useFeedback'
 
 const STORAGE_KEY_TEMPLATE = 'TOYtamaxia_current_template'
+
+/**
+ * 通用 RTL 样式切换函数（消除 3 处重复代码）
+ * 检测文字是否包含阿拉伯/哈萨克字符，自动切换字体/方向/对齐
+ */
+function applyRtlStyle(style: ElementStyle | undefined, text: string): ElementStyle {
+  if (!text || !RTL_CHAR_REGEX.test(text)) {
+    // 中文/英文：若之前被自动切换过，还原为默认
+    if (style) {
+      if (style.font === 'KazakhSoftAsilya') style.font = '思源宋体'
+      if (style.direction === 'rtl') style.direction = 'ltr'
+      if (style.textAlign === 'right') style.textAlign = 'center'
+    }
+    return style as ElementStyle
+  }
+  // 阿拉伯文：强制哈萨克字体 + rtl + 右对齐
+  const result = style ? { ...style } : ({} as ElementStyle)
+  if (!result.font || !result.font.includes('KazakhSoftAsilya')) {
+    result.font = 'KazakhSoftAsilya'
+  }
+  if (!result.direction || result.direction === 'auto') {
+    result.direction = 'rtl'
+  }
+  if (!result.textAlign) {
+    result.textAlign = 'right'
+  }
+  return result
+}
+
+// 持久化失败计数器（连续失败 N 次后通知用户）
+let _persistFailCount = 0
 const STORAGE_KEY_TEMPLATE_DATA = 'TOYtamaxia_current_template_data'
 
 export const useEditorStore = defineStore('editor', () => {
@@ -54,11 +87,11 @@ export const useEditorStore = defineStore('editor', () => {
 
   function snapshotCurrent(): any {
     return {
-      elements: JSON.parse(JSON.stringify(editableElements)),
-      pageSections: JSON.parse(JSON.stringify(pageSections)),
-      flipPages: JSON.parse(JSON.stringify(flipPages)),
-      background: JSON.parse(JSON.stringify(background.value)),
-      canvasSize: JSON.parse(JSON.stringify(canvasSize.value)),
+      elements: deepClone(editableElements),
+      pageSections: deepClone(pageSections),
+      flipPages: deepClone(flipPages),
+      background: deepClone(background.value),
+      canvasSize: deepClone(canvasSize.value),
       templateType: templateType.value,
       renderedImage: renderedImage.value,
       currentFlipPageIndex: currentFlipPageIndex.value,
@@ -99,19 +132,19 @@ export const useEditorStore = defineStore('editor', () => {
   function restoreSnapshot(snap: any) {
     if (snap && Array.isArray(snap.elements)) {
       // 深拷贝避免还原后编辑操作污染原始快照
-      editableElements.splice(0, editableElements.length, ...JSON.parse(JSON.stringify(snap.elements)))
+      editableElements.splice(0, editableElements.length, ...deepClone(snap.elements))
     }
     if (snap && Array.isArray(snap.pageSections)) {
-      pageSections.splice(0, pageSections.length, ...JSON.parse(JSON.stringify(snap.pageSections)))
+      pageSections.splice(0, pageSections.length, ...deepClone(snap.pageSections))
     }
     if (snap && Array.isArray(snap.flipPages)) {
-      flipPages.splice(0, flipPages.length, ...JSON.parse(JSON.stringify(snap.flipPages)))
+      flipPages.splice(0, flipPages.length, ...deepClone(snap.flipPages))
     }
     if (snap && snap.background) {
-      background.value = JSON.parse(JSON.stringify(snap.background))
+      background.value = deepClone(snap.background)
     }
     if (snap && snap.canvasSize) {
-      canvasSize.value = JSON.parse(JSON.stringify(snap.canvasSize))
+      canvasSize.value = deepClone(snap.canvasSize)
     }
     if (snap && snap.templateType) {
       templateType.value = snap.templateType
@@ -150,7 +183,7 @@ export const useEditorStore = defineStore('editor', () => {
   function resetToInitial() {
     if (!_initialSnapshot.value) return false
     // 深拷贝初始快照，避免还原后编辑操作污染 _initialSnapshot
-    const snapCopy = JSON.parse(JSON.stringify(_initialSnapshot.value))
+    const snapCopy = deepClone(_initialSnapshot.value)
     restoreSnapshot(snapCopy)
     // 重置后清空历史，以初始状态为起点（用副本，不共享引用）
     history.value = [snapCopy]
@@ -214,24 +247,10 @@ export const useEditorStore = defineStore('editor', () => {
     const type = el.type || 'text'
     const text = el.text ?? ''
     const isImage = type === 'image'
-    // 修复阿拉伯文显示混乱：检测 RTL 字符时强制使用哈萨克字体
-    // 避免因 style.font 默认继承思源宋体导致字符不连写
+    // 检测 RTL 字符时自动切换哈萨克字体（使用通用 applyRtlStyle 函数）
     let style = el.style ? { ...el.style } : undefined
-    if (!isImage && text && RTL_CHAR_REGEX.test(text)) {
-      const currentFont = style?.font || ''
-      // 若当前字体不含 KazakhSoftAsilya，则替换为哈萨克字体优先栈
-      if (!currentFont.includes('KazakhSoftAsilya')) {
-        style = style ? { ...style } : {}
-        style.font = 'KazakhSoftAsilya'
-        // 方向兜底：若未显式设置 direction 或为 auto，则设为 rtl
-        if (!style.direction || style.direction === 'auto') {
-          style.direction = 'rtl'
-        }
-        // 对齐兜底：若未显式设置 textAlign，则设为 right
-        if (!style.textAlign) {
-          style.textAlign = 'right'
-        }
-      }
+    if (!isImage && text) {
+      style = applyRtlStyle(style, text)
     }
     return {
       type,
@@ -349,9 +368,10 @@ export const useEditorStore = defineStore('editor', () => {
       }
     })
 
-    // 同步方向信息到 TemplateStore
+    // 同步方向信息到 TemplateStore（canvasSize 由 editorStore 直接维护）
     if (template.canvasSize) {
-      templateStore.setCanvasSize(template.canvasSize)
+      canvasSize.value = { ...template.canvasSize }
+      templateStore.setOrientationFromSize(template.canvasSize)
     }
     if (template.orientation) {
       templateStore.orientation = template.orientation
@@ -373,21 +393,27 @@ export const useEditorStore = defineStore('editor', () => {
       const templateStore = useTemplateStore()
       const data = {
         templateType: templateType.value,
-        elements: JSON.parse(JSON.stringify(editableElements)),
-        pageSections: JSON.parse(JSON.stringify(pageSections)),
-        flipPages: JSON.parse(JSON.stringify(flipPages)),
-        canvasSize: JSON.parse(JSON.stringify(canvasSize.value)),
-        background: JSON.parse(JSON.stringify(background.value)),
+        elements: deepClone(editableElements),
+        pageSections: deepClone(pageSections),
+        flipPages: deepClone(flipPages),
+        canvasSize: deepClone(canvasSize.value),
+        background: deepClone(background.value),
         renderedImage: renderedImage.value,
-        templateData: JSON.parse(JSON.stringify(templateStore.templateData)),
-        basicInfo: JSON.parse(JSON.stringify(templateStore.basicInfo)),
-        settings: JSON.parse(JSON.stringify(templateStore.settings)),
+        templateData: deepClone(templateStore.templateData),
+        basicInfo: deepClone(templateStore.basicInfo),
+        settings: deepClone(templateStore.settings),
         selectedMusicId: templateStore.selectedMusicId,
         currentFlipPageIndex: currentFlipPageIndex.value,
       }
       setStorage(STORAGE_KEY_TEMPLATE_DATA, data)
+      _persistFailCount = 0 // 成功则重置计数
     } catch (e) {
       console.warn('persistTemplate data failed:', e)
+      _persistFailCount++
+      // 连续失败 3 次后通知用户，避免静默数据丢失
+      if (_persistFailCount === 3) {
+        showToast('数据保存异常，请检查存储空间', 'warning')
+      }
     }
   }
 
@@ -644,24 +670,7 @@ export const useEditorStore = defineStore('editor', () => {
   /** 当文字变为阿拉伯/哈萨克文时，自动切换字体和 RTL 方向；恢复中文时还原 */
   function applyRtlStyleIfNeeded(el: EditableElement, newText: string) {
     if (el.type !== 'text') return
-    const isRtl = RTL_CHAR_REGEX.test(newText)
-    if (!el.style) el.style = {} as any
-    const style = el.style
-    if (isRtl) {
-      // 阿拉伯文：强制哈萨克字体 + rtl + 右对齐
-      if (!style.font || !style.font.includes('KazakhSoftAsilya')) {
-        style.font = 'KazakhSoftAsilya'
-      }
-      style.direction = 'rtl'
-      if (!style.textAlign) style.textAlign = 'right'
-    } else {
-      // 中文/英文：若之前被自动切换过，还原为默认字体和 ltr
-      if (style.font === 'KazakhSoftAsilya') {
-        style.font = '思源宋体'
-      }
-      if (style.direction === 'rtl') style.direction = 'ltr'
-      if (style.textAlign === 'right') style.textAlign = 'center'
-    }
+    el.style = applyRtlStyle(el.style, newText)
   }
 
   /** 将字段值同步到所有模式（canvas / page / flip）的对应元素中 */
@@ -682,16 +691,7 @@ export const useEditorStore = defineStore('editor', () => {
         else {
           sec.text = value
           if (sec.style) {
-            const isRtl = RTL_CHAR_REGEX.test(value)
-            if (isRtl) {
-              if (!sec.style.font || !sec.style.font.includes('KazakhSoftAsilya')) sec.style.font = 'KazakhSoftAsilya'
-              sec.style.direction = 'rtl'
-              if (!sec.style.textAlign) sec.style.textAlign = 'right'
-            } else {
-              if (sec.style.font === 'KazakhSoftAsilya') sec.style.font = '思源宋体'
-              if (sec.style.direction === 'rtl') sec.style.direction = 'ltr'
-              if (sec.style.textAlign === 'right') sec.style.textAlign = 'center'
-            }
+            sec.style = applyRtlStyle(sec.style, value)
           }
         }
       }
@@ -758,9 +758,11 @@ export const useEditorStore = defineStore('editor', () => {
       if (!url) return
       imageUrl = url!
     } else {
-      idx = selectedElement.value!
+      // 移除非空断言：先检查 null 再赋值
+      const selectedIdx = selectedElement.value
+      if (selectedIdx === null) return
+      idx = selectedIdx
       imageUrl = materialOrIdx.url
-      if (idx === null) return
     }
 
     if (idx === null || idx < 0 || idx >= editableElements.length) return

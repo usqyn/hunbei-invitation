@@ -4,11 +4,18 @@ import { API_BASE, USE_CLOUD_FUNCTIONS } from '@/config'
  * 将后端返回的相对路径解析为完整 URL
  * 支持: http/https, data:, blob:, wxfile://, cloud://, 以及 /uploads/ 等相对路径
  * /static/ 开头为小程序包内本地资源，不拼接服务器地址
+ * 小程序要求 HTTPS，对非 localhost 的 http:// 自动升级
  */
 export function resolveUrl(url: string | undefined | null): string {
   if (!url) return ''
+  if (url.startsWith('http://')) {
+    // 开发环境 localhost/127.0.0.1 保持 HTTP，生产环境自动升级 HTTPS
+    if (!url.includes('127.0.0.1') && !url.includes('localhost')) {
+      return url.replace('http://', 'https://')
+    }
+    return url
+  }
   if (
-    url.startsWith('http://') ||
     url.startsWith('https://') ||
     url.startsWith('data:') ||
     url.startsWith('blob:') ||
@@ -19,7 +26,12 @@ export function resolveUrl(url: string | undefined | null): string {
   ) {
     return url
   }
-  return API_BASE + url
+  // 相对路径拼接 API_BASE，非 localhost 时自动升级 HTTPS
+  const fullUrl = API_BASE + url
+  if (fullUrl.startsWith('http://') && !fullUrl.includes('127.0.0.1') && !fullUrl.includes('localhost')) {
+    return fullUrl.replace('http://', 'https://')
+  }
+  return fullUrl
 }
 
 // ============ 云存储 URL 缓存与刷新 ============

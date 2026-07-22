@@ -63,3 +63,21 @@ export function safeJsonParse<T = any>(str: string, fallback: T): T {
 export function uniqueId(prefix: string = ''): string {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
+
+/**
+ * 深拷贝（替代 JSON.parse(JSON.stringify()) 滥用）
+ * 支持 Object/Array/Date/RegExp，其余类型直接返回
+ */
+export function deepClone<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value
+  if (value instanceof Date) return new Date(value.getTime()) as unknown as T
+  if (value instanceof RegExp) return new RegExp(value.source, value.flags) as unknown as T
+  if (Array.isArray(value)) {
+    return value.map(item => deepClone(item)) as unknown as T
+  }
+  const result: Record<string, any> = {}
+  for (const key of Object.keys(value as Record<string, any>)) {
+    result[key] = deepClone((value as Record<string, any>)[key])
+  }
+  return result as unknown as T
+}

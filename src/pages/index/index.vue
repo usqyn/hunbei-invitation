@@ -180,7 +180,7 @@
             class="scroll-card paid-card"
             @click="handlePaidCardClick(card)"
           >
-            <image class="card-image" lazy-load :src="card.cover || card.image" mode="aspectFill" />
+            <image class="card-image" lazy-load :src="resolveUrl(card.cover || card.image)" mode="aspectFill" />
             <view class="card-overlay"></view>
             <view class="paid-badge">
               <text class="price-symbol">¥</text>
@@ -538,9 +538,12 @@ function goToMall() {
 }
 
 onMounted(() => {
+  // 首屏可见的精选模板优先加载，付费模板和海报模板延迟 1.5 秒避免竞争网络
   loadFeaturedTemplates()
-  loadPaidTemplates()
-  loadPosterTemplates()
+  setTimeout(() => {
+    loadPaidTemplates()
+    loadPosterTemplates()
+  }, 1500)
 })
 </script>
 

@@ -4,7 +4,6 @@ import { DEFAULT_TEMPLATE_DATA, DEFAULT_BASIC_INFO, DEFAULT_SETTINGS, DEFAULT_CA
 import type { TemplateData, BasicInfo, TemplateSettings, Template } from '@/types'
 import { request } from '@/utils/request'
 import { resolveUrl } from '@/utils/url'
-import { useEditorStore } from './editor'
 
 const STORAGE_KEY = 'TOYtamaxia_template'
 
@@ -17,15 +16,8 @@ export const useTemplateStore = defineStore('template', () => {
   const selectedMusicId = ref<number | null>(null)
   const orientation = ref<'portrait' | 'landscape'>('portrait')
 
-  /** canvasSize 由 editorStore 统一维护，此处作为代理访问 */
-  const canvasSize = computed(() => {
-    const editorStore = useEditorStore()
-    return editorStore.canvasSize
-  })
-
-  function setCanvasSize(size: { width: number; height: number }) {
-    const editorStore = useEditorStore()
-    editorStore.canvasSize = { ...size }
+  /** 根据画布尺寸更新方向（canvasSize 由 editorStore 统一维护，不再代理） */
+  function setOrientationFromSize(size: { width: number; height: number }) {
     orientation.value = size.width > size.height ? 'landscape' : 'portrait'
   }
 
@@ -49,7 +41,7 @@ export const useTemplateStore = defineStore('template', () => {
   }
 
   // 防抖持久化：避免每次按键都触发同步 IO
-  let persistTimer: any = null
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
   function debouncedPersist() {
     if (persistTimer) clearTimeout(persistTimer)
     persistTimer = setTimeout(() => {
@@ -60,13 +52,12 @@ export const useTemplateStore = defineStore('template', () => {
 
   function persist() {
     try {
-      const editorStore = useEditorStore()
+      // canvasSize 由 editorStore 自行持久化，此处不再保存
       uni.setStorageSync(STORAGE_KEY, {
         templateData: { ...templateData },
         basicInfo: { ...basicInfo },
         settings: { ...settings },
         selectedMusicId: selectedMusicId.value,
-        canvasSize: { ...editorStore.canvasSize },
         orientation: orientation.value,
       })
     } catch (e) { console.error('template persist failed', e) }
@@ -80,11 +71,7 @@ export const useTemplateStore = defineStore('template', () => {
         if (saved.basicInfo) Object.assign(basicInfo, saved.basicInfo)
         if (saved.settings) Object.assign(settings, saved.settings)
         if (saved.selectedMusicId !== undefined && saved.selectedMusicId !== null) selectedMusicId.value = saved.selectedMusicId
-        if (saved.canvasSize) {
-          // 同步恢复的 canvasSize 到 editorStore
-          const editorStore = useEditorStore()
-          editorStore.canvasSize = { ...saved.canvasSize }
-        }
+        // canvasSize 由 editorStore 自行恢复
         if (saved.orientation) orientation.value = saved.orientation
       }
     } catch (e) { console.error('template restore failed', e) }
@@ -107,9 +94,8 @@ export const useTemplateStore = defineStore('template', () => {
     Object.assign(settings, { ...DEFAULT_SETTINGS })
     selectedMusicId.value = null
     templateList.value = []
-    // 重置画布尺寸与方向（setCanvasSize 会同步到 editorStore 并根据宽高推导 orientation）
-    setCanvasSize({ width: DEFAULT_CANVAS_WIDTH, height: DEFAULT_CANVAS_HEIGHT })
-    // 清理持久化存储，避免 restore() 时恢复已被重置的旧状态
+    orientation.value = DEFAULT_CANVAS_WIDTH > DEFAULT_CANVAS_HEIGHT ? 'landscape' : 'portrait'
+    // canvasSize 由 editorStore 自己重置
     try { uni.removeStorageSync(STORAGE_KEY) } catch {}
   }
 
@@ -117,9 +103,9 @@ export const useTemplateStore = defineStore('template', () => {
 
   return {
     templateData, basicInfo, settings, templateList, loading, selectedMusicId,
-    canvasSize, orientation,
+    orientation,
     updateBasicInfo, updateField, toggleSetting, setSelectedMusic,
-    setCanvasSize,
+    setOrientationFromSize,
     fetchTemplates, persist, reset,
   }
 })

@@ -1,35 +1,40 @@
 import { API_BASE } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 
-// re-export 供外部直接引用
-export { RTL_CHAR_REGEX }
-
 // ============ 字体加载 ============
-const SYSTEM_FONTS = ['sans-serif', 'serif', 'monospace', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', 'Georgia', 'KaiTi']
+// 系统字体白名单（不需下载，直接跳过）。包含华文系列和思源系列别名
+const SYSTEM_FONTS = [
+  'sans-serif', 'serif', 'monospace',
+  'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB',
+  'Arial', 'Georgia', 'KaiTi',
+  // 华文系列（系统自带或与 KaiTi 等效）
+  '华文楷体', '华文行楷', '华文隶书', '华文宋体', '华文黑体',
+  // 思源系列（部分系统自带）
+  '思源宋体', '思源宋体极细', '思源黑体',
+]
 const loadedFonts = new Set<string>()
 let fontMap: Record<string, string> | null = null
-let fontMapLoading = false
+let fontMapPromise: Promise<void> | null = null
 let fontLoadCallbacks: Array<() => void> = []
 let fontsLoading = 0
 
+/** 字体别名映射：当 fontMap 中找不到原名时，尝试用别名查找 */
+const FONT_ALIASES: Record<string, string> = {
+  '华文楷体': 'KaiTi',
+  '华文行楷': 'STXingkai',
+  '华文隶书': 'STLiti',
+  '华文宋体': 'STSong',
+  '华文黑体': 'STHeiti',
+}
+
+/**
+ * 获取字体映射表（Promise 缓存模式，替代 setInterval 轮询）
+ * 多次调用复用同一个 Promise，避免重复请求
+ */
 function fetchFontMap(): Promise<void> {
-  return new Promise((resolve) => {
-    if (fontMap) { resolve(); return }
-    if (fontMapLoading) {
-      const check = setInterval(() => {
-        if (fontMap !== null) { clearInterval(check); resolve() }
-      }, 100)
-      // 10秒超时保护：避免请求卡住时无限轮询，超时后置 null 允许后续调用重试
-      setTimeout(() => {
-        if (fontMap === null) {
-          clearInterval(check)
-          fontMap = null
-          resolve()
-        }
-      }, 10000)
-      return
-    }
-    fontMapLoading = true
+  if (fontMap) return Promise.resolve()
+  if (fontMapPromise) return fontMapPromise
+  fontMapPromise = new Promise<void>((resolve) => {
     uni.request({
       url: API_BASE + '/api/fonts',
       method: 'GET',
@@ -37,16 +42,15 @@ function fetchFontMap(): Promise<void> {
       success: (res: any) => {
         const data = res.data
         const raw = (data?.success && data.data) || {}
-        // 服务端返回 [{filename, url}] 数组，转为 {filename: url} 映射
         fontMap = Array.isArray(raw)
           ? raw.reduce((m: Record<string, string>, f: any) => { m[f.filename] = f.url; return m }, {} as Record<string, string>)
           : raw
-        fontMapLoading = false
         resolve()
       },
-      fail: () => { fontMap = {}; fontMapLoading = false; resolve() },
+      fail: () => { fontMap = {}; resolve() },
     })
   })
+  return fontMapPromise
 }
 
 function notifyFontLoadComplete() {
@@ -65,13 +69,17 @@ function loadCustomFont(fontFamily: string): Promise<void> {
       fetchFontMap().then(() => loadCustomFont(fontFamily).then(resolve))
       return
     }
-    const rawFontUrl = fontMap[fontFamily]
+    const rawFontUrl = fontMap[fontFamily] || (FONT_ALIASES[fontFamily] ? fontMap[FONT_ALIASES[fontFamily]] : '')
     if (typeof rawFontUrl !== 'string' || !rawFontUrl) {
       console.warn(`[FontLoader] Font not in map or invalid: ${fontFamily}`, typeof rawFontUrl)
       resolve()
       return
     }
-    const fullUrl = rawFontUrl.startsWith('http') ? rawFontUrl : API_BASE + rawFontUrl
+    // 字体 URL HTTPS 升级（非 localhost）
+    let fullUrl = rawFontUrl.startsWith('http') ? rawFontUrl : API_BASE + rawFontUrl
+    if (fullUrl.startsWith('http://') && !fullUrl.includes('127.0.0.1') && !fullUrl.includes('localhost')) {
+      fullUrl = fullUrl.replace('http://', 'https://')
+    }
 
     fontsLoading++
 

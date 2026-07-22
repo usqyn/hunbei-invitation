@@ -148,6 +148,7 @@
                   v-else-if="el.type === 'text'"
                   class="canvas-text"
                   :style="getTextStyle(el)"
+                  :selectable="true"
                 >{{ formatBiDi(resolveText(el.text)) }}</text>
                 <!-- 缩放手柄（选中时显示） -->
                 <view
@@ -277,9 +278,10 @@
       @confirm="onTextEditorConfirm"
     />
 
-    <!-- Unified Edit Form（合并基本信息 + 快捷填写） -->
+    <!-- Unified Edit Form（合并基本信息 + 快捷填写）
+         仅 canvas 模式在此渲染；page/flip 模式由各自组件内部渲染自己的实例 -->
     <UnifiedEditForm
-      v-if="editorStore.showBasicInfoEditor"
+      v-if="editorStore.showBasicInfoEditor && editorStore.templateType === 'canvas'"
       :visible="editorStore.showBasicInfoEditor"
       :basic-info="basicInfo"
       :elements="editorStore.editableElements"
@@ -321,10 +323,10 @@ import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
 import { useUserStore } from '@/stores/user'
-import { loadFontsForElements, formatBiDi, RTL_CHAR_REGEX } from '@/utils/font-loader'
+import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
-import { toKazakhDate, getKzWeekdayOptions, getTimePeriodOptions } from '@/utils/kz-date'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
@@ -937,12 +939,7 @@ watch(() => editorStore.selectedElement, () => {
 })
 
 function resolveText(text: string): string {
-  const resolved = resolveDatePlaceholders(text, templateStore.templateData)
-  if (resolved.includes('{kzDate}') && templateStore.templateData.date) {
-    const { fullDate } = toKazakhDate(templateStore.templateData.date)
-    return resolved.replace(/\{kzDate\}/g, fullDate)
-  }
-  return resolved
+  return resolveDatePlaceholders(text, templateStore.templateData)
 }
 
 function updateCardSize() {
