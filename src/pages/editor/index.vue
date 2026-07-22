@@ -324,6 +324,7 @@ import { useUserStore } from '@/stores/user'
 import { loadFontsForElements, formatBiDi, RTL_CHAR_REGEX } from '@/utils/font-loader'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { toKazakhDate, getKzWeekdayOptions, getTimePeriodOptions } from '@/utils/kz-date'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
@@ -936,7 +937,12 @@ watch(() => editorStore.selectedElement, () => {
 })
 
 function resolveText(text: string): string {
-  return resolveDatePlaceholders(text, templateStore.templateData)
+  const resolved = resolveDatePlaceholders(text, templateStore.templateData)
+  if (resolved.includes('{kzDate}') && templateStore.templateData.date) {
+    const { fullDate } = toKazakhDate(templateStore.templateData.date)
+    return resolved.replace(/\{kzDate\}/g, fullDate)
+  }
+  return resolved
 }
 
 function updateCardSize() {
