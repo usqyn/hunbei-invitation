@@ -502,7 +502,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   /** 从已保存的作品数据恢复编辑状态（编辑已有作品时调用） */
-  function restoreFromWorkData(data: WorkEditorData, musicId?: string) {
+  function restoreFromWorkData(data: WorkEditorData, musicId?: number | string | null) {
     if (!data) return
     if (data.templateType) templateType.value = data.templateType
     if (data.elements && Array.isArray(data.elements)) {
@@ -566,12 +566,13 @@ export const useEditorStore = defineStore('editor', () => {
     if (data.settings) Object.assign(templateStore.settings, data.settings)
     // 恢复音乐选择（使用 !== undefined 确保正确处理 null/0）
     if (musicId !== undefined && musicId !== null) {
-      templateStore.selectedMusicId = musicId
+      // 统一转为 number，保持与 song.id 比较一致
+      templateStore.selectedMusicId = typeof musicId === 'string' ? Number(musicId) : musicId
     } else {
       templateStore.setSelectedMusic(null)
     }
     // 恢复翻页模式当前页码
-    if (data.currentFlipPageIndex != null && data.currentFlipPageIndex < flipPages.length) {
+    if (data.currentFlipPageIndex != null && data.currentFlipPageIndex >= 0 && data.currentFlipPageIndex < flipPages.length) {
       currentFlipPageIndex.value = data.currentFlipPageIndex
     }
     // 恢复渲染图（补全相对路径）；无渲染图时清空以触发重新生成
@@ -650,9 +651,28 @@ export const useEditorStore = defineStore('editor', () => {
       const sec = pageSections.find(s => s.id === activeSectionId.value)
       if (sec) {
         sec.text = editingText.value
+        // page 模式也需应用 RTL 样式（修复哈语文字不连写）
+        sec.style = applyRtlStyle(sec.style, editingText.value)
         if (sec.dataKey) {
           templateStore.updateField(sec.dataKey, editingText.value)
         }
+      }
+    }
+    // flip 模式：在当前翻页的元素中查找并更新
+    if (flipPages.length > 0 && currentFlipPageIndex.value >= 0) {
+      const page = flipPages[currentFlipPageIndex.value]
+      if (page?.elements) {
+        page.elements.forEach(el => {
+          if (el.type === 'text' && selectedElement.value !== null) {
+            // 仅更新选中的元素
+            const idx = editableElements.indexOf(el)
+            if (idx === selectedElement.value) {
+              el.text = editingText.value
+              applyRtlStyleIfNeeded(el, editingText.value)
+              if (el.dataKey) templateStore.updateField(el.dataKey, editingText.value)
+            }
+          }
+        })
       }
     }
     showTextEditor.value = false
@@ -690,9 +710,8 @@ export const useEditorStore = defineStore('editor', () => {
         if (sec.type === 'image') sec.image = resolveUrl(value)
         else {
           sec.text = value
-          if (sec.style) {
-            sec.style = applyRtlStyle(sec.style, value)
-          }
+          // 无条件应用 RTL（applyRtlStyle 内部处理 undefined style）
+          sec.style = applyRtlStyle(sec.style, value)
         }
       }
     })

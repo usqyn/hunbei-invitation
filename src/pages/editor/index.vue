@@ -964,15 +964,41 @@ function updateCardSize() {
 }
 
 function calculateProgress(): number {
-  const elements = editorStore.editableElements
-  if (!elements.length) return 0
+  // 根据模板类型统计不同模式的编辑进度
+  let total = 0
   let completed = 0
-  elements.forEach(el => {
-    if (el.type === 'text' && el.text && el.text.trim()) completed++
-    if (el.type === 'image' && el.text && !el.text.includes('default')) completed++
-  })
+
+  if (editorStore.templateType === 'canvas') {
+    const elements = editorStore.editableElements
+    total = elements.length + 2 // +2 for groom/bride name
+    elements.forEach(el => {
+      if (el.type === 'text' && el.text && el.text.trim()) completed++
+      if (el.type === 'image' && el.text && !el.text.includes('default')) completed++
+    })
+  } else if (editorStore.templateType === 'page') {
+    const sections = editorStore.pageSections
+    total = sections.length + 2
+    sections.forEach(sec => {
+      if (sec.type === 'text' && sec.text && sec.text.trim()) completed++
+      if (sec.type === 'image' && sec.image && !sec.image.includes('default')) completed++
+    })
+  } else if (editorStore.templateType === 'flip') {
+    let flipElementCount = 0
+    let flipCompleted = 0
+    editorStore.flipPages.forEach(page => {
+      page.elements?.forEach(el => {
+        flipElementCount++
+        if (el.type === 'text' && el.text && el.text.trim()) flipCompleted++
+        if (el.type === 'image' && el.text && !el.text.includes('default')) flipCompleted++
+      })
+    })
+    total = flipElementCount + 2
+    completed = flipCompleted
+  }
+
   if (templateStore.basicInfo?.groomName || templateStore.basicInfo?.brideName) completed += 2
-  return Math.min(100, Math.round((completed / (elements.length + 2)) * 100))
+  if (total === 0) return 0
+  return Math.min(100, Math.round((completed / total) * 100))
 }
 
 watch(editProgress, (val) => {
@@ -1025,6 +1051,12 @@ function onOpenEditor(idx: number) {
   if (el.type === 'image') {
     chooseLocalImage(idx)
   } else if (el.type === 'text') {
+    // 哈语日期/星期/时间段字段：禁止直接编辑（含固定哈语单位）
+    if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzTime') {
+      uni.showToast({ title: '请在「信息」面板修改', icon: 'none' })
+      openUnifiedEdit()
+      return
+    }
     editorStore.editingText = el.text
     editorStore.showTextEditor = true
   }
@@ -1219,46 +1251,63 @@ function handleChangeTemplate() {
   })
 }
 
+/**
+ * 从编辑器当前状态构建 Work 对象（统一三处保存逻辑）
+ * @param existing 已有作品（更新时传入），为 null 则创建新作品
+ */
+function buildWorkFromEditor(existing: Work | null): Work {
+  const editorData = editorStore.buildEditorData()
+  const musicId = templateStore.selectedMusicId
+  const now = new Date().toISOString()
+  const today = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+
+  if (existing) {
+    existing.title = templateStore.templateData.coverTitle || '未命名作品'
+    existing.date = today
+    existing.image = templateStore.templateData.coverImage
+    existing.cover = templateStore.templateData.coverImage
+    existing.templateId = editorStore.currentTemplateId
+    existing.templateType = editorStore.templateType
+    existing.musicId = musicId
+    existing.data = editorData
+    existing.updatedAt = now
+    return existing
+  }
+
+  const id = editorStore.currentWorkId || String(Date.now())
+  if (!editorStore.currentWorkId) {
+    editorStore.setCurrentWorkId(id)
+  }
+  return {
+    id,
+    title: templateStore.templateData.coverTitle || '未命名作品',
+    date: today,
+    image: templateStore.templateData.coverImage,
+    cover: templateStore.templateData.coverImage,
+    templateId: editorStore.currentTemplateId,
+    templateType: editorStore.templateType,
+    musicId,
+    status: 'draft',
+    data: editorData,
+    updatedAt: now,
+  }
+}
+
+/** 查找已有作品（同时搜索 works 和 drafts） */
+function findExistingWork(): Work | null {
+  if (!editorStore.currentWorkId) return null
+  return worksStore.works.find(w => w.id === editorStore.currentWorkId)
+    || (worksStore as any).drafts?.find((w: Work) => w.id === editorStore.currentWorkId)
+    || null
+}
+
 async function handleSave() {
   if (savingLoading.value) return
   haptic('medium')
   track('edit_save', { progress: editProgress.value })
   await runSave(async () => {
-    const editorData = editorStore.buildEditorData()
-    const musicId = templateStore.selectedMusicId
-    if (editorStore.currentWorkId) {
-      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
-      if (existing) {
-        existing.title = templateStore.templateData.coverTitle || '未命名作品'
-        existing.date = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
-        existing.image = templateStore.templateData.coverImage
-        existing.cover = templateStore.templateData.coverImage
-        existing.templateId = editorStore.currentTemplateId
-        existing.templateType = editorStore.templateType
-        existing.musicId = musicId
-        existing.data = editorData
-        existing.updatedAt = new Date().toISOString()
-        worksStore.saveAsWork(existing)
-        return
-      }
-    }
-    const id = editorStore.currentWorkId || String(Date.now())
-    if (!editorStore.currentWorkId) {
-      editorStore.setCurrentWorkId(id)
-    }
-    const work: Work = {
-      id,
-      title: templateStore.templateData.coverTitle || '未命名作品',
-      date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
-      image: templateStore.templateData.coverImage,
-      cover: templateStore.templateData.coverImage,
-      templateId: editorStore.currentTemplateId,
-      templateType: editorStore.templateType,
-      musicId,
-      status: 'draft',
-      data: editorData,
-      updatedAt: new Date().toISOString(),
-    }
+    const existing = findExistingWork()
+    const work = buildWorkFromEditor(existing)
     worksStore.saveAsWork(work)
     hasUnsavedChanges.value = false
   }, { successMessage: '已保存', minLoadingDuration: 400 })
@@ -1274,41 +1323,8 @@ async function autoSaveWork() {
   if (!hasUnsavedChanges.value) return
   if (savingLoading.value) return // 避免与手动保存并发
   try {
-    const editorData = editorStore.buildEditorData()
-    const musicId = templateStore.selectedMusicId
-    if (editorStore.currentWorkId) {
-      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
-      if (existing) {
-        existing.title = templateStore.templateData.coverTitle || '未命名作品'
-        existing.image = templateStore.templateData.coverImage
-        existing.cover = templateStore.templateData.coverImage
-        existing.templateId = editorStore.currentTemplateId
-        existing.templateType = editorStore.templateType
-        existing.musicId = musicId
-        existing.data = editorData
-        existing.updatedAt = new Date().toISOString()
-        worksStore.saveAsWork(existing)
-        hasUnsavedChanges.value = false
-        return
-      }
-    }
-    const id = editorStore.currentWorkId || String(Date.now())
-    if (!editorStore.currentWorkId) {
-      editorStore.setCurrentWorkId(id)
-    }
-    const work: Work = {
-      id,
-      title: templateStore.templateData.coverTitle || '未命名作品',
-      date: new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
-      image: templateStore.templateData.coverImage,
-      cover: templateStore.templateData.coverImage,
-      templateId: editorStore.currentTemplateId,
-      templateType: editorStore.templateType,
-      musicId,
-      status: 'draft',
-      data: editorData,
-      updatedAt: new Date().toISOString(),
-    }
+    const existing = findExistingWork()
+    const work = buildWorkFromEditor(existing)
     worksStore.saveAsWork(work)
     hasUnsavedChanges.value = false
     // 显示自动保存提示
@@ -1382,40 +1398,54 @@ async function doExport(options: { watermark: boolean; quality: string }) {
   uni.showLoading({ title: '导出中...' })
   try {
     const res = await exportInvitation(editorStore.currentWorkId, options)
-    uni.hideLoading()
-    // 下载并保存到相册，处理可能的失败
-    uni.downloadFile({
-      url: res.url,
-      success: (r) => {
-        uni.saveImageToPhotosAlbum({
-          filePath: r.tempFilePath,
-          success: () => {
-            uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
-          },
-          fail: (err) => {
-            // 用户可能未授权相册权限
-            if (err.errMsg?.includes('auth')) {
-              uni.showModal({
-                title: '提示',
-                content: '需要相册权限才能保存图片，请在设置中开启',
-                confirmText: '去设置',
-                success: (res) => {
-                  if (res.confirm) uni.openSetting({})
-                },
-              })
-            } else {
-              uni.showToast({ title: '保存到相册失败', icon: 'none' })
-            }
-          },
-        })
-      },
-      fail: () => {
-        uni.showToast({ title: '下载文件失败', icon: 'none' })
-      },
+    // Promise 包装 downloadFile，确保完整等待下载+保存流程
+    const downloadResult = await new Promise<{ tempFilePath: string }>((resolve, reject) => {
+      uni.downloadFile({
+        url: res.url,
+        success: (r) => {
+          if (r.statusCode === 200) {
+            resolve({ tempFilePath: r.tempFilePath })
+          } else {
+            reject(new Error(`下载失败 (HTTP ${r.statusCode})`))
+          }
+        },
+        fail: (err) => reject(new Error(err.errMsg || '下载失败')),
+      })
     })
-  } catch (e) {
+    // Promise 包装 saveImageToPhotosAlbum
+    await new Promise<void>((resolve, reject) => {
+      uni.saveImageToPhotosAlbum({
+        filePath: downloadResult.tempFilePath,
+        success: () => {
+          uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
+          resolve()
+        },
+        fail: (err) => {
+          if (err.errMsg?.includes('auth')) {
+            uni.showModal({
+              title: '提示',
+              content: '需要相册权限才能保存图片，请在设置中开启',
+              confirmText: '去设置',
+              success: (modalRes) => {
+                if (modalRes.confirm) uni.openSetting({})
+              },
+            })
+            reject(new Error('相册权限未授权'))
+          } else {
+            reject(new Error('保存到相册失败'))
+          }
+        },
+      })
+    })
+  } catch (e: any) {
+    const msg = e?.message || '导出失败'
+    if (!msg.includes('相册权限') && !msg.includes('下载失败') && !msg.includes('保存到相册')) {
+      uni.showToast({ title: '导出失败', icon: 'none' })
+    } else if (msg.includes('下载失败')) {
+      uni.showToast({ title: msg, icon: 'none' })
+    }
+  } finally {
     uni.hideLoading()
-    uni.showToast({ title: '导出失败', icon: 'none' })
   }
 }
 
@@ -1423,31 +1453,20 @@ async function handleShare() {
   if (sharingLoading.value) return
   haptic('medium')
   await runShare(async () => {
-    // 先保存（复用 buildEditorData，确保标题/封面等字段同步更新）
-    const editorData = editorStore.buildEditorData()
-    const musicId = templateStore.selectedMusicId
-    if (editorStore.currentWorkId) {
-      const existing = worksStore.works.find(w => w.id === editorStore.currentWorkId)
-      if (existing) {
-        existing.title = templateStore.templateData.coverTitle || '未命名作品'
-        existing.image = templateStore.templateData.coverImage
-        existing.cover = templateStore.templateData.coverImage
-        existing.templateId = editorStore.currentTemplateId
-        existing.templateType = editorStore.templateType
-        existing.data = editorData
-        existing.musicId = musicId
-        existing.updatedAt = new Date().toISOString()
-        worksStore.saveAsWork(existing)
-      }
-    }
-  }, { minLoadingDuration: 300 })
+    // 统一保存逻辑：无论新建还是更新都走 buildWorkFromEditor
+    const existing = findExistingWork()
+    const work = buildWorkFromEditor(existing)
+    worksStore.saveAsWork(work)
+    hasUnsavedChanges.value = false
+  }, { successMessage: '已保存', minLoadingDuration: 300 })
 
   const templateId = editorStore.currentTemplateId
-  if (templateId) {
-    uni.navigateTo({ url: `/pages/share/index?templateId=${templateId}` })
-  } else {
-    uni.navigateTo({ url: '/pages/share/index' })
-  }
+  const workId = editorStore.currentWorkId
+  const params = new URLSearchParams()
+  if (templateId) params.set('templateId', templateId)
+  if (workId) params.set('workId', workId)
+  const queryStr = params.toString()
+  uni.navigateTo({ url: `/pages/share/index${queryStr ? '?' + queryStr : ''}` })
 }
 
 function handleLocation() {

@@ -55,6 +55,8 @@ export function request<T = any>(options: string | {
         } else if (res.statusCode === 401) {
           if (!_isRedirecting) {
             _isRedirecting = true
+            // 超时保护：3 秒后自动释放，防止 reLaunch 失败导致永久锁死
+            setTimeout(() => { _isRedirecting = false }, 3000)
             try {
               uni.removeStorageSync('token')
               uni.removeStorageSync('TOYtamaxia_user')

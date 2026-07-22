@@ -191,6 +191,9 @@ async function loadMusic() {
 }
 
 async function switchTag(tag: string) {
+  // 切换分类时停止当前播放并重置选中索引，避免索引错位指向新列表的其他歌曲
+  stopAudio()
+  currentSongIndex.value = null
   currentTag.value = tag
   loading.value = true
   currentPage.value = 1

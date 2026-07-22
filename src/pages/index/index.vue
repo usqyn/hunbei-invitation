@@ -287,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
@@ -537,13 +537,23 @@ function goToMall() {
   })
 }
 
+let _delayedLoadTimer: ReturnType<typeof setTimeout> | null = null
+
 onMounted(() => {
   // 首屏可见的精选模板优先加载，付费模板和海报模板延迟 1.5 秒避免竞争网络
   loadFeaturedTemplates()
-  setTimeout(() => {
+  _delayedLoadTimer = setTimeout(() => {
     loadPaidTemplates()
     loadPosterTemplates()
   }, 1500)
+})
+
+onUnmounted(() => {
+  // 清理延迟加载定时器，防止组件卸载后仍触发请求
+  if (_delayedLoadTimer) {
+    clearTimeout(_delayedLoadTimer)
+    _delayedLoadTimer = null
+  }
 })
 </script>
 

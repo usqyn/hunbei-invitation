@@ -280,13 +280,13 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
     list = list.filter(t => t.category === activeCategory.value)
   }
 
-  // 按付费状态筛选
+  // 按付费状态筛选：统一使用 Boolean() 判断，兼容 is_paid 为数字或布尔值的情况
   if (activeFilter.value === 'free') {
-    list = list.filter(t => !t.is_paid || t.is_paid === 0 || t.is_paid === false)
+    list = list.filter(t => !Boolean(t.is_paid))
   } else if (activeFilter.value === 'paid') {
-    list = list.filter(t => t.is_paid === 1 || t.is_paid === true)
+    list = list.filter(t => Boolean(t.is_paid))
   } else if (activeFilter.value === 'vip') {
-    list = list.filter((t: any) => t.is_paid === 1 && t.vip_free === true)
+    list = list.filter((t: any) => Boolean(t.is_paid) && t.vip_free === true)
   }
 
   // 按关键词搜索（名称/副标题/分类名称/标签/元素内容）
@@ -457,7 +457,7 @@ function onSelectTemplate(template: TemplateItem) {
   // 登录拦截：未登录时跳转登录页
   if (!userStore.requireLogin()) return
 
-  if (template.is_paid) {
+  if (Boolean(template.is_paid)) {
     const isVip = userStore.isVip()
     if (!isVip && !isPurchased.value) {
       haptic('light')
@@ -485,6 +485,7 @@ function onSelectTemplate(template: TemplateItem) {
   navigating.value = true
   uni.navigateTo({
     url: `/pages/editor/index?templateId=${template.id}`,
+    fail: () => { navigating.value = false },
   })
 }
 

@@ -88,8 +88,10 @@ export const useWorksStore = defineStore('works', () => {
           const existing = works.value.find(w => w.id === id)
           if (existing) {
             // 合并：本地未保存到服务器的修改优先（updatedAt 较新者胜出）
-            const serverUpdatedAt = serverWork.updatedAt || serverWork.updated_at ? new Date(serverWork.updatedAt || serverWork.updated_at).getTime() : 0
+            const serverUpdatedAt = new Date(serverWork.updatedAt || serverWork.updated_at).getTime()
             const localUpdatedAt = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0
+            // 防止非法日期字符串导致 NaN，NaN 参与比较恒为 false 会跳过服务端更新
+            if (!isFinite(serverUpdatedAt)) return
             if (serverUpdatedAt > localUpdatedAt) {
               // 统一做 snake_case → camelCase 转换，保证字段一致
               existing.templateId = serverWork.templateId || serverWork.template_id || existing.templateId
@@ -238,6 +240,8 @@ export const useWorksStore = defineStore('works', () => {
     try {
       const userStore = useUserStore()
       const isCurrentlyFavorite = isFavorite(id)
+      // 保存收藏快照，用于 API 失败时整体回滚
+      const snapshot = [...favorites.value]
 
       if (isCurrentlyFavorite) {
         favorites.value = favorites.value.filter(f => f.id !== id)
@@ -257,12 +261,8 @@ export const useWorksStore = defineStore('works', () => {
           }
         } catch (e) {
           console.warn('favorite api failed', e)
-          if (isCurrentlyFavorite) {
-            const work = works.value.find(w => w.id === id) || drafts.value.find(w => w.id === id)
-            if (work) favorites.value.unshift(work)
-          } else {
-            favorites.value = favorites.value.filter(f => f.id !== id)
-          }
+          // 整体恢复快照，避免回滚逻辑与正向操作不一致导致状态错乱
+          favorites.value = snapshot
           persist()
           uni.showToast({ title: '操作失败，请重试', icon: 'none' })
         }

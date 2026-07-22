@@ -279,15 +279,26 @@ async function onShareMoments() {
     if (!res || !res.url) {
       uni.hideLoading()
       uni.showToast({ title: '生成海报失败', icon: 'none' })
+      isGenerating.value = false
       return
     }
     uni.downloadFile({
       url: res.url,
       success: (r) => {
         uni.hideLoading()
+        // 校验下载状态码，非 200 视为下载失败
+        if (r.statusCode !== 200) {
+          uni.showToast({ title: '下载失败', icon: 'none' })
+          isGenerating.value = false
+          return
+        }
         uni.saveImageToPhotosAlbum({
           filePath: r.tempFilePath,
-          success: () => uni.showToast({ title: '已保存到相册', icon: 'success' }),
+          success: () => {
+            uni.showToast({ title: '已保存到相册', icon: 'success' })
+            // 整个下载+保存流程完成后再释放锁
+            isGenerating.value = false
+          },
           fail: (err) => {
             if (err.errMsg && err.errMsg.includes('auth')) {
               uni.showModal({
@@ -299,18 +310,20 @@ async function onShareMoments() {
             } else {
               uni.showToast({ title: '保存失败', icon: 'none' })
             }
+            // 整个下载+保存流程完成后再释放锁
+            isGenerating.value = false
           },
         })
       },
       fail: () => {
         uni.hideLoading()
         uni.showToast({ title: '下载失败', icon: 'none' })
+        isGenerating.value = false
       },
     })
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: '生成海报失败', icon: 'none' })
-  } finally {
     isGenerating.value = false
   }
 }
@@ -327,6 +340,7 @@ async function onSharePoster() {
     if (!res || !res.url) {
       uni.hideLoading()
       uni.showToast({ title: '生成海报失败', icon: 'none' })
+      isGenerating.value = false
       return
     }
     uni.showModal({
@@ -341,7 +355,11 @@ async function onSharePoster() {
               uni.hideLoading()
               uni.saveImageToPhotosAlbum({
                 filePath: r.tempFilePath,
-                success: () => uni.showToast({ title: '图片已保存到相册', icon: 'success' }),
+                success: () => {
+                  uni.showToast({ title: '图片已保存到相册', icon: 'success' })
+                  // 整个下载+保存流程完成后再释放锁
+                  isGenerating.value = false
+                },
                 fail: (err) => {
                   if (err.errMsg && err.errMsg.includes('auth')) {
                     uni.showModal({
@@ -353,23 +371,26 @@ async function onSharePoster() {
                   } else {
                     uni.showToast({ title: '保存失败', icon: 'none' })
                   }
+                  // 整个下载+保存流程完成后再释放锁
+                  isGenerating.value = false
                 },
               })
             },
             fail: () => {
               uni.hideLoading()
               uni.showToast({ title: '下载失败', icon: 'none' })
+              isGenerating.value = false
             },
           })
         } else {
           uni.hideLoading()
+          isGenerating.value = false
         }
       },
     })
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: '生成海报失败', icon: 'none' })
-  } finally {
     isGenerating.value = false
   }
 }

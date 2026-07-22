@@ -45,6 +45,7 @@
             indicator-color="rgba(255,255,255,0.4)"
             indicator-active-color="#ffffff"
             :circular="false"
+            :current="editorStore.currentFlipPageIndex"
             @change="onFlipPageChange"
           >
             <swiper-item v-for="(page, idx) in editorStore.flipPages" :key="page.id">
@@ -421,7 +422,9 @@ async function loadData() {
       if (id) {
         templateId.value = id
         if (editorStore.currentTemplateId !== id) {
-          await editorStore.loadTemplateById(id)
+          // 模板加载失败时直接返回，避免在无效数据上执行 restoreFromWorkData
+          const loaded = await editorStore.loadTemplateById(id)
+          if (!loaded) { loadError.value = true; return }
         }
       }
       if (work.data) {
@@ -432,7 +435,9 @@ async function loadData() {
       if (id) {
         templateId.value = id
         if (editorStore.currentTemplateId !== id) {
-          await editorStore.loadTemplateById(id)
+          // 模板加载失败时直接返回，避免后续渲染无效数据
+          const loaded = await editorStore.loadTemplateById(id)
+          if (!loaded) { loadError.value = true; return }
         }
       }
     }
@@ -441,7 +446,9 @@ async function loadData() {
     if (id) {
       templateId.value = id
       if (editorStore.currentTemplateId !== id) {
-        await editorStore.loadTemplateById(id)
+        // 模板加载失败时直接返回，避免后续渲染无效数据
+        const loaded = await editorStore.loadTemplateById(id)
+        if (!loaded) { loadError.value = true; return }
       }
     }
   }
@@ -533,11 +540,11 @@ const { goBack } = useGoBack()
 const handleShare = () => {
   track('click_share', { channel: 'wechat' })
   const templateId = editorStore.currentTemplateId
-  if (templateId) {
-    uni.navigateTo({ url: `/pages/share/index?templateId=${templateId}` })
-  } else {
-    uni.navigateTo({ url: '/pages/share/index' })
-  }
+  const workId = editorStore.currentWorkId
+  const params: string[] = []
+  if (templateId) params.push(`templateId=${templateId}`)
+  if (workId) params.push(`workId=${workId}`)
+  uni.navigateTo({ url: `/pages/share/index${params.length ? '?' + params.join('&') : ''}` })
 }
 
 // 微信分享：支持右上角"..."菜单与转发按钮，使用真实的预览路径
