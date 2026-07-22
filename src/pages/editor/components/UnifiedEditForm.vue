@@ -111,6 +111,98 @@
             </view>
           </view>
 
+          <!-- 哈萨克语日期（拆分为年/月/日/星期/时间段，选日期后自动转换为哈语阿拉伯文） -->
+          <view v-if="hasKzDateFields" class="form-section kz-section">
+            <view class="section-title">
+              <text class="title-icon">📆</text>
+              <text class="title-text">哈语日期</text>
+              <text class="kz-badge">哈萨克文</text>
+            </view>
+
+            <!-- 日期选择器：选中文日期后自动转换为哈语年/月/日 -->
+            <view v-if="hasField('kzYear') || hasField('kzMonth') || hasField('kzDay') || hasField('kzDate')" class="form-item">
+              <view class="form-label">
+                <text class="label-name">选择日期</text>
+                <text class="label-hint">自动转为哈语</text>
+              </view>
+              <picker mode="date" :value="kzDateValue" @change="onKzDateChange">
+                <view class="input-wrapper clickable">
+                  <text v-if="kzDateValue" class="form-value">{{ kzDateValue }}</text>
+                  <text v-else class="input-placeholder">选择日期自动填充哈语年月日</text>
+                  <text class="input-arrow">›</text>
+                </view>
+              </picker>
+            </view>
+
+            <!-- 星期滚动选择器：周一-周日，选后写入哈语星期 -->
+            <view v-if="hasField('kzWeekday')" class="form-item">
+              <view class="form-label">
+                <text class="label-name">选择星期</text>
+                <text class="label-hint">滚动选择</text>
+              </view>
+              <picker
+                mode="selector"
+                :range="KZ_WEEKDAY_OPTIONS"
+                range-key="label"
+                :value="kzWeekdayIndex"
+                @change="onKzWeekdayChange"
+              >
+                <view class="input-wrapper clickable">
+                  <text class="form-value">{{ KZ_WEEKDAY_OPTIONS[kzWeekdayIndex].label }}</text>
+                  <text v-if="kzPreview.weekday" class="kz-inline-value rtl-text">{{ kzPreview.weekday }}</text>
+                  <text v-else class="input-placeholder">选择星期</text>
+                  <text class="input-arrow">›</text>
+                </view>
+              </picker>
+            </view>
+
+            <!-- 时间段滚动选择器：上午/中午/下午/傍晚/晚上 -->
+            <view v-if="hasField('kzTime')" class="form-item">
+              <view class="form-label">
+                <text class="label-name">选择时间段</text>
+                <text class="label-hint">滚动选择</text>
+              </view>
+              <picker
+                mode="selector"
+                :range="KZ_TIME_OPTIONS"
+                range-key="label"
+                :value="kzTimeIndex"
+                @change="onKzTimeChange"
+              >
+                <view class="input-wrapper clickable">
+                  <text class="form-value">{{ KZ_TIME_OPTIONS[kzTimeIndex].label }}</text>
+                  <text v-if="kzPreview.time" class="kz-inline-value rtl-text">{{ kzPreview.time }}</text>
+                  <text v-else class="input-placeholder">选择时间段</text>
+                  <text class="input-arrow">›</text>
+                </view>
+              </picker>
+            </view>
+
+            <!-- 哈语日期预览（实时展示写入占位符的内容） -->
+            <view v-if="kzPreview.year || kzPreview.month || kzPreview.day || kzPreview.weekday || kzPreview.fullDate" class="kz-preview">
+              <view v-if="kzPreview.fullDate && hasField('kzDate')" class="kz-preview-row kz-preview-row--full">
+                <text class="kz-preview-label">完整日期</text>
+                <text class="kz-preview-value rtl-text">{{ kzPreview.fullDate }}</text>
+              </view>
+              <view v-if="kzPreview.year && hasField('kzYear')" class="kz-preview-row">
+                <text class="kz-preview-label">年</text>
+                <text class="kz-preview-value rtl-text">{{ kzPreview.year }} جىل</text>
+              </view>
+              <view v-if="kzPreview.month && hasField('kzMonth')" class="kz-preview-row">
+                <text class="kz-preview-label">月</text>
+                <text class="kz-preview-value rtl-text">{{ kzPreview.month }}</text>
+              </view>
+              <view v-if="kzPreview.day && hasField('kzDay')" class="kz-preview-row">
+                <text class="kz-preview-label">日</text>
+                <text class="kz-preview-value rtl-text">{{ kzPreview.day }}</text>
+              </view>
+              <view v-if="kzPreview.weekday && hasField('kzWeekday')" class="kz-preview-row">
+                <text class="kz-preview-label">星期</text>
+                <text class="kz-preview-value rtl-text">{{ kzPreview.weekday }}</text>
+              </view>
+            </view>
+          </view>
+
           <!-- 其他信息（动态字段） -->
           <view v-if="extraFields.length > 0" class="form-section">
             <view class="section-title">
@@ -138,7 +230,7 @@
           </view>
 
           <!-- 无可编辑字段时的空状态提示 -->
-          <view v-if="!hasBasicInfoFields && !hasWeddingInfoFields && extraFields.length === 0" class="empty-state">
+          <view v-if="!hasBasicInfoFields && !hasWeddingInfoFields && !hasKzDateFields && extraFields.length === 0" class="empty-state">
             <text class="empty-icon">📋</text>
             <text class="empty-text">此模板暂无可编辑的信息字段</text>
             <text class="empty-sub">请在画布上直接点击文字或图片进行编辑</text>
@@ -155,11 +247,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { EditableElement, BasicInfo } from '@/types'
 import { showToast } from '@/composables/useFeedback'
 import { useRtl } from '@/composables/useRtl'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
+import { toKazakhDate, getTimePeriodOptions } from '@/utils/kz-date'
 
 const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholder: string }> = {
   inviter: { label: '邀请者', icon: '👤', placeholder: '请输入邀请者姓名' },
@@ -172,7 +265,14 @@ const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholde
   year: { label: '年份', icon: '📅', placeholder: '例如: 2025' },
   month: { label: '月份', icon: '📅', placeholder: '例如: 6' },
   day: { label: '日', icon: '📅', placeholder: '例如: 15' },
-  // 哈萨克语阿拉伯文日期字段（admin 端"哈语日期"按钮发布后由此识别）
+  // 哈萨克语阿拉伯文日期拆分字段（admin 端发布对应 dataKey 占位符后由此识别）
+  // 选择日期/星期后自动转换为哈萨克语阿拉伯文写入对应占位符
+  kzYear: { label: '哈语年份', icon: '📆', placeholder: '٢٠٢٥ / 2025' },
+  kzMonth: { label: '哈语月份', icon: '📆', placeholder: 'مامىر' },
+  kzDay: { label: '哈语日', icon: '📆', placeholder: '١٥ / 15' },
+  kzWeekday: { label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى' },
+  kzTime: { label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن' },
+  // 兼容旧模板：单文本哈语日期（选日期后自动填入完整哈语日期串）
   kzDate: { label: '哈语日期', icon: '📆', placeholder: 'توي كۇنى: 2024-05-20' },
 }
 
@@ -181,6 +281,9 @@ const BASIC_FIELD_KEYS = ['groomName', 'brideName', 'date', 'location', 'address
 
 // 日期占位符全局字段
 const DATE_PLACEHOLDER_KEYS = ['year', 'month', 'day']
+
+// 哈萨克语拆分字段（由专用选择器自动填充，不作为普通文本输入项出现在"其他信息"中）
+const KZ_FIELD_KEYS = ['kzYear', 'kzMonth', 'kzDay', 'kzWeekday', 'kzTime', 'kzDate']
 
 const props = defineProps<{
   visible: boolean
@@ -229,9 +332,9 @@ const hasWeddingInfoFields = computed(() => {
   return hasField('date') || hasField('location') || hasField('address')
 })
 
-// 额外字段（从 elements 的 dataKey 收集，排除基础字段）
+// 额外字段（从 elements 的 dataKey 收集，排除基础字段和哈语拆分字段）
 const extraFields = computed(() => {
-  const seen = new Set(BASIC_FIELD_KEYS)
+  const seen = new Set([...BASIC_FIELD_KEYS, ...KZ_FIELD_KEYS])
   const result: Array<{ key: string; label: string; icon: string; placeholder: string; value: string }> = []
 
   props.elements.forEach(el => {
@@ -285,6 +388,117 @@ function onInput(key: string, value: string) {
 function onDateChange(e: any) {
   emit('update', 'date', e.detail.value)
 }
+
+// ============ 哈萨克语日期（拆分为年/月/日/星期/时间段） ============
+
+// 星期选项（中文标签供用户滚动选择，选中后转换为哈萨克语阿拉伯文）
+const KZ_WEEKDAY_OPTIONS = [
+  { value: 1, label: '周一', kz: 'دۇيسەنبى' },
+  { value: 2, label: '周二', kz: 'سەيسەنبى' },
+  { value: 3, label: '周三', kz: 'سارسەنبى' },
+  { value: 4, label: '周四', kz: 'بەيسەنبى' },
+  { value: 5, label: '周五', kz: 'جۇما' },
+  { value: 6, label: '周六', kz: 'سەنبى' },
+  { value: 0, label: '周日', kz: 'جەكسەنبى' },
+]
+
+const KZ_TIME_OPTIONS = getTimePeriodOptions()
+
+/** 模板是否使用了任意哈语拆分字段（决定是否显示"哈语日期"区块） */
+const hasKzDateFields = computed(() => {
+  return KZ_FIELD_KEYS.some(k => hasField(k))
+})
+
+/** 哈语日期选择器的当前值（中文日期，用于驱动 toKazakhDate 转换） */
+const kzDateValue = ref('')
+
+/** 当前选中的星期索引（KZ_WEEKDAY_OPTIONS 下标） */
+const kzWeekdayIndex = ref(0)
+
+/** 当前选中的时间段索引（KZ_TIME_OPTIONS 下标） */
+const kzTimeIndex = ref(0)
+
+/** 从 templateData 反查星期索引（用于初始化） */
+function findWeekdayIndex(kzWeekdayText: string): number {
+  if (!kzWeekdayText) return 0
+  const idx = KZ_WEEKDAY_OPTIONS.findIndex(o => o.kz === kzWeekdayText)
+  return idx >= 0 ? idx : 0
+}
+
+/** 从 templateData 反查时间段索引（用于初始化） */
+function findTimeIndex(kzTimeText: string): number {
+  if (!kzTimeText) return 0
+  const idx = KZ_TIME_OPTIONS.findIndex(o => o.kzLabel === kzTimeText)
+  return idx >= 0 ? idx : 0
+}
+
+// 弹窗打开时，依据 templateData 中已有的哈语字段值初始化选择器状态
+watch(
+  () => props.visible,
+  (vis) => {
+    if (!vis) return
+    const td = props.templateData || {}
+    // 优先用 kzDate 反推日期；否则留空让用户重新选择
+    const legacyKzDate = (td as any).kzDate as string | undefined
+    if (legacyKzDate) {
+      const m = legacyKzDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)
+      if (m) kzDateValue.value = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+    } else {
+      kzDateValue.value = ''
+    }
+    kzWeekdayIndex.value = findWeekdayIndex((td as any).kzWeekday as string || '')
+    kzTimeIndex.value = findTimeIndex((td as any).kzTime as string || '')
+  },
+  { immediate: true },
+)
+
+/** 选择日期后自动转换为哈萨克语阿拉伯文，分别写入对应占位符 */
+function onKzDateChange(e: any) {
+  const dateStr = e.detail.value
+  kzDateValue.value = dateStr
+  const parts = toKazakhDate(dateStr)
+  // 仅同步模板中实际存在的字段，避免写入无占位符的 dataKey
+  if (hasField('kzYear')) emit('update', 'kzYear', parts.year)
+  if (hasField('kzMonth')) emit('update', 'kzMonth', parts.month)
+  if (hasField('kzDay')) emit('update', 'kzDay', parts.day)
+  // 选日期时同步推导星期（用户可再用星期选择器覆盖）
+  if (hasField('kzWeekday')) {
+    emit('update', 'kzWeekday', parts.weekday)
+    const idx = findWeekdayIndex(parts.weekday)
+    kzWeekdayIndex.value = idx
+  }
+  // 兼容旧模板：单文本 kzDate 写入完整哈语日期串
+  if (hasField('kzDate')) emit('update', 'kzDate', parts.fullDate)
+}
+
+/** 滚动选择星期（周一-周日），写入哈萨克语阿拉伯文到 kzWeekday 占位符 */
+function onKzWeekdayChange(e: any) {
+  const idx = Number(e.detail.value)
+  kzWeekdayIndex.value = idx
+  const opt = KZ_WEEKDAY_OPTIONS[idx]
+  if (opt) emit('update', 'kzWeekday', opt.kz)
+}
+
+/** 滚动选择时间段，写入哈萨克语阿拉伯文到 kzTime 占位符 */
+function onKzTimeChange(e: any) {
+  const idx = Number(e.detail.value)
+  kzTimeIndex.value = idx
+  const opt = KZ_TIME_OPTIONS[idx]
+  if (opt) emit('update', 'kzTime', opt.kzLabel)
+}
+
+/** 当前哈语日期各部分的预览值（来自 templateData，选择后实时更新） */
+const kzPreview = computed(() => {
+  const td = (props.templateData || {}) as any
+  return {
+    year: td.kzYear || '',
+    month: td.kzMonth || '',
+    day: td.kzDay || '',
+    weekday: td.kzWeekday || '',
+    time: td.kzTime || '',
+    fullDate: td.kzDate || '',
+  }
+})
 
 function onConfirm() {
   // 仅验证当前显示的必填字段
@@ -521,5 +735,81 @@ function onConfirm() {
 .empty-sub {
   font-size: 24rpx;
   color: var(--color-text-secondary);
+}
+
+/* ============ 哈萨克语日期区块 ============ */
+.kz-section {
+  background: #f3f0ff;
+}
+
+.kz-badge {
+  margin-left: auto;
+  font-size: 20rpx;
+  color: #6c5ce7;
+  background: #e8e3ff;
+  padding: 4rpx 14rpx;
+  border-radius: 20rpx;
+  font-weight: 500;
+}
+
+.label-hint {
+  margin-left: auto;
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* 选择器内的哈语预览值（内联展示已转换的阿拉伯文） */
+.kz-inline-value {
+  margin-left: 16rpx;
+  margin-right: auto;
+  font-size: 28rpx;
+  color: #6c5ce7;
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: isolate;
+  font-family: 'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', sans-serif;
+}
+
+/* 哈语日期预览面板 */
+.kz-preview {
+  margin-top: 20rpx;
+  padding: 20rpx 24rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  border: 2rpx dashed #d4ceff;
+}
+
+.kz-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10rpx 0;
+
+  & + & {
+    border-top: 1px solid #f0edff;
+  }
+}
+
+.kz-preview-row--full {
+  .kz-preview-value {
+    font-size: 26rpx;
+  }
+}
+
+.kz-preview-label {
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.kz-preview-value {
+  font-size: 30rpx;
+  color: #6c5ce7;
+  font-weight: 500;
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: isolate;
+  font-family: 'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', sans-serif;
 }
 </style>

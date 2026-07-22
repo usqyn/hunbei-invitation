@@ -31,6 +31,14 @@ export interface TemplateData {
   year?: string
   month?: string
   day?: string
+  // 哈萨克语阿拉伯文日期拆分字段（选日期/星期后自动转换为哈语写入占位符）
+  kzYear?: string
+  kzMonth?: string
+  kzDay?: string
+  kzWeekday?: string
+  kzTime?: string
+  // 兼容旧模板：单文本哈语完整日期
+  kzDate?: string
 }
 
 // 用户填写的基本信息（新人信息/节日信息等）
