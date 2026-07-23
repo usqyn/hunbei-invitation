@@ -1030,9 +1030,9 @@ const SMART_FIELDS: SmartFieldConfig[] = [
   // kzTime：小程序端提供时间段滚轮，选后填入哈语时间段
   // 发布后小程序端会自动注入 RTL 字体（KazakhSoftAsilya）
   { key: 'kzDate', label: '哈语日期', icon: '📆', placeholder: '2026 جىلعى 1 ايدىڭ 22 كۇنى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzWeekday', label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  // kzWeekdayParen：与 kzWeekday 相同的滚轮选择器，但输出带括号 (سەيسەنبى)
-  { key: 'kzWeekdayParen', label: '哈语星期(括号)', icon: '📆', placeholder: '(سەيسەنبى)', fontSize: 16, fontWeight: 'normal', color: '#666666' },
+  { key: 'kzWeekday', label: '哈语星期', icon: '📆', placeholder: 'سەنبى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
+  // kzWeekdayParen：与 kzWeekday 相同的滚轮选择器，但输出带括号 (سەنبى)
+  { key: 'kzWeekdayParen', label: '哈语星期(括号)', icon: '📆', placeholder: '(سەنبى)', fontSize: 16, fontWeight: 'normal', color: '#666666' },
   { key: 'kzTime', label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
 
