@@ -156,6 +156,28 @@
               </picker>
             </view>
 
+            <!-- 星期(带括号)滚动选择器：选后写入带括号的哈语星期名 (سەيسەنبى) -->
+            <view v-if="hasField('kzWeekdayParen')" class="form-item">
+              <view class="form-label">
+                <text class="label-name">选择星期(括号)</text>
+                <text class="label-hint">滚动选择</text>
+              </view>
+              <picker
+                mode="selector"
+                :range="KZ_WEEKDAY_OPTIONS"
+                range-key="label"
+                :value="kzWeekdayParenIndex"
+                @change="onKzWeekdayParenChange"
+              >
+                <view class="input-wrapper clickable">
+                  <text class="form-value">{{ KZ_WEEKDAY_OPTIONS[kzWeekdayParenIndex].label }}</text>
+                  <text v-if="kzPreview.weekdayParen" class="kz-inline-value rtl-text">{{ kzPreview.weekdayParen }}</text>
+                  <text v-else class="input-placeholder">选择星期</text>
+                  <text class="input-arrow">›</text>
+                </view>
+              </picker>
+            </view>
+
             <!-- 时间段滚动选择器：上午/中午/下午/傍晚/晚上 -->
             <view v-if="hasField('kzTime')" class="form-item">
               <view class="form-label">
@@ -187,6 +209,10 @@
               <view v-if="kzPreview.weekday && hasField('kzWeekday')" class="kz-preview-row">
                 <text class="kz-preview-label">星期</text>
                 <text class="kz-preview-value rtl-text">{{ kzPreview.weekday }}</text>
+              </view>
+              <view v-if="kzPreview.weekdayParen && hasField('kzWeekdayParen')" class="kz-preview-row">
+                <text class="kz-preview-label">星期(括号)</text>
+                <text class="kz-preview-value rtl-text">{{ kzPreview.weekdayParen }}</text>
               </view>
               <view v-if="kzPreview.time && hasField('kzTime')" class="kz-preview-row">
                 <text class="kz-preview-label">时间段</text>
@@ -273,7 +299,7 @@ const BASIC_FIELD_KEYS = ['groomName', 'brideName', 'date', 'location', 'address
 const DATE_PLACEHOLDER_KEYS = ['year', 'month', 'day']
 
 // 哈萨克语字段（由专用选择器自动填充，不作为普通文本输入项出现在"其他信息"中）
-const KZ_FIELD_KEYS = ['kzDate', 'kzWeekday', 'kzTime']
+const KZ_FIELD_KEYS = ['kzDate', 'kzWeekday', 'kzWeekdayParen', 'kzTime']
 
 const props = defineProps<{
   visible: boolean
@@ -396,13 +422,18 @@ const kzDateValue = ref('')
 /** 当前选中的星期索引（KZ_WEEKDAY_OPTIONS 下标），默认 0=周一 */
 const kzWeekdayIndex = ref(0)
 
+/** 当前选中的星期(括号)索引，默认 0=周一 */
+const kzWeekdayParenIndex = ref(0)
+
 /** 当前选中的时间段索引（KZ_TIME_OPTIONS 下标），默认 0=上午 */
 const kzTimeIndex = ref(0)
 
 /** 从 templateData 反查星期索引（用于回显已选值） */
 function findWeekdayIndex(kzText: string): number {
   if (!kzText) return 0
-  const idx = KZ_WEEKDAY_OPTIONS.findIndex(o => o.kz === kzText)
+  // kzWeekdayParen 存储的是带括号格式，需去括号后匹配
+  const cleaned = kzText.replace(/[()（）]/g, '')
+  const idx = KZ_WEEKDAY_OPTIONS.findIndex(o => o.kz === kzText || o.kz === cleaned)
   return idx >= 0 ? idx : 0
 }
 
@@ -430,6 +461,14 @@ function onKzWeekdayChange(e: any) {
   if (opt) emit('update', 'kzWeekday', opt.kz)
 }
 
+/** 滚动选择星期(括号)，写入带括号的哈语星期名到 kzWeekdayParen 占位符 */
+function onKzWeekdayParenChange(e: any) {
+  const idx = Number(e.detail.value)
+  kzWeekdayParenIndex.value = idx
+  const opt = KZ_WEEKDAY_OPTIONS[idx]
+  if (opt) emit('update', 'kzWeekdayParen', `(${opt.kz})`)
+}
+
 /** 滚动选择时间段，写入哈语时间段到 kzTime 占位符 */
 function onKzTimeChange(e: any) {
   const idx = Number(e.detail.value)
@@ -444,6 +483,7 @@ const kzPreview = computed(() => {
   return {
     date: td.kzDate || '',
     weekday: td.kzWeekday || '',
+    weekdayParen: td.kzWeekdayParen || '',
     time: td.kzTime || '',
   }
 })
@@ -452,6 +492,7 @@ const kzPreview = computed(() => {
 function initKzSelectors() {
   const td = (props.templateData || {}) as any
   kzWeekdayIndex.value = findWeekdayIndex(td.kzWeekday || '')
+  kzWeekdayParenIndex.value = findWeekdayIndex(td.kzWeekdayParen || '')
   kzTimeIndex.value = findTimeIndex(td.kzTime || '')
 }
 

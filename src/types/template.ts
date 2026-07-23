@@ -34,9 +34,11 @@ export interface TemplateData {
   // 哈萨克语阿拉伯文日期字段
   // kzDate：哈语日期表达式 "2026 جىل 1 اي 22 كۇن"
   // kzWeekday：哈语星期名
+  // kzWeekdayParen：带括号的哈语星期名 (سەيسەنبى)
   // kzTime：哈语时间段
   kzDate?: string
   kzWeekday?: string
+  kzWeekdayParen?: string
   kzTime?: string
 }
 

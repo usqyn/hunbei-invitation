@@ -1052,7 +1052,7 @@ function onOpenEditor(idx: number) {
     chooseLocalImage(idx)
   } else if (el.type === 'text') {
     // 哈语日期/星期/时间段字段：禁止直接编辑（含固定哈语单位）
-    if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzTime') {
+    if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzWeekdayParen' || el.dataKey === 'kzTime') {
       uni.showToast({ title: '请在「信息」面板修改', icon: 'none' })
       openUnifiedEdit()
       return
@@ -1152,7 +1152,7 @@ function handleEditText() {
   }
   // 哈语日期/星期/时间段字段：文字含固定哈语单位，禁止直接编辑文本
   // 引导用户去「信息」面板用选择器改（只改数字，不动单位）
-  if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzTime') {
+  if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzWeekdayParen' || el.dataKey === 'kzTime') {
     uni.showToast({ title: '请在「信息」面板修改日期', icon: 'none' })
     openUnifiedEdit()
     return

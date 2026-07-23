@@ -998,8 +998,9 @@ const TEMPLATE_DATA_KEYS = [
   // 哈萨克语阿拉伯文专用字段
   // kzDate：选日期后自动填入哈语表达式 "2026 جىل 1 اي 22 كۇن"
   // kzWeekday：星期滚轮，选后填入哈语星期名
+  // kzWeekdayParen：星期滚轮，选后填入带括号的哈语星期名 (سەيسەنبى)
   // kzTime：时间段滚轮，选后填入哈语时间段
-  'kzDate', 'kzWeekday', 'kzTime',
+  'kzDate', 'kzWeekday', 'kzWeekdayParen', 'kzTime',
 ]
 
 // 快捷字段配置
@@ -1030,6 +1031,8 @@ const SMART_FIELDS: SmartFieldConfig[] = [
   // 发布后小程序端会自动注入 RTL 字体（KazakhSoftAsilya）
   { key: 'kzDate', label: '哈语日期', icon: '📆', placeholder: '2026 جىلعى 1 ايدىڭ 22 كۇنى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
   { key: 'kzWeekday', label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
+  // kzWeekdayParen：与 kzWeekday 相同的滚轮选择器，但输出带括号 (سەيسەنبى)
+  { key: 'kzWeekdayParen', label: '哈语星期(括号)', icon: '📆', placeholder: '(سەيسەنبى)', fontSize: 16, fontWeight: 'normal', color: '#666666' },
   { key: 'kzTime', label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
 
