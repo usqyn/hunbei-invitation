@@ -60,6 +60,7 @@
         <span class="toolbar-divider"></span>
         <button class="tb-btn sm" :class="{ active: showGrid }" @click="toggleGrid" title="网格/吸附">{{ showGrid ? '🧲' : '⊞' }}</button>
         <span class="toolbar-divider"></span>
+        <button class="tb-btn sm" :class="{ active: painterState?.active }" @click="toggleFormatPainter" title="格式刷（吸取样式后点击目标元素应用）">🖌 刷</button>
         <button class="tb-btn danger" @click="deleteSelected" title="删除选中 (Del)">🗑 删除</button>
         <span class="toolbar-divider"></span>
         <button class="tb-btn" @click="saveToServer" title="保存到服务器 (Ctrl+S)">💾 保存</button>
@@ -1294,6 +1295,78 @@ const {
 
 // 图层：按 zIndex 降序显示（最上层排第一）
 const layers = computed(() => [...elements.value].sort((a, b) => b.zIndex - a.zIndex))
+
+// ============ 格式刷 ============
+// 吸取选中元素的样式，点击目标元素后自动应用并退出
+const painterState = ref<{
+  active: boolean
+  sourceId: string
+  sourceType: 'text' | 'image'
+  style: Record<string, any>
+} | null>(null)
+
+// 从元素对象抽取可被复制的样式字段（不含 id/位置/尺寸/内容/可见性/锁定等）
+function extractElementStyle(el: any): Record<string, any> {
+  if (el.type === 'text') {
+    return {
+      fontFamily: el.fontFamily, fontSize: el.fontSize, fontWeight: el.fontWeight,
+      fontStyle: el.fontStyle, color: el.color, textAlign: el.textAlign,
+      direction: el.direction, lineHeight: el.lineHeight, letterSpacing: el.letterSpacing,
+      strokeColor: el.strokeColor, strokeWidth: el.strokeWidth,
+      shadowColor: el.shadowColor, shadowOffsetX: el.shadowOffsetX,
+      shadowOffsetY: el.shadowOffsetY, shadowBlur: el.shadowBlur,
+      textDecoration: el.textDecoration,
+    }
+  }
+  if (el.type === 'image') {
+    return {
+      scale: el.scale, mask: el.mask, borderRadius: el.borderRadius,
+      borderColor: el.borderColor, borderWidth: el.borderWidth,
+      brightness: el.brightness, contrast: el.contrast, blur: el.blur,
+      grayscale: el.grayscale, saturate: el.saturate,
+    }
+  }
+  return {}
+}
+
+function toggleFormatPainter() {
+  if (painterState.value?.active) {
+    // 再次点击按钮：取消格式刷
+    painterState.value = null
+    showToast('已取消格式刷')
+    return
+  }
+  const sel = selectedElement.value
+  if (!sel) {
+    showToast('请先选中要吸取样式的元素', 'error')
+    return
+  }
+  painterState.value = {
+    active: true,
+    sourceId: sel.id,
+    sourceType: sel.type,
+    style: extractElementStyle(sel as any),
+  }
+  showToast('格式刷已激活，点击目标元素应用样式')
+}
+
+// 选中元素变化时，若格式刷激活且选中的不是源元素，则应用样式并退出
+watch(selectedId, (newId) => {
+  const state = painterState.value
+  if (!state?.active || !newId) return
+  if (newId === state.sourceId) return // 同一元素，忽略
+  const target = elements.value.find(e => e.id === newId)
+  if (!target) return
+  if (target.type !== state.sourceType) {
+    showToast('元素类型不一致，无法应用格式刷', 'error')
+    painterState.value = null
+    return
+  }
+  updateSelected(state.style)
+  pushHistory('format painter')
+  showToast('已应用格式刷')
+  painterState.value = null
+})
 
 // ============ Phase 2: 素材库 ============
 const materialCategories = getMaterialCategories()
