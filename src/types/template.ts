@@ -40,6 +40,10 @@ export interface TemplateData {
   kzWeekday?: string
   kzWeekdayParen?: string
   kzTime?: string
+  // 哈语新人姓名/地址：与中文姓名/地址对照，文本输入，自动 RTL 渲染
+  kzGroomName?: string
+  kzBrideName?: string
+  kzAddress?: string
 }
 
 // 用户填写的基本信息（新人信息/节日信息等）

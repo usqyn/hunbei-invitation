@@ -290,6 +290,10 @@ const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholde
   kzWeekday: { label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى' },
   // kzTime：时间段滚轮，输出哈语时间段
   kzTime: { label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن' },
+  // 哈语新人姓名/地址：文本输入，自动 RTL 渲染（出现在"其他信息"区）
+  kzGroomName: { label: '哈语新郎名', icon: '👨', placeholder: 'نۇرلان' },
+  kzBrideName: { label: '哈语新娘名', icon: '👩', placeholder: 'اينۇر' },
+  kzAddress: { label: '哈语地址', icon: '🏠', placeholder: 'قىزىلوردا قالاسى, توي سارايى' },
 }
 
 // 基础字段 key（值从 basicInfo 读取，但仅在模板中存在对应 dataKey 时显示）

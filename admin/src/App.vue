@@ -1001,6 +1001,7 @@ const TEMPLATE_DATA_KEYS = [
   // kzWeekdayParen：星期滚轮，选后填入带括号的哈语星期名 (سەيسەنبى)
   // kzTime：时间段滚轮，选后填入哈语时间段
   'kzDate', 'kzWeekday', 'kzWeekdayParen', 'kzTime',
+  'kzGroomName', 'kzBrideName', 'kzAddress',
 ]
 
 // 快捷字段配置
@@ -1021,9 +1022,6 @@ const SMART_FIELDS: SmartFieldConfig[] = [
   { key: 'location', label: '地点', icon: '📍', placeholder: '点击填写地点', fontSize: 18, fontWeight: 'normal', color: '#666666' },
   { key: 'address', label: '详细地址', icon: '🏠', placeholder: 'xx酒店xx厅', fontSize: 16, fontWeight: 'normal', color: '#999999' },
   { key: 'phone', label: '联系电话', icon: '📞', placeholder: '138xxxxxxxx', fontSize: 16, fontWeight: 'normal', color: '#999999' },
-  { key: 'year', label: '年份', icon: '📅', placeholder: '2025', fontSize: 14, fontWeight: 'normal', color: '#666666' },
-  { key: 'month', label: '月份', icon: '📅', placeholder: '6', fontSize: 14, fontWeight: 'normal', color: '#666666' },
-  { key: 'day', label: '日期(日)', icon: '📅', placeholder: '15', fontSize: 14, fontWeight: 'normal', color: '#666666' },
   // 哈萨克语阿拉伯文日期字段：
   // kzDate：小程序端选日期后自动填入哈语表达式 "2026 جىلعى 1 ايدىڭ 22 كۇنى"（从属格形式）
   // kzWeekday：小程序端提供周一-周日滚轮选择器，选后填入哈语星期名
@@ -1034,6 +1032,10 @@ const SMART_FIELDS: SmartFieldConfig[] = [
   // kzWeekdayParen：与 kzWeekday 相同的滚轮选择器，但输出带括号 (سەنبى)
   { key: 'kzWeekdayParen', label: '哈语星期(括号)', icon: '📆', placeholder: '(سەنبى)', fontSize: 16, fontWeight: 'normal', color: '#666666' },
   { key: 'kzTime', label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن', fontSize: 16, fontWeight: 'normal', color: '#666666' },
+  // 哈语新人姓名/地址：与普通姓名/地址中哈对照，文本输入，自动 RTL 渲染
+  { key: 'kzGroomName', label: '哈语新郎名', icon: '👨', placeholder: 'نۇرلان', fontSize: 16, fontWeight: 'bold', color: '#d4a574' },
+  { key: 'kzBrideName', label: '哈语新娘名', icon: '👩', placeholder: 'اينۇر', fontSize: 16, fontWeight: 'bold', color: '#d4a574' },
+  { key: 'kzAddress', label: '哈语地址', icon: '🏠', placeholder: 'قىزىلوردا قالاسى, توي سارايى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
 
 // 日期占位符预览值

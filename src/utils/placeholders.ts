@@ -32,6 +32,16 @@ export function resolveDatePlaceholders(text: string, data: Partial<TemplateData
   if (result.includes('{kzTime}') && data.kzTime) {
     result = result.replace(/\{kzTime\}/g, data.kzTime)
   }
+  // 哈语新人姓名/地址占位符：纯文本替换，自动 RTL 渲染
+  if (result.includes('{kzGroomName}') && data.kzGroomName) {
+    result = result.replace(/\{kzGroomName\}/g, data.kzGroomName)
+  }
+  if (result.includes('{kzBrideName}') && data.kzBrideName) {
+    result = result.replace(/\{kzBrideName\}/g, data.kzBrideName)
+  }
+  if (result.includes('{kzAddress}') && data.kzAddress) {
+    result = result.replace(/\{kzAddress\}/g, data.kzAddress)
+  }
   return result
 }
 
@@ -39,5 +49,5 @@ export function resolveDatePlaceholders(text: string, data: Partial<TemplateData
  * 检测文本是否包含日期占位符
  */
 export function hasDatePlaceholders(text: string): boolean {
-  return /\{year\}|\{month\}|\{day\}|\{kzDate\}|\{kzWeekday\}|\{kzWeekdayParen\}|\{kzTime\}/.test(text)
+  return /\{year\}|\{month\}|\{day\}|\{kzDate\}|\{kzWeekday\}|\{kzWeekdayParen\}|\{kzTime\}|\{kzGroomName\}|\{kzBrideName\}|\{kzAddress\}/.test(text)
 }
