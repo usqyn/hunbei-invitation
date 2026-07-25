@@ -1164,6 +1164,9 @@ const onImageError = () => {
 
 .preview-element {
   display: block;
+}
+
+.preview-image {
   overflow: hidden;
 }
 

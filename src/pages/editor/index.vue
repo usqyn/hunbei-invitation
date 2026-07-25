@@ -2088,8 +2088,9 @@ onUnmounted(() => {
   overflow: hidden;
   border-radius: 4rpx;
 }
+/* 文本元素不裁切，高度自适应，避免渲染引擎差异导致文字被切 */
 .canvas-element.text-element {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .canvas-image {

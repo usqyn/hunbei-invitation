@@ -107,8 +107,11 @@ export function useCanvasRender(options: {
       opacity: String(el.opacity ?? 1),
     }
 
+    // 文本元素：不强制裁切，高度自适应，避免 admin 与小程序渲染引擎差异
+    // （字间距语义、字体度量、换行行为不同）导致文本被切掉一半
     if (el.type === 'text') {
-      style.overflow = 'hidden'
+      style.height = 'auto'
+      style.minHeight = `${(h / ch) * 100}%`
     }
 
     // 构建复合 transform：旋转 + 图片缩放 + 图片偏移
@@ -164,7 +167,9 @@ export function useCanvasRender(options: {
       fontSize: `${fontSize}rpx`,
       color: style.color || '#333333',
       lineHeight: String(style.lineHeight || DEFAULT_LINE_HEIGHT),
-      letterSpacing: direction === 'rtl' ? 'normal' : `${style.spacing ?? DEFAULT_LETTER_SPACING}rpx`,
+      // admin 编辑态字间距是 0.02em（相对字号），序列化后变成 rpx 绝对值。
+      // 这里转回 em 单位，保持与 admin 一致的相对语义，避免不同字号下字间距失真
+      letterSpacing: direction === 'rtl' ? 'normal' : `${((style.spacing ?? DEFAULT_LETTER_SPACING) / fontSize).toFixed(4)}em`,
       fontFamily: getFontFamily(style.font),
       fontWeight: style.fontWeight || 'normal',
       fontStyle: style.fontStyle || 'normal',
