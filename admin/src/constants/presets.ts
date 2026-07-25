@@ -433,7 +433,7 @@ const KZ_PRESETS: TemplatePreset[] = [
     id: 'kz-formal-classic',
     name: '经典红金 · تويعا كەلىڭىزدەر',
     category: 'kz',
-    description: '深红色背景，传统正式婚礼，请参考截图布局',
+    description: '深红色背景，传统正式婚礼（参考截图布局）',
     thumbnail: 'linear-gradient(135deg, #4a1a1a, #2d0f0f)',
     draft: {
       canvasSize: { width: 375, height: 667 },
@@ -564,6 +564,317 @@ const KZ_PRESETS: TemplatePreset[] = [
           name: '底部祝福', x: 187, y: 600, width: 320, height: 40, zIndex: 13,
           content: 'بەرەكەتتى بولسىن!',
           fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, fontWeight: 'bold', color: '#FFD700',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 3,
+        }),
+      ],
+    },
+  },
+  {
+    id: 'kz-landscape-formal',
+    name: '横屏经典 · تويعا كەلىڭىزدەر（横屏）',
+    category: 'kz',
+    description: '横屏 900×600，左图右文，完整还原截图所有信息',
+    thumbnail: 'linear-gradient(135deg, #5a2020, #3d1010)',
+    draft: {
+      // 横屏 900×600，左半放图，右半放文字
+      canvasSize: { width: 900, height: 600 },
+      background: { type: 'linear-gradient', color1: '#5a2020', color2: '#3d1010', angle: 135 },
+      elements: [
+        // ============ 左侧大图（新人合影，占左半区域）===========
+        makeImage({
+          name: '新人合影', x: 215, y: 300, width: 400, height: 500, zIndex: 0,
+          src: PLACEHOLDER_IMG,
+          dataKey: 'coverImage',
+          scale: 'cover',
+          mask: 'rect',
+          borderRadius: 0,
+        }),
+
+        // ============ 右侧文字区域（x=670 居中于右半 450~900）===========
+
+        // 主标题：تويعا كەلىڭىزدەر
+        makeText({
+          name: '主标题', x: 670, y: 40, width: 440, height: 60, zIndex: 1,
+          content: 'تويعا كەلىڭىزدەر',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 40, fontWeight: 'bold', color: '#FFD700',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.3, letterSpacing: 3,
+          shadowColor: 'rgba(0,0,0,0.5)', shadowOffsetX: 1, shadowOffsetY: 2, shadowBlur: 4,
+        }),
+
+        // 装饰分隔线
+        makeText({
+          name: '装饰线', x: 670, y: 105, width: 120, height: 16, zIndex: 2,
+          content: '─────────',
+          fontFamily: 'Arial, sans-serif', fontSize: 12, color: '#D4AF37',
+          textAlign: 'center', letterSpacing: 1,
+        }),
+
+        // ============ 日期区域 ============
+        // 哈语日期
+        makeText({
+          name: '哈语日期', x: 670, y: 140, width: 440, height: 34, zIndex: 3,
+          content: '2026 جىلعى 10 ايدىڭ 25 كۇنى',
+          dataKey: 'kzDate',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, color: '#FFE4B5',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+
+        // 星期（带括号）
+        makeText({
+          name: '哈语星期(括号)', x: 670, y: 178, width: 440, height: 30, zIndex: 4,
+          content: '(سەنبى)',
+          dataKey: 'kzWeekdayParen',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 16, color: '#FFE4B5',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+
+        // 时间段
+        makeText({
+          name: '哈语时间段', x: 670, y: 212, width: 440, height: 30, zIndex: 5,
+          content: 'كەشكى ساعات 7 دە',
+          dataKey: 'kzTime',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 16, color: '#FFE4B5',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+
+        // 邀请正文（两行）
+        makeText({
+          name: '邀请正文', x: 670, y: 250, width: 440, height: 50, zIndex: 6,
+          content: 'بىيجىنىڭ ۋاقىتى كەشكى ساعات 7 دە بولاتىن\nكەلىن تۇسىرۋ توي قۋانىشىمىز',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 14, color: '#FFE4B5',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.6, letterSpacing: 1,
+        }),
+
+        // ============ 新郎新娘区域 ============
+        // 新郎名
+        makeText({
+          name: '哈语新郎名', x: 670, y: 315, width: 440, height: 38, zIndex: 7,
+          content: 'سامعار ساعات ۇلى',
+          dataKey: 'kzGroomName',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 20, fontWeight: 'bold', color: '#FFD700',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+
+        // 新娘名
+        makeText({
+          name: '哈语新娘名', x: 670, y: 358, width: 440, height: 38, zIndex: 8,
+          content: 'گاۋھار بەكەجان قىزى',
+          dataKey: 'kzBrideName',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 20, fontWeight: 'bold', color: '#FFD700',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+
+        // 装饰线2
+        makeText({
+          name: '分隔线2', x: 670, y: 402, width: 80, height: 16, zIndex: 9,
+          content: '─────',
+          fontFamily: 'Arial, sans-serif', fontSize: 12, color: '#D4AF37',
+          textAlign: 'center', letterSpacing: 0,
+        }),
+
+        // ============ 地点区域 ============
+        // 哈语地址
+        makeText({
+          name: '哈语地址', x: 670, y: 432, width: 440, height: 36, zIndex: 10,
+          content: 'قۇلجا قالاسى «تاڭنۇر» رەستۋرانى',
+          dataKey: 'kzAddress',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 16, color: '#DEB887',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+
+        // 地址详细说明（两行）
+        makeText({
+          name: '地址详细', x: 670, y: 472, width: 440, height: 40, zIndex: 11,
+          content: '(كۇنە كوپىر دەن وتكەننەن كەيىن\nجولدىڭ سول جاعىندا)',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 13, color: '#DEB887',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.6, letterSpacing: 0,
+        }),
+
+        // ============ 底部联系电话 ============
+        makeText({
+          name: '联系电话', x: 670, y: 522, width: 440, height: 32, zIndex: 12,
+          content: 'تەلەفون: 13369820339 / 13999586651',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 14, color: '#DEB887',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 0,
+        }),
+
+        // 底部祝福
+        makeText({
+          name: '底部祝福', x: 670, y: 562, width: 440, height: 36, zIndex: 13,
+          content: 'بەرەكەتتى بولسىن!',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 20, fontWeight: 'bold', color: '#FFD700',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 3,
+        }),
+      ],
+    },
+  },
+  {
+    id: 'kz-poetic-elegant',
+    name: '文艺诗意 · باقىت قۇسى',
+    category: 'kz',
+    description: '蓝白渐变，浪漫诗意',
+    thumbnail: 'linear-gradient(135deg, #1e3c72, #2a5298)',
+    draft: {
+      canvasSize: { width: 375, height: 667 },
+      background: { type: 'linear-gradient', color1: '#1e3c72', color2: '#2a5298', angle: 135 },
+      elements: [
+        // 主标题：باقىت قۇسى قونعان توي (幸福降临的婚礼) - 静态
+        makeText({
+          name: '主标题', x: 187, y: 130, width: 340, height: 70, zIndex: 0,
+          content: 'باقىت قۇسى قونعان توي',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 34, fontWeight: 'bold', color: '#ffffff',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.3, letterSpacing: 2,
+          shadowColor: 'rgba(0,0,0,0.3)', shadowOffsetX: 1, shadowOffsetY: 2, shadowBlur: 4,
+        }),
+        // 副标题：ەكى جۇرەك بىرىگەدى (两颗心合而为一) - 静态
+        makeText({
+          name: '副标题', x: 187, y: 215, width: 340, height: 32, zIndex: 1,
+          content: 'ەكى جۇرەك بىرىگەدى',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, color: '#B0E0E6',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 2,
+        }),
+        // 装饰线 - 静态
+        makeText({
+          name: '装饰线', x: 187, y: 260, width: 80, height: 20, zIndex: 2,
+          content: '✿ ─ ✿',
+          fontFamily: 'Arial, sans-serif', fontSize: 16, color: '#87CEEB',
+          textAlign: 'center', letterSpacing: 4,
+        }),
+        // 新郎名 - dataKey=kzGroomName
+        makeText({
+          name: '哈语新郎名', x: 187, y: 300, width: 340, height: 44, zIndex: 3,
+          content: 'نۇرلان',
+          dataKey: 'kzGroomName',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 26, fontWeight: 'bold', color: '#ffffff',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.3, letterSpacing: 3,
+        }),
+        // 新娘名 - dataKey=kzBrideName
+        makeText({
+          name: '哈语新娘名', x: 187, y: 355, width: 340, height: 44, zIndex: 4,
+          content: 'اينۇر',
+          dataKey: 'kzBrideName',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 26, fontWeight: 'bold', color: '#ffffff',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.3, letterSpacing: 3,
+        }),
+        // 哈语日期 - dataKey=kzDate
+        makeText({
+          name: '哈语日期', x: 187, y: 420, width: 340, height: 36, zIndex: 5,
+          content: '2026 جىلعى 1 ايدىڭ 22 كۇنى',
+          dataKey: 'kzDate',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, color: '#E0FFFF',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 哈语星期 - dataKey=kzWeekday
+        makeText({
+          name: '哈语星期', x: 187, y: 460, width: 340, height: 32, zIndex: 6,
+          content: 'سەنبى',
+          dataKey: 'kzWeekday',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, color: '#E0FFFF',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 哈语时间段 - dataKey=kzTime
+        makeText({
+          name: '哈语时间段', x: 187, y: 495, width: 340, height: 32, zIndex: 7,
+          content: 'تۇستەن كەيىن',
+          dataKey: 'kzTime',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 16, color: '#B0C4DE',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 哈语地址 - dataKey=kzAddress
+        makeText({
+          name: '哈语地址', x: 187, y: 535, width: 340, height: 32, zIndex: 8,
+          content: 'استانا قالاسى، "نۇرلي" توي سارايى',
+          dataKey: 'kzAddress',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 15, color: '#B0C4DE',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 底部诗句 - 静态
+        makeText({
+          name: '底部诗句', x: 187, y: 590, width: 340, height: 60, zIndex: 9,
+          content: 'ارمانىمىز ورىندالعان كۇنى\nسىزدەرگە ارنالدى',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 15, color: 'rgba(255,255,255,0.85)',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.8, letterSpacing: 1,
+        }),
+      ],
+    },
+  },
+  {
+    id: 'kz-minimal-modern',
+    name: '简洁现代 · قۇتتى بولسىن',
+    category: 'kz',
+    description: '米白简约，现代清爽',
+    thumbnail: 'linear-gradient(135deg, #faf3e0, #f5e6d3)',
+    draft: {
+      canvasSize: { width: 375, height: 667 },
+      background: { type: 'linear-gradient', color1: '#faf3e0', color2: '#f5e6d3', angle: 135 },
+      elements: [
+        // 主标题：قۇتتى بولسىن! (恭喜！) - 静态
+        makeText({
+          name: '主标题', x: 187, y: 150, width: 340, height: 70, zIndex: 0,
+          content: 'قۇتتى بولسىن!',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 44, fontWeight: 'bold', color: '#5d4037',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.2, letterSpacing: 4,
+        }),
+        // 装饰线 - 静态
+        makeText({
+          name: '装饰线', x: 187, y: 240, width: 60, height: 20, zIndex: 1,
+          content: '───',
+          fontFamily: 'Arial, sans-serif', fontSize: 16, color: '#c9a96e',
+          textAlign: 'center', letterSpacing: 0,
+        }),
+        // 新郎名 - dataKey=kzGroomName
+        makeText({
+          name: '哈语新郎名', x: 187, y: 285, width: 340, height: 40, zIndex: 2,
+          content: 'نۇرلان',
+          dataKey: 'kzGroomName',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 24, color: '#5d4037',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 2,
+        }),
+        // 新娘名 - dataKey=kzBrideName
+        makeText({
+          name: '哈语新娘名', x: 187, y: 335, width: 340, height: 40, zIndex: 3,
+          content: 'اينۇر',
+          dataKey: 'kzBrideName',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 24, color: '#5d4037',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 2,
+        }),
+        // 哈语日期 - dataKey=kzDate
+        makeText({
+          name: '哈语日期', x: 187, y: 400, width: 340, height: 36, zIndex: 4,
+          content: '2026 جىلعى 1 ايدىڭ 22 كۇنى',
+          dataKey: 'kzDate',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, color: '#8d6e63',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 哈语星期 - dataKey=kzWeekday
+        makeText({
+          name: '哈语星期', x: 187, y: 445, width: 340, height: 32, zIndex: 5,
+          content: 'سەنبى',
+          dataKey: 'kzWeekday',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, color: '#8d6e63',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 哈语时间段 - dataKey=kzTime
+        makeText({
+          name: '哈语时间段', x: 187, y: 480, width: 340, height: 32, zIndex: 6,
+          content: 'تۇستەن كەيىن',
+          dataKey: 'kzTime',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 16, color: '#a1887f',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 哈语地址 - dataKey=kzAddress
+        makeText({
+          name: '哈语地址', x: 187, y: 525, width: 340, height: 32, zIndex: 7,
+          content: 'استانا قالاسى، "نۇرلي" توي سارايى',
+          dataKey: 'kzAddress',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 16, color: '#a1887f',
+          textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 1,
+        }),
+        // 底部祝福 - 静态
+        makeText({
+          name: '底部祝福', x: 187, y: 600, width: 340, height: 40, zIndex: 8,
+          content: 'تىلەك بىلدىرەمىز',
+          fontFamily: 'KazakhSoftAsilya, serif', fontSize: 18, color: '#c9a96e',
           textAlign: 'center', direction: 'rtl', lineHeight: 1.5, letterSpacing: 3,
         }),
       ],
