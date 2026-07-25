@@ -139,7 +139,7 @@
               class="preview-image-el"
               lazy-load
               :src="el.text"
-              mode="aspectFit"
+              mode="scaleToFill"
               @error="onImageError"
             />
             <text v-else-if="el.type === 'text'" class="preview-text-el" :style="getTextStyle(el)">{{ formatBiDi(resolveText(el.text)) }}</text>

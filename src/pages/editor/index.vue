@@ -141,7 +141,7 @@
                   v-if="el.type === 'image'"
                   custom-class="canvas-image"
                   :src="el.text"
-                  mode="aspectFit"
+                  mode="scaleToFill"
                   @error="onImageError"
                 />
                 <text
