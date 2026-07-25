@@ -1178,7 +1178,7 @@ const onImageError = () => {
 
 .preview-text-el {
   display: block;
-  word-break: break-word;
+  white-space: pre;
 }
 
 /* Page 模式 */

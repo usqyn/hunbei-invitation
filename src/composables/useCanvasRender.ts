@@ -107,9 +107,10 @@ export function useCanvasRender(options: {
       opacity: String(el.opacity ?? 1),
     }
 
-    // 文本元素：不强制裁切，高度自适应，避免 admin 与小程序渲染引擎差异
-    // （字间距语义、字体度量、换行行为不同）导致文本被切掉一半
+    // 文本元素：不限制宽高，让文本自然撑开（与 admin Fabric IText 行为一致）
+    // admin 的 IText 不设 width、不换行、不裁切，小程序也应如此
     if (el.type === 'text') {
+      style.width = 'auto'
       style.height = 'auto'
       style.minHeight = `${(h / ch) * 100}%`
     }
@@ -175,8 +176,8 @@ export function useCanvasRender(options: {
       fontStyle: style.fontStyle || 'normal',
       textAlign,
       direction,
-      whiteSpace: 'pre-wrap',
-      wordBreak: 'break-word',
+      // 与 admin Fabric IText 一致：不自动换行，文本按自然宽度排布
+      whiteSpace: 'pre',
       writingMode: 'horizontal-tb',
       textDecoration: style.textDecoration || 'none',
     }

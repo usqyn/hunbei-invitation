@@ -2101,7 +2101,7 @@ onUnmounted(() => {
 
 .canvas-text {
   display: block;
-  word-break: break-word;
+  white-space: pre;
 }
 
 .non-editable {
