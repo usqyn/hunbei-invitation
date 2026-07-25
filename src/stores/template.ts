@@ -81,11 +81,21 @@ export const useTemplateStore = defineStore('template', () => {
     loading.value = true
     try {
       const list = await request<Template[]>({ url: '/api/templates', data: { type, page: 1 } })
-      // 对模板封面图做 URL 归一化，补全相对路径
-      templateList.value = (list || []).map(t => ({ ...t, image: resolveUrl(t.image) }))
+      templateList.value = (list || []).map(t => ({
+        ...t,
+        image: resolveUrl(t.image),
+        vipLevel: t.vipLevel || inferVipLevel(t),
+      }))
     }
     catch (e) { console.error('fetchTemplates failed', e); templateList.value = [] }
     finally { loading.value = false }
+  }
+
+  function inferVipLevel(t: Template): 'free' | 'personal' | 'pro' {
+    if (t.vipLevel) return t.vipLevel
+    if (t.is_premium) return 'pro'
+    if (t.is_paid) return 'personal'
+    return 'free'
   }
 
   function reset() {

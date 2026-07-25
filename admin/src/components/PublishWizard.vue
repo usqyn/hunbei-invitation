@@ -62,20 +62,19 @@
             </div>
           </div>
         <div class="form-field">
-          <label class="field-label">付费设置</label>
-          <div class="price-setting">
-            <label class="switch-label">
-              <input type="checkbox" v-model="form.isPaid" />
-              <span>设为付费模板</span>
-            </label>
-            <div v-if="form.isPaid" class="price-input-wrap">
-              <input v-model.number="form.price" type="number" class="field-input price-input" placeholder="价格（元）" min="1" max="99" />
-              <span class="price-unit">元</span>
-            </div>
-            <label class="switch-label">
-              <input type="checkbox" v-model="form.isPremium" />
-              <span>含付费元素（VIP专属素材/字体/特效）</span>
-            </label>
+          <label class="field-label">会员等级</label>
+          <div class="vip-level-chips">
+            <button
+              v-for="level in VIP_LEVEL_OPTIONS"
+              :key="level.value"
+              class="vip-level-chip"
+              :class="{ active: form.vipLevel === level.value }"
+              @click="form.vipLevel = level.value"
+            >
+              <span class="vl-icon">{{ level.icon }}</span>
+              <span class="vl-name">{{ level.name }}</span>
+              <span class="vl-desc">{{ level.desc }}</span>
+            </button>
           </div>
         </div>
         <div class="form-field">
@@ -316,6 +315,12 @@ const TAG_LIST = [
   '中国风', '简约', '复古', '浪漫', '活泼', '典雅', '大气', '温馨', '西式', '韩式',
 ]
 
+const VIP_LEVEL_OPTIONS = [
+  { value: 'free', name: '免费', icon: '🆓', desc: '免费用户可用，带水印' },
+  { value: 'personal', name: '个人VIP', icon: '👑', desc: '个人会员可用，无水印' },
+  { value: 'pro', name: '专业版', icon: '💎', desc: '专业版可用，最高权益' },
+]
+
 const currentStep = ref(0)
 const form = reactive({
   name: '',
@@ -324,9 +329,7 @@ const form = reactive({
   tags: [] as string[],
   pageCount: 10,
   likes: 1000,
-  isPaid: false,
-  price: 3,
-  isPremium: false,
+  vipLevel: 'free' as 'free' | 'personal' | 'pro',
 })
 
 const validationResults = ref<Array<{
@@ -373,9 +376,7 @@ watch(() => props.visible, (val) => {
     form.tags = []
     form.pageCount = 10
     form.likes = 1000
-    form.isPaid = false
-    form.price = 3
-    form.isPremium = false
+    form.vipLevel = 'free'
   }
 })
 
@@ -571,9 +572,7 @@ async function doPublish() {
       likes: form.likes,
       pageCount: isFlipMode ? flipPages.length : form.pageCount,
       status: 'published',
-      isPaid: form.isPaid,
-      price: form.isPaid ? form.price : 0,
-      isPremium: form.isPremium,
+      vipLevel: form.vipLevel,
       renderedImage: renderedImageUrl,
       orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
       templateType: isFlipMode ? 'flip' : 'canvas',
@@ -1072,6 +1071,40 @@ function onViewTemplate() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.vip-level-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vip-level-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+.vip-level-chip:hover { border-color: #1976d2; }
+.vip-level-chip.active {
+  border-color: #1976d2;
+  background: #e3f2fd;
+}
+.vl-icon { font-size: 22px; }
+.vl-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+  flex-shrink: 0;
+}
+.vl-desc {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
 }
 .switch-label {
   display: flex;

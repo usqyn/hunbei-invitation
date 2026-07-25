@@ -257,9 +257,17 @@
             </div>
             <div class="tpl-info" @click="onLoadTemplate(tpl.id)">
               <div class="tpl-name">{{ tpl.name }}</div>
-              <div class="tpl-cat">{{ getCategoryName(tpl.category) }}</div>
+              <div class="tpl-cat">
+                {{ getCategoryName(tpl.category) }}
+                <span class="tpl-vip-badge" :class="'vip-' + (tpl.vipLevel || 'free')">{{ vipLevelLabel(tpl.vipLevel) }}</span>
+              </div>
             </div>
             <div class="tpl-actions">
+              <select class="tpl-vip-select" :value="tpl.vipLevel || 'free'" @change="onChangeTemplateVip(tpl, $event)">
+                <option value="free">免费</option>
+                <option value="personal">个人VIP</option>
+                <option value="pro">专业版</option>
+              </select>
               <button class="tpl-btn" @click="onCloneTemplate(tpl)" title="克隆">📋</button>
               <button class="tpl-btn danger" @click="onDeleteTemplate(tpl)" title="删除">🗑</button>
             </div>
@@ -1591,6 +1599,25 @@ async function onDeleteTemplate(tpl: any) {
 
 function getCategoryName(catId: string): string {
   return CATEGORIES.find(c => c.id === catId)?.name || catId
+}
+
+function vipLevelLabel(level?: string): string {
+  if (level === 'pro') return '专业版'
+  if (level === 'personal') return 'VIP'
+  return '免费'
+}
+
+async function onChangeTemplateVip(tpl: any, e: Event) {
+  const target = e.target as HTMLSelectElement
+  const vipLevel = target.value as 'free' | 'personal' | 'pro'
+  try {
+    await updateTemplate(tpl.id, { vipLevel })
+    tpl.vipLevel = vipLevel
+  } catch (err: any) {
+    console.error('更新VIP等级失败:', err)
+    alert('更新失败：' + (err?.message || err))
+    target.value = tpl.vipLevel || 'free'
+  }
 }
 
 function formatTime(ts: number): string {
@@ -2965,9 +2992,28 @@ label {
 
 .tpl-info { flex: 1; min-width: 0; cursor: pointer; }
 .tpl-name { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tpl-cat { font-size: 11px; color: #999; margin-top: 2px; }
+.tpl-cat { font-size: 11px; color: #999; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+.tpl-vip-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.tpl-vip-badge.vip-free { background: #e8f5e9; color: #2e7d32; }
+.tpl-vip-badge.vip-personal { background: #fff3e0; color: #e65100; }
+.tpl-vip-badge.vip-pro { background: #f3e5f5; color: #6a1b9a; }
+.tpl-vip-select {
+  padding: 3px 6px;
+  font-size: 11px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
 
-.tpl-actions { display: flex; gap: 2px; }
+.tpl-actions { display: flex; gap: 2px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
 .tpl-btn {
   padding: 4px 6px;

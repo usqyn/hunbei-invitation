@@ -204,9 +204,14 @@ export interface TemplateItem {
   tags?: string[]
   // 渲染图（admin 发布时生成的高清截图）
   renderedImage?: string
-  // 付费相关字段
+  // 付费相关字段（兼容旧版 is_paid / is_premium）
   is_paid?: boolean
   is_premium?: boolean
   price?: number
   vip_free?: boolean
+  // 会员等级：free=免费基础 / personal=个人VIP / pro=专业版
+  // free: 免费无水印，限制作次数
+  // personal: 个人VIP，无水印，更多次数
+  // pro: 专业版，全部权益，最高次数
+  vipLevel?: 'free' | 'personal' | 'pro'
 }

@@ -54,6 +54,7 @@ export const useEditorStore = defineStore('editor', () => {
   const currentTemplateId = ref<string>(DEFAULT_TEMPLATE_ID)
   const currentWorkId = ref<string | null>(null)
   const templateLoading = ref(false)
+  const currentTemplateVipLevel = ref<'free' | 'personal' | 'pro'>('free')
 
   const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
   const background = ref<{ type: string; color1: string; color2?: string; angle?: number; image?: string }>({ type: 'solid', color1: '#ffffff' })
@@ -276,6 +277,9 @@ export const useEditorStore = defineStore('editor', () => {
     // 加载新模板时重置选中状态，避免选中失效的元素索引
     selectedElement.value = null
     activeSectionId.value = null
+
+    // 设置模板 VIP 等级
+    currentTemplateVipLevel.value = template.vipLevel || 'free'
 
     // 设置模板类型
     templateType.value = template.templateType || 'canvas'
@@ -845,7 +849,7 @@ export const useEditorStore = defineStore('editor', () => {
   return {
     showTextEditor, showSectionTextEditor, showBasicInfoEditor,
     selectedElement, editingText,
-    editableElements, currentTemplateId, currentWorkId, templateLoading, canvasSize, background, renderedImage,
+    editableElements, currentTemplateId, currentWorkId, templateLoading, currentTemplateVipLevel, canvasSize, background, renderedImage,
     templateType, pageSections, activeSectionId,
     flipPages, currentFlipPageIndex,
     history, historyIndex, canUndo, canRedo, canReset,

@@ -322,7 +322,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
-import { useUserStore } from '@/stores/user'
+import { useUserStore, VIP_LIMITS } from '@/stores/user'
 import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
@@ -1305,13 +1305,32 @@ async function handleSave() {
   if (savingLoading.value) return
   haptic('medium')
   track('edit_save', { progress: editProgress.value })
+
+  const existing = findExistingWork()
+  if (!existing && !userStore.canCreateWork()) {
+    uni.showModal({
+      title: '制作次数已用完',
+      content: `您本月的免费制作次数（${VIP_LIMITS[userStore.getVipLevel()].monthlyCreateCount}次）已用完，升级会员可获得更多次数。`,
+      confirmText: '去开通',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          uni.navigateTo({ url: '/pages/vip/index' })
+        }
+      },
+    })
+    return
+  }
+
+  const isNewWork = !existing
   await runSave(async () => {
-    const existing = findExistingWork()
     const work = buildWorkFromEditor(existing)
     worksStore.saveAsWork(work)
+    if (isNewWork) {
+      userStore.incrementCreateCount()
+    }
     hasUnsavedChanges.value = false
   }, { successMessage: '已保存', minLoadingDuration: 400 })
-  // 显示自动保存提示
   autoSaveToast.value = true
   setTimeout(() => {
     if (_isMounted) autoSaveToast.value = false
@@ -1324,10 +1343,14 @@ async function autoSaveWork() {
   if (savingLoading.value) return // 避免与手动保存并发
   try {
     const existing = findExistingWork()
+    if (!existing && !userStore.canCreateWork()) return
+    const isNewWork = !existing
     const work = buildWorkFromEditor(existing)
     worksStore.saveAsWork(work)
+    if (isNewWork) {
+      userStore.incrementCreateCount()
+    }
     hasUnsavedChanges.value = false
-    // 显示自动保存提示
     autoSaveToast.value = true
     setTimeout(() => {
       if (_isMounted) autoSaveToast.value = false

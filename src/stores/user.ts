@@ -5,6 +5,47 @@ import { resolveUrl } from '@/utils/url'
 
 const STORAGE_KEY = 'TOYtamaxia_user'
 
+export type VipLevel = 0 | 1 | 2
+
+export const VIP_LEVELS = {
+  FREE: 0 as const,
+  PERSONAL: 1 as const,
+  PRO: 2 as const,
+}
+
+export const VIP_LIMITS = {
+  [VIP_LEVELS.FREE]: {
+    freeTemplates: 3,
+    monthlyCreateCount: 3,
+    watermarkOnPremium: true,
+    hdExport: false,
+    videoInvitation: false,
+    guestManagement: false,
+    customLogo: false,
+    prioritySupport: false,
+  },
+  [VIP_LEVELS.PERSONAL]: {
+    freeTemplates: Infinity,
+    monthlyCreateCount: 10,
+    watermarkOnPremium: false,
+    hdExport: true,
+    videoInvitation: false,
+    guestManagement: false,
+    customLogo: false,
+    prioritySupport: false,
+  },
+  [VIP_LEVELS.PRO]: {
+    freeTemplates: Infinity,
+    monthlyCreateCount: 100,
+    watermarkOnPremium: false,
+    hdExport: true,
+    videoInvitation: true,
+    guestManagement: true,
+    customLogo: true,
+    prioritySupport: true,
+  },
+} as const
+
 export const useUserStore = defineStore('user', () => {
   const isLoggedIn = ref(false)
   const nickname = ref('')
@@ -14,20 +55,53 @@ export const useUserStore = defineStore('user', () => {
   const vipStatus = ref(0)
   const vipExpireAt = ref(0)
   const vipPlan = ref('')
+  const vipLevel = ref<VipLevel>(0)
+  const monthlyCreateCount = ref(0)
+  const monthlyCountMonth = ref('')
 
-  /** 纯函数：判断是否为 VIP，不修改任何状态 */
-  function checkVip(): boolean {
-    if (vipStatus.value !== 1) return false
-    // vipExpireAt 为 0 表示永久 VIP（服务端未设过期时间），视为有效
+  function getVipLevel(): VipLevel {
+    if (vipStatus.value !== 1) return VIP_LEVELS.FREE
     if (vipExpireAt.value && vipExpireAt.value > 0 && vipExpireAt.value < Date.now()) {
-      return false
+      return VIP_LEVELS.FREE
     }
-    return true
+    return vipLevel.value > 0 ? vipLevel.value as VipLevel : VIP_LEVELS.PERSONAL
   }
 
-  /** 判断当前是否为 VIP（纯查询，不产生副作用） */
   function isVip(): boolean {
-    return checkVip()
+    return getVipLevel() >= VIP_LEVELS.PERSONAL
+  }
+
+  function isPro(): boolean {
+    return getVipLevel() >= VIP_LEVELS.PRO
+  }
+
+  function getMonthlyCreateCount(): number {
+    const now = new Date()
+    const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    if (monthlyCountMonth.value !== curMonth) {
+      monthlyCreateCount.value = 0
+      monthlyCountMonth.value = curMonth
+      persist()
+    }
+    return monthlyCreateCount.value
+  }
+
+  function getRemainingCreateCount(): number {
+    const level = getVipLevel()
+    const limit = VIP_LIMITS[level].monthlyCreateCount
+    if (limit === Infinity) return Infinity
+    const used = getMonthlyCreateCount()
+    return Math.max(0, limit - used)
+  }
+
+  function canCreateWork(): boolean {
+    return getRemainingCreateCount() > 0
+  }
+
+  function incrementCreateCount() {
+    getMonthlyCreateCount()
+    monthlyCreateCount.value++
+    persist()
   }
 
   /** 清理已过期的 VIP 状态（应在 fetchUserInfo 等显式时机调用） */
@@ -49,6 +123,9 @@ export const useUserStore = defineStore('user', () => {
         vipStatus: vipStatus.value,
         vipExpireAt: vipExpireAt.value,
         vipPlan: vipPlan.value,
+        vipLevel: vipLevel.value,
+        monthlyCreateCount: monthlyCreateCount.value,
+        monthlyCountMonth: monthlyCountMonth.value,
       })
       if (token.value) uni.setStorageSync('token', token.value)
     } catch (e) { console.error('user persist failed', e) }
@@ -66,12 +143,15 @@ export const useUserStore = defineStore('user', () => {
         vipStatus.value = saved.vipStatus ?? 0
         vipExpireAt.value = saved.vipExpireAt || 0
         vipPlan.value = saved.vipPlan || ''
+        vipLevel.value = (saved.vipLevel ?? 0) as VipLevel
+        monthlyCreateCount.value = saved.monthlyCreateCount || 0
+        monthlyCountMonth.value = saved.monthlyCountMonth || ''
         if (token.value) uni.setStorageSync('token', token.value)
       }
     } catch (e) { console.error('user restore failed', e) }
   }
 
-  function setLogin(phoneNumber: string, nick?: string, tk?: string, vip?: { status?: number; expireAt?: number; plan?: string }) {
+  function setLogin(phoneNumber: string, nick?: string, tk?: string, vip?: { status?: number; expireAt?: number; plan?: string; level?: number }) {
     isLoggedIn.value = true
     phone.value = phoneNumber
     if (nick) nickname.value = nick
@@ -80,6 +160,7 @@ export const useUserStore = defineStore('user', () => {
       if (vip.status !== undefined) vipStatus.value = vip.status
       if (vip.expireAt !== undefined) vipExpireAt.value = vip.expireAt
       if (vip.plan !== undefined) vipPlan.value = vip.plan
+      if (vip.level !== undefined) vipLevel.value = vip.level as VipLevel
     }
     persist()
   }
@@ -93,6 +174,9 @@ export const useUserStore = defineStore('user', () => {
     vipStatus.value = 0
     vipExpireAt.value = 0
     vipPlan.value = ''
+    vipLevel.value = 0
+    monthlyCreateCount.value = 0
+    monthlyCountMonth.value = ''
     try { uni.removeStorageSync(STORAGE_KEY); uni.removeStorageSync('token') } catch {}
     // 清除作品数据，防止下个用户看到上个用户的作品
     try {
@@ -114,12 +198,21 @@ export const useUserStore = defineStore('user', () => {
         vip_status?: number
         vip_expire_at?: number
         vip_plan?: string
+        vip_level?: number
+        monthly_create_count?: number
+        monthly_count_month?: string
       }>({ url: '/api/user/login', method: 'POST', data: loginData })
       setLogin(res.phone, res.nickname, res.token, {
         status: res.vip_status,
         expireAt: res.vip_expire_at,
         plan: res.vip_plan,
+        level: res.vip_level,
       })
+      if (res.monthly_create_count !== undefined) {
+        monthlyCreateCount.value = res.monthly_create_count
+        monthlyCountMonth.value = res.monthly_count_month || ''
+      }
+      persist()
       return true
     } catch (e: any) {
       uni.showToast({ title: e.message || '登录失败', icon: 'none' })
@@ -137,6 +230,9 @@ export const useUserStore = defineStore('user', () => {
         vip_status?: number
         vip_expire_at?: number
         vip_plan?: string
+        vip_level?: number
+        monthly_create_count?: number
+        monthly_count_month?: string
       }>({ url: '/api/user/info', method: 'GET' })
       nickname.value = res.nickname
       avatar.value = resolveUrl(res.avatar || '')
@@ -144,7 +240,11 @@ export const useUserStore = defineStore('user', () => {
       if (res.vip_status !== undefined) vipStatus.value = res.vip_status
       if (res.vip_expire_at !== undefined) vipExpireAt.value = res.vip_expire_at
       if (res.vip_plan !== undefined) vipPlan.value = res.vip_plan
-      // 拉取最新用户信息后，清理已过期的 VIP 状态（统一在此处做副作用清理）
+      if (res.vip_level !== undefined) vipLevel.value = res.vip_level as VipLevel
+      if (res.monthly_create_count !== undefined) {
+        monthlyCreateCount.value = res.monthly_create_count
+        monthlyCountMonth.value = res.monthly_count_month || ''
+      }
       clearExpiredVip()
       persist()
     } catch (e) { console.error('fetchUserInfo failed', e) }
@@ -158,5 +258,12 @@ export const useUserStore = defineStore('user', () => {
 
   restore()
 
-  return { isLoggedIn, nickname, avatar, phone, token, vipStatus, vipExpireAt, vipPlan, isVip, checkVip, setLogin, logout, doLogin, fetchUserInfo, requireLogin }
+  return {
+    isLoggedIn, nickname, avatar, phone, token,
+    vipStatus, vipExpireAt, vipPlan, vipLevel,
+    monthlyCreateCount, monthlyCountMonth,
+    isVip, isPro, getVipLevel,
+    getMonthlyCreateCount, getRemainingCreateCount, canCreateWork, incrementCreateCount,
+    setLogin, logout, doLogin, fetchUserInfo, requireLogin,
+  }
 })

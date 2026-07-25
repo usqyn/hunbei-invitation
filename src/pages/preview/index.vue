@@ -123,10 +123,10 @@
       </template>
       <!-- 画布模式：绝对定位渲染 -->
       <template v-else-if="isCanvasMode">
-        <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="canvasCardStyle">
+        <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="[canvasCardStyle, canvasBackgroundStyle]">
           <image class="rendered-image" lazy-load :src="editorStore.renderedImage" mode="widthFix" />
         </view>
-        <view v-else class="preview-card preview-card--canvas" :style="canvasBackgroundStyle">
+        <view v-else class="preview-card preview-card--canvas" :style="[canvasCardStyle, canvasBackgroundStyle]">
           <view
             v-for="(el, idx) in editorStore.editableElements"
             :key="idx"
@@ -271,10 +271,10 @@
       </view>
     </view>
 
-    <view class="vip-bar animate-slide-up" v-if="!userStore.isVip()" @click="goToVip">
+    <view class="vip-bar animate-slide-up" v-if="showVipBar" @click="goToVip">
       <text class="vip-icon">👑</text>
-      <text class="vip-text">开通VIP，本次请柬免费导出 + 全模板解锁 + 商城9折</text>
-      <text class="vip-btn">去开通 →</text>
+      <text class="vip-text">{{ vipBarText }}</text>
+      <text class="vip-btn">{{ vipBarBtnText }} →</text>
     </view>
 
     <view class="preview-footer animate-slide-up">
@@ -282,6 +282,8 @@
         <text class="button-text">立即制作</text>
       </view>
     </view>
+
+    <Watermark v-if="shouldShowWatermark" :show="true" text="TOYtamaxia" class="preview-watermark" />
   </view>
 </template>
 
@@ -302,6 +304,7 @@ import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts } from '@/api'
 import type { EditableElement, Work } from '@/types'
+import Watermark from '@/components/Watermark.vue'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
@@ -347,6 +350,45 @@ const displayTitle = computed(() => {
 
 const templateId = ref('')
 const loadError = ref(false)
+
+const shouldShowWatermark = computed(() => {
+  const vipLevel = userStore.getVipLevel()
+  const templateLevel = editorStore.currentTemplateVipLevel
+  if (templateLevel === 'free') return false
+  if (templateLevel === 'personal') return vipLevel < 1
+  if (templateLevel === 'pro') return vipLevel < 2
+  return false
+})
+
+const showVipBar = computed(() => {
+  const vipLevel = userStore.getVipLevel()
+  const templateLevel = editorStore.currentTemplateVipLevel
+  if (templateLevel === 'free') return vipLevel < 1
+  if (templateLevel === 'personal') return vipLevel < 1
+  if (templateLevel === 'pro') return vipLevel < 2
+  return true
+})
+
+const vipBarText = computed(() => {
+  const vipLevel = userStore.getVipLevel()
+  const templateLevel = editorStore.currentTemplateVipLevel
+  if (templateLevel === 'pro' && vipLevel < 2) {
+    return '此模板为专业版专属，升级解锁全部权益'
+  }
+  if (vipLevel === 0) {
+    return '开通VIP，高清无水印导出 + 全模板解锁 + 更多次数'
+  }
+  if (vipLevel === 1) {
+    return '升级专业版，解锁全部模板 + 最高制作次数'
+  }
+  return ''
+})
+
+const vipBarBtnText = computed(() => {
+  const vipLevel = userStore.getVipLevel()
+  if (vipLevel === 0) return '去开通'
+  return '去升级'
+})
 
 // 免费导出预览图（通过 CSS 类 compare-img--watermarked 降低不透明度并加模糊）
 const watermarkedPreview = computed(() => editorStore.renderedImage || '')
@@ -849,6 +891,16 @@ const onImageError = () => {
   overflow: hidden;
 }
 
+.preview-watermark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
 .preview-page::before {
   content: '';
   position: absolute;
@@ -1082,6 +1134,8 @@ const onImageError = () => {
 /* 画布模式 */
 .preview-card--canvas {
   display: block;
+  box-sizing: border-box;
+  width: 100%;
   padding: 0;
   position: relative;
   border-radius: 0;
