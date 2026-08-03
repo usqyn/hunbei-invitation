@@ -141,7 +141,7 @@
                   v-if="el.type === 'image'"
                   custom-class="canvas-image"
                   :src="el.text"
-                  mode="scaleToFill"
+                  mode="aspectFill"
                   :fade-show="false"
                   @error="onImageError"
                 />
@@ -149,7 +149,7 @@
                   v-else-if="el.type === 'text'"
                   class="canvas-text"
                   :style="getTextStyle(el)"
-                  :selectable="true"
+                  user-select
                 >{{ formatBiDi(resolveText(el.text)) }}</text>
                 <!-- 缩放手柄（选中时显示） -->
                 <view
@@ -1486,10 +1486,10 @@ async function handleShare() {
 
   const templateId = editorStore.currentTemplateId
   const workId = editorStore.currentWorkId
-  const params = new URLSearchParams()
-  if (templateId) params.set('templateId', templateId)
-  if (workId) params.set('workId', workId)
-  const queryStr = params.toString()
+  const params: string[] = []
+  if (templateId) params.push(`templateId=${encodeURIComponent(templateId)}`)
+  if (workId) params.push(`workId=${encodeURIComponent(workId)}`)
+  const queryStr = params.join('&')
   uni.navigateTo({ url: `/pages/share/index${queryStr ? '?' + queryStr : ''}` })
 }
 

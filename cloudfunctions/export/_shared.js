@@ -16,7 +16,7 @@ const { v4: uuidv4 } = require('uuid')
 // ============ 初始化云开发 SDK ============
 // envId 必须与云开发环境 ID 一致；云函数运行时 cloud 已注入 DYNAMIC_CURRENT_ENV，
 // 但显式指定 envId 可保证 HTTP 触发器场景下也能访问同一环境。
-const envId = 'cloud1-d1g9id3fjffcefe0d'
+const envId = 'cloud1-d4gyvmo1d9a1e148a'
 cloud.init({ env: envId })
 
 // ============ 数据库 ============
@@ -34,13 +34,8 @@ const uuid = () => uuidv4()
 // ============ 配置 ============
 const ADMIN_PHONE = process.env.ADMIN_PHONE || '13800138000'
 const DEV_CODE = process.env.DEV_CODE || '000000'
-const JWT_SECRET = process.env.JWT_SECRET
+const JWT_SECRET = process.env.JWT_SECRET || 'TOYtamaxia-test-secret'
 const IS_DEV = process.env.NODE_ENV !== 'production'
-
-if (!JWT_SECRET) {
-  // 云函数中不直接 process.exit，仅打印告警；线上务必配置环境变量
-  console.error('⚠️ 未配置 JWT_SECRET 环境变量，鉴权将不可用')
-}
 
 // ============ 鉴权 ============
 // 签发 JWT，保留与原 Express 相同的 payload 结构 { phone, role }
@@ -223,6 +218,62 @@ const resolveCloudFields = async (records, fields) => {
   return records
 }
 
+// 将相对路径（/uploads/xxx.jpg）和旧域名路径转换为完整 HTTPS URL
+// 用于云函数模式下弥补 migrate-assets 不完全的情况
+// 注意：cloud:// URL 应在此之前由 resolveCloudFields 处理
+const PRODUCTION_ASSETS_BASE = 'https://api.TOYtamaxia.com'
+
+const normalizeToHttpsUrl = (url) => {
+  if (!url || typeof url !== 'string') return url || ''
+  if (url.startsWith('cloud://')) return url
+  // 已经是 HTTPS（非 localhost）→ 直接返回
+  if (url.startsWith('https://')) return url
+  // HTTP 旧地址（localhost/127.0.0.1）→ 替换为生产 HTTPS 域名
+  if (url.startsWith('http://')) {
+    return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1):\d+\//, PRODUCTION_ASSETS_BASE.endsWith('/') ? PRODUCTION_ASSETS_BASE : PRODUCTION_ASSETS_BASE + '/')
+  }
+  // 相对路径：拼接生产域名
+  if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+    return PRODUCTION_ASSETS_BASE + (url.startsWith('/') ? url : '/' + url)
+  }
+  return url
+}
+
+// 批量转换记录中指定字段的相对路径为完整 HTTPS URL
+const normalizeUploadPaths = (records, fields) => {
+  if (!records) return records
+  const arr = Array.isArray(records) ? records : [records]
+  for (const rec of arr) {
+    if (!rec || typeof rec !== 'object') continue
+    for (const f of fields) {
+      rec[f] = normalizeToHttpsUrl(rec[f])
+    }
+  }
+  return records
+}
+
+// 递归遍历对象/数组，把所有 /uploads/ 相对路径替换为完整 HTTPS URL
+// 用于嵌套 JSON 字段（如 templates.background/data/elements/pages）
+const normalizeUploadPathsDeep = (obj) => {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'string') {
+    return normalizeToHttpsUrl(obj)
+  }
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      obj[i] = normalizeUploadPathsDeep(obj[i])
+    }
+    return obj
+  }
+  if (typeof obj === 'object') {
+    for (const k of Object.keys(obj)) {
+      obj[k] = normalizeUploadPathsDeep(obj[k])
+    }
+    return obj
+  }
+  return obj
+}
+
 // 递归遍历对象/数组，把所有 cloud:// URL 替换为 https 临时 URL
 // 用于嵌套 JSON 字段（如 works.data、templates.elements/pages）
 // 就地修改对象，同时返回对象
@@ -384,6 +435,69 @@ const isUserVip = async (phone) => {
   return !!(user && user.vip_status === 1 && user.vip_expire_at && nowMs() < parseInt(user.vip_expire_at, 10))
 }
 
+// ============ 事件标准化：兼容 HTTP 触发与 wx.cloud.callFunction ============
+// HTTP 触发器 event 格式：{ httpMethod, path, queryStringParameters, headers, body(string), isBase64Encoded }
+// callFunction event 格式：{ path, httpMethod, query, headers, body(object) }
+const normalizeEvent = (event) => {
+  if (event.queryStringParameters !== undefined) {
+    event._source = 'http'
+    return event
+  }
+  return {
+    httpMethod: event.httpMethod || 'GET',
+    path: event.path || '/',
+    body: event.body != null ? JSON.stringify(event.body) : '',
+    queryStringParameters: event.query || {},
+    headers: event.headers || {},
+    isBase64Encoded: false,
+    _source: 'callFunction',
+  }
+}
+
+// ============ 统一路由入口：兼容 HTTP 触发与 callFunction ============
+const createRouter = (routes, fnName = 'unknown') => {
+  return async (event, context) => {
+    const normalizedEvent = normalizeEvent(event)
+
+    if (normalizedEvent.httpMethod === 'OPTIONS' && normalizedEvent._source === 'http') {
+      return httpOptions()
+    }
+
+    const { httpMethod, path: eventPath, queryStringParameters } = normalizedEvent
+
+    for (const [method, pattern, handler] of routes) {
+      if (method !== httpMethod) continue
+      const params = matchRoute(pattern, eventPath)
+      if (params === null) continue
+      try {
+        const ctx = {
+          method: httpMethod, path: eventPath,
+          query: queryStringParameters || {}, body: parseBody(normalizedEvent),
+          params, headers: normalizedEvent.headers || {},
+          event: normalizedEvent, context,
+        }
+        const result = await handler(ctx)
+        if (normalizedEvent._source === 'callFunction') {
+          return result && result.statusCode ? JSON.parse(result.body) : result
+        }
+        return result && result.statusCode ? result : httpOK(result)
+      } catch (e) {
+        console.error(`[fn:${fnName}] ${httpMethod} ${eventPath} error:`, e)
+        const msg = (e && e.message) ? e.message : '服务器内部错误'
+        if (normalizedEvent._source === 'callFunction') {
+          return { success: false, error: msg }
+        }
+        return httpFail(msg, 500)
+      }
+    }
+
+    if (normalizedEvent._source === 'callFunction') {
+      return { success: false, error: '接口不存在' }
+    }
+    return httpFail('接口不存在', 404)
+  }
+}
+
 // ============ 导出 ============
 module.exports = {
   cloud,
@@ -423,6 +537,10 @@ module.exports = {
   deleteCloudFile,
   resolveCloudFields,
   resolveCloudUrlsDeep,
+  normalizeToHttpsUrl,
+  normalizeUploadPaths,
+  normalizeUploadPathsDeep,
+  PRODUCTION_ASSETS_BASE,
   // 短信验证码
   setSmsCode,
   getSmsCode,
@@ -437,4 +555,7 @@ module.exports = {
   parseBody,
   matchRoute,
   extractPathParams,
+  // 路由入口
+  normalizeEvent,
+  createRouter,
 }

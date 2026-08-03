@@ -1,3 +1,4 @@
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const multer = require('multer')
@@ -11,6 +12,8 @@ const jwt = require('jsonwebtoken')
 const { requireAuth, requireAdmin, isRequestFromAdmin } = require('./middleware/auth')
 // 数据库事务辅助函数（多步操作保证原子性）
 const { runTransaction } = require('./middleware/db')
+// 云同步模块（发布模板时自动同步到云数据库 + 云存储）
+const cloudSync = require('./cloudSync')
 
 const app = express()
 // 信任反向代理（Nginx 等）的第一层代理，确保 req.ip / req.protocol 能正确获取真实客户端信息
@@ -1292,6 +1295,10 @@ app.post('/api/templates', requireAdmin, (req, res) => {
     const result = db.exec("SELECT * FROM templates WHERE id = ?", [id])
     const template = rowToObject(result)
     res.json({ success: true, data: template })
+
+    // 异步同步到云数据库（不阻塞响应）
+    cloudSync.syncTemplateToCloud(id, template, 'create').catch(e =>
+      console.warn('[cloudSync] 后台同步失败:', e.message))
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1381,6 +1388,10 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
     const result = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
     const template = rowToObject(result)
     res.json({ success: true, data: template })
+
+    // 异步同步到云数据库（不阻塞响应）
+    cloudSync.syncTemplateToCloud(req.params.id, template, 'update').catch(e =>
+      console.warn('[cloudSync] 后台同步失败:', e.message))
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1397,6 +1408,10 @@ app.delete('/api/templates/:id', requireAdmin, (req, res) => {
     bumpVersion()
     saveDatabase()
     res.json({ success: true, message: '删除成功' })
+
+    // 异步从云数据库删除
+    cloudSync.deleteTemplateFromCloud(req.params.id).catch(e =>
+      console.warn('[cloudSync] 后台删除失败:', e.message))
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }

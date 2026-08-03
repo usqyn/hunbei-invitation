@@ -14,7 +14,7 @@ const {
   db, collection, _, now, uuid,
   getUser, requireAuth, requireAdmin,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
-  parsePagination, paginateResponse, parseBody, matchRoute,
+  parsePagination, paginateResponse, parseBody, matchRoute, createRouter,
 } = require('./_shared')
 
 // VIP 套餐配置：时长（天）+ 服务端定价（不信任客户端价格）
@@ -229,26 +229,4 @@ const routes = [
 ]
 
 // ============ 云函数入口 ============
-exports.main = async (event, context) => {
-  if (event.httpMethod === 'OPTIONS') return httpOptions()
-  const { httpMethod, path: eventPath, queryStringParameters } = event
-  for (const [method, pattern, handler] of routes) {
-    if (method !== httpMethod) continue
-    const params = matchRoute(pattern, eventPath)
-    if (params === null) continue
-    try {
-      const ctx = {
-        method: httpMethod, path: eventPath,
-        query: queryStringParameters || {}, body: parseBody(event),
-        params, headers: event.headers || {}, event, context,
-      }
-      const result = await handler(ctx)
-      if (result && result.statusCode) return result
-      return httpOK(result)
-    } catch (e) {
-      console.error(`[order] ${httpMethod} ${eventPath} error:`, e)
-      return httpFail('服务器内部错误', 500)
-    }
-  }
-  return httpFail('接口不存在', 404)
-}
+exports.main = createRouter(routes, 'order')

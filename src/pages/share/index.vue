@@ -141,7 +141,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { onShareAppMessage } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useGoBack } from '@/composables/useGoBack'
@@ -192,7 +192,23 @@ onMounted(() => {
 
   // 封面使用模板的封面图
   coverImage.value = templateStore.templateData.coverImage || '/static/images/templates/wedding-1.svg'
+
+  enableShareMenu()
 })
+
+// 页面加载即启用分享菜单（比 onMounted 更早，兼容分包页面）
+onLoad(() => {
+  enableShareMenu()
+})
+
+function enableShareMenu() {
+  uni.showShareMenu({
+    withShareTicket: true,
+    menus: ['shareAppMessage', 'shareTimeline'],
+    success: () => console.log('share menu enabled'),
+    fail: (err: any) => console.warn('share menu fail:', err?.errMsg || err),
+  })
+}
 
 // 微信分享配置 - 同时支持右上角 ... 菜单和自定义按钮
 onShareAppMessage(() => {
@@ -211,6 +227,19 @@ onShareAppMessage(() => {
     path,
     imageUrl: coverImage.value,
     desc: shareDesc.value,
+  }
+})
+
+onShareTimeline(() => {
+  const workId = editorStore.currentWorkId
+  const templateId = editorStore.currentTemplateId
+  const params: string[] = []
+  if (templateId) params.push(`templateId=${templateId}`)
+  if (workId) params.push(`workId=${workId}`)
+  return {
+    title: shareTitle.value,
+    query: params.join('&'),
+    imageUrl: coverImage.value,
   }
 })
 

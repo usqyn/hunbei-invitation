@@ -227,16 +227,18 @@ const filteredProducts = computed(() => {
 })
 
 const loadProducts = async () => {
+  // 本地兜底商品立即渲染，不等待接口，避免 loading 蒙层长时间遮挡
+  products.value = fallbackProducts
+
+  // 后台静默尝试拉取线上商品，成功后替换
   try {
     const res = await fetchProducts()
     if (res && res.list && res.list.length > 0) {
       products.value = res.list
-    } else {
-      products.value = fallbackProducts
     }
   } catch (e) {
-    // TODO: 后端 API 未就绪时 fallback 本地数据
-    products.value = fallbackProducts
+    // 线上接口失败时保持本地兜底数据
+    console.warn('拉取线上商品失败，使用本地兜底:', e)
   }
 }
 
@@ -297,11 +299,11 @@ const buyNow = () => {
   const product = detailProduct.value
   if (!product) return
   uni.setStorageSync('mall_orderItems', [{ ...product, quantity: 1 }])
-  uni.navigateTo({ url: '/pages/mall/order-confirm' })
+  uni.navigateTo({ url: '/pages/mall-sub/order-confirm' })
 }
 
 const goCart = () => {
-  uni.navigateTo({ url: '/pages/mall/cart' })
+  uni.navigateTo({ url: '/pages/mall-sub/cart' })
 }
 
 const goCheckout = () => {
@@ -313,7 +315,7 @@ const goCheckout = () => {
       return
     }
     uni.setStorageSync('mall_orderItems', selectedItems)
-    uni.navigateTo({ url: '/pages/mall/order-confirm' })
+    uni.navigateTo({ url: '/pages/mall-sub/order-confirm' })
   } catch (err) {
     uni.showToast({ title: '操作失败', icon: 'none' })
   }

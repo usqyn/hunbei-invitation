@@ -18,17 +18,22 @@ const {
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
   getVersion, bumpVersion,
-  resolveCloudFields, resolveCloudUrlsDeep,
+  resolveCloudFields, resolveCloudUrlsDeep, normalizeUploadPaths, normalizeUploadPathsDeep, createRouter,
 } = require('./_shared')
 
 // ============ 分类 ============
 
 // GET /api/categories — 含每个分类的模板数（仅统计已发布）
+// ?noCounts=1 跳过 aggregate 聚合统计（由客户端自行计算）
 const listCategories = async (ctx) => {
   const catsRes = await collection('categories').limit(100).get()
   const cats = (catsRes.data || []).map(c => ({
     id: c.id, name: c.name, icon: c.icon || '', count: 0,
   }))
+  // 跳过聚合：客户端会从已加载的模板数据中计算分类数量
+  if (ctx.query.noCounts === '1') {
+    return ok(cats)
+  }
   // 按分类聚合统计已发布模板数（用 aggregate pipeline 的 $group）
   const $ = db.command.aggregate
   let counts = {}
@@ -40,7 +45,6 @@ const listCategories = async (ctx) => {
       .end()
     ;(aggRes.list || []).forEach(row => { counts[row._id] = row.count })
   } catch (e) {
-    // aggregate 失败时退化为遍历统计
     console.warn('aggregate count failed, fallback:', e.message)
   }
   cats.forEach(c => { c.count = counts[c.id] || 0 })
@@ -77,10 +81,13 @@ const listTemplates = async (ctx) => {
     const res = await q.skip(skip).limit(limit).get()
     // 解析顶层 cloud:// URL（cover/backgroundImage/renderedImage）
     await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+    // 兜底：将 /uploads/ 相对路径转为完整 HTTPS URL
+    normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
     return paginateResponse(res.data || [], page, limit, total)
   }
   const res = await q.limit(1000).get()
   await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   // 无分页时返回全部 + total 字段（与原实现一致）
   return Object.assign(ok(res.data || []), { total: (res.data || []).length })
 }
@@ -98,6 +105,7 @@ const listSimilarTemplates = async (ctx) => {
     .limit(6)
     .get()
   await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   return ok(res.data || [])
 }
 
@@ -111,9 +119,15 @@ const getTemplate = async (ctx) => {
   const template = res.data[0]
   // 解析顶层 cloud:// URL + 嵌套 JSON 中的 cloud:// URL（data/elements/pages）
   await resolveCloudFields(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  normalizeUploadPaths(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   await resolveCloudUrlsDeep(template.data)
   await resolveCloudUrlsDeep(template.elements)
   await resolveCloudUrlsDeep(template.pages)
+  // 兜底：嵌套对象中的 /uploads/ 相对路径转为完整 HTTPS URL
+  normalizeUploadPathsDeep(template.background)
+  normalizeUploadPathsDeep(template.data)
+  normalizeUploadPathsDeep(template.elements)
+  normalizeUploadPathsDeep(template.pages)
   // 自动记录足迹
   const user = getUser(ctx.event)
   if (user && user.phone) {
@@ -151,6 +165,7 @@ const createTemplate = async (ctx) => {
     status: body.status || 'draft', renderedImage: body.renderedImage || '',
     is_paid: body.is_paid || body.isPaid || 0, price: body.price || 0,
     is_premium: body.is_premium || body.isPremium || 0,
+    vipLevel: body.vipLevel || 'free',
     templateType: body.templateType || 'canvas', pages: body.pages || [],
     createdAt: ts, updatedAt: ts,
   } })
@@ -170,7 +185,7 @@ const updateTemplate = async (ctx) => {
   if (body.name !== undefined && (typeof body.name !== 'string' || body.name.length > 100)) return httpFail('模板名称不能超过 100 个字符')
   if (body.price !== undefined && body.price !== null && (typeof body.price !== 'number' || body.price < 0)) return httpFail('价格必须为非负数')
   // 仅允许更新非统计字段（likes/pageCount 不可改）
-  const allowed = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium', 'templateType', 'data', 'elements', 'canvasSize', 'background', 'tags', 'pages']
+  const allowed = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium', 'vipLevel', 'templateType', 'data', 'elements', 'canvasSize', 'background', 'tags', 'pages']
   // 兼容 camelCase 付费字段
   if (body.isPaid !== undefined) body.is_paid = body.isPaid
   if (body.isPremium !== undefined) body.is_premium = body.isPremium
@@ -202,14 +217,16 @@ const listProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
   const { page, limit, skip, hasPaging } = parsePagination(ctx.query)
-  const countRes = await collection('templates').where(conditions).count()
-  const total = countRes.total || 0
   let q = collection('templates').where(conditions).orderBy('likes', 'desc')
   if (hasPaging) {
-    const res = await q.skip(skip).limit(limit).get()
-    return paginateResponse(res.data || [], page, limit, total)
+    const [countRes, res] = await Promise.all([
+      collection('templates').where(conditions).count(),
+      q.skip(skip).limit(limit).get(),
+    ])
+    return paginateResponse(res.data || [], page, limit, countRes.total || 0)
   }
-  const res = await q.limit(1000).get()
+  // 无分页时默认只取 20 条，避免一次性拉 1000 条导致 loading 过长
+  const res = await q.limit(20).get()
   return Object.assign(ok(res.data || []), { total: (res.data || []).length })
 }
 
@@ -243,26 +260,4 @@ const routes = [
 ]
 
 // ============ 云函数入口 ============
-exports.main = async (event, context) => {
-  if (event.httpMethod === 'OPTIONS') return httpOptions()
-  const { httpMethod, path: eventPath, queryStringParameters } = event
-  for (const [method, pattern, handler] of routes) {
-    if (method !== httpMethod) continue
-    const params = matchRoute(pattern, eventPath)
-    if (params === null) continue
-    try {
-      const ctx = {
-        method: httpMethod, path: eventPath,
-        query: queryStringParameters || {}, body: parseBody(event),
-        params, headers: event.headers || {}, event, context,
-      }
-      const result = await handler(ctx)
-      if (result && result.statusCode) return result
-      return httpOK(result)
-    } catch (e) {
-      console.error(`[template] ${httpMethod} ${eventPath} error:`, e)
-      return httpFail('服务器内部错误', 500)
-    }
-  }
-  return httpFail('接口不存在', 404)
-}
+exports.main = createRouter(routes, 'template')

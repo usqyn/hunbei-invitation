@@ -7,14 +7,53 @@ const _envBase = import.meta.env.VITE_API_BASE
 export const API_BASE = _envBase !== undefined ? _envBase : 'http://localhost:3001'
 // #endif
 // #ifndef H5
+// ─── 微信小程序：运行时自动检测版本环境，切换 API 地址 ───
+// #ifdef MP-WEIXIN
+function getWechatApiBase(fallbackBase: string): string {
+  try {
+    // @ts-ignore - wx 由微信运行时注入
+    if (typeof wx === 'undefined' || typeof wx.getAccountInfoSync !== 'function') return fallbackBase
+    const env = wx.getAccountInfoSync()?.miniProgram?.envVersion as string | undefined
+
+    switch (env) {
+      case 'develop': {
+        // 开发者工具 / 预览扫码 → 优先使用 VITE_WECHAT_DEV_API，否则用 VITE_API_BASE
+        const devApi = import.meta.env.VITE_WECHAT_DEV_API
+        if (devApi) return devApi
+        // develop 模式 + VITE_API_BASE 为空 → 连本地 dev server
+        if (!fallbackBase || fallbackBase === '') return 'http://127.0.0.1:3001'
+        return fallbackBase
+      }
+      case 'trial': {
+        // 体验版 → 优先使用 VITE_WECHAT_TRIAL_API（独立测试环境），回落 VITE_API_BASE
+        const trialApi = import.meta.env.VITE_WECHAT_TRIAL_API
+        return (trialApi && trialApi !== '') ? trialApi : fallbackBase
+      }
+      case 'release':
+      default: {
+        // 正式版 → 优先使用 VITE_WECHAT_RELEASE_API，回落 VITE_API_BASE
+        const releaseApi = import.meta.env.VITE_WECHAT_RELEASE_API
+        return (releaseApi && releaseApi !== '') ? releaseApi : fallbackBase
+      }
+    }
+  } catch {
+    // 获取失败降级
+    return fallbackBase
+  }
+}
+
+export const API_BASE = getWechatApiBase(import.meta.env.VITE_API_BASE || 'http://127.0.0.1:3001')
+// #endif
+// #ifndef MP-WEIXIN
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:3001'
+// #endif
 // #endif
 
 // ============ 云开发（CloudBase）配置 ============
 // 云函数 HTTP 触发器 URL 形如：https://{envId}.service.tcloudbase.com/{functionName}
 // 当 VITE_USE_CLOUD=1 时启用云函数模式，请求会按 path 前缀分发到对应云函数。
 // H5 dev 默认关闭（走 vite proxy → 旧 Express 服务），生产环境通过 .env.production 开启。
-const CLOUD_ENV_ID = import.meta.env.VITE_CLOUD_ENV_ID || 'cloud1-d1g9id3fjffcefe0d'
+export const CLOUD_ENV_ID = import.meta.env.VITE_CLOUD_ENV_ID || 'cloud1-d4gyvmo1d9a1e148a'
 export const CLOUD_BASE = import.meta.env.VITE_CLOUD_BASE || `https://${CLOUD_ENV_ID}.service.tcloudbase.com`
 export const USE_CLOUD_FUNCTIONS = import.meta.env.VITE_USE_CLOUD === '1' || import.meta.env.VITE_USE_CLOUD === 'true'
 
@@ -106,6 +145,7 @@ export const HOME_CONFIG = {
     allCategories: { title: '全部分类' },
   },
   moreText: '查看全部 ›',
+  // banner 图片打包在 static 中（约 350KB），确保体验版可访问
   banners: [
     {
       image: '/static/images/banners/banner-1.jpg',

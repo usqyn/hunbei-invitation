@@ -289,7 +289,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { onShareAppMessage } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
@@ -515,7 +515,21 @@ function retryLoad() {
 
 onMounted(() => {
   loadData()
+  enableShareMenu()
 })
+
+onLoad(() => {
+  enableShareMenu()
+})
+
+function enableShareMenu() {
+  uni.showShareMenu({
+    withShareTicket: true,
+    menus: ['shareAppMessage', 'shareTimeline'],
+    success: () => console.log('share menu enabled'),
+    fail: (err: any) => console.warn('share menu fail:', err?.errMsg || err),
+  })
+}
 
 watch(() => editorStore.templateLoading, (loading) => {
   if (!loading) {
@@ -605,6 +619,23 @@ onShareAppMessage(() => {
   return {
     title,
     path,
+    imageUrl: templateStore.templateData.coverImage || '',
+  }
+})
+
+onShareTimeline(() => {
+  const templateId = editorStore.currentTemplateId || ''
+  const workId = editorStore.currentWorkId || ''
+  const params: string[] = []
+  if (templateId) params.push(`templateId=${templateId}`)
+  if (workId) params.push(`workId=${workId}`)
+  const info = templateStore.basicInfo
+  const groom = info.groomName || ''
+  const bride = info.brideName || ''
+  const title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : 'TOYtamaxia'
+  return {
+    title,
+    query: params.join('&'),
     imageUrl: templateStore.templateData.coverImage || '',
   }
 })

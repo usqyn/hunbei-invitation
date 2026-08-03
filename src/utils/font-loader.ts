@@ -1,4 +1,4 @@
-import { API_BASE } from '@/config'
+import { API_BASE, USE_CLOUD_FUNCTIONS } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 
 // ============ 字体加载 ============
@@ -35,6 +35,12 @@ function fetchFontMap(): Promise<void> {
   if (fontMap) return Promise.resolve()
   if (fontMapPromise) return fontMapPromise
   fontMapPromise = new Promise<void>((resolve) => {
+    // 云函数模式下字体接口不可用，直接跳过
+    if (USE_CLOUD_FUNCTIONS) {
+      fontMap = {}
+      resolve()
+      return
+    }
     uni.request({
       url: API_BASE + '/api/fonts',
       method: 'GET',
@@ -71,7 +77,8 @@ function loadCustomFont(fontFamily: string): Promise<void> {
     }
     const rawFontUrl = fontMap[fontFamily] || (FONT_ALIASES[fontFamily] ? fontMap[FONT_ALIASES[fontFamily]] : '')
     if (typeof rawFontUrl !== 'string' || !rawFontUrl) {
-      console.warn(`[FontLoader] Font not in map or invalid: ${fontFamily}`, typeof rawFontUrl)
+      // 云函数模式下字体不可用属于正常情况，降级为 log
+      if (USE_CLOUD_FUNCTIONS) console.log(`[FontLoader] Font not available (cloud mode): ${fontFamily}`)
       resolve()
       return
     }

@@ -81,7 +81,7 @@ npm install -g @cloudbase/cli
 
 # 登录并选择环境
 tcb login
-tcb env list  # 确认环境 ID 为 cloud1-d1g9id3fjffcefe0d
+tcb env list  # 确认环境 ID 为 cloud1-d4gyvmo1d9a1e148a
 ```
 
 ### 2. 同步公共代码
@@ -157,7 +157,7 @@ cd cloudfunctions
 npm install sql.js wx-server-sdk
 
 # 设置云环境 ID
-export TCB_ENV_ID=cloud1-d1g9id3fjffcefe0d
+export TCB_ENV_ID=cloud1-d4gyvmo1d9a1e148a
 
 # 执行数据迁移（SQL → NoSQL）
 node migrate-data.js
@@ -172,7 +172,7 @@ node migrate-assets.js
 
 ```bash
 VITE_USE_CLOUD=1
-VITE_CLOUD_ENV_ID=cloud1-d1g9id3fjffcefe0d
+VITE_CLOUD_ENV_ID=cloud1-d4gyvmo1d9a1e148a
 ```
 
 构建后即可使用云函数：
@@ -214,7 +214,7 @@ npm run build:mp-weixin
 ```bash
 cd cloudfunctions
 npm install sql.js wx-server-sdk
-export TCB_ENV_ID=cloud1-d1g9id3fjffcefe0d
+export TCB_ENV_ID=cloud1-d4gyvmo1d9a1e148a
 node migrate-data.js
 ```
 
@@ -258,7 +258,7 @@ node migrate-data.js
 ```bash
 cd cloudfunctions
 npm install wx-server-sdk
-export TCB_ENV_ID=cloud1-d1g9id3fjffcefe0d
+export TCB_ENV_ID=cloud1-d4gyvmo1d9a1e148a
 node migrate-assets.js
 ```
 

@@ -3,7 +3,7 @@ const fs = require('fs')
 const path = require('path')
 
 const FUNCTIONS = ['common', 'user', 'template', 'work', 'order', 'upload', 'poster', 'export', 'cleanup']
-const ENV = 'cloud1-d1g9id3fjffcefe0d'
+const ENV = 'cloud1-d4gyvmo1d9a1e148a'
 
 // Delete existing routes
 const deleteData = JSON.stringify({ domain: '*', routes: FUNCTIONS.map(f => ({ path: '/' + f })) })

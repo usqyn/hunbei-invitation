@@ -1,10 +1,5 @@
 <template>
   <view class="page animate-page-fade-in">
-    <!-- 顶部状态栏区域 + 问候语 -->
-    <view class="status-bar">
-      <text class="date-text">{{ dateText }}</text>
-    </view>
-
     <!-- 顶部轮播图 -->
     <view class="banner-wrap">
       <swiper
@@ -288,6 +283,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
@@ -335,15 +331,6 @@ const featuredCards = computed(() => {
     views: (c as any).likes || 0,
   }))
   return [...apiCards, ...staticCards].slice(0, 8)
-})
-
-const dateText = computed(() => {
-  const now = new Date()
-  const month = now.getMonth() + 1
-  const day = now.getDate()
-  const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-  const weekDay = weekDays[now.getDay()]
-  return `${month}月${day}日 ${weekDay}`
 })
 
 function formatCount(count: number): string {
@@ -546,6 +533,37 @@ onMounted(() => {
     loadPaidTemplates()
     loadPosterTemplates()
   }, 1500)
+
+  enableShareMenu()
+})
+
+onLoad(() => {
+  enableShareMenu()
+})
+
+function enableShareMenu() {
+  uni.showShareMenu({
+    withShareTicket: true,
+    menus: ['shareAppMessage', 'shareTimeline'],
+    success: () => console.log('share menu enabled'),
+    fail: (err: any) => console.warn('share menu fail:', err?.errMsg || err),
+  })
+}
+
+onShareAppMessage(() => {
+  return {
+    title: 'TOYtamaxia - 精美婚礼请柬与海报模板',
+    path: '/pages/index/index',
+    imageUrl: featuredTemplates.value[0]?.cover || '',
+  }
+})
+
+onShareTimeline(() => {
+  return {
+    title: 'TOYtamaxia - 精美婚礼请柬与海报模板',
+    query: '',
+    imageUrl: featuredTemplates.value[0]?.cover || '',
+  }
 })
 
 onUnmounted(() => {
@@ -594,22 +612,6 @@ onUnmounted(() => {
   animation: sectionFadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* 状态栏 + 问候语 */
-.status-bar {
-  padding-top: calc(env(safe-area-inset-top) + 16rpx);
-  padding-left: 32rpx;
-  padding-right: 32rpx;
-  padding-bottom: 8rpx;
-  position: relative;
-  z-index: 10;
-}
-
-.date-text {
-  font-size: 22rpx;
-  color: #8e8e93;
-  margin-top: 2rpx;
-}
-
 /* 顶部轮播图 */
 .banner-wrap {
   position: relative;
@@ -635,8 +637,6 @@ onUnmounted(() => {
 .banner-swiper {
   width: 100%;
   height: 380rpx;
-  border-bottom-left-radius: 40rpx;
-  border-bottom-right-radius: 40rpx;
   box-shadow: 0 16rpx 48rpx rgba(232, 74, 110, 0.15);
   position: relative;
   z-index: 1;
@@ -752,7 +752,7 @@ onUnmounted(() => {
 
 .search-bar {
   padding: 20rpx 20rpx 20rpx 32rpx;
-  margin: 48rpx 24rpx 0;
+  margin: 16rpx 24rpx 0;
   background: transparent;
   border-radius: 32rpx;
   position: relative;

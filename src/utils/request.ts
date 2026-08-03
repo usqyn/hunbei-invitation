@@ -1,4 +1,4 @@
-import { getRequestUrl } from '@/config'
+import { getRequestUrl, USE_CLOUD_FUNCTIONS, getFunctionName } from '@/config'
 
 let loadingCount = 0
 
@@ -12,11 +12,28 @@ function showLoadingSafe(title = '加载中...') {
 
 function hideLoadingSafe() {
   loadingCount = Math.max(0, loadingCount - 1)
-  if (loadingCount === 0) uni.hideLoading()
+  if (loadingCount === 0) {
+    // 当 showToast 覆盖了 loading 时，hideLoading 会报 "toast can't be found"
+    // fail 回调静默吞掉该错误，不影响业务
+    uni.hideLoading({ fail: () => {} })
+  }
 }
 
 function getToken(): string {
   try { return uni.getStorageSync('token') || '' } catch { return '' }
+}
+
+function parseUrlQuery(url: string): Record<string, string> {
+  const idx = url.indexOf('?')
+  if (idx === -1) return {}
+  const search = url.slice(idx + 1)
+  const params: Record<string, string> = {}
+  search.split('&').forEach(pair => {
+    const eq = pair.indexOf('=')
+    if (eq === -1) return
+    params[decodeURIComponent(pair.slice(0, eq))] = decodeURIComponent(pair.slice(eq + 1))
+  })
+  return params
 }
 
 export interface ApiResponse<T> {
@@ -35,6 +52,57 @@ export function request<T = any>(options: string | {
   if (token) header['Authorization'] = `Bearer ${token}`
   if (!options.hideLoading) showLoadingSafe()
   return new Promise((resolve, reject) => {
+    // ── 云函数模式：wx.cloud.callFunction ──
+    if (USE_CLOUD_FUNCTIONS) {
+      // #ifdef MP-WEIXIN
+      const fnName = getFunctionName(options.url)
+      const cleanPath = options.url.indexOf('?') === -1 ? options.url : options.url.slice(0, options.url.indexOf('?'))
+      const queryObj = parseUrlQuery(options.url)
+      wx.cloud.callFunction({
+        name: fnName,
+        data: {
+          path: cleanPath,
+          httpMethod: (options.method || 'GET').toUpperCase(),
+          query: queryObj,
+          body: options.data || {},
+          headers: header,
+        },
+        success: (res: any) => {
+          if (!options.hideLoading) hideLoadingSafe()
+          const result = res.result
+          if (result && typeof result === 'object' && 'success' in result) {
+            if (result.success) {
+              resolve(result.data !== undefined ? (result.data as T) : (result as T))
+            } else {
+              if (result.error === '登录已过期' || result.error === '请先登录') {
+                if (!_isRedirecting) {
+                  _isRedirecting = true
+                  setTimeout(() => { _isRedirecting = false }, 3000)
+                  try { uni.removeStorageSync('token') } catch {}
+                  try { uni.removeStorageSync('TOYtamaxia_user') } catch {}
+                  uni.reLaunch({ url: '/pages/login/index', complete: () => { _isRedirecting = false } })
+                  reject(new Error('登录已过期'))
+                } else {
+                  reject(new Error('redirecting'))
+                }
+              } else {
+                reject(new Error(result.error || '请求失败'))
+              }
+            }
+          } else {
+            resolve(result as T)
+          }
+        },
+        fail: (err: any) => {
+          if (!options.hideLoading) hideLoadingSafe()
+          uni.showToast({ title: '网络异常', icon: 'none' })
+          reject(new Error(err.errMsg || '网络异常'))
+        },
+      })
+      return
+      // #endif
+    }
+
     uni.request({
       // 云函数模式下按 path 前缀分发到对应云函数 HTTP 触发器；
       // 非云函数模式（dev）退化为 API_BASE + path（走 vite proxy）

@@ -1,6 +1,6 @@
 {
   "name": "TOYtamaxia",
-  "appid": "wx1234567890123456",
+  "appid": "wxac46cbfe019159a6",
   "description": "婚礼请柬制作小程序",
   "versionName": "1.0.0",
   "versionCode": "100",
@@ -12,7 +12,8 @@
     }
   },
   "mp-weixin": {
-    "appid": "wx1234567890123456",
+    "appid": "wxac46cbfe019159a6",
+    "cloudfunctionRoot": "cloudfunctions/",
     "setting": {
       "urlCheck": false
     },

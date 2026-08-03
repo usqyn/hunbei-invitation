@@ -237,7 +237,7 @@ const handleToolClick = (tool: any) => {
 const handleMenuItemClick = (item: any) => {
   if (item.id === 1) {
     if (!userStore.requireLogin()) return
-    uni.navigateTo({ url: '/pages/mall/orders' })
+    uni.navigateTo({ url: '/pages/mall-sub/orders' })
   } else if (item.id === 2) {
     // 客服入口：优先调起微信小程序原生客服会话；非微信环境或未配置时，
     // 兜底为拨打客服电话占位（上线前需在 settings/协议页填写真实客服电话）

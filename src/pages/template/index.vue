@@ -211,9 +211,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import type { TemplateItem, TemplateCategory } from '@/types'
-import { TEMPLATE_LIST } from '@/constants/templates-data'
 import { HOME_CATEGORIES } from '@/constants/categories'
 import { TEMPLATE_PAGE_CONFIG } from '@/config'
 import { request } from '@/utils/request'
@@ -337,72 +336,111 @@ onMounted(async () => {
     activeFilter.value = options.filter
   }
 
-  await loadCategories()
-  await loadTemplates()
+  loading.value = true
+
+  // 并行加载分类和模板，不再串行等待
+  const [categories, templates] = await Promise.all([
+    fetchCategories(),
+    fetchTemplates(),
+  ])
+
+  buildState(categories, templates)
+
+  loading.value = false
+  enableShareMenu()
 })
+
+onLoad(() => {
+  enableShareMenu()
+})
+
+function enableShareMenu() {
+  uni.showShareMenu({
+    withShareTicket: true,
+    menus: ['shareAppMessage', 'shareTimeline'],
+    success: () => console.log('share menu enabled'),
+    fail: (err: any) => console.warn('share menu fail:', err?.errMsg || err),
+  })
+}
 
 // 用户从编辑器返回时重置导航锁，避免点击无响应
 onShow(() => {
   navigating.value = false
 })
 
-async function loadCategories() {
+onShareAppMessage(() => {
+  const category = activeCategory.value || 'wedding'
+  return {
+    title: `模板广场 - 发现精美${getCategoryName(category)}模板`,
+    path: `/pages/template/index?category=${category}`,
+  }
+})
+
+onShareTimeline(() => {
+  const category = activeCategory.value || 'wedding'
+  return {
+    title: `模板广场 - 发现精美${getCategoryName(category)}模板`,
+    query: `category=${category}`,
+  }
+})
+
+// 获取分类数据（纯数据，不写 reactive state）
+async function fetchCategories() {
   try {
-    const data = await request<{ id: string; name: string; icon: string; count: number }[]>({ url: '/api/categories', hideLoading: true })
+    const data = await request<{ id: string; name: string; icon: string; count: number }[]>({
+      url: '/api/categories?noCounts=1', hideLoading: true,
+    })
     if (data && Array.isArray(data)) {
-      categoryList.value = data.map((cat: any) => {
+      return data.map((cat: any) => {
         const staticCat = STATIC_CATEGORIES.find(s => s.id === cat.id)
         return {
           id: cat.id,
           name: staticCat?.name || cat.name,
           icon: staticCat?.icon || '/static/images/icons/document.svg',
           count: cat.count ?? 0,
-          templates: allTemplates.value.filter(t => t.category === cat.id),
+          templates: [] as TemplateItem[],
         }
       })
     }
   } catch (e) {
-    console.warn('加载分类失败，使用静态分类:', e)
-    categoryList.value = STATIC_CATEGORIES.map(cat => ({
-      id: cat.id,
-      name: cat.name,
-      icon: cat.icon,
-      count: 0,
-      templates: [],
-    }))
+    console.warn('加载分类失败，回退静态分类:', e)
   }
+  // 兜底：静态分类
+  return STATIC_CATEGORIES.map(cat => ({
+    id: cat.id, name: cat.name, icon: cat.icon, count: 0, templates: [] as TemplateItem[],
+  }))
 }
 
-async function loadTemplates() {
-  loading.value = true
+// 获取模板数据（纯数据，不写 reactive state）
+async function fetchTemplates(): Promise<TemplateItem[]> {
   loadError.value = false
-
   try {
     const data = await request<TemplateItem[]>({ url: '/api/templates', hideLoading: true })
     if (data && Array.isArray(data)) {
-      // 字段裁剪：列表页只需卡片展示字段，避免把完整 elements/sections/pages/renderedImage
-      // setData 到页面（实测可从 1170KB 降到 < 100KB）
-      allTemplates.value = data.map(pickCardFields)
+      return data.map(pickCardFields)
     }
-
-    // 合并 API 模板 + 本地模板（不重复），仅保留卡片字段
-    const existingIds = new Set(allTemplates.value.map(t => t.id))
-    TEMPLATE_LIST.forEach(t => {
-      if (!existingIds.has(t.id)) {
-        allTemplates.value.push(pickCardFields(t))
-        existingIds.add(t.id)
-      }
-    })
-    categoryList.value = categoryList.value.map(cat => ({
-      ...cat,
-      templates: allTemplates.value.filter(t => t.category === cat.id),
-    }))
   } catch (e) {
     console.error('加载模板列表失败:', e)
     loadError.value = true
-  } finally {
-    loading.value = false
   }
+  return []
+}
+
+// 将分类与模板交叉关联，写入 reactive state
+function buildState(categories: any[], templates: TemplateItem[]) {
+  // 计算每个分类下的模板数（客户端聚合，免去云函数 aggregate 开销）
+  const countMap: Record<string, number> = {}
+  templates.forEach(t => {
+    if (t.category) countMap[t.category] = (countMap[t.category] || 0) + 1
+  })
+
+  allTemplates.value = templates
+
+  categoryList.value = categories.map(cat => ({
+    ...cat,
+    count: countMap[cat.id] || cat.count || 0,
+    templates: templates.filter(t => t.category === cat.id),
+  }))
 }
 
 // 模板列表卡片展示所需字段（避免把 elements/sections/pages/renderedImage 等大字段塞进 setData）
@@ -818,13 +856,13 @@ function onBack() {
 
 .template-grid {
   padding: 24rpx 24rpx 0;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
 }
 
 .template-card {
-  width: calc(50% - 12rpx);
-  margin-bottom: 24rpx;
+  width: 100%;
   background: #ffffff;
   border-radius: 24rpx;
   overflow: hidden;
@@ -837,10 +875,6 @@ function onBack() {
   &:active {
     transform: translateY(-6rpx) scale(0.98);
     box-shadow: 0 16rpx 40rpx rgba(232, 74, 110, 0.18);
-  }
-
-  &:nth-child(odd) {
-    margin-right: 24rpx;
   }
 }
 

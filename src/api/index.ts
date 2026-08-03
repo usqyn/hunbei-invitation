@@ -253,7 +253,8 @@ export function generatePoster(workId: string) {
 
 // ========== 商城相关 ==========
 export function fetchProducts(params?: { category?: string; page?: number; size?: number }) {
-  return request<{ list: any[]; total: number }>({ url: '/api/products', data: params })
+  // 商城商品目前走本地兜底数据，先隐藏全局 loading 蒙层，避免长时间遮挡页面
+  return request<{ list: any[]; total: number }>({ url: '/api/products', data: params, hideLoading: true })
 }
 
 export function fetchRecommendProducts(category: string) {

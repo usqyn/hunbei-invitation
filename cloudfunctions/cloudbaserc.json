@@ -1,5 +1,5 @@
 {
-  "envId": "cloud1-d1g9id3fjffcefe0d",
+  "envId": "cloud1-d4gyvmo1d9a1e148a",
   "functionRoot": ".",
   "functions": [
     {
@@ -71,6 +71,22 @@
     {
       "name": "cleanup",
       "timeout": 30,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "migrate",
+      "timeout": 60,
+      "memorySize": 256,
+      "envVariables": {
+        "JWT_SECRET": "TOYtamaxia-test-secret"
+      }
+    },
+    {
+      "name": "seed-data",
+      "timeout": 60,
       "memorySize": 256,
       "envVariables": {
         "JWT_SECRET": "TOYtamaxia-test-secret"

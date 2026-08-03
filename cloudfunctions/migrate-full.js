@@ -6,7 +6,7 @@ try { initSqlJs = require('sql.js') } catch (e) {
   process.exit(1)
 }
 
-const ENV_ID = process.env.TCB_ENV_ID || 'cloud1-d1g9id3fjffcefe0d'
+const ENV_ID = process.env.TCB_ENV_ID || 'cloud1-d4gyvmo1d9a1e148a'
 const SERVER_DIR = path.resolve(__dirname, '..', 'server')
 const MAIN_DB_PATH = path.join(SERVER_DIR, 'data.db')
 const POSTER_DB_PATH = path.join(SERVER_DIR, 'poster.db')

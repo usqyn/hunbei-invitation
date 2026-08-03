@@ -1,0 +1,6 @@
+CloudBase CLI 3.6.2
+试试 tcb ai 命令，开启 AI 原生开发
+- 数据加载中...
+- 云函数部署中...
+✖ [DescribeEnvInfo] env not found in list: cloud1-d4gyvmo1d9a1e148a
+requestId: 8b643626-62f3-4275-86c8-c0891ff073b7

@@ -25,7 +25,7 @@ const {
   getUser, requireAuth, requireAdmin, isRequestFromAdmin,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
-  uploadToCloud, getCloudUrl, getCloudUrls, resolveCloudFields,
+  uploadToCloud, getCloudUrl, getCloudUrls, resolveCloudFields, createRouter,
 } = require('./_shared')
 
 // ============ 贴纸资源集合（云存储路径前缀） ============
@@ -420,26 +420,4 @@ const routes = [
 ]
 
 // ============ 云函数入口 ============
-exports.main = async (event, context) => {
-  if (event.httpMethod === 'OPTIONS') return httpOptions()
-  const { httpMethod, path: eventPath, queryStringParameters } = event
-  for (const [method, pattern, handler] of routes) {
-    if (method !== httpMethod) continue
-    const params = matchRoute(pattern, eventPath)
-    if (params === null) continue
-    try {
-      const ctx = {
-        method: httpMethod, path: eventPath,
-        query: queryStringParameters || {}, body: parseBody(event),
-        params, headers: event.headers || {}, event, context,
-      }
-      const result = await handler(ctx)
-      if (result && result.statusCode) return result
-      return httpOK(result)
-    } catch (e) {
-      console.error(`[poster] ${httpMethod} ${eventPath} error:`, e)
-      return httpFail('服务器内部错误', 500)
-    }
-  }
-  return httpFail('接口不存在', 404)
-}
+exports.main = createRouter(routes, 'poster')

@@ -83,7 +83,7 @@ export const useTemplateStore = defineStore('template', () => {
       const list = await request<Template[]>({ url: '/api/templates', data: { type, page: 1 } })
       templateList.value = (list || []).map(t => ({
         ...t,
-        image: resolveUrl(t.image),
+        image: resolveUrl((t as any).image || (t as any).cover || ''),
         vipLevel: t.vipLevel || inferVipLevel(t),
       }))
     }

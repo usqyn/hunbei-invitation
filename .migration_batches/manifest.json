@@ -1,0 +1,98 @@
+[
+  {
+    "collection": "templates",
+    "pk": "id",
+    "batchCount": 2,
+    "total": 58
+  },
+  {
+    "collection": "categories",
+    "pk": "id",
+    "batchCount": 1,
+    "total": 10
+  },
+  {
+    "collection": "music",
+    "pk": "id",
+    "batchCount": 1,
+    "total": 14
+  },
+  {
+    "collection": "users",
+    "pk": "id",
+    "batchCount": 1,
+    "total": 24
+  },
+  {
+    "collection": "works",
+    "pk": "id",
+    "batchCount": 1,
+    "total": 8
+  },
+  {
+    "collection": "orders",
+    "pk": "id",
+    "batchCount": 1,
+    "total": 10
+  },
+  {
+    "collection": "favorites",
+    "pk": null,
+    "batchCount": 0,
+    "total": 0
+  },
+  {
+    "collection": "footprints",
+    "pk": null,
+    "batchCount": 2,
+    "total": 98
+  },
+  {
+    "collection": "notifications",
+    "pk": null,
+    "batchCount": 1,
+    "total": 22
+  },
+  {
+    "collection": "feedback",
+    "pk": null,
+    "batchCount": 0,
+    "total": 0
+  },
+  {
+    "collection": "events",
+    "pk": null,
+    "batchCount": 13,
+    "total": 614
+  },
+  {
+    "collection": "recycle_bin",
+    "pk": null,
+    "batchCount": 0,
+    "total": 0
+  },
+  {
+    "collection": "settings",
+    "pk": "key",
+    "batchCount": 1,
+    "total": 1
+  },
+  {
+    "collection": "poster_templates",
+    "pk": "id",
+    "batchCount": 1,
+    "total": 25
+  },
+  {
+    "collection": "poster_works",
+    "pk": "id",
+    "batchCount": 0,
+    "total": 0
+  },
+  {
+    "collection": "recycle_bin_poster",
+    "pk": null,
+    "batchCount": 0,
+    "total": 0
+  }
+]

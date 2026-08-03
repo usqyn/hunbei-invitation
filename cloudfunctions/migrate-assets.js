@@ -5,7 +5,7 @@
 //   1. 安装依赖：在 cloudfunctions/ 目录下执行
 //      npm install wx-server-sdk
 //   2. 配置环境变量（云开发环境 ID）
-//      export TCB_ENV_ID=cloud1-d1g9id3fjffcefe0d
+//      export TCB_ENV_ID=cloud1-d4gyvmo1d9a1e148a
 //   3. 执行迁移：
 //      node migrate-assets.js
 //
@@ -30,7 +30,7 @@ try { cloud = require('wx-server-sdk') } catch (e) {
 }
 
 // ============ 配置 ============
-const ENV_ID = process.env.TCB_ENV_ID || 'cloud1-d1g9id3fjffcefe0d'
+const ENV_ID = process.env.TCB_ENV_ID || 'cloud1-d4gyvmo1d9a1e148a'
 const SERVER_DIR = path.resolve(__dirname, '..', 'server')
 const UPLOADS_DIR = path.join(SERVER_DIR, 'uploads')
 const MUSIC_DIR = path.join(SERVER_DIR, 'music')

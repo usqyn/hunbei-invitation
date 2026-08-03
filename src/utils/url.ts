@@ -1,5 +1,8 @@
 import { API_BASE, USE_CLOUD_FUNCTIONS } from '@/config'
 
+// 云函数模式下兜底的资源域名（当 API_BASE 为 localhost 时使用）
+const CLOUD_FALLBACK_ASSETS_BASE = 'https://api.TOYtamaxia.com'
+
 /**
  * 将后端返回的相对路径解析为完整 URL
  * 支持: http/https, data:, blob:, wxfile://, cloud://, 以及 /uploads/ 等相对路径
@@ -9,9 +12,16 @@ import { API_BASE, USE_CLOUD_FUNCTIONS } from '@/config'
 export function resolveUrl(url: string | undefined | null): string {
   if (!url) return ''
   if (url.startsWith('http://')) {
-    // 开发环境 localhost/127.0.0.1 保持 HTTP，生产环境自动升级 HTTPS
-    if (!url.includes('127.0.0.1') && !url.includes('localhost')) {
+    const isLocalhost = url.includes('127.0.0.1') || url.includes('localhost')
+    // 非 localhost HTTP → 自动升级 HTTPS
+    if (!isLocalhost) {
       return url.replace('http://', 'https://')
+    }
+    // localhost HTTP → 云函数模式下替换为 HTTPS 生产域名
+    if (USE_CLOUD_FUNCTIONS) {
+      const pathIdx = url.indexOf('/', url.indexOf('://') + 3)
+      const path = pathIdx !== -1 ? url.substring(pathIdx) : '/'
+      return CLOUD_FALLBACK_ASSETS_BASE + path
     }
     return url
   }
@@ -26,10 +36,23 @@ export function resolveUrl(url: string | undefined | null): string {
   ) {
     return url
   }
-  // 相对路径拼接 API_BASE，非 localhost 时自动升级 HTTPS
-  const fullUrl = API_BASE + url
-  if (fullUrl.startsWith('http://') && !fullUrl.includes('127.0.0.1') && !fullUrl.includes('localhost')) {
-    return fullUrl.replace('http://', 'https://')
+  // 相对路径拼接 API_BASE
+  // 云函数模式下 API_BASE 可能是 localhost（体验版 fallback），此时用生产域名兜底
+  let base = API_BASE
+  if (USE_CLOUD_FUNCTIONS && (base.includes('127.0.0.1') || base.includes('localhost'))) {
+    base = CLOUD_FALLBACK_ASSETS_BASE
+  }
+  const fullUrl = base + url
+  if (fullUrl.startsWith('http://')) {
+    const isLocalhost = fullUrl.includes('127.0.0.1') || fullUrl.includes('localhost')
+    if (!isLocalhost) {
+      return fullUrl.replace('http://', 'https://')
+    }
+    // localhost HTTP → 云函数模式下替换为 HTTPS 生产域名
+    if (USE_CLOUD_FUNCTIONS) {
+      const sep = url.startsWith('/') ? url : '/' + url
+      return CLOUD_FALLBACK_ASSETS_BASE + sep
+    }
   }
   return fullUrl
 }

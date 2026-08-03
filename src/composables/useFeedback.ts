@@ -6,25 +6,26 @@
 type ToastType = 'success' | 'error' | 'warning' | 'none'
 type VibrateType = 'light' | 'medium' | 'heavy' | 'success' | 'error'
 
-/** 震动反馈映射 */
-const vibrateMap: Record<VibrateType, 'short' | 'long'> = {
-  light: 'short',
-  medium: 'short',
-  heavy: 'long',
-  success: 'short',
-  error: 'long',
-}
-
 /**
  * 触发触觉反馈
- * 微信小程序使用 vibrateShort/vibrateLong
+ * 微信小程序 vibrateShort type 仅支持 'light' | 'medium' | 'heavy'
+ * vibrateLong 无 type 参数
  */
 export function haptic(type: VibrateType = 'light') {
   try {
-    if (type === 'heavy' || type === 'error') {
-      uni.vibrateLong({})
-    } else {
-      uni.vibrateShort({ type: vibrateMap[type] as any })
+    switch (type) {
+      case 'heavy':
+      case 'error':
+        uni.vibrateLong({})
+        break
+      case 'medium':
+        uni.vibrateShort({ type: 'medium' })
+        break
+      case 'light':
+      case 'success':
+      default:
+        uni.vibrateShort({ type: 'light' })
+        break
     }
   } catch (_) {
     // H5 或不支持时静默忽略
