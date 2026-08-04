@@ -73,7 +73,7 @@
             </view>
             <view class="card-main">
               <view class="card-cover">
-                <image class="cover-image" lazy-load :src="work.image" mode="aspectFill" @error="onImageError" />
+                <CloudImage class="cover-image" :src="work.image" mode="aspectFill" custom-class="cover-image" @error="onImageError" />
                 <view class="cover-badge" :class="getBadgeClass(work)">
                   <text>{{ getBadgeText(work) }}</text>
                 </view>
@@ -144,7 +144,7 @@
           >
             <view class="card-main">
               <view class="card-cover">
-                <image class="cover-image" lazy-load :src="draft.image" mode="aspectFill" @error="onImageError" />
+                <CloudImage class="cover-image" :src="draft.image" mode="aspectFill" custom-class="cover-image" @error="onImageError" />
                 <view class="cover-badge draft-badge">
                   <text>草稿</text>
                 </view>
@@ -199,7 +199,7 @@
           >
             <view class="card-main">
               <view class="card-cover">
-                <image class="cover-image" lazy-load :src="fav.image" mode="aspectFill" @error="onImageError" />
+                <CloudImage class="cover-image" :src="fav.image" mode="aspectFill" custom-class="cover-image" @error="onImageError" />
                 <view class="cover-badge favorite-badge">
                   <text>♥ 收藏</text>
                 </view>
@@ -269,6 +269,7 @@ import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
 import { useFeedback } from '@/composables/useFeedback'
 import { WORKS_CONFIG } from '@/config'
+import CloudImage from '@/components/CloudImage.vue'
 
 const userStore = useUserStore()
 const worksStore = useWorksStore()

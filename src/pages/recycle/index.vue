@@ -23,7 +23,7 @@
           :key="item.id"
           class="recycle-item"
         >
-          <image class="recycle-image" lazy-load :src="item.image" mode="aspectFill" />
+          <CloudImage class="recycle-image" :src="item.image" mode="aspectFill" custom-class="recycle-image" />
           <view class="recycle-info">
             <text class="recycle-title">{{ item.title }}</text>
             <text class="recycle-time">删除于 {{ item.deletedAt || item.deleted_at || '未知时间' }}</text>
@@ -43,6 +43,7 @@ import { ref, onMounted } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { fetchRecycleBin, restoreWork, permanentDelete } from '@/api'
 import { useWorksStore } from '@/stores/works'
+import CloudImage from '@/components/CloudImage.vue'
 
 const { goBack } = useGoBack()
 const worksStore = useWorksStore()

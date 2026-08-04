@@ -14,7 +14,7 @@
       <text class="preview-mock-label">分享效果预览</text>
       <view class="wechat-card">
         <view class="wechat-card-thumb">
-          <image class="wechat-card-img" :src="coverImage" mode="aspectFill" />
+          <CloudImage class="wechat-card-img" :src="coverImage" mode="aspectFill" custom-class="wechat-card-img" />
         </view>
         <view class="wechat-card-body">
           <text class="wechat-card-title">{{ shareTitle || '分享标题' }}</text>
@@ -65,7 +65,7 @@
           </view>
         </view>
         <view class="desc-right" @click="onChangeCover">
-          <image class="cover-image" :src="coverImage" mode="aspectFill" />
+          <CloudImage class="cover-image" :src="coverImage" mode="aspectFill" custom-class="cover-image" />
           <view class="cover-tip">
             <text class="tip-emoji">👆</text>
             <text class="tip-text">更换封面</text>
@@ -148,6 +148,7 @@ import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useRtl } from '@/composables/useRtl'
 import { generatePoster } from '@/api'
+import CloudImage from '@/components/CloudImage.vue'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()

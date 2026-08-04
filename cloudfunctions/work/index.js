@@ -15,7 +15,7 @@ const {
   getUser, requireAuth,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
-  resolveCloudFields, resolveCloudUrlsDeep, createRouter,
+  resolveCloudFields, resolveCloudUrlsDeep, normalizeUploadPaths, createRouter,
 } = require('./_shared')
 
 // ============ 作品 CRUD ============
@@ -135,6 +135,7 @@ const updateWork = async (ctx) => {
 
 // GET /api/works/recycle — 合并主库 recycle_bin 与 poster 库 recycle_bin_poster
 // 每条带 source: 'template' | 'poster' 标记，按时间倒序
+// 返回结构：{ id, title, image, deletedAt, source }（展平 work_data，供小程序页面直接使用）
 const listRecycleBin = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -143,18 +144,44 @@ const listRecycleBin = async (ctx) => {
 
   // 主库 recycle_bin：按 phone 过滤
   const mainRes = await collection('recycle_bin').where({ phone }).orderBy('deletedAt', 'desc').limit(500).get()
-  const mainItems = (mainRes.data || []).map(it => ({ ...it, source: 'template' }))
+  const mainItems = (mainRes.data || []).map(it => {
+    const w = it.work_data || {}
+    let wd = w
+    if (typeof wd === 'string') { try { wd = JSON.parse(wd) } catch (_) {} }
+    return {
+      id: it.work_id || wd.id || '',
+      title: wd.title || wd.template_name || '',
+      image: wd.cover || wd.cover_url || '',
+      deletedAt: it.deletedAt || it.deleted_at || '',
+      source: 'template',
+    }
+  })
 
   // poster 库 recycle_bin_poster：按 user_id 过滤（字段名不同）
   const posterRes = await collection('recycle_bin_poster').where({ user_id: phone }).orderBy('deleted_at', 'desc').limit(500).get()
-  const posterItems = (posterRes.data || []).map(it => ({ ...it, source: 'poster' }))
+  const posterItems = (posterRes.data || []).map(it => {
+    const w = it.work_data || {}
+    let wd = w
+    if (typeof wd === 'string') { try { wd = JSON.parse(wd) } catch (_) {} }
+    return {
+      id: it.work_id || wd.id || '',
+      title: wd.title || wd.template_name || '',
+      image: wd.cover || wd.cover_url || '',
+      deletedAt: it.deletedAt || it.deleted_at || '',
+      source: 'poster',
+    }
+  })
 
   // 合并并按时间倒序（兼容 deletedAt 和 deleted_at 两种字段名）
   let allItems = [...mainItems, ...posterItems].sort((a, b) => {
-    const timeA = a.deletedAt || a.deleted_at || ''
-    const timeB = b.deletedAt || b.deleted_at || ''
+    const timeA = a.deletedAt || ''
+    const timeB = b.deletedAt || ''
     return String(timeB).localeCompare(String(timeA))
   })
+
+  // 解析 image 中的 cloud:// 协议与相对路径
+  await resolveCloudFields(allItems, ['image'])
+  normalizeUploadPaths(allItems, ['image'])
 
   if (hasPaging) {
     const total = allItems.length

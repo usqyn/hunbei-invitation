@@ -24,7 +24,7 @@
           class="footprint-item"
           @click="handleClick(item)"
         >
-          <image class="footprint-image" :src="item.image" mode="aspectFill" />
+          <CloudImage class="footprint-image" :src="item.image" mode="aspectFill" custom-class="footprint-image" />
           <view class="footprint-info">
             <text class="footprint-title">{{ item.title }}</text>
             <text class="footprint-time">{{ item.time }}</text>
@@ -39,6 +39,7 @@
 import { ref, onMounted } from 'vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { fetchFootprints } from '@/api'
+import CloudImage from '@/components/CloudImage.vue'
 
 const { goBack } = useGoBack()
 

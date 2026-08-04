@@ -153,7 +153,7 @@ export const useWorksStore = defineStore('works', () => {
     try {
       const data = await fetchFavorites()
       if (data && Array.isArray(data)) {
-        const serverFavoriteIds = new Set(data.map((item: any) => item.workId || item.id))
+        const serverFavoriteIds = new Set(data.map((item: any) => item.workId || item.work_id || item.id))
         const allWorks = [...works.value, ...drafts.value]
         // 保留本地未同步的收藏（不在服务端但本地有的）
         const localOnlyFavorites = favorites.value.filter(w => !serverFavoriteIds.has(w.id))

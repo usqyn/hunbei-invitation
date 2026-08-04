@@ -14,6 +14,7 @@ const {
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
   refreshVipStatus, isUserVip, createRouter,
+  resolveCloudFields, normalizeUploadPaths,
 } = require('./_shared')
 
 // ============ 用户信息 ============
@@ -110,12 +111,25 @@ const listFavorites = async (ctx) => {
   const countRes = await collection('favorites').where({ phone }).count()
   const total = countRes.total || 0
   let q = collection('favorites').where({ phone }).orderBy('createdAt', 'desc')
+  let res
   if (hasPaging) {
-    const res = await q.skip(skip).limit(limit).get()
-    return paginateResponse(res.data || [], page, limit, total)
+    res = await q.skip(skip).limit(limit).get()
+  } else {
+    res = await q.limit(100).get()
   }
-  const res = await q.limit(100).get()
-  return ok(res.data || [])
+  // 兼容小程序 store 读取的字段名（workId / image 等），并解析 cloud:// 协议
+  const items = (res.data || []).map(f => ({
+    id: f._id,
+    workId: f.work_id || f.workId || '',
+    templateId: f.template_id || f.templateId || '',
+    title: f.title || '',
+    image: f.image || '',
+    createdAt: f.createdAt || '',
+  }))
+  await resolveCloudFields(items, ['image'])
+  normalizeUploadPaths(items, ['image'])
+  if (hasPaging) return paginateResponse(items, page, limit, total)
+  return ok(items)
 }
 
 // ============ 足迹系统 ============
@@ -154,12 +168,25 @@ const listFootprints = async (ctx) => {
   const countRes = await collection('footprints').where({ phone }).count()
   const total = countRes.total || 0
   let q = collection('footprints').where({ phone }).orderBy('timestamp', 'desc')
+  let res
   if (hasPaging) {
-    const res = await q.skip(skip).limit(limit).get()
-    return paginateResponse(res.data || [], page, limit, total)
+    res = await q.skip(skip).limit(limit).get()
+  } else {
+    res = await q.limit(50).get()
   }
-  const res = await q.limit(50).get()
-  return ok(res.data || [])
+  // 兼容小程序页面读取的字段名（image/title/time/templateId），并解析 cloud:// 协议
+  const items = (res.data || []).map(f => ({
+    id: f._id,
+    templateId: f.template_id || f.templateId || '',
+    title: f.template_name || f.title || '',
+    image: f.template_cover || f.image || '',
+    time: f.timestamp ? new Date(f.timestamp).toLocaleString('zh-CN', { hour12: false }) : '',
+    timestamp: f.timestamp,
+  }))
+  await resolveCloudFields(items, ['image'])
+  normalizeUploadPaths(items, ['image'])
+  if (hasPaging) return paginateResponse(items, page, limit, total)
+  return ok(items)
 }
 
 // ============ 通知系统 ============

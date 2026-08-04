@@ -124,7 +124,7 @@
       <!-- 画布模式：绝对定位渲染 -->
       <template v-else-if="isCanvasMode">
         <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="[canvasCardStyle, canvasBackgroundStyle]">
-          <image class="rendered-image" lazy-load :src="editorStore.renderedImage" mode="widthFix" />
+          <CloudImage class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" custom-class="rendered-image" />
         </view>
         <view v-else class="preview-card preview-card--canvas" :style="[canvasCardStyle, canvasBackgroundStyle]">
           <view
@@ -184,7 +184,7 @@
         <view class="similar-list">
           <view class="similar-item animate-stagger-item" v-for="(item, idx) in similarTemplates" :key="idx" :style="{ animationDelay: (idx * 0.1) + 's' }" @click="onSimilarClick(item)">
             <view class="similar-image-wrap">
-              <image class="similar-image" lazy-load :src="item.image" mode="aspectFill" @error="onImageError"></image>
+              <CloudImage class="similar-image" :src="item.image" mode="aspectFill" custom-class="similar-image" @error="onImageError" />
               <view class="similar-overlay">
                 <text class="similar-title">{{ item.title }}</text>
                 <text class="similar-sub">{{ item.subtitle }}</text>
@@ -205,7 +205,7 @@
           <view class="compare-col">
             <view class="compare-label">免费导出</view>
             <view class="compare-img-wrap">
-              <image class="compare-img compare-img--watermarked" lazy-load :src="watermarkedPreview" mode="aspectFill" />
+              <CloudImage class="compare-img compare-img--watermarked" :src="watermarkedPreview" mode="aspectFill" custom-class="compare-img compare-img--watermarked" />
               <view class="compare-watermark-overlay">
                 <text class="compare-watermark-text">水印</text>
               </view>
@@ -216,7 +216,7 @@
             <view class="compare-vip-badge">VIP</view>
             <view class="compare-label">高清导出</view>
             <view class="compare-img-wrap">
-              <image class="compare-img compare-img--hd" lazy-load :src="hdPreview" mode="aspectFill" />
+              <CloudImage class="compare-img compare-img--hd" :src="hdPreview" mode="aspectFill" custom-class="compare-img compare-img--hd" />
               <view class="compare-hd-badge">高清</view>
             </view>
             <view class="compare-desc">无水印 · 1440px</view>
@@ -248,7 +248,7 @@
         <scroll-view class="shop-rec-scroll" scroll-x>
           <view class="shop-rec-list">
             <view v-for="(p, idx) in recommendProducts" :key="p.id" class="shop-rec-card animate-stagger-item" :style="{ animationDelay: (idx * 0.08) + 's' }" @click="goToProduct(p)">
-              <image class="shop-rec-img" lazy-load :src="p.image" mode="aspectFill" />
+              <CloudImage class="shop-rec-img" :src="p.image" mode="aspectFill" custom-class="shop-rec-img" />
               <text class="shop-rec-name">{{ p.name }}</text>
               <text class="shop-rec-price">{{ p.price }}元</text>
             </view>
@@ -626,7 +626,12 @@ async function loadSimilarTemplates() {
   try {
     const data = await fetchSimilarTemplates(templateId.value)
     if (data && Array.isArray(data)) {
-      similarTemplates.value = data
+      // 兼容模板文档字段（cover/name）与页面读取字段（image/title）
+      similarTemplates.value = data.map(t => ({
+        ...t,
+        image: t.image || t.cover || '',
+        title: t.title || t.name || '',
+      }))
     }
   } catch (e) {
     console.warn('加载相似模板失败:', e)
