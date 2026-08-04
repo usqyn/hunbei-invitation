@@ -93,6 +93,28 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
       shadowOffsetY: Math.round((el.shadowOffsetY ?? 0) * pxToRpx),
       shadowBlur: Math.round((el.shadowBlur ?? 0) * pxToRpx),
       textDecoration: el.textDecoration || 'none',
+      // 文字渐变填充（admin Fabric Text 支持，小程序 useCanvasRender 需读取并应用）
+      gradientFill: el.gradientFill || undefined,
+      gradientFillType: el.gradientFillType || undefined,
+      gradientStart: el.gradientStart || undefined,
+      gradientEnd: el.gradientEnd || undefined,
+      gradientAngle: el.gradientAngle ?? undefined,
+      // 长阴影特效
+      longShadowEnabled: el.longShadowEnabled || false,
+      longShadowColor: el.longShadowColor || undefined,
+      longShadowLength: el.longShadowLength ?? undefined,
+      longShadowAngle: el.longShadowAngle ?? undefined,
+      // 霓虹发光特效
+      neonGlowEnabled: el.neonGlowEnabled || false,
+      neonGlowColor: el.neonGlowColor || undefined,
+      neonGlowSize: el.neonGlowSize ?? undefined,
+      neonGlowBlur: el.neonGlowBlur ?? undefined,
+    }
+    // 清理 undefined 值，避免序列化输出大量 undefined 字段
+    if (base.style) {
+      Object.keys(base.style).forEach(k => {
+        if (base.style[k] === undefined) delete base.style[k]
+      })
     }
   } else if (el.type === 'image') {
     base.style = {
@@ -102,6 +124,18 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
       borderRadius: Math.round((el.borderRadius ?? 0) * pxToRpx),
       borderColor: el.borderColor || 'transparent',
       borderWidth: Math.round((el.borderWidth ?? 0) * pxToRpx),
+      // 图片缩放与裁剪（小程序端 imageScale 需读取）
+      scale: el.scale || 'cover',
+      mask: el.mask || 'rect',
+      // 图片滤镜（小程序端 useCanvasRender 需读取并应用）
+      brightness: el.brightness ?? 100,
+      contrast: el.contrast ?? 100,
+      saturate: el.saturate ?? 100,
+      blur: el.blur ?? 0,
+      grayscale: el.grayscale ?? 0,
+      // 图片偏移（小程序端 ImagePropertyPanel 缺失 UI，但数据需保留）
+      imageOffsetX: el.imageOffsetX ?? 0,
+      imageOffsetY: el.imageOffsetY ?? 0,
     } as any
   }
 

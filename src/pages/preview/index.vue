@@ -302,7 +302,7 @@ import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts } from '@/api'
+import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchWorkApi } from '@/api'
 import type { EditableElement, Work } from '@/types'
 import Watermark from '@/components/Watermark.vue'
 
@@ -433,8 +433,8 @@ function updateCardSize() {
   })
 }
 
-// 查找作品：优先从 store，回退到本地存储
-function findWork(workId: string): Work | undefined {
+// 查找作品：优先从 store，回退到本地存储，最后回退到服务端
+function findWorkLocal(workId: string): Work | undefined {
   const fromStore = worksStore.works.find(w => w.id === workId) || worksStore.drafts.find(w => w.id === workId)
   if (fromStore) return fromStore
   try {
@@ -447,6 +447,38 @@ function findWork(workId: string): Work | undefined {
   return undefined
 }
 
+// 服务端兜底：被分享者打开链接时本地无数据，调接口拉取
+async function findWorkFromServer(workId: string): Promise<Work | undefined> {
+  try {
+    const res = await fetchWorkApi(workId)
+    const data = res as any
+    if (data && data.id) {
+      // 兼容 snake_case 字段
+      const work: Work = {
+        id: data.id,
+        title: data.title || '',
+        date: data.date || '',
+        image: data.image || data.cover || '',
+        cover: data.cover || data.image || '',
+        templateId: data.templateId || data.template_id || '',
+        templateType: data.templateType || data.template_type || 'canvas',
+        musicId: data.musicId || data.music_id || '',
+        data: (typeof data.data === 'string' ? safeParse(data.data) : data.data) || {},
+        status: data.status,
+        updatedAt: data.updatedAt || data.updated_at,
+      }
+      return work
+    }
+  } catch (e) {
+    console.warn('[preview] 服务端拉取作品失败:', e)
+  }
+  return undefined
+}
+
+function safeParse(s: string): any {
+  try { return JSON.parse(s) } catch { return undefined }
+}
+
 async function loadData() {
   try {
     loadError.value = false
@@ -456,8 +488,12 @@ async function loadData() {
 
   const workId = options.workId
   if (workId) {
-    // 通过 workId 加载对应作品数据
-    const work = findWork(workId)
+    // 1. 先查本地 store / storage
+    let work = findWorkLocal(workId)
+    // 2. 本地无则调服务端兜底（被分享者场景）
+    if (!work) {
+      work = await findWorkFromServer(workId)
+    }
     if (work) {
       editorStore.setCurrentWorkId(work.id)
       const id = work.templateId || options.templateId || options.id
@@ -473,6 +509,7 @@ async function loadData() {
         editorStore.restoreFromWorkData(work.data, work.musicId)
       }
     } else {
+      // 本地与服务端均无此作品：降级到 templateId 展示模板原始内容
       const id = options.templateId || options.id
       if (id) {
         templateId.value = id
@@ -481,6 +518,10 @@ async function loadData() {
           const loaded = await editorStore.loadTemplateById(id)
           if (!loaded) { loadError.value = true; return }
         }
+      } else {
+        // 既无 workId 数据，也无 templateId，显示加载失败
+        loadError.value = true
+        return
       }
     }
   } else {

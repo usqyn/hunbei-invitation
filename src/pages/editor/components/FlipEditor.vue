@@ -917,7 +917,7 @@ async function handleSave() {
         existing.musicId = musicId
         existing.data = editorData
         existing.updatedAt = new Date().toISOString()
-        worksStore.saveAsWork(existing)
+        await worksStore.saveAsWork(existing)
         hasUnsavedChanges.value = false
         uni.showToast({ title: '已保存', icon: 'success' })
         return
@@ -940,7 +940,7 @@ async function handleSave() {
       data: editorData,
       updatedAt: new Date().toISOString(),
     }
-    worksStore.saveAsWork(work)
+    await worksStore.saveAsWork(work)
     hasUnsavedChanges.value = false
     uni.showToast({ title: '已保存', icon: 'success' })
   } finally {

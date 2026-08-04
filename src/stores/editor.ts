@@ -243,8 +243,9 @@ export const useEditorStore = defineStore('editor', () => {
   // ============ 应用模板数据到编辑区 ============
 
   /** 将模板元素映射为可编辑元素（canvas / flip 模式共用） */
-  function mapTemplateElement(el: EditableElement): EditableElement {
+  function mapTemplateElement(el: any): EditableElement {
     // 对必填字段加 fallback 默认值，防御 API 数据缺失
+    // 兼容 snake_case 字段（云函数返回）与 camelCase 字段（server 返回）
     const type = el.type || 'text'
     const text = el.text ?? ''
     const isImage = type === 'image'
@@ -256,19 +257,33 @@ export const useEditorStore = defineStore('editor', () => {
     return {
       type,
       text: isImage ? resolveUrl(text) : text,
-      dataKey: el.dataKey,
+      dataKey: el.dataKey || el.data_key,
       label: el.label,
       style,
       x: el.x,
       y: el.y,
       width: el.width,
       height: el.height,
-      zIndex: el.zIndex,
+      zIndex: el.zIndex ?? el.z_index,
       rotation: el.rotation,
       opacity: el.opacity,
       editable: el.editable,
-      isPremium: el.isPremium,
-    }
+      isPremium: el.isPremium || el.is_premium,
+      // 图片相关字段（snake_case 兼容）
+      imageScale: el.imageScale ?? el.image_scale,
+      imageOffsetX: el.imageOffsetX ?? el.image_offset_x,
+      imageOffsetY: el.imageOffsetY ?? el.image_offset_y,
+      borderRadius: el.borderRadius ?? el.border_radius,
+      // 滤镜字段（admin 序列化器输出在 style 内，这里也兼容 element 级）
+      brightness: el.brightness ?? style?.brightness,
+      contrast: el.contrast ?? style?.contrast,
+      saturate: el.saturate ?? style?.saturate,
+      blur: el.blur ?? style?.blur,
+      grayscale: el.grayscale ?? style?.grayscale,
+      borderColor: el.borderColor ?? style?.borderColor,
+      borderWidth: el.borderWidth ?? style?.borderWidth,
+      mask: el.mask ?? style?.mask,
+    } as EditableElement
   }
 
   function applyTemplateData(template: TemplateItem) {

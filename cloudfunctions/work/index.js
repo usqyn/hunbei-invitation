@@ -22,12 +22,32 @@ const {
 
 // GET /api/works — 当前用户作品列表（按 updated_at 倒序）
 // works.cover 存的是 cloud:// fileID，需解析为 https 临时 URL
+// 合并查询 poster_works，让海报作品也出现在列表中（字段名: user_id）
 const listWorks = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
+  // 主库 works（按 phone）
   const res = await collection('works').where({ phone: auth.user.phone }).orderBy('updated_at', 'desc').limit(1000).get()
-  await resolveCloudFields(res.data || [], ['cover'])
-  return ok(res.data || [])
+  // 海报库 poster_works（按 user_id）
+  let posterData = []
+  try {
+    const posterRes = await collection('poster_works').where({ user_id: auth.user.phone }).orderBy('updated_at', 'desc').limit(500).get()
+    posterData = (posterRes.data || []).map(p => ({
+      ...p,
+      templateType: p.template_type || p.templateType || 'poster',
+      // 标记来源，便于前端区分
+      _source: 'poster',
+    }))
+  } catch (_) { /* poster_works 集合可能未创建，忽略 */ }
+  // 合并后按 updated_at 倒序
+  const merged = [...(res.data || []), ...posterData]
+  merged.sort((a, b) => {
+    const ta = new Date(a.updated_at || a.updatedAt || 0).getTime()
+    const tb = new Date(b.updated_at || b.updatedAt || 0).getTime()
+    return tb - ta
+  })
+  await resolveCloudFields(merged, ['cover'])
+  return ok(merged)
 }
 
 // GET /api/works/:id — 作品详情（需校验所有权）

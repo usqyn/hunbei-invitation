@@ -151,6 +151,34 @@
                   :style="getTextStyle(el)"
                   user-select
                 >{{ formatBiDi(resolveText(el.text)) }}</text>
+                <!-- 贴纸：作为图片渲染（admin 序列化器已把 sticker 转为 image） -->
+                <CloudImage
+                  v-else-if="el.type === 'sticker'"
+                  custom-class="canvas-image canvas-sticker"
+                  :src="el.text"
+                  mode="aspectFit"
+                  :fade-show="false"
+                  @error="onImageError"
+                />
+                <!-- 形状：用 view 渲染纯色/渐变矩形/圆形 -->
+                <view
+                  v-else-if="el.type === 'shape'"
+                  class="canvas-shape"
+                  :style="getShapeStyle(el)"
+                ></view>
+                <!-- 分组：递归渲染子元素（group 的 children 在 el.text 中以 JSON 存储不太合理，
+                     这里作为占位容器，实际分组元素在 admin 序列化时已展开为顶层元素） -->
+                <view
+                  v-else-if="el.type === 'group'"
+                  class="canvas-group"
+                ></view>
+                <!-- basic：兜底按文本渲染 -->
+                <text
+                  v-else
+                  class="canvas-text"
+                  :style="getTextStyle(el)"
+                  user-select
+                >{{ formatBiDi(resolveText(el.text)) }}</text>
                 <!-- 缩放手柄（选中时显示） -->
                 <view
                   v-if="editorStore.selectedElement === idx && el.editable !== false"
@@ -359,6 +387,7 @@ const {
   updateCardHeight,
   getCanvasElementStyle,
   getTextStyle,
+  getShapeStyle,
 } = useCanvasRender({
   getElements: () => editorStore.editableElements,
   getCanvasSize: () => editorStore.canvasSize,
@@ -1326,7 +1355,8 @@ async function handleSave() {
   const isNewWork = !existing
   await runSave(async () => {
     const work = buildWorkFromEditor(existing)
-    worksStore.saveAsWork(work)
+    // await 服务端同步，确保后续 export 接口能读到最新数据
+    await worksStore.saveAsWork(work)
     if (isNewWork) {
       userStore.incrementCreateCount()
     }
@@ -1347,7 +1377,7 @@ async function autoSaveWork() {
     if (!existing && !userStore.canCreateWork()) return
     const isNewWork = !existing
     const work = buildWorkFromEditor(existing)
-    worksStore.saveAsWork(work)
+    await worksStore.saveAsWork(work)
     if (isNewWork) {
       userStore.incrementCreateCount()
     }
@@ -1480,7 +1510,8 @@ async function handleShare() {
     // 统一保存逻辑：无论新建还是更新都走 buildWorkFromEditor
     const existing = findExistingWork()
     const work = buildWorkFromEditor(existing)
-    worksStore.saveAsWork(work)
+    // await 服务端同步完成，避免分享时服务端尚未收到最新数据
+    await worksStore.saveAsWork(work)
     hasUnsavedChanges.value = false
   }, { successMessage: '已保存', minLoadingDuration: 300 })
 

@@ -225,6 +225,10 @@ export function fetchWorksApi() {
   return request({ url: '/api/works', method: 'GET' })
 }
 
+export function fetchWorkApi(id: string) {
+  return request<any>({ url: `/api/works/${id}`, method: 'GET' })
+}
+
 export function deleteWorkApi(id: string) {
   return request({ url: `/api/works/${id}`, method: 'DELETE' })
 }

@@ -86,9 +86,9 @@ export interface ElementStyle {
   textDecoration?: 'none' | 'underline' | 'line-through'
 }
 
-// 单个可编辑元素（图片/文字/基本信息）
+// 单个可编辑元素（图片/文字/基本信息/形状/贴纸/分组）
 export interface EditableElement {
-  type: 'image' | 'text' | 'basic'
+  type: 'image' | 'text' | 'basic' | 'shape' | 'sticker' | 'group'
   text: string
   dataKey?: keyof TemplateData
   label?: string
@@ -106,6 +106,15 @@ export interface EditableElement {
   imageOffsetX?: number     // 图片在容器内 X 偏移（百分比 -50~50）
   imageOffsetY?: number     // 图片在容器内 Y 偏移（百分比 -50~50）
   borderRadius?: number     // 圆角（rpx）
+  // 图片滤镜（admin 序列化器输出，useCanvasRender 应用）
+  brightness?: number
+  contrast?: number
+  saturate?: number
+  blur?: number
+  grayscale?: number
+  borderColor?: string
+  borderWidth?: number
+  mask?: string
   // admin 端控制是否允许用户编辑
   editable?: boolean
   // 是否为付费/VIP 专属素材

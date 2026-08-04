@@ -83,7 +83,26 @@ export function useCanvasRender(options: {
       if (!bg.image) {
         return { background: bg.color1 || '#ffffff' }
       }
-      return { background: `url(${bg.image}) center/cover no-repeat` }
+      // 应用背景图缩放（imageScale: 'cover' | 'contain' | '100%'）与透明度
+      const scale = (bg as any).imageScale
+      const bgSize = scale === 'contain' ? 'contain' : (scale === '100%' ? '100% 100%' : 'cover')
+      const opacity = (bg as any).imageOpacity
+      if (opacity != null && opacity < 1) {
+        // opacity<1 时用伪背景层无法实现，这里用 rgba 叠加近似（uniapp view 不支持 ::before）
+        return {
+          backgroundImage: `url(${bg.image})`,
+          backgroundPosition: 'center',
+          backgroundSize: bgSize,
+          backgroundRepeat: 'no-repeat',
+          opacity: opacity,
+        }
+      }
+      return {
+        backgroundImage: `url(${bg.image})`,
+        backgroundPosition: 'center',
+        backgroundSize: bgSize,
+        backgroundRepeat: 'no-repeat',
+      }
     }
     return { background: bg?.color1 || '#ffffff' }
   })
@@ -132,6 +151,39 @@ export function useCanvasRender(options: {
     if (el.type === 'image' && br) {
       style.borderRadius = `${br}rpx`
       style.overflow = 'hidden'
+    }
+
+    // 图片滤镜：brightness / contrast / saturate / blur / grayscale
+    // 优先读 element 级别，回退到 style 级别（admin 序列化器输出的字段）
+    if (el.type === 'image') {
+      const st: any = el.style || {}
+      const brightness = el.brightness ?? st.brightness
+      const contrast = el.contrast ?? st.contrast
+      const saturate = el.saturate ?? st.saturate
+      const blur = el.blur ?? st.blur
+      const grayscale = el.grayscale ?? st.grayscale
+      const filters: string[] = []
+      if (brightness != null && brightness !== 100) filters.push(`brightness(${brightness}%)`)
+      if (contrast != null && contrast !== 100) filters.push(`contrast(${contrast}%)`)
+      if (saturate != null && saturate !== 100) filters.push(`saturate(${saturate}%)`)
+      if (blur != null && blur > 0) filters.push(`blur(${blur}px)`)
+      if (grayscale != null && grayscale > 0) filters.push(`grayscale(${grayscale}%)`)
+      if (filters.length > 0) {
+        style.filter = filters.join(' ')
+      }
+      // 图片边框（admin 序列化器输出 borderColor/borderWidth）
+      const borderColor = el.borderColor ?? st.borderColor
+      const borderWidth = el.borderWidth ?? st.borderWidth
+      if (borderColor && borderColor !== 'transparent' && borderWidth) {
+        style.borderColor = borderColor
+        style.borderWidth = `${borderWidth}rpx`
+        style.borderStyle = 'solid'
+      }
+      // 图片遮罩 mask（仅支持 'circle'，其余回退矩形）
+      const mask = el.mask ?? st.mask
+      if (mask === 'circle') {
+        style.borderRadius = '50%'
+      }
     }
 
     return style
@@ -194,7 +246,77 @@ export function useCanvasRender(options: {
       result.textShadow = `${style.shadowOffsetX ?? 0}rpx ${style.shadowOffsetY ?? 0}rpx ${style.shadowBlur}rpx ${style.shadowColor || 'transparent'}`
     }
 
+    // 文字渐变填充（admin Fabric 支持，小程序通过 background-clip 还原）
+    const st: any = style
+    if (st.gradientFill && st.gradientStart && st.gradientEnd) {
+      const angle = st.gradientAngle ?? 90
+      result.backgroundImage = `linear-gradient(${angle}deg, ${st.gradientStart}, ${st.gradientEnd})`
+      result.WebkitBackgroundClip = 'text'
+      result.backgroundClip = 'text'
+      result.color = 'transparent'
+      result.WebkitTextFillColor = 'transparent'
+    }
+
+    // 长阴影特效（多层 textShadow 模拟）
+    if (st.longShadowEnabled && st.longShadowColor && st.longShadowColor !== 'transparent') {
+      const len = st.longShadowLength ?? 8
+      const angle = ((st.longShadowAngle ?? 45) * Math.PI) / 180
+      const dx = Math.round(Math.cos(angle))
+      const dy = Math.round(Math.sin(angle))
+      const shadows: string[] = []
+      for (let i = 1; i <= len; i++) {
+        shadows.push(`${i * dx}rpx ${i * dy}rpx 0 ${st.longShadowColor}`)
+      }
+      // 合并已有 textShadow
+      const existing = result.textShadow
+      result.textShadow = (existing ? existing + ', ' : '') + shadows.join(', ')
+    }
+
+    // 霓虹发光特效
+    if (st.neonGlowEnabled && st.neonGlowColor && st.neonGlowColor !== 'transparent') {
+      const size = st.neonGlowSize ?? 4
+      const blur = st.neonGlowBlur ?? 8
+      const glow = `0 0 ${size}rpx ${st.neonGlowColor}, 0 0 ${blur}rpx ${st.neonGlowColor}`
+      const existing = result.textShadow
+      result.textShadow = (existing ? existing + ', ' : '') + glow
+    }
+
     return result
+  }
+
+  function getShapeStyle(el: EditableElement): Record<string, string> {
+    const st: any = el.style || {}
+    const style: Record<string, string> = {
+      width: '100%',
+      height: '100%',
+    }
+    // 形状填充：渐变 > 纯色
+    if (st.gradientFill && st.gradientStart && st.gradientEnd) {
+      const angle = st.gradientAngle ?? 90
+      style.background = `linear-gradient(${angle}deg, ${st.gradientStart}, ${st.gradientEnd})`
+    } else if (st.color) {
+      style.background = st.color
+    } else {
+      style.background = st.background || '#cccccc'
+    }
+    // 边框
+    if (st.borderColor && st.borderColor !== 'transparent' && st.borderWidth) {
+      style.borderColor = st.borderColor
+      style.borderWidth = `${st.borderWidth}rpx`
+      style.borderStyle = 'solid'
+    }
+    // 圆角 / 圆形
+    const mask = el.mask ?? st.mask
+    if (mask === 'circle') {
+      style.borderRadius = '50%'
+    } else if (el.borderRadius ?? st.borderRadius) {
+      style.borderRadius = `${el.borderRadius ?? st.borderRadius}rpx`
+    }
+    // 透明度
+    if (el.opacity != null && el.opacity < 1) {
+      style.opacity = String(el.opacity)
+    }
+    return style
   }
 
   return {
@@ -210,5 +332,6 @@ export function useCanvasRender(options: {
     getFontFamily,
     detectTextDirection,
     getTextStyle,
+    getShapeStyle,
   }
 }

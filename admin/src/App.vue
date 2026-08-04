@@ -50,6 +50,7 @@
         <button class="tb-btn" :class="{ active: pageMode === 'single' }" @click="onPageModeChange('single')" title="单页模式">📄 单页</button>
         <button class="tb-btn" :class="{ active: pageMode === 'long' }" @click="onPageModeChange('long')" title="长页面模式">📃 长页面</button>
         <button class="tb-btn" :class="{ active: pageMode === 'landscape' }" @click="onPageModeChange('landscape')" title="横屏卡片模式">🃏 横屏</button>
+        <button class="tb-btn" :class="{ active: pageMode === 'flip' }" @click="onPageModeChange('flip')" title="翻页模式（多页请柬）">📖 翻页</button>
       </div>
 
       <div class="toolbar-right">
@@ -64,7 +65,7 @@
         <button class="tb-btn danger" @click="deleteSelected" title="删除选中 (Del)">🗑 删除</button>
         <span class="toolbar-divider"></span>
         <button class="tb-btn" @click="saveToServer" title="保存到服务器 (Ctrl+S)">💾 保存</button>
-        <button class="tb-btn publish-btn" @click="showPublishWizard = true" title="发布模板">🚀 发布</button>
+        <button class="tb-btn publish-btn" @click="onPublishClick" title="发布模板">🚀 发布</button>
         <button class="tb-btn" @click="onExportPNG" title="导出 PNG">📥 导出</button>
         <span class="toolbar-divider"></span>
         <button class="tb-btn" @click="onLogout" title="退出登录">🚪 退出</button>
@@ -341,7 +342,7 @@
           </div>
         </template>
         <!-- 横屏卡片模式 -->
-        <template v-else>
+        <template v-else-if="pageMode === 'landscape'">
           <div class="card-wrap" @wheel.prevent="onWheel">
             <div class="card-header">横屏卡片 · 宽 {{ canvasSize.width }} × 高 {{ canvasSize.height }}</div>
             <div class="card-viewport">
@@ -365,6 +366,65 @@
               </div>
             </div>
             <div class="card-footer">卡片居中展示 · 传统横版贺卡风格</div>
+          </div>
+        </template>
+        <!-- 翻页模式：单页画布 + 翻页切换 UI -->
+        <template v-else-if="pageMode === 'flip'">
+          <div class="canvas-scroll" @wheel.prevent="onWheel">
+            <!-- 翻页工具栏 -->
+            <div class="flip-toolbar">
+              <button class="flip-btn" :disabled="currentFlipPageIndex === 0" @click="prevFlipPage">‹ 上一页</button>
+              <span class="flip-page-info">
+                第 {{ currentFlipPageIndex + 1 }} / {{ flipPages.length }} 页 ·
+                {{ flipPages[currentFlipPageIndex]?.name || '' }}
+              </span>
+              <button class="flip-btn" :disabled="currentFlipPageIndex >= flipPages.length - 1" @click="nextFlipPage">下一页 ›</button>
+              <button class="flip-btn sm" @click="addFlipPage()">+ 新增页</button>
+              <button class="flip-btn sm" :disabled="flipPages.length <= 1" @click="removeFlipPage(currentFlipPageIndex)">删除当前页</button>
+              <button class="flip-btn sm" @click="duplicateFlipPage(currentFlipPageIndex)">复制当前页</button>
+            </div>
+            <!-- 页面缩略图列表 -->
+            <div class="flip-thumbnails">
+              <div
+                v-for="(p, idx) in flipPages"
+                :key="p.id"
+                class="flip-thumb"
+                :class="{ active: idx === currentFlipPageIndex }"
+                @click="selectFlipPage(idx)"
+              >
+                <span class="flip-thumb-idx">{{ idx + 1 }}</span>
+                <span class="flip-thumb-name">{{ p.name }}</span>
+              </div>
+            </div>
+            <div
+              class="phone-frame"
+              :style="{
+                width: (canvasSize.width * zoom) + 'px',
+                height: (canvasSize.height * zoom) + 'px',
+              }"
+            >
+              <div
+                class="phone-notch"
+                :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
+              ></div>
+              <canvas
+                ref="canvasRef"
+                class="fabric-canvas"
+                :style="{
+                  width: (canvasSize.width * zoom) + 'px',
+                  height: (canvasSize.height * zoom) + 'px',
+                }"
+                @dragover="onCanvasDragOver"
+                @drop="onCanvasDrop"
+              ></canvas>
+            </div>
+            <div class="flip-hint">翻页模式：每页独立设计，切换前会自动保存当前页内容</div>
+          </div>
+        </template>
+        <!-- 兜底 -->
+        <template v-else>
+          <div class="canvas-scroll" @wheel.prevent="onWheel">
+            <canvas ref="canvasRef" class="fabric-canvas"></canvas>
           </div>
         </template>
 
@@ -904,7 +964,7 @@
       :getCanvasEl="getCanvasEl"
       :getFabricCanvas="() => fabricCanvas.value"
       :getFlipPages="() => flipPages.value"
-      :saveCurrentFlipPage="() => {}"
+      :saveCurrentFlipPage="saveCurrentFlipPage"
       :pageMode="pageMode"
       :currentTemplateId="currentTemplateId || ''"
       @close="showPublishWizard = false"
@@ -944,6 +1004,7 @@ import { GRADIENT_CATEGORIES, GRADIENT_PRESETS, getGradientsByCategory } from '.
 import { COLOR_SCHEMES } from './constants/colorSchemes'
 import type { ColorScheme } from './constants/colorSchemes'
 import { serializeElement } from './utils/element-serializer'
+import { useFlipPages } from './composables/useFlipPages'
 import { shapeText, containsRtl } from './utils/bidi'
 
 /**
@@ -1301,6 +1362,35 @@ const {
   },
 })
 
+// ============ 翻页模式：接入 useFlipPages ============
+// 提供翻页切换、保存当前页、加载目标页、增删/排序页面等能力
+const {
+  flipPages,
+  currentFlipPageIndex,
+  initFlipPages,
+  selectFlipPage,
+  prevFlipPage,
+  nextFlipPage,
+  saveCurrentFlipPage,
+  loadCurrentFlipPage,
+  addFlipPage,
+  removeFlipPage,
+  moveFlipPageUp,
+  moveFlipPageDown,
+  moveFlipPage,
+  renameFlipPage,
+  duplicateFlipPage,
+} = useFlipPages({
+  pageMode,
+  background,
+  elements,
+  canvasSize,
+  setBackground,
+  clearCanvas,
+  addImage,
+  addText,
+})
+
 // 图层：按 zIndex 降序显示（最上层排第一）
 const layers = computed(() => [...elements.value].sort((a, b) => b.zIndex - a.zIndex))
 
@@ -1452,9 +1542,6 @@ const showPublishWizard = ref(false)
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
-// 翻页模式：从模板加载的翻页数据（在缺少独立翻页编辑器时暂存，发布时使用）
-const flipPages = ref<Array<{ id: string; name: string; pageType: string; background: any; elements: any[] }>>([])
-
 // 快速保存（saveToServer，status=draft）时的付费设置默认值。
 // 发布向导 PublishWizard 拥有独立的 form 来设置付费；此处保存为草稿，默认免费。
 const form = reactive({ isPaid: 0, isPremium: 0, price: 0 })
@@ -1539,16 +1626,19 @@ async function onLoadTemplate(id: string) {
         direction: el.style?.direction || 'auto',
         textDecoration: el.style?.textDecoration || 'none',
         src: el.type === 'image' ? (el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '') : '',
-        scale: 'cover',
-        mask: 'rect',
-        borderRadius: 0,
-        borderColor: 'transparent',
-        borderWidth: 0,
-        brightness: 100,
-        contrast: 0,
-        blur: 0,
-        grayscale: 0,
-        saturate: 100,
+        // 读取已序列化的图片属性，缺失时回退默认值
+        scale: el.style?.scale || 'cover',
+        mask: el.style?.mask || 'rect',
+        borderRadius: el.style?.borderRadius ?? 0,
+        borderColor: el.style?.borderColor || 'transparent',
+        borderWidth: el.style?.borderWidth ?? 0,
+        brightness: el.style?.brightness ?? 100,
+        contrast: el.style?.contrast ?? 100,
+        blur: el.style?.blur ?? 0,
+        grayscale: el.style?.grayscale ?? 0,
+        saturate: el.style?.saturate ?? 100,
+        imageOffsetX: el.style?.imageOffsetX ?? 0,
+        imageOffsetY: el.style?.imageOffsetY ?? 0,
         }
       }),
     }
@@ -1570,6 +1660,9 @@ async function onLoadTemplate(id: string) {
       if (pageMode.value !== 'flip') {
         pageMode.value = 'flip'
       }
+      // 加载第一页到画布
+      currentFlipPageIndex.value = 0
+      loadCurrentFlipPage()
     } else {
       flipPages.value = []
     }
@@ -1786,6 +1879,10 @@ async function generateRenderedImage(): Promise<string> {
 
 async function saveToServer() {
   try {
+    // flip 模式下，先保存当前页内容到 flipPages，确保发布的是最新数据
+    if (pageMode.value === 'flip') {
+      saveCurrentFlipPage()
+    }
     const draft = getDraft()
     const cSize = draft?.canvasSize || { width: 375, height: 667 }
     let name = currentTemplateName.value || ''
@@ -2059,8 +2156,20 @@ function onPresetChange() {
   }
 }
 
+// 点击发布按钮：flip 模式下先保存当前页，再打开发布向导
+function onPublishClick() {
+  if (pageMode.value === 'flip') {
+    saveCurrentFlipPage()
+  }
+  showPublishWizard.value = true
+}
+
 // 手动切换页面模式
 function onPageModeChange(mode: PageMode) {
+  // 离开 flip 模式前，保存当前页内容到 flipPages
+  if (pageMode.value === 'flip' && mode !== 'flip') {
+    saveCurrentFlipPage()
+  }
   pageMode.value = mode
   // 切换到单页时，如果当前是长页面或横屏，自动切回默认单页尺寸
   if (mode === 'single' && (canvasSize.value.height > 1000 || canvasSize.value.width > canvasSize.value.height)) {
@@ -2077,11 +2186,22 @@ function onPageModeChange(mode: PageMode) {
     sizeLabel.value = '横屏 750 × 500'
     setSize({ width: 750, height: 500 })
   }
+  // 切换到翻页模式时，使用标准请柬尺寸
+  if (mode === 'flip') {
+    sizeLabel.value = '翻页 375 × 667'
+    setSize({ width: 375, height: 667 })
+  }
 }
 
 // 页面模式切换时，画布 DOM 会重建（v-if），需销毁旧 Fabric 实例并在新 canvas 上重建
-watch(pageMode, async () => {
+watch(pageMode, async (mode, prevMode) => {
   await nextTick()
+  // 进入 flip 模式时初始化翻页数据（若无数据）
+  if (mode === 'flip' && flipPages.value.length === 0) {
+    initFlipPages()
+    currentFlipPageIndex.value = 0
+    loadCurrentFlipPage()
+  }
   const draft = getDraft()
   dispose()
   init()
@@ -2721,6 +2841,77 @@ onMounted(() => {
   background: #fff;
   display: block;
   /* 由外层容器设置实际尺寸 */
+}
+
+/* 翻页模式 UI */
+.flip-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 13px;
+}
+.flip-btn {
+  padding: 4px 12px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.flip-btn:hover:not(:disabled) { background: #e5e7eb; }
+.flip-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.flip-btn.sm { padding: 3px 8px; font-size: 11px; }
+.flip-page-info {
+  flex: 1;
+  color: #374151;
+  text-align: center;
+}
+.flip-thumbnails {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  background: #fafafa;
+  border-bottom: 1px solid #e5e7eb;
+}
+.flip-thumb {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 60px;
+  transition: all 0.15s;
+}
+.flip-thumb:hover { background: #f3f4f6; }
+.flip-thumb.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+.flip-thumb-idx {
+  font-size: 11px;
+  color: #6b7280;
+}
+.flip-thumb-name {
+  font-size: 11px;
+  color: #374151;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flip-hint {
+  padding: 6px 16px;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
 }
 
 .canvas-footer {

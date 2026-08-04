@@ -137,7 +137,7 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
       is_paid: templateData.is_paid || templateData.isPaid || 0,
       price: templateData.price || 0,
       is_premium: templateData.is_premium || templateData.isPremium || 0,
-      vipLevel: templateData.vipLevel || 'free',
+      vipLevel: templateData.vipLevel || (templateData.is_premium || templateData.isPremium ? 'pro' : (templateData.is_paid || templateData.isPaid ? 'personal' : 'free')),
       templateType: templateData.templateType || 'canvas',
       pages: rewriteLocalhostUrls(templateData.pages || []),
     }

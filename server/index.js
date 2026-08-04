@@ -222,6 +222,8 @@ async function initDatabase() {
   // 迁移：添加 templateType 和 pages 字段，支持翻页模式模板
   try { db.run("ALTER TABLE templates ADD COLUMN templateType TEXT DEFAULT 'canvas'") } catch (_) {}
   try { db.run("ALTER TABLE templates ADD COLUMN pages TEXT DEFAULT '[]'") } catch (_) {}
+  // 迁移：添加 vipLevel 字段，支持 VIP 等级（free/personal/pro）
+  try { db.run("ALTER TABLE templates ADD COLUMN vipLevel TEXT DEFAULT 'free'") } catch (_) {}
   // 迁移：为 orders 表添加 paid_at 字段
   try { db.run("ALTER TABLE orders ADD COLUMN paid_at TEXT") } catch (_) {}
   // 已有模板全部标记为 published
@@ -1263,8 +1265,8 @@ app.post('/api/templates', requireAdmin, (req, res) => {
     }
 
     db.run(`INSERT INTO templates
-      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, is_paid, price, is_premium, templateType, pages, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, is_paid, price, is_premium, templateType, pages, vipLevel, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       id,
       body.name,
       body.subtitle || '',
@@ -1286,6 +1288,7 @@ app.post('/api/templates', requireAdmin, (req, res) => {
       body.is_premium || body.isPremium || 0,
       body.templateType || 'canvas',
       JSON.stringify(body.pages || []),
+      body.vipLevel || 'free',
       new Date().toISOString(),
       new Date().toISOString(),
     ])
@@ -1337,7 +1340,7 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
     }
 
     // 移除统计字段（likes、pageCount），管理员编辑不应直接篡改统计数据
-    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium', 'templateType']
+    const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium', 'templateType', 'vipLevel']
     allowedFields.forEach(f => {
       if (body[f] !== undefined) {
         fields.push(`${f} = ?`)
@@ -1442,12 +1445,47 @@ function mapWorkRow(row, cols) {
 }
 
 // 获取当前用户作品列表
+// 合并查询主库 works + 海报库 poster_works，让两类作品都可见
 app.get('/api/works', requireAuth, (req, res) => {
   try {
     const phone = req.user?.phone
     if (!phone) return res.json({ success: true, data: [] })
     const result = db.exec("SELECT * FROM works WHERE phone = ? ORDER BY updated_at DESC", [phone])
     const works = result.length ? result[0].values.map(row => mapWorkRow(row, result[0].columns)) : []
+    // 合并海报作品（poster_works 表，按 user_id 过滤）
+    const _posterDb = getPosterDb()
+    if (_posterDb) {
+      try {
+        const posterResult = _posterDb.exec("SELECT * FROM poster_works WHERE user_id = ? ORDER BY created_at DESC", [phone])
+        if (posterResult.length && posterResult[0].values.length) {
+          const posterCols = posterResult[0].columns
+          const posterWorks = posterResult[0].values.map(row => {
+            const obj = {}
+            posterCols.forEach((col, i) => {
+              const key = col === 'user_id' ? 'phone' : col
+              let val = row[i]
+              if (col === 'content' || col === 'data') {
+                try { obj[col === 'content' ? 'data' : col] = JSON.parse(val) } catch { obj[col === 'content' ? 'data' : col] = val }
+              } else {
+                obj[key] = val
+              }
+            })
+            // 统一字段名，便于前端复用
+            obj.templateType = obj.template_type || obj.templateType || 'poster'
+            obj.cover = obj.cover_url || obj.cover || obj.poster_url || ''
+            obj._source = 'poster'
+            return obj
+          })
+          works.push(...posterWorks)
+          // 合并后按 updated_at / created_at 倒序
+          works.sort((a, b) => {
+            const ta = new Date(a.updated_at || a.updatedAt || a.created_at || 0).getTime()
+            const tb = new Date(b.updated_at || b.updatedAt || b.created_at || 0).getTime()
+            return tb - ta
+          })
+        }
+      } catch (_) { /* poster_works 表可能不存在，忽略 */ }
+    }
     res.json({ success: true, data: works })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })

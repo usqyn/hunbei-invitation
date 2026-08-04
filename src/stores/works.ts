@@ -276,7 +276,7 @@ export const useWorksStore = defineStore('works', () => {
     return favorites.value.some(f => f.id === id)
   }
 
-  function saveAsWork(work: Work) {
+  function saveAsWork(work: Work): Promise<void> {
     const existing = works.value.find(w => w.id === work.id)
     if (existing) {
       Object.assign(existing, work)
@@ -290,30 +290,29 @@ export const useWorksStore = defineStore('works', () => {
     // 关键操作使用同步持久化，避免防抖延迟导致数据丢失
     persist()
 
-    // 本地保存成功后，登录用户异步同步到服务器
+    // 本地保存成功后，登录用户同步到服务器；返回 Promise 供调用方 await
     const userStore = useUserStore()
-    if (userStore.isLoggedIn) {
-      const isNew = !existing
-      // 异步同步，不阻塞本地流程
-      ;(async () => {
-        try {
-          // 构建发送给 API 的 work 对象，确保包含服务端需要的字段
-          const apiWork = {
-            ...work,
-            cover: work.cover || work.image,
-            templateId: work.templateId || '',
-            templateType: work.templateType || 'canvas',
-          }
-          if (isNew) {
-            await saveWorkApi(apiWork)
-          } else {
-            await updateWorkApi(work.id, apiWork)
-          }
-        } catch (e) {
-          console.warn('sync work to server failed:', work.id, e)
+    if (!userStore.isLoggedIn) return Promise.resolve()
+
+    const isNew = !existing
+    return (async () => {
+      try {
+        // 构建发送给 API 的 work 对象，确保包含服务端需要的字段
+        const apiWork = {
+          ...work,
+          cover: work.cover || work.image,
+          templateId: work.templateId || '',
+          templateType: work.templateType || 'canvas',
         }
-      })()
-    }
+        if (isNew) {
+          await saveWorkApi(apiWork)
+        } else {
+          await updateWorkApi(work.id, apiWork)
+        }
+      } catch (e) {
+        console.warn('sync work to server failed:', work.id, e)
+      }
+    })()
   }
 
   /** 清空所有本地数据（登出时调用） */
