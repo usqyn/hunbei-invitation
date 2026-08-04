@@ -675,10 +675,17 @@ function getPageBgStyle(page: any): Record<string, string> {
     style.background = bg.color1
   } else if (bg.type === 'linear-gradient') {
     style.background = `linear-gradient(${bg.angle || 180}deg, ${bg.color1}, ${bg.color2 || bg.color1})`
-  } else if (bg.type === 'image' && bg.imageUrl) {
-    style.backgroundImage = `url(${bg.imageUrl})`
-    style.backgroundSize = bg.imageScale || 'cover'
-    style.backgroundPosition = 'center'
+  } else if (bg.type === 'image') {
+    // admin 标准字段是 image，历史数据可能存 imageUrl，两者都兼容
+    const bgUrl = bg.image || bg.imageUrl
+    if (bgUrl) {
+      style.backgroundImage = `url(${bgUrl})`
+      style.backgroundSize = bg.imageScale || 'cover'
+      style.backgroundPosition = 'center'
+      style.backgroundRepeat = 'no-repeat'
+    } else {
+      style.background = bg.color1 || '#ffffff'
+    }
   }
   return style
 }

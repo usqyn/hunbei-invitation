@@ -65,6 +65,19 @@ const getWork = async (ctx) => {
   return ok(work)
 }
 
+// GET /api/works/share/:id — 公开访问作品（被分享者通过 workId 查看内容，不校验 phone）
+// 仅返回渲染所需的只读字段，不暴露作者 phone
+const getSharedWork = async (ctx) => {
+  const res = await collection('works').where({ id: ctx.params.id }).limit(1).get()
+  if (!res.data || !res.data.length) return httpFail('作品不存在', 404)
+  const work = res.data[0]
+  await resolveCloudFields(work, ['cover'])
+  await resolveCloudUrlsDeep(work.data)
+  // 仅返回渲染所需字段，剔除 phone 等敏感信息
+  const { phone, ...safeWork } = work
+  return ok(safeWork)
+}
+
 // POST /api/works — 创建/覆盖作品（INSERT OR REPLACE 语义）
 const createWork = async (ctx) => {
   const auth = requireAuth(ctx.event)
@@ -251,6 +264,7 @@ const deleteWork = async (ctx) => {
 // ============ 路由表（recycle 必须在 :id 前） ============
 const routes = [
   ['GET', '/api/works/recycle', listRecycleBin],
+  ['GET', '/api/works/share/:id', getSharedWork],
   ['GET', '/api/works', listWorks],
   ['GET', '/api/works/:id', getWork],
   ['POST', '/api/works', createWork],

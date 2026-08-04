@@ -229,6 +229,11 @@ export function fetchWorkApi(id: string) {
   return request<any>({ url: `/api/works/${id}`, method: 'GET' })
 }
 
+// 公开访问作品（被分享者通过 workId 查看，不校验登录态）
+export function fetchSharedWorkApi(id: string) {
+  return request<any>({ url: `/api/works/share/${id}`, method: 'GET', hideLoading: true })
+}
+
 export function deleteWorkApi(id: string) {
   return request({ url: `/api/works/${id}`, method: 'DELETE' })
 }

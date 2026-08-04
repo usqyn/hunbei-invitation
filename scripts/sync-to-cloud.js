@@ -63,6 +63,9 @@ async function main() {
     try { pages = typeof t.pages === 'string' ? JSON.parse(t.pages) : (t.pages || []) } catch {}
     let canvasSize = {}
     try { canvasSize = typeof t.canvas_size === 'string' ? JSON.parse(t.canvas_size) : (t.canvas_size || { width: 375, height: 667 }) } catch {}
+    // background：SQLite 存的是 JSON 字符串，需 parse 成对象后递归改写 localhost URL
+    let background = {}
+    try { background = typeof t.background === 'string' ? JSON.parse(t.background) : (t.background || {}) } catch {}
 
     // 云数据库文档格式（字段名与 SQLite 一致）
     const cloudDoc = {
@@ -80,7 +83,7 @@ async function main() {
       pages,
       canvasSize,
       orientation: t.orientation || 'portrait',
-      background: t.background || '',
+      background,
       status: t.status || 'published',
       renderedImage: t.renderedImage || '',
       is_paid: t.is_paid || 0,

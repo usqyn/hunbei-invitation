@@ -117,12 +117,14 @@ const getTemplate = async (ctx) => {
   const res = await collection('templates').where(conditions).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('模板不存在', 404)
   const template = res.data[0]
-  // 解析顶层 cloud:// URL + 嵌套 JSON 中的 cloud:// URL（data/elements/pages）
+  // 解析顶层 cloud:// URL + 嵌套 JSON 中的 cloud:// URL（data/elements/pages/background）
   await resolveCloudFields(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   normalizeUploadPaths(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   await resolveCloudUrlsDeep(template.data)
   await resolveCloudUrlsDeep(template.elements)
   await resolveCloudUrlsDeep(template.pages)
+  // 顶层 background 也需递归解析 cloud://（小程序 CSS url() 不能加载 cloud:// 协议）
+  await resolveCloudUrlsDeep(template.background)
   // 兜底：嵌套对象中的 /uploads/ 相对路径转为完整 HTTPS URL
   normalizeUploadPathsDeep(template.background)
   normalizeUploadPathsDeep(template.data)

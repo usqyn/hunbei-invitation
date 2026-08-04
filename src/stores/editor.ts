@@ -325,19 +325,26 @@ export const useEditorStore = defineStore('editor', () => {
     flipPages.splice(0, flipPages.length)
     ;(template.pages || []).forEach(page => {
       const elements = (page.elements || []).map(el => mapTemplateElement(el))
+      // 背景：admin 存 image 字段，小程序 flip 渲染读 imageUrl（兼容历史数据两边都保留）
+      // 同时做 imageUrl → image 与 image → imageUrl 双向归一化，确保任一渲染端都能取到值
+      const rawBg = page.background || {}
+      let bgImage = rawBg.image ? resolveUrl(rawBg.image) : undefined
+      let bgImageUrl = rawBg.imageUrl ? resolveUrl(rawBg.imageUrl) : undefined
+      if (bgImage && !bgImageUrl) bgImageUrl = bgImage
+      if (bgImageUrl && !bgImage) bgImage = bgImageUrl
       flipPages.push({
         id: page.id,
         name: page.name,
         pageType: page.pageType,
         background: {
-          type: page.background?.type || 'solid',
-          color1: page.background?.color1 || '#ffffff',
-          color2: page.background?.color2,
-          angle: page.background?.angle,
-          image: page.background?.image ? resolveUrl(page.background.image) : undefined,
-          imageUrl: page.background?.imageUrl ? resolveUrl(page.background.imageUrl) : undefined,
-          imageScale: page.background?.imageScale,
-          imageOpacity: page.background?.imageOpacity,
+          type: rawBg.type || 'solid',
+          color1: rawBg.color1 || '#ffffff',
+          color2: rawBg.color2,
+          angle: rawBg.angle,
+          image: bgImage,
+          imageUrl: bgImageUrl,
+          imageScale: rawBg.imageScale,
+          imageOpacity: rawBg.imageOpacity,
         },
         elements,
       })

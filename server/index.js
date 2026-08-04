@@ -1508,6 +1508,21 @@ app.get('/api/works/:id', requireAuth, (req, res) => {
   }
 })
 
+// 公开访问作品：被分享者通过 workId 查看作品内容，不校验 phone
+// 仅返回渲染所需的只读字段（data/templateId/templateType/cover），不暴露作者 phone
+app.get('/api/works/share/:id', (req, res) => {
+  try {
+    const result = db.exec("SELECT id, template_id, template_type, title, data, music_id, cover, created_at, updated_at FROM works WHERE id = ?", [req.params.id])
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ success: false, error: '作品不存在' })
+    }
+    const obj = mapWorkRow(result[0].values[0], result[0].columns)
+    res.json({ success: true, data: obj })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
 // 创建作品
 app.post('/api/works', createLimiter, requireAuth, (req, res) => {
   try {

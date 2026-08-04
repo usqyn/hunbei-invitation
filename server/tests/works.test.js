@@ -162,3 +162,30 @@ describe('IDOR protection (user A vs user B)', () => {
     expect(getA.body.data.cover).toBe('http://example.com/private.png')
   })
 })
+
+describe('GET /api/works/share/:id (public access for shared recipients)', () => {
+  it('allows public access without token (for shared recipients)', async () => {
+    const create = await createWork(userA(), {
+      cover: 'http://example.com/share.png',
+      data: { elements: [{ type: 'text', text: '婚礼邀请' }] },
+    })
+    const id = create.body.data.id
+
+    // 无 token 也能访问（被分享者场景）
+    const res = await request(app).get('/api/works/share/' + id)
+    expect(res.status).toBe(200)
+    expect(res.body.success).toBe(true)
+    expect(res.body.data.id).toBe(id)
+    expect(res.body.data.cover).toBe('http://example.com/share.png')
+    // data 字段被正确反序列化为对象
+    expect(res.body.data.data).toBeDefined()
+    expect(Array.isArray(res.body.data.data.elements)).toBe(true)
+    // 不暴露作者 phone
+    expect(res.body.data.phone).toBeUndefined()
+  })
+
+  it('returns 404 for non-existent work', async () => {
+    const res = await request(app).get('/api/works/share/non-existent-id')
+    expect(res.status).toBe(404)
+  })
+})

@@ -57,12 +57,12 @@
                   :class="{ 'flip-text': el.type === 'text', 'flip-image': el.type === 'image' }"
                   :style="getFlipElementStyle(el)"
                 >
-                  <image
+                  <CloudImage
                     v-if="el.type === 'image'"
                     class="flip-image-el"
-                    lazy-load
                     :src="el.text"
                     mode="aspectFit"
+                    custom-class="flip-image-el"
                     @error="onImageError"
                   />
                   <text v-else-if="el.type === 'text'" class="flip-text-el" :style="getFlipTextStyle(el)">{{ formatBiDi(resolveText(el.text)) }}</text>
@@ -89,11 +89,11 @@
               <text class="section-date" :style="getTextStyle({ type: 'text', text: sec.text || '', style: sec.style } as any)">{{ sec.text || sec.placeholder || 'YYYY/MM/DD' }}</text>
             </template>
             <template v-else-if="sec.type === 'image'">
-              <image
+              <CloudImage
                 class="section-image"
-                lazy-load
                 :src="sec.image || PLACEHOLDER_IMAGE"
                 mode="aspectFit"
+                custom-class="section-image"
                 @error="onImageError"
               />
             </template>
@@ -134,12 +134,12 @@
             :class="{ 'preview-text': el.type === 'text', 'preview-image': el.type === 'image' }"
             :style="getCanvasElementStyle(el)"
           >
-            <image
+            <CloudImage
               v-if="el.type === 'image'"
               class="preview-image-el"
-              lazy-load
               :src="el.text"
               mode="scaleToFill"
+              custom-class="preview-image-el"
               @error="onImageError"
             />
             <text v-else-if="el.type === 'text'" class="preview-text-el" :style="getTextStyle(el)">{{ formatBiDi(resolveText(el.text)) }}</text>
@@ -155,12 +155,12 @@
             class="preview-section"
             :class="{ 'preview-image-section': el.type === 'image', 'preview-text-section': el.type === 'text' }"
           >
-            <image
+            <CloudImage
               v-if="el.type === 'image'"
               class="preview-section-image"
-              lazy-load
               :src="el.text"
               mode="aspectFill"
+              custom-class="preview-section-image"
               @error="onImageError"
             />
             <text
@@ -302,9 +302,10 @@ import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchWorkApi } from '@/api'
+import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchSharedWorkApi } from '@/api'
 import type { EditableElement, Work } from '@/types'
 import Watermark from '@/components/Watermark.vue'
+import CloudImage from '@/components/CloudImage.vue'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
@@ -450,7 +451,7 @@ function findWorkLocal(workId: string): Work | undefined {
 // 服务端兜底：被分享者打开链接时本地无数据，调接口拉取
 async function findWorkFromServer(workId: string): Promise<Work | undefined> {
   try {
-    const res = await fetchWorkApi(workId)
+    const res = await fetchSharedWorkApi(workId)
     const data = res as any
     if (data && data.id) {
       // 兼容 snake_case 字段
@@ -890,11 +891,17 @@ function getFlipPageBgStyle(page: any): Record<string, string> {
     style.background = `linear-gradient(${bg.angle || 180}deg, ${bg.color1}, ${bg.color2 || bg.color1})`
   } else if (bg.type === 'radial-gradient') {
     style.background = `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})`
-  } else if (bg.type === 'image' && bg.imageUrl) {
-    style.backgroundImage = `url(${bg.imageUrl})`
-    style.backgroundSize = bg.imageScale || 'cover'
-    style.backgroundPosition = 'center'
-    style.backgroundRepeat = 'no-repeat'
+  } else if (bg.type === 'image') {
+    // admin 标准字段是 image，历史数据可能存 imageUrl，两者都兼容
+    const bgUrl = bg.image || bg.imageUrl
+    if (bgUrl) {
+      style.backgroundImage = `url(${bgUrl})`
+      style.backgroundSize = bg.imageScale || 'cover'
+      style.backgroundPosition = 'center'
+      style.backgroundRepeat = 'no-repeat'
+    } else {
+      style.background = bg.color1 || '#ffffff'
+    }
   }
   return style
 }

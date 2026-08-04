@@ -17,6 +17,10 @@ interface BackgroundConfig {
   color2?: string
   angle?: number
   image?: string
+  // 历史字段：admin 早期版本存 imageUrl，渲染时优先用 image
+  imageUrl?: string
+  imageScale?: string
+  imageOpacity?: number
 }
 
 interface CanvasSize {
@@ -79,18 +83,20 @@ export function useCanvasRender(options: {
       return { background: `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})` }
     }
     if (bg.type === 'image') {
+      // 兼容 admin 标准字段 image 与历史字段 imageUrl
+      const bgImage = bg.image || bg.imageUrl
       // 背景图 URL 为空时回退到纯色背景，避免渲染空 url()
-      if (!bg.image) {
+      if (!bgImage) {
         return { background: bg.color1 || '#ffffff' }
       }
       // 应用背景图缩放（imageScale: 'cover' | 'contain' | '100%'）与透明度
-      const scale = (bg as any).imageScale
+      const scale = bg.imageScale
       const bgSize = scale === 'contain' ? 'contain' : (scale === '100%' ? '100% 100%' : 'cover')
-      const opacity = (bg as any).imageOpacity
+      const opacity = bg.imageOpacity
       if (opacity != null && opacity < 1) {
         // opacity<1 时用伪背景层无法实现，这里用 rgba 叠加近似（uniapp view 不支持 ::before）
         return {
-          backgroundImage: `url(${bg.image})`,
+          backgroundImage: `url(${bgImage})`,
           backgroundPosition: 'center',
           backgroundSize: bgSize,
           backgroundRepeat: 'no-repeat',
@@ -98,7 +104,7 @@ export function useCanvasRender(options: {
         }
       }
       return {
-        backgroundImage: `url(${bg.image})`,
+        backgroundImage: `url(${bgImage})`,
         backgroundPosition: 'center',
         backgroundSize: bgSize,
         backgroundRepeat: 'no-repeat',
