@@ -819,7 +819,8 @@ export const useEditorStore = defineStore('editor', () => {
       syncFieldToAllModes(el.dataKey, imageUrl)
     }
     pushHistory()
-    selectedElement.value = null
+    // 保留选中状态，避免换图后用户需重新点击图片才能继续调整
+    // （与 FlipEditor.applySelectedImage 行为对齐）
   }
 
   function setCurrentWorkId(id: string | null) {

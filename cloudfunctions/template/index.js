@@ -225,10 +225,15 @@ const listProducts = async (ctx) => {
       collection('templates').where(conditions).count(),
       q.skip(skip).limit(limit).get(),
     ])
+    // 与 listTemplates 一致：解析 cloud:// + 补全相对路径
+    await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+    normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
     return paginateResponse(res.data || [], page, limit, countRes.total || 0)
   }
   // 无分页时默认只取 20 条，避免一次性拉 1000 条导致 loading 过长
   const res = await q.limit(20).get()
+  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   return Object.assign(ok(res.data || []), { total: (res.data || []).length })
 }
 
@@ -237,6 +242,8 @@ const listRecommendProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
   const res = await collection('templates').where(conditions).orderBy('likes', 'desc').limit(10).get()
+  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   return ok(res.data || [])
 }
 
@@ -244,7 +251,10 @@ const listRecommendProducts = async (ctx) => {
 const getProduct = async (ctx) => {
   const res = await collection('templates').where({ id: ctx.params.id, status: _.neq('deleted') }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('商品不存在', 404)
-  return ok(res.data[0])
+  const template = res.data[0]
+  await resolveCloudFields(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  normalizeUploadPaths(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  return ok(template)
 }
 
 // ============ 路由表（顺序敏感：similar/recommend 必须在 :id 前） ============

@@ -168,6 +168,12 @@ export interface PageSection {
   rotation?: number
   opacity?: number
   borderRadius?: number
+  // 图片滤镜（与 EditableElement 对齐，让 page 模式图片 section 也支持滤镜调整）
+  brightness?: number
+  contrast?: number
+  saturate?: number
+  blur?: number
+  grayscale?: number
 }
 
 // 翻页模式 - 页面类型

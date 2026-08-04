@@ -413,6 +413,65 @@ describe('serializeElement', () => {
       expect(result.style?.font).toBe('KazakhSoftAsilyaQaniq')
     })
 
+    it('含哈语占位符 {kzGroomName} 的文本应预标记为 RTL（占位符本身是 ASCII，但替换后是哈语）', () => {
+      const kzEl = {
+        id: 't-kz-placeholder',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        content: '{kzGroomName}',
+        direction: 'auto',
+        fontFamily: '思源宋体',
+      }
+      const result = serializeElement(kzEl)!
+      // 应检测为 RTL
+      expect(result.style?.direction).toBe('rtl')
+      // 应强制使用 KazakhSoftAsilya 字体（占位符替换后是哈语）
+      expect(result.style?.font).toBe('KazakhSoftAsilya')
+      // 应右对齐
+      expect(result.style?.textAlign).toBe('right')
+      // 字间距应为 0
+      expect(result.style?.spacing).toBe(0)
+    })
+
+    it('含哈语占位符 {kzDate} 的文本应预标记为 RTL', () => {
+      const kzDateEl = {
+        id: 't-kz-date',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        content: 'توي كۇنى: {kzDate}',
+        direction: 'auto',
+      }
+      const result = serializeElement(kzDateEl)!
+      // {kzDate} 占位符 + 已有哈语字符 → RTL
+      expect(result.style?.direction).toBe('rtl')
+      expect(result.style?.font).toBe('KazakhSoftAsilya')
+    })
+
+    it('纯 ASCII 占位符 {kzAddress} 也应预标记为 RTL', () => {
+      // 即使 content 全是 ASCII（占位符本身），也应预标记 RTL
+      // 因为替换后会变成哈语地址
+      const kzAddrEl = {
+        id: 't-kz-addr',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        content: '{kzAddress}',
+        direction: 'auto',
+        fontFamily: 'Arial',
+      }
+      const result = serializeElement(kzAddrEl)!
+      expect(result.style?.direction).toBe('rtl')
+      expect(result.style?.font).toBe('KazakhSoftAsilya')
+    })
+
     it('坐标与尺寸应四舍五入到两位小数', () => {
       // topLeftX = 100.123 - 33.333... / 2... 用奇数尺寸验证取整
       const el = {

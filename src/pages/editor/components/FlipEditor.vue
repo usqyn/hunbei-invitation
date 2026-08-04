@@ -76,6 +76,25 @@
               class="flip-text"
               :style="getTextStyle(el)"
             >{{ formatBiDi(resolveText(el.text)) }}</text>
+            <!-- 缩放手柄：选中后显示，仅在画布上直接缩放元素尺寸 -->
+            <view
+              v-if="activeElementIndex === eIdx && el.editable !== false"
+              class="resize-handle resize-handle--active"
+              @touchstart.stop="onResizeHandleTouchStart(el, $event)"
+              @touchmove.stop.prevent="onResizeHandleTouchMove"
+              @touchend.stop="onResizeHandleTouchEnd"
+            ></view>
+            <!-- 旋转手柄：选中后显示，单指旋转元素 -->
+            <view
+              v-if="activeElementIndex === eIdx && el.editable !== false"
+              class="rotate-handle rotate-handle--active"
+              @touchstart.stop="onRotateHandleTouchStart(el, $event)"
+              @touchmove.stop.prevent="onRotateHandleTouchMove"
+              @touchend.stop="onRotateHandleTouchEnd"
+            >
+              <view class="rotate-handle-line"></view>
+              <view class="rotate-handle-dot">↻</view>
+            </view>
           </view>
         </view>
       </swiper-item>
@@ -210,10 +229,13 @@ import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useWorksStore } from '@/stores/works'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { usePinchGesture } from '@/composables/usePinchGesture'
+import { useFrameThrottle } from '@/composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { formatBiDi } from '@/utils/font-loader'
+import { buildImageCssFilterFromElement } from '@/utils/imageFilter'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
@@ -316,6 +338,13 @@ function onElementTouchStart(el: any, idx: number, e: any) {
   activeElementIndex.value = idx
   selectedElement.value = el
   haptic('light')
+  // 双指落下：进入 pinch 模式（缩放 + 旋转）
+  if (e.touches && e.touches.length === 2) {
+    flipPinchState.startImageScale = el.imageScale ?? 1
+    flipPinchState.startRotation = el.rotation ?? 0
+    flipPinch.onTouchStart(e)
+    return
+  }
   const touch = e.touches ? e.touches[0] : e
   flipDragState.value = {
     elementIdx: idx,
@@ -327,7 +356,10 @@ function onElementTouchStart(el: any, idx: number, e: any) {
   }
 }
 
-function onElementTouchMove(e: any) {
+// 单指拖拽：原始逻辑用 useFrameThrottle 包一层做 16ms 节流（约 60fps）
+// 双指手势不走节流（频率本来不高，节流反而会有卡顿感）
+// touchend 时 flush 避免最后一帧丢失
+const onElementDragMoveThrottled = useFrameThrottle((e: any) => {
   const ds = flipDragState.value
   if (!ds) return
   const touch = e.touches ? e.touches[0] : e
@@ -358,9 +390,26 @@ function onElementTouchMove(e: any) {
   newY = Math.max(0, Math.min(cs.height - elH, newY))
   el.x = newX
   el.y = newY
+})
+
+function onElementTouchMove(e: any) {
+  // 双指手势优先（不节流）
+  if (flipPinch.isActive() || (e.touches && e.touches.length === 2)) {
+    flipPinch.onTouchMove(e)
+    return
+  }
+  // 单指拖拽走节流
+  onElementDragMoveThrottled(e)
 }
 
-function onElementTouchEnd() {
+function onElementTouchEnd(e?: any) {
+  // 双指手势结束
+  if (flipPinch.isActive()) {
+    flipPinch.onTouchEnd(e || {})
+    return
+  }
+  // 单指拖拽结束：强制刷新最后一帧，避免丢帧
+  onElementDragMoveThrottled.flush()
   const ds = flipDragState.value
   if (ds && ds.moved) {
     lastFlipDragMoved = true
@@ -369,6 +418,189 @@ function onElementTouchEnd() {
   }
   flipDragging.value = false
   flipDragState.value = null
+}
+
+// ===== 双指缩放 + 旋转手势 =====
+const flipPinchState = { startImageScale: 1, startRotation: 0 }
+const flipPinch = usePinchGesture({
+  onStart: () => {
+    flipDragging.value = true
+  },
+  onScale: ({ ratio, angleDelta }) => {
+    const idx = activeElementIndex.value
+    if (idx == null || idx < 0) return
+    const page = currentPage.value
+    if (!page) return
+    const el = page.elements[idx]
+    if (!el) return
+    let newScale = flipPinchState.startImageScale * ratio
+    newScale = Math.max(0.2, Math.min(5, newScale))
+    el.imageScale = newScale
+    let newRotation = (flipPinchState.startRotation + angleDelta) % 360
+    if (newRotation > 180) newRotation -= 360
+    if (newRotation < -180) newRotation += 360
+    el.rotation = newRotation
+  },
+  onEnd: () => {
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+    flipDragging.value = false
+    flipDragState.value = null
+  },
+})
+
+// ===== 缩放手柄：在画布上直接拖动调整元素尺寸 =====
+interface FlipResizeState {
+  elementIdx: number
+  startTouchX: number
+  startTouchY: number
+  startX: number
+  startY: number
+  startWidth: number
+  startHeight: number
+  moved: boolean
+}
+const flipResizeState = ref<FlipResizeState | null>(null)
+const FLIP_RESIZE_THRESHOLD = 5
+
+function onResizeHandleTouchStart(el: any, e: any) {
+  const idx = activeElementIndex.value
+  if (idx === null || idx < 0) return
+  const touch = e.touches ? e.touches[0] : e
+  flipResizeState.value = {
+    elementIdx: idx,
+    startTouchX: touch.clientX,
+    startTouchY: touch.clientY,
+    startX: el.x || 0,
+    startY: el.y || 0,
+    startWidth: el.width || 0,
+    startHeight: el.height || 0,
+    moved: false,
+  }
+}
+
+function onResizeHandleTouchMove(e: any) {
+  const ds = flipResizeState.value
+  if (!ds) return
+  const page = currentPage.value
+  if (!page) return
+  const el = page.elements[ds.elementIdx]
+  if (!el) return
+  const touch = e.touches ? e.touches[0] : e
+  const dx = touch.clientX - ds.startTouchX
+  const dy = touch.clientY - ds.startTouchY
+  if (!ds.moved && Math.abs(dx) + Math.abs(dy) < FLIP_RESIZE_THRESHOLD) return
+  if (!ds.moved) {
+    ds.moved = true
+    flipDragging.value = true
+    haptic('medium')
+  }
+  const cs = editorStore.canvasSize
+  // 屏幕像素位移转画布坐标
+  const screenW = _screenInfo.width || 375
+  const screenW2Canvas = cs.width / screenW
+  // 用对角线位移避免负数域丢量（与 canvas 模式一致）
+  const deltaCanvas = Math.hypot(dx, dy) * Math.sign(dx + dy || 1) * screenW2Canvas
+  const aspect = ds.startHeight && ds.startWidth ? ds.startHeight / ds.startWidth : 1
+  const newWidth = Math.max(20, ds.startWidth + deltaCanvas)
+  const newHeight = Math.max(20, newWidth * aspect)
+  // 边界裁剪：不能超出画布
+  const clampedWidth = Math.min(newWidth, cs.width - (el.x || 0))
+  const clampedHeight = Math.min(clampedWidth * aspect, cs.height - (el.y || 0))
+  el.width = clampedWidth
+  el.height = clampedHeight
+}
+
+function onResizeHandleTouchEnd() {
+  const ds = flipResizeState.value
+  if (ds && ds.moved) {
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+  }
+  flipDragging.value = false
+  flipResizeState.value = null
+}
+
+// ===== 旋转手柄：单指旋转元素（参考 image-cropper / AlloyFinger 的 atan2 旋转算法） =====
+interface FlipRotateState {
+  elementIdx: number
+  startAngle: number
+  startRotation: number
+  pageRect: { left: number; top: number; width: number; height: number }
+  moved: boolean
+}
+const flipRotateState = ref<FlipRotateState | null>(null)
+const FLIP_ROTATE_THRESHOLD = 3
+
+function getFlipElementCenterScreen(el: any, pageRect: { left: number; top: number; width: number; height: number }): { x: number; y: number } {
+  const cs = editorStore.canvasSize
+  return {
+    x: pageRect.left + (el.x + (el.width || 0) / 2) / cs.width * pageRect.width,
+    y: pageRect.top + (el.y + (el.height || 0) / 2) / cs.height * pageRect.height,
+  }
+}
+
+function onRotateHandleTouchStart(el: any, e: any) {
+  const idx = activeElementIndex.value
+  if (idx === null || idx < 0) return
+  const touch = e.touches ? e.touches[0] : e
+  // 查询 flip-page 的屏幕位置（用于计算元素中心点）
+  const query = uni.createSelectorQuery()
+  query.select('.flip-page').boundingClientRect((rect: any) => {
+    const pageRect = rect && rect.width > 0
+      ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+      : { left: 0, top: 0, width: _screenInfo.width || 375, height: _screenInfo.height || 667 }
+    const center = getFlipElementCenterScreen(el, pageRect)
+    const startAngle = Math.atan2(touch.clientY - center.y, touch.clientX - center.x) * 180 / Math.PI
+    flipRotateState.value = {
+      elementIdx: idx,
+      startAngle,
+      startRotation: el.rotation ?? 0,
+      pageRect,
+      moved: false,
+    }
+  }).exec()
+}
+
+const onRotateHandleTouchMoveThrottled = useFrameThrottle((e: any) => {
+  const rs = flipRotateState.value
+  if (!rs) return
+  const page = currentPage.value
+  if (!page) return
+  const el = page.elements[rs.elementIdx]
+  if (!el) return
+  const touch = e.touches ? e.touches[0] : e
+  const center = getFlipElementCenterScreen(el, rs.pageRect)
+  const currentAngle = Math.atan2(touch.clientY - center.y, touch.clientX - center.x) * 180 / Math.PI
+  let delta = currentAngle - rs.startAngle
+  while (delta > 180) delta -= 360
+  while (delta < -180) delta += 360
+  if (!rs.moved && Math.abs(delta) < FLIP_ROTATE_THRESHOLD) return
+  if (!rs.moved) {
+    rs.moved = true
+    flipDragging.value = true
+    haptic('medium')
+  }
+  let newRotation = rs.startRotation + delta
+  newRotation = newRotation % 360
+  if (newRotation > 180) newRotation -= 360
+  if (newRotation < -180) newRotation += 360
+  el.rotation = newRotation
+})
+
+function onRotateHandleTouchMove(e: any) {
+  onRotateHandleTouchMoveThrottled(e)
+}
+
+function onRotateHandleTouchEnd() {
+  onRotateHandleTouchMoveThrottled.flush()
+  const rs = flipRotateState.value
+  if (rs && rs.moved) {
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+  }
+  flipDragging.value = false
+  flipRotateState.value = null
 }
 
 function onElementLongPress(el: any, idx: number) {
@@ -506,10 +738,17 @@ function onImagePropPreview(field: string, value: number) {
 // 图片属性面板重置回调
 function onImagePropReset() {
   if (!selectedElement.value) return
-  selectedElement.value.imageScale = 1
-  selectedElement.value.rotation = 0
-  selectedElement.value.opacity = 1
-  selectedElement.value.borderRadius = 0
+  const el = selectedElement.value as any
+  el.imageScale = 1
+  el.rotation = 0
+  el.opacity = 1
+  el.borderRadius = 0
+  // 同时重置滤镜字段（与 ImagePropertyPanel 的 FILTER_DEFAULTS 对齐）
+  el.brightness = 100
+  el.contrast = 0
+  el.saturate = 100
+  el.blur = 0
+  el.grayscale = 0
   editorStore.pushHistory()
   hasUnsavedChanges.value = true
 }
@@ -711,6 +950,14 @@ function getElementStyle(el: any): Record<string, string> {
   if (el.type === 'image' && br) {
     style.borderRadius = `${br}rpx`
     style.overflow = 'hidden'
+  }
+  // 图片滤镜：与 useCanvasRender/preview 一致（CSS filter，真机静默降级）
+  if (el.type === 'image') {
+    const cssFilter = buildImageCssFilterFromElement(el)
+    if (cssFilter) {
+      style.filter = cssFilter
+      style.WebkitFilter = cssFilter
+    }
   }
   return style
 }
@@ -1176,6 +1423,66 @@ onUnmounted(() => {
 .flip-element--dragging {
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.2);
   opacity: 0.9;
+}
+
+/* 缩放手柄：右下角圆形 */
+.resize-handle {
+  position: absolute;
+  right: -16rpx;
+  bottom: -16rpx;
+  width: 32rpx;
+  height: 32rpx;
+  background: #fff;
+  border: 4rpx solid #e84a6e;
+  border-radius: 50%;
+  z-index: 30;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+}
+
+.resize-handle--active {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border: 4rpx solid #fff;
+  box-shadow: 0 0 0 2rpx #e84a6e, 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
+}
+
+/* 旋转手柄 */
+.rotate-handle {
+  position: absolute;
+  left: 50%;
+  top: -64rpx;
+  margin-left: -24rpx;
+  width: 48rpx;
+  height: 48rpx;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rotate-handle-line {
+  position: absolute;
+  left: 50%;
+  bottom: -20rpx;
+  width: 4rpx;
+  height: 20rpx;
+  margin-left: -2rpx;
+  background: #e84a6e;
+}
+
+.rotate-handle-dot {
+  width: 48rpx;
+  height: 48rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border: 4rpx solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2rpx #e84a6e, 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: bold;
+  box-sizing: border-box;
 }
 
 .flip-image {

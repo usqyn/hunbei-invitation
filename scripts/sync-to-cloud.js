@@ -12,6 +12,39 @@ const tcb = require('@cloudbase/node-sdk')
 const ENV_ID = 'cloud1-d4gyvmo1d9a1e148a'
 const DB_PATH = path.join(__dirname, '..', 'server', 'data.db')
 
+// 生产域名：与 server/cloudSync.js 保持一致
+const ASSETS_BASE = process.env.ASSETS_BASE || 'https://api.TOYtamaxia.com'
+
+/**
+ * 将 localhost/127.0.0.1 的 URL 替换为 HTTPS 生产域名
+ * 与 server/cloudSync.js 的 rewriteLocalhostUrl 行为一致
+ */
+function rewriteLocalhostUrl(url) {
+  if (!url || typeof url !== 'string') return url || ''
+  return url
+    .replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+\//g, ASSETS_BASE.endsWith('/') ? ASSETS_BASE : ASSETS_BASE + '/')
+}
+
+/**
+ * 递归替换对象/数组中的所有字符串值中的 localhost URL
+ * 用于 data / elements / pages / background 等嵌套结构
+ */
+function rewriteLocalhostUrls(obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(rewriteLocalhostUrls)
+  const result = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === 'string') {
+      result[key] = rewriteLocalhostUrl(value)
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = rewriteLocalhostUrls(value)
+    } else {
+      result[key] = value
+    }
+  }
+  return result
+}
+
 // 初始化云开发（使用 API Key 鉴权）
 const API_KEY = process.env.CLOUDBASE_APIKEY || 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjlkMWRjMzFlLWI0ZDAtNDQ4Yi1hNzZmLWIwY2M2M2Q4MTQ5OCJ9.eyJhdWQiOiJjbG91ZDEtZDRneXZtbzFkOWExZTE0OGEiLCJleHAiOjI1MzQwMjMwMDc5OSwiaWF0IjoxNzg1ODQ0ODQ5LCJhdF9oYXNoIjoibTBKZ2dGV2xTUXkzclJwMmliTUV5QSIsInByb2plY3RfaWQiOiJjbG91ZDEtZDRneXZtbzFkOWExZTE0OGEiLCJtZXRhIjp7InBsYXRmb3JtIjoiQXBpS2V5In0sImFkbWluaXN0cmF0b3JfaWQiOiIyMDgxNzAwNjQ4Mjc4NTk3NjM0IiwidXNlcl90eXBlIjoiIiwiY2xpZW50X3R5cGUiOiJjbGllbnRfc2VydmVyIiwiaXNfc3lzdGVtX2FkbWluIjp0cnVlfQ.Y5TYJuE3uqS2GIYJLxNm6-BobPE9Nycj9P7du0kICs0HF9ApclF4qNwh2Shi-j-hC9we-RD5uH99twQfbKLqgnrOxDmgjPm6IuollzgOgI1T3wxw0xyZVczYOLZFbp-Yjpg00G8gfQZQoEUXzNA0Sedv4qCQagegc1XcRXIJ20JgtlEoeNY1_QUw4rnhfv2Vi-BuuEyO44e3BMq6UIeTaK1FsFZ8kcBFLmccyKeUj_8jKbIXbtui-0omZ3-k453mhcg_KfW4JaxwCm0Fe2Hi20J6LZXZlTtEJGKJJBJjKdLg1cvYYxC8YyrPmIHDDAI-7TLuk01eqIZnLQdFguZUiw'
 const app = tcb.init({
@@ -68,24 +101,25 @@ async function main() {
     try { background = typeof t.background === 'string' ? JSON.parse(t.background) : (t.background || {}) } catch {}
 
     // 云数据库文档格式（字段名与 SQLite 一致）
+    // 所有可能含 localhost URL 的字段都做改写，与 server/cloudSync.js 行为一致
     const cloudDoc = {
       id: t.id,
       name: t.name || '',
       subtitle: t.subtitle || '',
       category: t.category || '',
-      cover: t.cover || '',
+      cover: rewriteLocalhostUrl(t.cover || ''),
       primaryColor: t.primaryColor || '#e84a6e',
       likes: t.likes || 0,
       pageCount: t.pageCount || 10,
-      data,
-      elements,
+      data: rewriteLocalhostUrls(data),
+      elements: rewriteLocalhostUrls(elements),
       tags,
-      pages,
+      pages: rewriteLocalhostUrls(pages),
       canvasSize,
       orientation: t.orientation || 'portrait',
-      background,
+      background: rewriteLocalhostUrls(background),
       status: t.status || 'published',
-      renderedImage: t.renderedImage || '',
+      renderedImage: rewriteLocalhostUrl(t.renderedImage || ''),
       is_paid: t.is_paid || 0,
       price: t.price || 0,
       is_premium: t.is_premium || 0,

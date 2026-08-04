@@ -25,7 +25,7 @@ const {
   getUser, requireAuth, requireAdmin, isRequestFromAdmin,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
-  uploadToCloud, getCloudUrl, getCloudUrls, resolveCloudFields, createRouter,
+  uploadToCloud, getCloudUrl, getCloudUrls, resolveCloudFields, resolveCloudUrlsDeep, normalizeUploadPaths, normalizeUploadPathsDeep, createRouter,
 } = require('./_shared')
 
 // ============ 贴纸资源集合（云存储路径前缀） ============
@@ -61,6 +61,8 @@ const listPosterTemplates = async (ctx) => {
   const templates = res.data || []
   // 把 cover_url/background_url 的 cloud:// fileID 转为临时 https URL
   await resolveCloudFields(templates, ['cover_url', 'background_url'])
+  // 与 listPosterWorks/listRecycleBin 一致：把 /uploads/ 相对路径补全为完整 HTTPS URL
+  normalizeUploadPaths(templates, ['cover_url', 'background_url'])
   return {
     success: true,
     data: templates,
@@ -82,10 +84,12 @@ const listHotPosterTemplates = async (ctx) => {
     .get()
   const templates = res.data || []
   await resolveCloudFields(templates, ['cover_url', 'background_url'])
+  normalizeUploadPaths(templates, ['cover_url', 'background_url'])
   return ok(templates)
 }
 
 // GET /api/poster/templates/:id — 模板详情
+// config.editableAreas[].defaultImage 可能是 cloud:// URL，需递归解析
 const getPosterTemplate = async (ctx) => {
   const res = await collection('poster_templates').where({ id: ctx.params.id }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('模板不存在', 404)
@@ -93,6 +97,9 @@ const getPosterTemplate = async (ctx) => {
   // 非管理员不能查看已下架模板
   if (!template.is_active && !isRequestFromAdmin(ctx.event)) return httpFail('模板不存在', 404)
   await resolveCloudFields(template, ['cover_url', 'background_url'])
+  // 递归解析 config.editableAreas[].defaultImage 等内嵌 cloud:// URL
+  await resolveCloudUrlsDeep(template.config)
+  normalizeUploadPathsDeep(template.config)
   return ok(template)
 }
 
@@ -100,6 +107,7 @@ const getPosterTemplate = async (ctx) => {
 
 // GET /api/poster/works — 用户作品列表（分页）
 // poster_works 中 cover_url/poster_url 存的是 cloud:// fileID，需批量转为 https 临时 URL
+// content.editableAreas[].defaultImage / _src 也可能是 cloud://，逐条递归解析
 const listPosterWorks = async (ctx) => {
   const user = getUser(ctx.event)
   if (!user || !user.phone) return httpFail('请先登录', 401)
@@ -118,12 +126,24 @@ const listPosterWorks = async (ctx) => {
   }
   // 把 cover_url/poster_url 的 cloud:// fileID 转为临时 https URL
   await resolveCloudFields(data, ['cover_url', 'poster_url'])
+  // 与 listPosterTemplates 一致：把 /uploads/ 相对路径补全为完整 HTTPS URL
+  normalizeUploadPaths(data, ['cover_url', 'poster_url'])
+  // 逐条递归解析 content 内的 cloud:// URL（贴纸 src、用户上传图）
+  for (const w of data) {
+    if (w && w.content) {
+      await resolveCloudUrlsDeep(w.content)
+      normalizeUploadPathsDeep(w.content)
+    }
+  }
   if (hasPaging) return paginateResponse(data, page, limit, total)
   return Object.assign(ok(data), { total: data.length })
 }
 
 // GET /api/poster/works/recycle — 回收站列表
 // 必须注册在 /works/:id 之前
+// 回收站记录结构为 { user_id, work_id, work_data: { cover_url, poster_url, content, ... }, deleted_at }
+// 展平 work_data 后输出 { id, title, image, cover_url, poster_url, deletedAt, source }，
+// 与 work/index.js listRecycleBin 风格一致，让小程序端可统一渲染
 const listPosterRecycleBin = async (ctx) => {
   const user = getUser(ctx.event)
   if (!user || !user.phone) return httpFail('请先登录', 401)
@@ -140,13 +160,29 @@ const listPosterRecycleBin = async (ctx) => {
     const res = await q.limit(1000).get()
     data = res.data || []
   }
-  // 回收站 work_data 内可能含 cloud:// URL，一并解析
-  await resolveCloudFields(data, ['poster_url', 'cover_url'])
-  if (hasPaging) return paginateResponse(data, page, limit, total)
-  return ok(data)
+  // 展平 work_data 到顶层，便于小程序列表直接使用
+  const items = data.map(it => {
+    let wd = it.work_data || {}
+    if (typeof wd === 'string') { try { wd = JSON.parse(wd) } catch (_) {} }
+    return {
+      id: it.work_id || wd.id || '',
+      title: wd.template_name || wd.title || '',
+      image: wd.cover_url || wd.poster_url || '',
+      cover_url: wd.cover_url || '',
+      poster_url: wd.poster_url || '',
+      deletedAt: it.deleted_at || '',
+      source: 'poster',
+    }
+  })
+  // 解析 image/cover_url/poster_url 中的 cloud:// 协议与相对路径
+  await resolveCloudFields(items, ['image', 'cover_url', 'poster_url'])
+  normalizeUploadPaths(items, ['image', 'cover_url', 'poster_url'])
+  if (hasPaging) return paginateResponse(items, page, limit, total)
+  return ok(items)
 }
 
 // GET /api/poster/works/:id — 作品详情（需校验所有权）
+// content.editableAreas[].defaultImage / _src 可能是 cloud:// URL，需递归解析
 const getPosterWork = async (ctx) => {
   const user = getUser(ctx.event)
   if (!user || !user.phone) return httpFail('请先登录', 401)
@@ -154,6 +190,12 @@ const getPosterWork = async (ctx) => {
   if (!res.data || !res.data.length) return httpFail('作品不存在', 404)
   const work = res.data[0]
   await resolveCloudFields(work, ['cover_url', 'poster_url'])
+  normalizeUploadPaths(work, ['cover_url', 'poster_url'])
+  // 递归解析 content 内的 cloud:// URL（贴纸 src、用户上传图、可编辑区默认图）
+  if (work.content) {
+    await resolveCloudUrlsDeep(work.content)
+    normalizeUploadPathsDeep(work.content)
+  }
   return ok(work)
 }
 

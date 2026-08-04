@@ -60,14 +60,20 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
     // RTL 字符检测正则（阿拉伯/哈萨克文等）
     const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
     const containsRtl = RTL_REGEX.test(content)
+    // 检测 content 是否含哈语占位符：占位符本身是 ASCII，不会触发 RTL 检测，
+    // 但替换后会变成哈语文本（RTL），需要预先标记为 RTL，保证小程序端替换后字体格式一致。
+    // 哈语占位符清单与 src/utils/placeholders.ts resolveDatePlaceholders 对齐
+    const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
+    const containsKzPlaceholder = KZ_PLACEHOLDER_RE.test(content)
+    const isRtl = containsRtl || containsKzPlaceholder
     // 解析 direction: 'auto'，根据内容自动判定
     // 修复死代码：原实现仅 `el.direction || 'ltr'` 未解析 auto
     const rawDirection = el.direction || 'auto'
     const direction = rawDirection === 'auto'
-      ? (containsRtl ? 'rtl' : 'ltr')
+      ? (isRtl ? 'rtl' : 'ltr')
       : rawDirection
-    // RTL 文本强制使用哈萨克字体，避免 fontFamily 为默认中文字体时字符不连写
-    const fontFamily = containsRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
+    // RTL 文本（含哈语占位符）强制使用哈萨克字体，避免 fontFamily 为默认中文字体时字符不连写
+    const fontFamily = isRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
       ? 'KazakhSoftAsilya'
       : el.fontFamily
     // RTL 文本默认右对齐（仅当用户未显式设置时）

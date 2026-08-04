@@ -10,6 +10,7 @@ import {
   FONT_FAMILY_BASE,
 } from '@/constants/editor'
 import type { EditableElement, ElementStyle } from '@/types'
+import { buildImageCssFilterFromElement } from '@/utils/imageFilter'
 
 interface BackgroundConfig {
   type: 'solid' | 'linear-gradient' | 'radial-gradient' | 'image'
@@ -160,22 +161,16 @@ export function useCanvasRender(options: {
     }
 
     // 图片滤镜：brightness / contrast / saturate / blur / grayscale
-    // 优先读 element 级别，回退到 style 级别（admin 序列化器输出的字段）
+    // 使用统一工具 utils/imageFilter.ts，与 admin 端 useCanvas.ts applyImagePatch 公式完全对齐：
+    //   brightness(${brightness}%) contrast(${100 + contrast}%) saturate(${saturate}%) blur(${blur}px) grayscale(${grayscale}%)
+    // 字段默认值：brightness=100 / contrast=0(偏移量,0=不变) / saturate=100 / blur=0 / grayscale=0
+    // 任一非默认值时输出完整 filter 串，避免部分字段缺失导致渲染跳变
     if (el.type === 'image') {
-      const st: any = el.style || {}
-      const brightness = el.brightness ?? st.brightness
-      const contrast = el.contrast ?? st.contrast
-      const saturate = el.saturate ?? st.saturate
-      const blur = el.blur ?? st.blur
-      const grayscale = el.grayscale ?? st.grayscale
-      const filters: string[] = []
-      if (brightness != null && brightness !== 100) filters.push(`brightness(${brightness}%)`)
-      if (contrast != null && contrast !== 100) filters.push(`contrast(${contrast}%)`)
-      if (saturate != null && saturate !== 100) filters.push(`saturate(${saturate}%)`)
-      if (blur != null && blur > 0) filters.push(`blur(${blur}px)`)
-      if (grayscale != null && grayscale > 0) filters.push(`grayscale(${grayscale}%)`)
-      if (filters.length > 0) {
-        style.filter = filters.join(' ')
+      const cssFilter = buildImageCssFilterFromElement(el)
+      if (cssFilter) {
+        style.filter = cssFilter
+        // 兼容 iOS 旧版本（参考微信开放社区反馈：iOS 18.4 前 filter 需前缀）
+        style.WebkitFilter = cssFilter
       }
       // 图片边框（admin 序列化器输出 borderColor/borderWidth）
       const borderColor = el.borderColor ?? st.borderColor
@@ -222,6 +217,13 @@ export function useCanvasRender(options: {
     // 限制最小字号，避免 fontSize 为 0 或极小值导致文字不可见
     const fontSize = Math.max(style.fontSize || DEFAULT_FONT_SIZE, 8)
 
+    // RTL 文本（含哈语占位符替换后的实际哈语内容）强制使用 KazakhSoftAsilya 字体，
+    // 即使 admin 端 style.font 是中文字体，也能保证字符正确连写。
+    // 这是对 admin element-serializer 预标记的兜底：避免旧模板或手动改 DB 的数据未标记 RTL。
+    const fontFamily = direction === 'rtl'
+      ? `'KazakhSoftAsilya', ${FONT_FAMILY_BASE}`
+      : getFontFamily(style.font)
+
     const result: Record<string, string | number | undefined> = {
       fontSize: `${fontSize}rpx`,
       color: style.color || '#333333',
@@ -229,7 +231,7 @@ export function useCanvasRender(options: {
       // admin 编辑态字间距是 0.02em（相对字号），序列化后变成 rpx 绝对值。
       // 这里转回 em 单位，保持与 admin 一致的相对语义，避免不同字号下字间距失真
       letterSpacing: direction === 'rtl' ? 'normal' : `${((style.spacing ?? DEFAULT_LETTER_SPACING) / fontSize).toFixed(4)}em`,
-      fontFamily: getFontFamily(style.font),
+      fontFamily,
       fontWeight: style.fontWeight || 'normal',
       fontStyle: style.fontStyle || 'normal',
       textAlign,

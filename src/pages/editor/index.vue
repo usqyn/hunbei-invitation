@@ -102,6 +102,17 @@
                   @touchmove.stop.prevent="onResizeHandleTouchMove"
                   @touchend.stop="onResizeHandleTouchEnd"
                 ></view>
+                <!-- 旋转手柄（选中时显示，参考 image-cropper 顶部旋转柄设计） -->
+                <view
+                  v-if="editorStore.selectedElement === idx && el.editable !== false"
+                  class="rotate-handle rotate-handle--active"
+                  @touchstart.stop="onRotateHandleTouchStart"
+                  @touchmove.stop.prevent="onRotateHandleTouchMove"
+                  @touchend.stop="onRotateHandleTouchEnd"
+                >
+                  <view class="rotate-handle-line"></view>
+                  <view class="rotate-handle-dot">↻</view>
+                </view>
               </view>
             </view>
           </template>
@@ -187,6 +198,17 @@
                   @touchmove.stop.prevent="onResizeHandleTouchMove"
                   @touchend.stop="onResizeHandleTouchEnd"
                 ></view>
+                <!-- 旋转手柄（选中时显示） -->
+                <view
+                  v-if="editorStore.selectedElement === idx && el.editable !== false"
+                  class="rotate-handle rotate-handle--active"
+                  @touchstart.stop="onRotateHandleTouchStart"
+                  @touchmove.stop.prevent="onRotateHandleTouchMove"
+                  @touchend.stop="onRotateHandleTouchEnd"
+                >
+                  <view class="rotate-handle-line"></view>
+                  <view class="rotate-handle-dot">↻</view>
+                </view>
               </view>
             </view>
           </template>
@@ -357,6 +379,8 @@ import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
 import { resolveDatePlaceholders } from '@/utils/placeholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { usePinchGesture } from '@/composables/usePinchGesture'
+import { useFrameThrottle } from '@/composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
@@ -569,7 +593,7 @@ function onSmartFieldUpdate(key: string, value: string) {
 }
 
 // ============ 元素拖拽 / 缩放（touch 事件） ============
-const canvasDisplayRect = ref({ width: 0, height: 0 })
+const canvasDisplayRect = ref({ width: 0, height: 0, left: 0, top: 0 })
 
 function updateCanvasDisplayRect() {
   const query = uni.createSelectorQuery()
@@ -577,7 +601,7 @@ function updateCanvasDisplayRect() {
     .select('.rendered-image-container, .preview-card--canvas')
     .boundingClientRect((rect: any) => {
       if (rect && rect.width > 0) {
-        canvasDisplayRect.value = { width: rect.width, height: rect.height }
+        canvasDisplayRect.value = { width: rect.width, height: rect.height, left: rect.left || 0, top: rect.top || 0 }
       }
     })
     .exec()
@@ -685,6 +709,13 @@ function onElementTouchStart(idx: number, e: any) {
   if (el.x == null || el.y == null) return
   editorStore.selectedElement = idx
   updateCanvasDisplayRect()
+  // 双指落下：进入 pinch 模式（缩放 + 旋转），不进入单指 move 模式
+  if (e.touches && e.touches.length === 2) {
+    pinchState.startImageScale = el.imageScale ?? 1
+    pinchState.startRotation = el.rotation ?? 0
+    pinch.onTouchStart(e)
+    return
+  }
   const touch = e.touches ? e.touches[0] : e
   dragState.value = {
     type: 'move',
@@ -699,15 +730,22 @@ function onElementTouchStart(idx: number, e: any) {
   }
 }
 
-function onElementTouchMove(e: any) {
+// 单指拖拽：原始逻辑用 useFrameThrottle 包一层做 16ms 节流（约 60fps）
+// 双指手势不走节流（频率本来不高，节流反而会有卡顿感）
+// touchend 时 flush 避免最后一帧丢失
+const onElementDragMoveThrottled = useFrameThrottle((e: any) => {
   const ds = dragState.value
   if (!ds || ds.type !== 'move') return
   const touch = e.touches ? e.touches[0] : e
   const dx = touch.clientX - ds.startTouchX
   const dy = touch.clientY - ds.startTouchY
   if (!ds.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
-  ds.moved = true
-  dragging.value = true
+  if (!ds.moved) {
+    ds.moved = true
+    dragging.value = true
+    // 立即切到回退视图，避免 renderedImage 烘焙图与交互层不同步（"边框动图不动"）
+    renderedImageStale.value = true
+  }
   const rect = canvasDisplayRect.value
   const scaleX = rect.width ? editorStore.canvasSize.width / rect.width : 1
   const scaleY = rect.height ? editorStore.canvasSize.height / rect.height : 1
@@ -723,9 +761,27 @@ function onElementTouchMove(e: any) {
   newY = Math.max(0, Math.min(ch - elH, newY))
   el.x = newX
   el.y = newY
+})
+
+function onElementTouchMove(e: any) {
+  // 双指手势优先：当前正在 pinch 或本次 touchmove 是 2 指
+  if (pinch.isActive() || (e.touches && e.touches.length === 2)) {
+    renderedImageStale.value = true
+    pinch.onTouchMove(e)
+    return
+  }
+  // 单指拖拽走节流
+  onElementDragMoveThrottled(e)
 }
 
-function onElementTouchEnd() {
+function onElementTouchEnd(e?: any) {
+  // 双指手势结束
+  if (pinch.isActive()) {
+    pinch.onTouchEnd(e || {})
+    return
+  }
+  // 单指拖拽结束：强制刷新最后一帧，避免丢帧
+  onElementDragMoveThrottled.flush()
   const ds = dragState.value
   if (ds && ds.moved) {
     lastDragMoved = true
@@ -736,6 +792,37 @@ function onElementTouchEnd() {
   dragging.value = false
   dragState.value = null
 }
+
+// ===== 双指缩放 + 旋转手势 =====
+const pinchState = { startImageScale: 1, startRotation: 0 }
+const pinch = usePinchGesture({
+  onStart: () => {
+    dragging.value = true
+  },
+  onScale: ({ ratio, angleDelta }) => {
+    const ds = dragState.value
+    const idx = ds ? ds.elementIdx : editorStore.selectedElement
+    if (idx == null) return
+    const el = editorStore.editableElements[idx]
+    if (!el) return
+    // imageScale 限定 0.2~5
+    let newScale = pinchState.startImageScale * ratio
+    newScale = Math.max(0.2, Math.min(5, newScale))
+    el.imageScale = newScale
+    // rotation 累加角度增量，归一化到 -180~180
+    let newRotation = (pinchState.startRotation + angleDelta) % 360
+    if (newRotation > 180) newRotation -= 360
+    if (newRotation < -180) newRotation += 360
+    el.rotation = newRotation
+  },
+  onEnd: () => {
+    editorStore.pushHistory()
+    renderedImageStale.value = true
+    hasUnsavedChanges.value = true
+    dragging.value = false
+    dragState.value = null
+  },
+})
 
 function onResizeHandleTouchStart(e: any) {
   if (editorStore.selectedElement === null) return
@@ -756,15 +843,25 @@ function onResizeHandleTouchStart(e: any) {
   }
 }
 
-function onResizeHandleTouchMove(e: any) {
+// 缩放手柄拖拽：用 useFrameThrottle 做 16ms 节流（约 60fps）
+// touchend 时 flush 避免最后一帧丢失
+const onResizeHandleTouchMoveThrottled = useFrameThrottle((e: any) => {
   const ds = dragState.value
   if (!ds || ds.type !== 'scale') return
   const touch = e.touches ? e.touches[0] : e
   const dx = touch.clientX - ds.startTouchX
   const dy = touch.clientY - ds.startTouchY
+  if (!ds.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return
+  if (!ds.moved) {
+    ds.moved = true
+    // 立即切到回退视图，避免烘焙图与交互层不同步
+    renderedImageStale.value = true
+  }
   const rect = canvasDisplayRect.value
   const scale = rect.width ? editorStore.canvasSize.width / rect.width : 1
-  const deltaCanvas = Math.max(dx, dy) * scale
+  // 用对角线位移代替 Math.max(dx,dy)，避免负数域丢量，让缩放跟手
+  // sign(dx+dy) 让向左上拖（缩小）也能正确产生负增量
+  const deltaCanvas = Math.hypot(dx, dy) * Math.sign(dx + dy || 1) * scale
   const el = editorStore.editableElements[ds.elementIdx]
   if (!el) return
   const aspect = ds.startHeight && ds.startWidth ? ds.startHeight / ds.startWidth : 1
@@ -777,10 +874,15 @@ function onResizeHandleTouchMove(e: any) {
   const clampedHeight = Math.min(clampedWidth * aspect, ch - (el.y || 0))
   el.width = clampedWidth
   el.height = clampedHeight
-  ds.moved = true
+})
+
+function onResizeHandleTouchMove(e: any) {
+  onResizeHandleTouchMoveThrottled(e)
 }
 
 function onResizeHandleTouchEnd() {
+  // 强制刷新最后一帧，避免丢帧
+  onResizeHandleTouchMoveThrottled.flush()
   const ds = dragState.value
   if (ds && ds.type === 'scale' && ds.moved) {
     editorStore.pushHistory()
@@ -788,6 +890,86 @@ function onResizeHandleTouchEnd() {
     hasUnsavedChanges.value = true
   }
   dragState.value = null
+}
+
+// ===== 旋转手柄：单指旋转元素（参考 image-cropper / AlloyFinger 的 atan2 旋转算法） =====
+// 算法：以元素几何中心为旋转锚点，用 atan2(touch - center) 计算角度增量
+interface RotateState {
+  elementIdx: number
+  startAngle: number    // 起始触点相对元素中心的角度（度）
+  startRotation: number // 元素起始 rotation 值
+  moved: boolean
+}
+const rotateState = ref<RotateState | null>(null)
+const ROTATE_THRESHOLD = 3
+
+// 计算元素中心在屏幕坐标系中的位置
+function getElementCenterScreen(el: any): { x: number; y: number } {
+  const rect = canvasDisplayRect.value
+  const scaleX = rect.width ? editorStore.canvasSize.width / rect.width : 1
+  const scaleY = rect.height ? editorStore.canvasSize.height / rect.height : 1
+  const centerCanvasX = (el.x || 0) + (el.width || 0) / 2
+  const centerCanvasY = (el.y || 0) + (el.height || 0) / 2
+  return {
+    x: rect.left + centerCanvasX / scaleX,
+    y: rect.top + centerCanvasY / scaleY,
+  }
+}
+
+function onRotateHandleTouchStart(e: any) {
+  if (editorStore.selectedElement === null) return
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  if (!el) return
+  updateCanvasDisplayRect()
+  const touch = e.touches ? e.touches[0] : e
+  const center = getElementCenterScreen(el)
+  const startAngle = Math.atan2(touch.clientY - center.y, touch.clientX - center.x) * 180 / Math.PI
+  rotateState.value = {
+    elementIdx: editorStore.selectedElement,
+    startAngle,
+    startRotation: el.rotation ?? 0,
+    moved: false,
+  }
+}
+
+const onRotateHandleTouchMoveThrottled = useFrameThrottle((e: any) => {
+  const rs = rotateState.value
+  if (!rs) return
+  const el = editorStore.editableElements[rs.elementIdx]
+  if (!el) return
+  const touch = e.touches ? e.touches[0] : e
+  const center = getElementCenterScreen(el)
+  const currentAngle = Math.atan2(touch.clientY - center.y, touch.clientX - center.x) * 180 / Math.PI
+  let delta = currentAngle - rs.startAngle
+  // 归一化到 -180~180
+  while (delta > 180) delta -= 360
+  while (delta < -180) delta += 360
+  if (!rs.moved && Math.abs(delta) < ROTATE_THRESHOLD) return
+  if (!rs.moved) {
+    rs.moved = true
+    renderedImageStale.value = true
+  }
+  let newRotation = rs.startRotation + delta
+  // 归一化到 -180~180
+  newRotation = newRotation % 360
+  if (newRotation > 180) newRotation -= 360
+  if (newRotation < -180) newRotation += 360
+  el.rotation = newRotation
+})
+
+function onRotateHandleTouchMove(e: any) {
+  onRotateHandleTouchMoveThrottled(e)
+}
+
+function onRotateHandleTouchEnd() {
+  onRotateHandleTouchMoveThrottled.flush()
+  const rs = rotateState.value
+  if (rs && rs.moved) {
+    editorStore.pushHistory()
+    renderedImageStale.value = true
+    hasUnsavedChanges.value = true
+  }
+  rotateState.value = null
 }
 
 // 撤销 / 重做
@@ -895,12 +1077,18 @@ function onImagePropPreview(field: string, value: number) {
 // 图片属性面板重置回调
 function onImagePropReset() {
   if (editorStore.selectedElement === null) return
-  const el = editorStore.editableElements[editorStore.selectedElement]
+  const el = editorStore.editableElements[editorStore.selectedElement] as any
   if (!el) return
   el.imageScale = 1
   el.rotation = 0
   el.opacity = 1
   el.borderRadius = 0
+  // 同时重置滤镜字段（与 ImagePropertyPanel 的 FILTER_DEFAULTS 对齐）
+  el.brightness = 100
+  el.contrast = 0
+  el.saturate = 100
+  el.blur = 0
+  el.grayscale = 0
   editorStore.pushHistory()
   renderedImageStale.value = true
   hasUnsavedChanges.value = true
@@ -2179,6 +2367,46 @@ onUnmounted(() => {
   border: 4rpx solid #fff;
   box-shadow: 0 0 0 2rpx #e84a6e, 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
   animation: pulseGlow 1.5s ease-in-out infinite;
+}
+
+/* ===== 旋转手柄 ===== */
+.rotate-handle {
+  position: absolute;
+  left: 50%;
+  top: -64rpx;
+  margin-left: -24rpx;
+  width: 48rpx;
+  height: 48rpx;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rotate-handle-line {
+  position: absolute;
+  left: 50%;
+  bottom: -20rpx;
+  width: 4rpx;
+  height: 20rpx;
+  margin-left: -2rpx;
+  background: #e84a6e;
+}
+
+.rotate-handle-dot {
+  width: 48rpx;
+  height: 48rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border: 4rpx solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2rpx #e84a6e, 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: bold;
+  box-sizing: border-box;
 }
 
 /* 横屏模式布局 */

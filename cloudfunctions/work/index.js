@@ -15,7 +15,7 @@ const {
   getUser, requireAuth,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
-  resolveCloudFields, resolveCloudUrlsDeep, normalizeUploadPaths, createRouter,
+  resolveCloudFields, resolveCloudUrlsDeep, normalizeUploadPaths, normalizeUploadPathsDeep, createRouter,
 } = require('./_shared')
 
 // ============ 作品 CRUD ============
@@ -23,6 +23,8 @@ const {
 // GET /api/works — 当前用户作品列表（按 updated_at 倒序）
 // works.cover 存的是 cloud:// fileID，需解析为 https 临时 URL
 // 合并查询 poster_works，让海报作品也出现在列表中（字段名: user_id）
+// poster_works 的字段名（cover_url/content/user_id）需归一化为前端期望的 camelCase（cover/data/phone），
+// 与 server/index.js 的 /api/works 列表合并逻辑保持一致
 const listWorks = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -31,27 +33,34 @@ const listWorks = async (ctx) => {
   // 海报库 poster_works（按 user_id）
   let posterData = []
   try {
-    const posterRes = await collection('poster_works').where({ user_id: auth.user.phone }).orderBy('updated_at', 'desc').limit(500).get()
+    const posterRes = await collection('poster_works').where({ user_id: auth.user.phone }).orderBy('created_at', 'desc').limit(500).get()
     posterData = (posterRes.data || []).map(p => ({
       ...p,
+      // 归一化字段：poster_works 用 user_id/cover_url/content，前端读 phone/cover/data
+      phone: p.user_id || p.phone || auth.user.phone,
+      cover: p.cover_url || p.cover || p.poster_url || '',
+      data: p.content || p.data || {},
       templateType: p.template_type || p.templateType || 'poster',
       // 标记来源，便于前端区分
       _source: 'poster',
     }))
   } catch (_) { /* poster_works 集合可能未创建，忽略 */ }
-  // 合并后按 updated_at 倒序
+  // 合并后按 updated_at 倒序（poster_works 没有 updated_at，回退 created_at）
   const merged = [...(res.data || []), ...posterData]
   merged.sort((a, b) => {
-    const ta = new Date(a.updated_at || a.updatedAt || 0).getTime()
-    const tb = new Date(b.updated_at || b.updatedAt || 0).getTime()
+    const ta = new Date(a.updated_at || a.updatedAt || a.created_at || a.createdAt || 0).getTime()
+    const tb = new Date(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0).getTime()
     return tb - ta
   })
   await resolveCloudFields(merged, ['cover'])
+  // 与 getWork/listRecycleBin 一致：把 /uploads/ 相对路径补全为完整 HTTPS URL
+  normalizeUploadPaths(merged, ['cover'])
   return ok(merged)
 }
 
 // GET /api/works/:id — 作品详情（需校验所有权）
 // works.cover 和 works.data（嵌套 JSON）中的 cloud:// URL 需解析
+// 同时调用 normalizeUploadPathsDeep 补全 /uploads/ 相对路径为完整 HTTPS URL（与 template/index.js getTemplate 行为一致）
 const getWork = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
@@ -62,6 +71,8 @@ const getWork = async (ctx) => {
   await resolveCloudFields(work, ['cover'])
   // 解析嵌套 JSON 中的 cloud:// URL（data 内含元素图片 URL）
   await resolveCloudUrlsDeep(work.data)
+  // 补全 /uploads/ 相对路径与 localhost URL（与 getTemplate 一致）
+  normalizeUploadPathsDeep(work.data)
   return ok(work)
 }
 
@@ -73,6 +84,7 @@ const getSharedWork = async (ctx) => {
   const work = res.data[0]
   await resolveCloudFields(work, ['cover'])
   await resolveCloudUrlsDeep(work.data)
+  normalizeUploadPathsDeep(work.data)
   // 仅返回渲染所需字段，剔除 phone 等敏感信息
   const { phone, ...safeWork } = work
   return ok(safeWork)

@@ -45,6 +45,25 @@
               <text class="placeholder-icon">📷</text>
               <text class="placeholder-text">{{ sec.placeholder || '点击上传照片' }}</text>
             </view>
+            <!-- 缩放手柄：选中后显示，支持在画布上直接缩放图片 section -->
+            <view
+              v-if="editorStore.activeSectionId === sec.id && sec.editable !== false"
+              class="resize-handle resize-handle--active"
+              @touchstart.stop="onResizeHandleTouchStart(sec, $event)"
+              @touchmove.stop.prevent="onResizeHandleTouchMove"
+              @touchend.stop="onResizeHandleTouchEnd"
+            ></view>
+            <!-- 旋转手柄：选中后显示，单指旋转图片 section -->
+            <view
+              v-if="editorStore.activeSectionId === sec.id && sec.editable !== false"
+              class="rotate-handle rotate-handle--active"
+              @touchstart.stop="onRotateHandleTouchStart(sec, $event)"
+              @touchmove.stop.prevent="onRotateHandleTouchMove"
+              @touchend.stop="onRotateHandleTouchEnd"
+            >
+              <view class="rotate-handle-line"></view>
+              <view class="rotate-handle-dot">↻</view>
+            </view>
           </template>
           <template v-else-if="sec.type === 'text'">
             <text class="section-text" :style="getTextStyle(sec)">{{ formatBiDi(sec.text || sec.placeholder || '请输入正文内容') }}</text>
@@ -228,10 +247,12 @@ import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useWorksStore } from '@/stores/works'
 import { useCanvasRender } from '@/composables/useCanvasRender'
+import { useFrameThrottle } from '@/composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { uploadImage } from '@/api'
 import { formatBiDi } from '@/utils/font-loader'
+import { buildImageCssFilterFromElement } from '@/utils/imageFilter'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
@@ -391,6 +412,131 @@ function deselectSection() {
   editorStore.activeSectionId = null
 }
 
+// ===== 缩放手柄：在画布上直接拖动调整图片 section 的 imageScale =====
+interface PageResizeState {
+  sectionId: string
+  startTouchX: number
+  startTouchY: number
+  startImageScale: number
+  moved: boolean
+}
+const pageResizeState = ref<PageResizeState | null>(null)
+const PAGE_RESIZE_THRESHOLD = 5
+
+function onResizeHandleTouchStart(sec: PageSection, e: any) {
+  const touch = e.touches ? e.touches[0] : e
+  pageResizeState.value = {
+    sectionId: sec.id,
+    startTouchX: touch.clientX,
+    startTouchY: touch.clientY,
+    startImageScale: sec.imageScale ?? 1,
+    moved: false,
+  }
+}
+
+// 缩放手柄拖拽：用 useFrameThrottle 做 16ms 节流（约 60fps）
+// touchend 时 flush 避免最后一帧丢失
+const onResizeHandleTouchMoveThrottled = useFrameThrottle((e: any) => {
+  const ds = pageResizeState.value
+  if (!ds) return
+  const sec = editorStore.pageSections.find(s => s.id === ds.sectionId)
+  if (!sec) return
+  const touch = e.touches ? e.touches[0] : e
+  const dx = touch.clientX - ds.startTouchX
+  const dy = touch.clientY - ds.startTouchY
+  if (!ds.moved && Math.abs(dx) + Math.abs(dy) < PAGE_RESIZE_THRESHOLD) return
+  if (!ds.moved) {
+    ds.moved = true
+    haptic('medium')
+  }
+  // page 模式 section 是占整宽的容器，缩放手柄用对角线位移改变 imageScale（0.3~3 倍）
+  const delta = Math.hypot(dx, dy) * Math.sign(dx + dy || 1) / 200
+  let newScale = ds.startImageScale + delta
+  newScale = Math.max(0.3, Math.min(3, newScale))
+  sec.imageScale = newScale
+})
+
+function onResizeHandleTouchMove(e: any) {
+  onResizeHandleTouchMoveThrottled(e)
+}
+
+function onResizeHandleTouchEnd() {
+  // 强制刷新最后一帧，避免丢帧
+  onResizeHandleTouchMoveThrottled.flush()
+  const ds = pageResizeState.value
+  if (ds && ds.moved) {
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+  }
+  pageResizeState.value = null
+}
+
+// ===== 旋转手柄：单指旋转图片 section（参考 image-cropper / AlloyFinger 的 atan2 旋转算法） =====
+interface PageRotateState {
+  sectionId: string
+  startAngle: number
+  startRotation: number
+  center: { x: number; y: number }
+  moved: boolean
+}
+const pageRotateState = ref<PageRotateState | null>(null)
+const PAGE_ROTATE_THRESHOLD = 3
+
+function onRotateHandleTouchStart(sec: PageSection, e: any) {
+  const touch = e.touches ? e.touches[0] : e
+  // 查询当前激活的 section 元素的屏幕位置（用 .page-section--active 选择器）
+  const query = uni.createSelectorQuery()
+  query.select('.page-section--active').boundingClientRect((rect: any) => {
+    if (rect && rect.width > 0) {
+      const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      const startAngle = Math.atan2(touch.clientY - center.y, touch.clientX - center.x) * 180 / Math.PI
+      pageRotateState.value = {
+        sectionId: sec.id,
+        startAngle,
+        startRotation: sec.rotation ?? 0,
+        center,
+        moved: false,
+      }
+    }
+  }).exec()
+}
+
+const onRotateHandleTouchMoveThrottled = useFrameThrottle((e: any) => {
+  const rs = pageRotateState.value
+  if (!rs) return
+  const sec = editorStore.pageSections.find(s => s.id === rs.sectionId)
+  if (!sec) return
+  const touch = e.touches ? e.touches[0] : e
+  const currentAngle = Math.atan2(touch.clientY - rs.center.y, touch.clientX - rs.center.x) * 180 / Math.PI
+  let delta = currentAngle - rs.startAngle
+  while (delta > 180) delta -= 360
+  while (delta < -180) delta += 360
+  if (!rs.moved && Math.abs(delta) < PAGE_ROTATE_THRESHOLD) return
+  if (!rs.moved) {
+    rs.moved = true
+    haptic('medium')
+  }
+  let newRotation = rs.startRotation + delta
+  newRotation = newRotation % 360
+  if (newRotation > 180) newRotation -= 360
+  if (newRotation < -180) newRotation += 360
+  sec.rotation = newRotation
+})
+
+function onRotateHandleTouchMove(e: any) {
+  onRotateHandleTouchMoveThrottled(e)
+}
+
+function onRotateHandleTouchEnd() {
+  onRotateHandleTouchMoveThrottled.flush()
+  const rs = pageRotateState.value
+  if (rs && rs.moved) {
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+  }
+  pageRotateState.value = null
+}
+
 // 图片 section 的变换样式
 function getImageSectionStyle(sec: PageSection): Record<string, string> {
   const style: Record<string, string> = {}
@@ -404,6 +550,13 @@ function getImageSectionStyle(sec: PageSection): Record<string, string> {
   // 圆角
   if (sec.borderRadius) {
     style.borderRadius = `${sec.borderRadius}rpx`
+  }
+  // 图片滤镜：与 useCanvasRender/flip 一致（CSS filter，真机静默降级）
+  // PageSection 也支持 brightness/contrast/saturate/blur/grayscale 字段
+  const cssFilter = buildImageCssFilterFromElement(sec as any)
+  if (cssFilter) {
+    style.filter = cssFilter
+    style.WebkitFilter = cssFilter
   }
   return style
 }
@@ -430,10 +583,17 @@ function onImagePropPreview(field: string, value: number) {
 // 图片属性面板重置回调
 function onImagePropReset() {
   if (!activeSection.value) return
-  activeSection.value.imageScale = 1
-  activeSection.value.rotation = 0
-  activeSection.value.opacity = 1
-  activeSection.value.borderRadius = 0
+  const sec = activeSection.value as any
+  sec.imageScale = 1
+  sec.rotation = 0
+  sec.opacity = 1
+  sec.borderRadius = 0
+  // 同时重置滤镜字段（与 ImagePropertyPanel 的 FILTER_DEFAULTS 对齐）
+  sec.brightness = 100
+  sec.contrast = 0
+  sec.saturate = 100
+  sec.blur = 0
+  sec.grayscale = 0
   editorStore.pushHistory()
   hasUnsavedChanges.value = true
 }
@@ -908,6 +1068,66 @@ function onImageError() {
   aspect-ratio: 3 / 4;
   border-radius: 12rpx;
   background: #f5f5f5;
+}
+
+/* 缩放手柄：右下角圆形 */
+.resize-handle {
+  position: absolute;
+  right: -8rpx;
+  bottom: -8rpx;
+  width: 32rpx;
+  height: 32rpx;
+  background: #fff;
+  border: 4rpx solid #e84a6e;
+  border-radius: 50%;
+  z-index: 30;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+}
+
+.resize-handle--active {
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border: 4rpx solid #fff;
+  box-shadow: 0 0 0 2rpx #e84a6e, 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
+}
+
+/* 旋转手柄 */
+.rotate-handle {
+  position: absolute;
+  left: 50%;
+  top: -64rpx;
+  margin-left: -24rpx;
+  width: 48rpx;
+  height: 48rpx;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rotate-handle-line {
+  position: absolute;
+  left: 50%;
+  bottom: -20rpx;
+  width: 4rpx;
+  height: 20rpx;
+  margin-left: -2rpx;
+  background: #e84a6e;
+}
+
+.rotate-handle-dot {
+  width: 48rpx;
+  height: 48rpx;
+  background: linear-gradient(135deg, #e84a6e 0%, #ff6b8a 100%);
+  border: 4rpx solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2rpx #e84a6e, 0 4rpx 12rpx rgba(232, 74, 110, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: bold;
+  box-sizing: border-box;
 }
 
 .image-placeholder {

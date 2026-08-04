@@ -63,11 +63,16 @@ function resolveRtlTextOptions(el: {
 } {
   const content = el.content || ''
   const containsRtl = RTL_REGEX.test(content)
+  // 检测哈语占位符：占位符本身是 ASCII，但替换后会变成哈语文本（RTL）
+  // 预标记为 RTL，保证 admin 编辑态字体格式与最终小程序渲染一致
+  const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
+  const containsKzPlaceholder = KZ_PLACEHOLDER_RE.test(content)
+  const isRtl = containsRtl || containsKzPlaceholder
   const rawDirection = el.direction || 'auto'
   const direction: 'rtl' | 'ltr' = rawDirection === 'auto'
-    ? (containsRtl ? 'rtl' : 'ltr')
+    ? (isRtl ? 'rtl' : 'ltr')
     : (rawDirection as 'rtl' | 'ltr')
-  const fontFamily = containsRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
+  const fontFamily = isRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
     ? 'KazakhSoftAsilya'
     : el.fontFamily
   const charSpacing = direction === 'rtl' ? 0 : (el.letterSpacing ?? 2) * 10
@@ -1151,21 +1156,55 @@ export function useCanvas(opts: UseCanvasOptions) {
   }
 
   // ---- 日期占位符实时预览 ----
+  // 哈语占位符预览值：与 App.vue SMART_FIELDS 的 placeholder 对齐
+  // 用于 admin 编辑态预览 {kzDate} 等字面占位符替换后的哈语效果
+  const KZ_PLACEHOLDER_PREVIEW: Record<string, string> = {
+    kzDate: '2026 جىلعى 1 ايدىڭ 22 كۇنى',
+    kzWeekday: 'سەنبى',
+    kzWeekdayParen: '(سەنبى)',
+    kzTime: 'تۇستەن كەيىن',
+    kzGroomName: 'نۇرلان',
+    kzBrideName: 'اينۇر',
+    kzAddress: 'قىزىلوردا قالاسى, توي سارايى',
+  }
+  const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
+
   function refreshDatePlaceholders(dateValues: Record<string, string | undefined>) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const placeholderRe = /\{year\}|\{month\}|\{day\}/
+    const placeholderRe = /\{year\}|\{month\}|\{day\}|\{kzDate\}|\{kzWeekday\}|\{kzWeekdayParen\}|\{kzTime\}|\{kzGroomName\}|\{kzBrideName\}|\{kzAddress\}/
     elements.value.forEach(el => {
       if (el.type !== 'text') return
       const t = el as TextElement
       if (!placeholderRe.test(t.content)) return
-      const resolved = t.content
+      // 替换中文日期占位符
+      let resolved = t.content
         .replace(/\{year\}/g, dateValues.year ?? '')
         .replace(/\{month\}/g, dateValues.month ?? '')
         .replace(/\{day\}/g, dateValues.day ?? '')
+      // 替换哈语占位符为预览值（让 admin 编辑态能看到哈语替换后的效果）
+      if (KZ_PLACEHOLDER_RE.test(resolved)) {
+        for (const [k, v] of Object.entries(KZ_PLACEHOLDER_PREVIEW)) {
+          resolved = resolved.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
+        }
+      }
       const obj = canvas.getObjects().find(o => o.id === el.id)
       if (obj) {
-        ;(obj as fabric.IText).set('text', resolved)
+        const textObj = obj as fabric.IText
+        textObj.set('text', resolved)
+        // 替换后重新解析 RTL：如果替换后的文本含哈语字符，强制使用 KazakhSoftAsilya 字体
+        // 这保证 admin 预览时字体格式与最终小程序渲染一致
+        const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+        const containsRtl = RTL_REGEX.test(resolved)
+        if (containsRtl) {
+          const rtlDraft = resolveRtlTextOptions({ ...t, content: resolved } as TextElement)
+          textObj.set({
+            fontFamily: rtlDraft.fontFamily,
+            charSpacing: rtlDraft.charSpacing,
+            direction: rtlDraft.direction,
+            textAlign: t.textAlign || 'right',
+          })
+        }
       }
     })
     canvas.renderAll()

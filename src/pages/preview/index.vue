@@ -932,8 +932,13 @@ function getFlipTextStyle(el: any): Record<string, string> {
   const detectedDirection = RTL_CHAR_REGEX.test(el.text) ? 'rtl' : 'ltr'
   const direction = style.direction === 'auto' ? detectedDirection : (style.direction || 'ltr')
   const isRtl = direction === 'rtl'
+  // RTL 文本（含哈语占位符替换后的实际内容）强制使用 KazakhSoftAsilya 字体，
+  // 与 useCanvasRender.getTextStyle 对齐，保证占位符替换前后字体格式一致
+  const fontFamily = isRtl
+    ? `'KazakhSoftAsilya', ${FONT_FAMILY_BASE}`
+    : (style.font ? `"${style.font}", ${FONT_FAMILY_BASE}` : FONT_FAMILY_BASE)
   return {
-    fontFamily: style.font ? `"${style.font}", ${FONT_FAMILY_BASE}` : FONT_FAMILY_BASE,
+    fontFamily,
     fontSize: (style.fontSize || 28) + 'rpx',
     color: style.color || '#333333',
     letterSpacing: isRtl ? 'normal' : (style.spacing || 0) + 'rpx',

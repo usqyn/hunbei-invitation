@@ -8,6 +8,7 @@ const {
   getUser, requireAuth,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parseBody, matchRoute, isUserVip, createRouter,
+  resolveCloudFields, normalizeToHttpsUrl,
 } = require('./_shared')
 
 // POST /api/export — 请柬导出
@@ -53,6 +54,12 @@ const exportInvitation = async (ctx) => {
   if (!url && workData) {
     if (workData.renderedImage) url = workData.renderedImage
     else if (workData.templateData && workData.templateData.renderedImage) url = workData.templateData.renderedImage
+  }
+  // 解析 cloud:// URL 为 https 临时 URL；并把 /uploads/ 相对路径补全为完整 HTTPS URL
+  // 与 template/work 云函数对齐，避免客户端拿到 cloud:// 协议无法加载
+  if (url) {
+    await resolveCloudFields({ url }, ['url'])
+    url = normalizeToHttpsUrl(url)
   }
   const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
   return ok({
