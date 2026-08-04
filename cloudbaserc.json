@@ -1,6 +1,6 @@
 {
   "envId": "cloud1-d4gyvmo1d9a1e148a",
-  "region": "ap-guangzhou",
+  "region": "ap-shanghai",
   "framework": {
     "plugins": {
       "server": {

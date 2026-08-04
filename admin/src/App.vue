@@ -1387,8 +1387,8 @@ const {
   canvasSize,
   setBackground,
   clearCanvas,
-  addImage,
-  addText,
+  addImage: canvasAddImage,
+  addText: canvasAddText,
 })
 
 // 图层：按 zIndex 降序显示（最上层排第一）
