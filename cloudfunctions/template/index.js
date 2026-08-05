@@ -79,17 +79,27 @@ const listTemplates = async (ctx) => {
   let q = collection('templates').where(conditions).orderBy('updatedAt', 'desc')
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
-    // 解析顶层 cloud:// URL（cover/backgroundImage/renderedImage）
     await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-    // 兜底：将 /uploads/ 相对路径转为完整 HTTPS URL
     normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-    return paginateResponse(res.data || [], page, limit, total)
+    const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+    const list = (res.data || []).map(t => {
+      const light = { ...t }
+      HEAVY_FIELDS.forEach(f => { delete light[f] })
+      return light
+    })
+    return paginateResponse(list, page, limit, total)
   }
   const res = await q.limit(1000).get()
   await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  // 无分页时返回全部 + total 字段（与原实现一致）
-  return Object.assign(ok(res.data || []), { total: (res.data || []).length })
+  // 列表接口排除大字段，避免响应超过 1MB 限制
+  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+  const list = (res.data || []).map(t => {
+    const light = { ...t }
+    HEAVY_FIELDS.forEach(f => { delete light[f] })
+    return light
+  })
+  return Object.assign(ok(list), { total: list.length })
 }
 
 // GET /api/templates/similar — 相似模板（同分类，按 likes 倒序，最多 6 个）
@@ -106,7 +116,13 @@ const listSimilarTemplates = async (ctx) => {
     .get()
   await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  return ok(res.data || [])
+  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+  const list = (res.data || []).map(t => {
+    const light = { ...t }
+    HEAVY_FIELDS.forEach(f => { delete light[f] })
+    return light
+  })
+  return ok(list)
 }
 
 // GET /api/templates/:id — 模板详情（普通用户仅看 published；管理员可看任意状态）
@@ -225,16 +241,26 @@ const listProducts = async (ctx) => {
       collection('templates').where(conditions).count(),
       q.skip(skip).limit(limit).get(),
     ])
-    // 与 listTemplates 一致：解析 cloud:// + 补全相对路径
     await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
     normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-    return paginateResponse(res.data || [], page, limit, countRes.total || 0)
+    const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+    const list = (res.data || []).map(t => {
+      const light = { ...t }
+      HEAVY_FIELDS.forEach(f => { delete light[f] })
+      return light
+    })
+    return paginateResponse(list, page, limit, countRes.total || 0)
   }
-  // 无分页时默认只取 20 条，避免一次性拉 1000 条导致 loading 过长
   const res = await q.limit(20).get()
   await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  return Object.assign(ok(res.data || []), { total: (res.data || []).length })
+  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+  const list = (res.data || []).map(t => {
+    const light = { ...t }
+    HEAVY_FIELDS.forEach(f => { delete light[f] })
+    return light
+  })
+  return Object.assign(ok(list), { total: list.length })
 }
 
 // GET /api/products/recommend — 推荐商品（按 likes 倒序，最多 10 个）
@@ -244,7 +270,13 @@ const listRecommendProducts = async (ctx) => {
   const res = await collection('templates').where(conditions).orderBy('likes', 'desc').limit(10).get()
   await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  return ok(res.data || [])
+  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+  const list = (res.data || []).map(t => {
+    const light = { ...t }
+    HEAVY_FIELDS.forEach(f => { delete light[f] })
+    return light
+  })
+  return ok(list)
 }
 
 // GET /api/products/:id — 商品详情
