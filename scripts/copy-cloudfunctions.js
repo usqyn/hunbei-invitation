@@ -1,16 +1,30 @@
 /**
  * 编译后将 cloudfunctions 复制到 dist 目录，并更新 project.config.json
  * 解决微信开发者工具从 dist 目录打开时找不到云函数的问题
+ * 
+ * 用法: node scripts/copy-cloudfunctions.js [dev|build|all]
+ *   dev   - 只复制到 dist/dev/mp-weixin
+ *   build - 只复制到 dist/build/mp-weixin
+ *   all   - 复制到两个目录（默认）
  */
 const fs = require('fs')
 const path = require('path')
 
+const mode = process.argv[2] || 'all'
 const root = path.resolve(__dirname, '..')
 const cloudfunctionsSrc = path.join(root, 'cloudfunctions')
-const targets = [
-  path.join(root, 'dist', 'dev', 'mp-weixin'),
-  path.join(root, 'dist', 'build', 'mp-weixin')
-]
+
+let targets
+if (mode === 'dev') {
+  targets = [path.join(root, 'dist', 'dev', 'mp-weixin')]
+} else if (mode === 'build') {
+  targets = [path.join(root, 'dist', 'build', 'mp-weixin')]
+} else {
+  targets = [
+    path.join(root, 'dist', 'dev', 'mp-weixin'),
+    path.join(root, 'dist', 'build', 'mp-weixin')
+  ]
+}
 
 // 忽略的文件/目录模式
 // 非云函数的内容（共享模块、构建脚本等）
