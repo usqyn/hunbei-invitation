@@ -49,6 +49,42 @@ function rewriteLocalhostUrls(obj) {
   return result
 }
 
+/**
+ * 确保字段为正确的类型（对象/数组），如果是字符串则尝试解析
+ */
+function ensureFieldType(value, fieldName) {
+  if (value === null || value === undefined) return value
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      console.log(`[cloudSync] 🔧 ${fieldName}: string -> ${Array.isArray(parsed) ? 'array' : 'object'}`)
+      return parsed
+    } catch (e) {
+      // 无法解析，保持原值
+      return value
+    }
+  }
+  return value
+}
+
+/**
+ * 规范化模板数据，确保字段类型正确且 URL 无 localhost
+ */
+function normalizeTemplateData(templateData) {
+  const data = { ...templateData }
+
+  // 解析可能被错误存储为字符串的 JSON 字段
+  const jsonFields = ['data', 'elements', 'pages', 'canvasSize', 'background', 'tags']
+  for (const field of jsonFields) {
+    if (data[field] !== undefined && data[field] !== null) {
+      data[field] = ensureFieldType(data[field], field)
+    }
+  }
+
+  // 递归替换所有 localhost URL
+  return rewriteLocalhostUrls(data)
+}
+
 function isEnabled() {
   return true
 }
@@ -58,42 +94,38 @@ function isEnabled() {
  */
 async function syncTemplateToCloud(id, templateData, action = 'create') {
   try {
+    const normalized = normalizeTemplateData(templateData)
     const payload = {
       id,
-      name: templateData.name || '',
-      subtitle: templateData.subtitle || '',
-      category: templateData.category || '',
-      cover: rewriteLocalhostUrl(templateData.cover),
-      primaryColor: templateData.primaryColor || '#e84a6e',
-      likes: templateData.likes || 0,
-      pageCount: templateData.pageCount || 10,
-      data: rewriteLocalhostUrls(templateData.data || {}),
-      elements: rewriteLocalhostUrls(templateData.elements || []),
-      canvasSize: templateData.canvasSize || { width: 375, height: 667 },
-      orientation: templateData.orientation || 'portrait',
-      background: rewriteLocalhostUrls(templateData.background || {}),
-      tags: templateData.tags || [],
-      status: templateData.status || 'published',
-      renderedImage: rewriteLocalhostUrl(templateData.renderedImage),
-      is_paid: templateData.is_paid || templateData.isPaid || 0,
-      price: templateData.price || 0,
-      is_premium: templateData.is_premium || templateData.isPremium || 0,
-      vipLevel: templateData.vipLevel || (templateData.is_premium || templateData.isPremium ? 'pro' : (templateData.is_paid || templateData.isPaid ? 'personal' : 'free')),
-      templateType: templateData.templateType || 'canvas',
-      pages: rewriteLocalhostUrls(templateData.pages || []),
-      createdAt: templateData.createdAt || Date.now(),
+      name: normalized.name || '',
+      subtitle: normalized.subtitle || '',
+      category: normalized.category || '',
+      cover: rewriteLocalhostUrl(normalized.cover),
+      primaryColor: normalized.primaryColor || '#e84a6e',
+      likes: normalized.likes || 0,
+      pageCount: normalized.pageCount || 10,
+      data: normalized.data || {},
+      elements: normalized.elements || [],
+      canvasSize: normalized.canvasSize || { width: 375, height: 667 },
+      orientation: normalized.orientation || 'portrait',
+      background: normalized.background || {},
+      tags: normalized.tags || [],
+      status: normalized.status || 'published',
+      renderedImage: rewriteLocalhostUrl(normalized.renderedImage),
+      is_paid: normalized.is_paid || normalized.isPaid || 0,
+      price: normalized.price || 0,
+      is_premium: normalized.is_premium || normalized.isPremium || 0,
+      vipLevel: normalized.vipLevel || (normalized.is_premium || normalized.isPremium ? 'pro' : (normalized.is_paid || normalized.isPaid ? 'personal' : 'free')),
+      templateType: normalized.templateType || 'canvas',
+      pages: normalized.pages || [],
+      createdAt: normalized.createdAt || Date.now(),
       updatedAt: Date.now(),
     }
 
     if (action === 'create') {
-      await db.collection('templates').add(payload)
+      await db.collection('templates').doc(id).set(payload)
     } else {
-      const existing = await db.collection('templates').where({ id }).get()
-      if (existing.data.length > 0) {
-        await db.collection('templates').doc(existing.data[0]._id).update(payload)
-      } else {
-        await db.collection('templates').add(payload)
-      }
+      await db.collection('templates').doc(id).set(payload)
     }
 
     console.log(`[cloudSync] ✅ 模板已同步: ${action} ${id} (${payload.name})`)
@@ -109,16 +141,11 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
  */
 async function deleteTemplateFromCloud(id) {
   try {
-    const existing = await db.collection('templates').where({ id }).get()
-    if (existing.data.length > 0) {
-      await db.collection('templates').doc(existing.data[0]._id).remove()
-      console.log(`[cloudSync] ✅ 模板已删除: ${id}`)
-      return true
-    }
-    console.warn(`[cloudSync] ⚠️ 模板删除失败: ${id}, 云数据库中不存在`)
-    return false
+    await db.collection('templates').doc(id).remove()
+    console.log(`[cloudSync] ✅ 模板已删除: ${id}`)
+    return true
   } catch (e) {
-    console.warn(`[cloudSync] ⚠️ 模板删除请求失败: ${id},`, e.message)
+    console.warn(`[cloudSync] ⚠️ 模板删除失败: ${id},`, e.message)
     return false
   }
 }
