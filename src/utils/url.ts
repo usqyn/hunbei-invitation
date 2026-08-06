@@ -1,4 +1,4 @@
-import { API_BASE, USE_CLOUD_FUNCTIONS } from '@/config'
+import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName } from '@/config'
 
 // 云函数模式下兜底的资源域名（当 API_BASE 为 localhost 时使用）
 const CLOUD_FALLBACK_ASSETS_BASE = 'https://api.TOYtamaxia.com'
@@ -104,13 +104,34 @@ export function invalidateAllCloudUrls(): void {
   cloudUrlCache.clear()
 }
 
-// 动态 import request，避免循环依赖
+// 直接调用 wx.cloud.callFunction 刷新云存储 URL（避免循环依赖）
 let _refreshUrlFn: ((fileID: string) => Promise<string>) | null = null
 async function getRefreshUrlFn(): Promise<(fileID: string) => Promise<string>> {
   if (_refreshUrlFn) return _refreshUrlFn
-  // 动态加载，避免与 request.ts 形成循环依赖
-  const { request } = await import('@/utils/request')
+  // #ifdef MP-WEIXIN
   _refreshUrlFn = async (fileID: string): Promise<string> => {
+    const fnName = getFunctionName('/api/refresh-url')
+    const res = await new Promise<any>((resolve, reject) => {
+      wx.cloud.callFunction({
+        name: fnName,
+        data: {
+          path: '/api/refresh-url',
+          httpMethod: 'POST',
+          query: {},
+          body: { fileID },
+          headers: {},
+        },
+        success: (r: any) => resolve(r.result),
+        fail: (err: any) => reject(err),
+      })
+    })
+    if (res && res.success && res.data?.url) return res.data.url
+    throw new Error(res?.error || '刷新 URL 失败')
+  }
+  // #endif
+  // #ifndef MP-WEIXIN
+  _refreshUrlFn = async (fileID: string): Promise<string> => {
+    const { request } = await import('@/utils/request')
     const res = await request<{ url: string; fileID: string }>({
       url: '/api/refresh-url',
       method: 'POST',
@@ -119,6 +140,7 @@ async function getRefreshUrlFn(): Promise<(fileID: string) => Promise<string>> {
     })
     return res.url
   }
+  // #endif
   return _refreshUrlFn
 }
 

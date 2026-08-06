@@ -38,6 +38,7 @@ function fetchFontMap(): Promise<void> {
     // #ifdef MP-WEIXIN
     if (USE_CLOUD_FUNCTIONS && typeof wx !== 'undefined' && wx.cloud) {
       const fnName = getFunctionName('/api/fonts')
+      console.log('[FontLoader] Fetching font map via cloud function:', fnName)
       wx.cloud.callFunction({
         name: fnName,
         data: {
@@ -48,14 +49,20 @@ function fetchFontMap(): Promise<void> {
           headers: {},
         },
         success: (res: any) => {
+          console.log('[FontLoader] Cloud function result:', res.result)
           const result = res.result
           const raw = (result?.success && result.data) || result || {}
           fontMap = Array.isArray(raw)
             ? raw.reduce((m: Record<string, string>, f: any) => { m[f.filename] = f.url; return m }, {} as Record<string, string>)
             : raw
+          console.log('[FontLoader] Font map loaded:', Object.keys(fontMap).length, 'fonts')
           resolve()
         },
-        fail: () => { fontMap = {}; resolve() },
+        fail: (err: any) => {
+          console.warn('[FontLoader] Cloud function failed:', err)
+          fontMap = {}
+          resolve()
+        },
       })
       return
     }

@@ -131,7 +131,7 @@
             class="scroll-card"
             @click="handleCardClick(card)"
           >
-            <image class="card-image" lazy-load :src="card.image" mode="aspectFill" @error="onImageError" />
+            <CloudImage class="card-image" :src="card.image" mode="aspectFill" @error="onImageError" />
             <view class="card-overlay"></view>
             <view class="card-badge-wrap">
               <view class="card-vip-tag">
@@ -218,7 +218,7 @@
             class="scroll-card poster-card"
             @click="handlePosterClick(poster)"
           >
-            <image class="card-image poster-card-image" lazy-load :src="resolveUrl(poster.cover_url)" mode="aspectFill" @error="onImageError" />
+            <CloudImage class="card-image poster-card-image" :src="poster.cover_url" mode="aspectFill" @error="onImageError" />
             <view class="card-overlay"></view>
             <view class="poster-category-tag">{{ poster.category_name }}</view>
             <view class="card-info">
@@ -288,6 +288,7 @@ import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/cat
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
 import { resolveUrl } from '@/utils/url'
+import CloudImage from '@/components/CloudImage.vue'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { t } from '@/locales'
