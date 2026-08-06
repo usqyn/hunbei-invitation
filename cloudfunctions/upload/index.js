@@ -221,7 +221,7 @@ const listMusic = async (ctx) => {
     const res = await q.skip(skip).limit(limit).get()
     rawList = res.data || []
   } else {
-    const res = await q.limit(1000).get()
+    const res = await q.limit(100).get()
     rawList = res.data || []
   }
   // 批量把 fileID（cloud://）转为临时 https URL

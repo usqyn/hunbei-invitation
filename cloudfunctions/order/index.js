@@ -97,7 +97,7 @@ const listOrders = async (ctx) => {
     const res = await q.skip(skip).limit(limit).get()
     return paginateResponse(res.data || [], page, limit, total)
   }
-  const res = await q.limit(1000).get()
+  const res = await q.limit(100).get()
   return ok(res.data || [])
 }
 

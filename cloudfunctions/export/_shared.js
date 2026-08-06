@@ -491,6 +491,7 @@ const createRouter = (routes, fnName = 'unknown') => {
       }
     }
 
+    console.warn(`[fn:${fnName}] ${httpMethod} ${eventPath} 未匹配到路由，可用路由:`, routes.map(r => `${r[0]} ${r[1]}`).join(', '))
     if (normalizedEvent._source === 'callFunction') {
       return { success: false, error: '接口不存在' }
     }

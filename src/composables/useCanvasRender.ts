@@ -173,15 +173,15 @@ export function useCanvasRender(options: {
         style.WebkitFilter = cssFilter
       }
       // 图片边框（admin 序列化器输出 borderColor/borderWidth）
-      const borderColor = el.borderColor ?? st.borderColor
-      const borderWidth = el.borderWidth ?? st.borderWidth
+      const borderColor = el.borderColor ?? el.style?.borderColor
+      const borderWidth = el.borderWidth ?? el.style?.borderWidth
       if (borderColor && borderColor !== 'transparent' && borderWidth) {
         style.borderColor = borderColor
         style.borderWidth = `${borderWidth}rpx`
         style.borderStyle = 'solid'
       }
       // 图片遮罩 mask（仅支持 'circle'，其余回退矩形）
-      const mask = el.mask ?? st.mask
+      const mask = el.mask ?? el.style?.mask
       if (mask === 'circle') {
         style.borderRadius = '50%'
       }

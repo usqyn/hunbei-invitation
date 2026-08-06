@@ -29,11 +29,11 @@ const listWorks = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
   // 主库 works（按 phone）
-  const res = await collection('works').where({ phone: auth.user.phone }).orderBy('updated_at', 'desc').limit(1000).get()
+  const res = await collection('works').where({ phone: auth.user.phone }).orderBy('updated_at', 'desc').limit(100).get()
   // 海报库 poster_works（按 user_id）
   let posterData = []
   try {
-    const posterRes = await collection('poster_works').where({ user_id: auth.user.phone }).orderBy('created_at', 'desc').limit(500).get()
+    const posterRes = await collection('poster_works').where({ user_id: auth.user.phone }).orderBy('created_at', 'desc').limit(100).get()
     posterData = (posterRes.data || []).map(p => ({
       ...p,
       // 归一化字段：poster_works 用 user_id/cover_url/content，前端读 phone/cover/data

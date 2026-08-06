@@ -1,4 +1,4 @@
-import { API_BASE, USE_CLOUD_FUNCTIONS } from '@/config'
+import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 
 // ============ 字体加载 ============
@@ -35,12 +35,31 @@ function fetchFontMap(): Promise<void> {
   if (fontMap) return Promise.resolve()
   if (fontMapPromise) return fontMapPromise
   fontMapPromise = new Promise<void>((resolve) => {
-    // 云函数模式下字体接口不可用，直接跳过
-    if (USE_CLOUD_FUNCTIONS) {
-      fontMap = {}
-      resolve()
+    // #ifdef MP-WEIXIN
+    if (USE_CLOUD_FUNCTIONS && typeof wx !== 'undefined' && wx.cloud) {
+      const fnName = getFunctionName('/api/fonts')
+      wx.cloud.callFunction({
+        name: fnName,
+        data: {
+          path: '/api/fonts',
+          httpMethod: 'GET',
+          query: {},
+          body: {},
+          headers: {},
+        },
+        success: (res: any) => {
+          const result = res.result
+          const raw = (result?.success && result.data) || result || {}
+          fontMap = Array.isArray(raw)
+            ? raw.reduce((m: Record<string, string>, f: any) => { m[f.filename] = f.url; return m }, {} as Record<string, string>)
+            : raw
+          resolve()
+        },
+        fail: () => { fontMap = {}; resolve() },
+      })
       return
     }
+    // #endif
     uni.request({
       url: API_BASE + '/api/fonts',
       method: 'GET',

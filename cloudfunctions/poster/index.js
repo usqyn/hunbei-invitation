@@ -121,7 +121,7 @@ const listPosterWorks = async (ctx) => {
     const res = await q.skip(skip).limit(limit).get()
     data = res.data || []
   } else {
-    const res = await q.limit(1000).get()
+    const res = await q.limit(100).get()
     data = res.data || []
   }
   // 把 cover_url/poster_url 的 cloud:// fileID 转为临时 https URL
@@ -157,7 +157,7 @@ const listPosterRecycleBin = async (ctx) => {
     const res = await q.skip(skip).limit(limit).get()
     data = res.data || []
   } else {
-    const res = await q.limit(1000).get()
+    const res = await q.limit(100).get()
     data = res.data || []
   }
   // 展平 work_data 到顶层，便于小程序列表直接使用

@@ -89,7 +89,7 @@ const listTemplates = async (ctx) => {
     })
     return paginateResponse(list, page, limit, total)
   }
-  const res = await q.limit(1000).get()
+  const res = await q.limit(100).get()
   await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   // 列表接口排除大字段，避免响应超过 1MB 限制
