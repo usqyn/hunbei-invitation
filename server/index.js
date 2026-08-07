@@ -2688,6 +2688,19 @@ function rowToObject(result) {
   return obj
 }
 
+// ============ 云同步状态查询 ============
+app.get('/api/cloud-sync/status', requireAdmin, (req, res) => {
+  const enabled = cloudSync.isEnabled()
+  res.json({
+    success: true,
+    data: {
+      enabled,
+      envId: 'cloud1-d4gyvmo1d9a1e148a',
+      message: enabled ? '云同步已启用' : 'CLOUDBASE_APIKEY 未配置，云同步已禁用',
+    },
+  })
+})
+
 // ============ 404 处理 ============
 app.use((req, res) => {
   res.status(404).json({ success: false, error: '接口不存在' })

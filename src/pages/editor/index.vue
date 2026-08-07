@@ -72,10 +72,11 @@
           <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
           <template v-if="editorStore.renderedImage && !renderedImageStale">
             <view class="rendered-image-container animate-fade-in-scale">
-              <image
+              <CloudImage
                 class="rendered-image"
                 :src="editorStore.renderedImage"
                 mode="widthFix"
+                custom-class="rendered-image"
                 @load="onRenderedImageLoad"
                 @error="onRenderedImageError"
               />

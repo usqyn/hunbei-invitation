@@ -66,6 +66,9 @@
         <span class="toolbar-divider"></span>
         <button class="tb-btn" @click="saveToServer" title="保存到服务器 (Ctrl+S)">💾 保存</button>
         <button class="tb-btn publish-btn" @click="onPublishClick" title="发布模板">🚀 发布</button>
+        <span class="cloud-sync-indicator" :class="{ 'sync-ok': cloudSyncStatus.enabled, 'sync-off': !cloudSyncStatus.enabled }" :title="cloudSyncStatus.message">
+          {{ cloudSyncStatus.enabled ? '☁️' : '⚠️' }}
+        </span>
         <button class="tb-btn" @click="onExportPNG" title="导出 PNG">📥 导出</button>
         <span class="toolbar-divider"></span>
         <button class="tb-btn" @click="onLogout" title="退出登录">🚪 退出</button>
@@ -990,6 +993,7 @@ import {
   createTemplate,
   updateTemplate,
   clearAdminToken,
+  fetchCloudSyncStatus,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
 import AdminLogin from './components/AdminLogin.vue'
@@ -1261,7 +1265,23 @@ function initEditorAfterAuth() {
 function onLoginSuccess(_token: string) {
   isLoggedIn.value = true
   initEditorAfterAuth()
+  checkCloudSyncStatus()
   showToast('登录成功 ✅')
+}
+
+// ============ 云同步状态 ============
+const cloudSyncStatus = ref<{ enabled: boolean; message: string }>({ enabled: false, message: '检查中...' })
+
+async function checkCloudSyncStatus() {
+  try {
+    const status = await fetchCloudSyncStatus()
+    cloudSyncStatus.value = status
+    if (!status.enabled) {
+      showToast('⚠️ 云同步未启用：CLOUDBASE_APIKEY 未配置', 'warn')
+    }
+  } catch (e) {
+    cloudSyncStatus.value = { enabled: false, message: '检查失败' }
+  }
 }
 
 function onLogout() {
@@ -3254,6 +3274,23 @@ label {
 }
 
 .tb-btn.publish-btn:hover { background: linear-gradient(135deg, #c0392b, #e84a6e); }
+
+/* 云同步状态指示器 */
+.cloud-sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  margin-left: 4px;
+  cursor: help;
+  transition: opacity 0.2s;
+}
+.cloud-sync-indicator.sync-ok { opacity: 1; }
+.cloud-sync-indicator.sync-off { opacity: 0.6; animation: pulse-warn 2s infinite; }
+
+@keyframes pulse-warn {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
 
 /* 空提示小号 */
 .empty-hint.small {

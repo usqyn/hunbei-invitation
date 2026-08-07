@@ -178,3 +178,15 @@ export async function fetchFonts(): Promise<Array<{ filename: string; url: strin
   if (!res.data.success) throw new Error(res.data.error)
   return res.data.data || []
 }
+
+// ============ 云同步状态 ============
+
+export async function fetchCloudSyncStatus(): Promise<{ enabled: boolean; envId: string; message: string }> {
+  try {
+    const res = await api.get('/api/cloud-sync/status')
+    if (res.data.success) return res.data.data
+    return { enabled: false, envId: '', message: res.data.error || '查询失败' }
+  } catch (e: any) {
+    return { enabled: false, envId: '', message: e?.response?.data?.error || e?.message || '查询失败' }
+  }
+}

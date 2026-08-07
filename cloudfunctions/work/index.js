@@ -52,7 +52,12 @@ const listWorks = async (ctx) => {
     const tb = new Date(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0).getTime()
     return tb - ta
   })
-  await resolveCloudFields(merged, ['cover'])
+  // 解析 cover 的 cloud:// URL（带超时保护，失败不影响列表返回）
+  try {
+    await resolveCloudFields(merged, ['cover'])
+  } catch (e) {
+    console.warn('resolveCloudFields failed for listWorks:', e.message)
+  }
   // 与 getWork/listRecycleBin 一致：把 /uploads/ 相对路径补全为完整 HTTPS URL
   normalizeUploadPaths(merged, ['cover'])
   return ok(merged)
@@ -67,10 +72,10 @@ const getWork = async (ctx) => {
   const res = await collection('works').where({ id: ctx.params.id, phone: auth.user.phone }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('作品不存在', 404)
   const work = res.data[0]
-  // 解析顶层 cloud:// URL
-  await resolveCloudFields(work, ['cover'])
+  // 解析顶层 cloud:// URL（带超时保护）
+  try { await resolveCloudFields(work, ['cover']) } catch (e) { console.warn('resolveCloudFields failed:', e.message) }
   // 解析嵌套 JSON 中的 cloud:// URL（data 内含元素图片 URL）
-  await resolveCloudUrlsDeep(work.data)
+  try { await resolveCloudUrlsDeep(work.data) } catch (e) { console.warn('resolveCloudUrlsDeep failed:', e.message) }
   // 补全 /uploads/ 相对路径与 localhost URL（与 getTemplate 一致）
   normalizeUploadPathsDeep(work.data)
   return ok(work)
@@ -82,8 +87,8 @@ const getSharedWork = async (ctx) => {
   const res = await collection('works').where({ id: ctx.params.id }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('作品不存在', 404)
   const work = res.data[0]
-  await resolveCloudFields(work, ['cover'])
-  await resolveCloudUrlsDeep(work.data)
+  try { await resolveCloudFields(work, ['cover']) } catch (e) { console.warn('resolveCloudFields failed:', e.message) }
+  try { await resolveCloudUrlsDeep(work.data) } catch (e) { console.warn('resolveCloudUrlsDeep failed:', e.message) }
   normalizeUploadPathsDeep(work.data)
   // 仅返回渲染所需字段，剔除 phone 等敏感信息
   const { phone, ...safeWork } = work
@@ -99,25 +104,25 @@ const createWork = async (ctx) => {
   const coverValue = cover || image || ''
   const workId = id || uuid()
   const ts = now()
-  // 若指定 id，检查归属
+  // 若指定 id，检查归属（单次查询）
   if (id) {
     const existing = await collection('works').where({ id }).limit(1).get()
     if (existing.data && existing.data.length && existing.data[0].phone !== auth.user.phone) {
       return httpFail('无权操作此作品', 403)
     }
-  }
-  // 覆盖：先删旧的同 id 记录，再插入新数据（模拟 INSERT OR REPLACE）
-  if (id) {
+    // 覆盖：先删旧记录
     try { await collection('works').where({ id }).remove() } catch (_) {}
   }
-  await collection('works').add({ data: {
+  // 构建记录数据
+  const record = {
     id: workId, phone: auth.user.phone,
     template_id: templateId || '', template_type: templateType || template_type || 'canvas',
     title: title || '', data: data || {}, music_id: musicId || music_id || '',
     cover: coverValue, created_at: ts, updated_at: ts,
-  } })
-  const res = await collection('works').where({ id: workId }).limit(1).get()
-  return ok(res.data[0])
+  }
+  await collection('works').add({ data: record })
+  // 直接返回构建的记录，避免额外查询
+  return ok(record)
 }
 
 // PUT /api/works/:id — 更新作品
@@ -139,8 +144,9 @@ const updateWork = async (ctx) => {
   if (coverValue !== undefined) fields.cover = coverValue
   fields.updated_at = now()
   await collection('works').where({ id: ctx.params.id }).update({ data: fields })
-  const res = await collection('works').where({ id: ctx.params.id }).limit(1).get()
-  return ok(res.data[0])
+  // 合并已有记录与更新字段，直接返回（避免额外查询）
+  const updated = { ...existing.data[0], ...fields }
+  return ok(updated)
 }
 
 // ============ 回收站 ============

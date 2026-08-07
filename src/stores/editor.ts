@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { useTemplateStore } from './template'
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
-import { resolveUrl } from '@/utils/url'
+import { resolveUrl, resolveCloudUrlSync } from '@/utils/url'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData, ElementStyle } from '@/types'
 import { request } from '@/utils/request'
@@ -151,7 +151,7 @@ export const useEditorStore = defineStore('editor', () => {
       templateType.value = snap.templateType
     }
     if (snap && typeof snap.renderedImage !== 'undefined') {
-      renderedImage.value = snap.renderedImage
+      renderedImage.value = resolveCloudUrlSync(snap.renderedImage)
     }
     if (snap && typeof snap.currentFlipPageIndex !== 'undefined') {
       currentFlipPageIndex.value = snap.currentFlipPageIndex
@@ -374,8 +374,8 @@ export const useEditorStore = defineStore('editor', () => {
       background.value = { type: 'solid', color1: '#ffffff' }
     }
 
-    // 同步渲染图
-    renderedImage.value = resolveUrl(template.renderedImage || '')
+    // 同步渲染图（cloud:// URL 通过 resolveCloudUrlSync 转换为 https 临时 URL）
+    renderedImage.value = resolveCloudUrlSync(resolveUrl(template.renderedImage || ''))
 
     // 同步到 TemplateStore（只覆盖有实际值的字段，保留非空默认值）
     const templateStore = useTemplateStore()
@@ -494,7 +494,7 @@ export const useEditorStore = defineStore('editor', () => {
           canvasSize.value = { ...savedData.canvasSize }
         }
         if (savedData.renderedImage) {
-          renderedImage.value = resolveUrl(savedData.renderedImage)
+          renderedImage.value = resolveCloudUrlSync(resolveUrl(savedData.renderedImage))
         }
         if (savedData.templateData) {
           const td = JSON.parse(JSON.stringify(savedData.templateData))
@@ -601,9 +601,9 @@ export const useEditorStore = defineStore('editor', () => {
     if (data.currentFlipPageIndex != null && data.currentFlipPageIndex >= 0 && data.currentFlipPageIndex < flipPages.length) {
       currentFlipPageIndex.value = data.currentFlipPageIndex
     }
-    // 恢复渲染图（补全相对路径）；无渲染图时清空以触发重新生成
+    // 恢复渲染图（补全相对路径，cloud:// 转 https）；无渲染图时清空以触发重新生成
     if (data.renderedImage) {
-      renderedImage.value = resolveUrl(data.renderedImage)
+      renderedImage.value = resolveCloudUrlSync(resolveUrl(data.renderedImage))
     } else {
       renderedImage.value = ''
     }
