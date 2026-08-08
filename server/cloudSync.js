@@ -136,7 +136,7 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
       orientation: normalized.orientation || 'portrait',
       background: normalized.background || {},
       tags: normalized.tags || [],
-      status: normalized.status || 'published',
+      status: 'published',
       renderedImage: rewriteLocalhostUrl(normalized.renderedImage),
       is_paid: normalized.is_paid || normalized.isPaid || 0,
       price: normalized.price || 0,
@@ -197,8 +197,54 @@ async function deleteTemplateFromCloud(id) {
   }
 }
 
+/**
+ * 查询云数据库中的模板列表（仅返回 id 和 name，用于验证同步状态）
+ */
+async function fetchCloudTemplates(limit = 100) {
+  if (!syncEnabled || !db) {
+    return { success: false, error: '云同步未启用', data: [] }
+  }
+
+  try {
+    const result = await db.collection('templates').limit(limit).get()
+    const templates = (result.data || []).map(t => ({
+      id: t.id,
+      name: t.name,
+      status: t.status,
+      updatedAt: t.updatedAt,
+    }))
+    return { success: true, data: templates }
+  } catch (e) {
+    console.error('[cloudSync] 查询云模板失败:', e.message)
+    return { success: false, error: e.message, data: [] }
+  }
+}
+
+/**
+ * 检查单个模板是否存在于云数据库
+ */
+async function checkCloudTemplateExists(id) {
+  if (!syncEnabled || !db) {
+    return { exists: false, error: '云同步未启用' }
+  }
+
+  try {
+    const result = await db.collection('templates').doc(id).get()
+    return { exists: !!result.data, data: result.data }
+  } catch (e) {
+    // doc.get() 在不存在时会抛出异常
+    if (e.message && e.message.includes('not exist')) {
+      return { exists: false }
+    }
+    console.error('[cloudSync] 查询云模板失败:', e.message)
+    return { exists: false, error: e.message }
+  }
+}
+
 module.exports = {
   isEnabled,
   syncTemplateToCloud,
   deleteTemplateFromCloud,
+  fetchCloudTemplates,
+  checkCloudTemplateExists,
 }

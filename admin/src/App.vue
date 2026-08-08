@@ -251,7 +251,13 @@
           <div class="section-divider"></div>
 
           <!-- 我的模板 -->
-          <div class="section-title">📁 我的模板</div>
+          <div class="section-title">
+            📁 我的模板
+            <button class="check-sync-btn" @click="onBatchCheckSync" :disabled="isCheckingSync" title="检查云端同步状态">
+              {{ isCheckingSync ? '⏳ 检查中...' : '🔍 检查状态' }}
+            </button>
+            <button v-if="hasUnsyncedTemplates" class="resync-all-btn" @click="onResyncAll" title="批量重新同步未同步的模板">🔄 同步全部</button>
+          </div>
           <div v-if="loadingTemplates" class="empty-hint">加载中...</div>
           <div v-else-if="!templateList.length" class="empty-hint">暂无模板<br/>先在画布制作，再发布</div>
           <div v-for="tpl in templateList" :key="tpl.id" class="template-item" :class="{ active: currentTemplateId === tpl.id }">
@@ -260,7 +266,12 @@
               <div v-else class="tpl-thumb-placeholder">📄</div>
             </div>
             <div class="tpl-info" @click="onLoadTemplate(tpl.id)">
-              <div class="tpl-name">{{ tpl.name }}</div>
+              <div class="tpl-name">
+                {{ tpl.name }}
+                <span class="tpl-cloud-status" :class="{ 'synced': tpl.cloud_synced }" :title="tpl.cloud_synced ? '已同步到微信云' : '未同步到云'">
+                  {{ tpl.cloud_synced ? '☁️' : '⚠️' }}
+                </span>
+              </div>
               <div class="tpl-cat">
                 {{ getCategoryName(tpl.category) }}
                 <span class="tpl-vip-badge" :class="'vip-' + (tpl.vipLevel || 'free')">{{ vipLevelLabel(tpl.vipLevel) }}</span>
@@ -272,8 +283,9 @@
                 <option value="personal">个人VIP</option>
                 <option value="pro">专业版</option>
               </select>
+              <button v-if="!tpl.cloud_synced" class="tpl-btn sync-btn" @click="onResyncTemplate(tpl)" title="重新同步到云">🔄</button>
               <button class="tpl-btn" @click="onCloneTemplate(tpl)" title="克隆">📋</button>
-              <button class="tpl-btn danger" @click="onDeleteTemplate(tpl)" title="删除">🗑</button>
+              <button class="tpl-btn danger" @click="onSafeDeleteTemplate(tpl)" title="安全删除（先删云端再删本地）">🗑</button>
             </div>
           </div>
           <div class="section-divider"></div>
@@ -994,6 +1006,10 @@ import {
   updateTemplate,
   clearAdminToken,
   fetchCloudSyncStatus,
+  resyncTemplate,
+  resyncAllTemplates,
+  safeDeleteTemplate,
+  batchCheckCloudSync,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
 import AdminLogin from './components/AdminLogin.vue'
@@ -1281,6 +1297,115 @@ async function checkCloudSyncStatus() {
     }
   } catch (e) {
     cloudSyncStatus.value = { enabled: false, message: '检查失败' }
+  }
+}
+
+// ============ 云同步重试 ============
+const isCheckingSync = ref(false)
+const syncingIds = ref<Set<string>>(new Set())
+
+const hasUnsyncedTemplates = computed(() => {
+  return templateList.value.some(t => !t.cloud_synced)
+})
+
+async function onResyncTemplate(tpl: any) {
+  if (syncingIds.value.has(tpl.id)) return
+  syncingIds.value.add(tpl.id)
+  try {
+    const result = await resyncTemplate(tpl.id)
+    if (result.success) {
+      tpl.cloud_synced = 1
+      showToast(`✅ ${tpl.name} 同步成功`)
+    } else {
+      showToast(`❌ 同步失败: ${result.message}`, 'error')
+    }
+  } catch (e) {
+    showToast('❌ 同步失败', 'error')
+  } finally {
+    syncingIds.value.delete(tpl.id)
+  }
+}
+
+async function onResyncAll() {
+  const unsyncedCount = templateList.value.filter(t => !t.cloud_synced).length
+  if (unsyncedCount === 0) {
+    showToast('所有模板已同步')
+    return
+  }
+  if (!confirm(`确定要重新同步 ${unsyncedCount} 个未同步的模板吗？`)) return
+
+  showToast(`开始同步 ${unsyncedCount} 个模板...`)
+  try {
+    const result = await resyncAllTemplates()
+    if (result.success) {
+      // 更新本地状态
+      templateList.value.forEach(t => {
+        if (!t.cloud_synced) t.cloud_synced = 1
+      })
+      showToast(`✅ ${result.message}`)
+    } else {
+      showToast(`❌ ${result.message}`, 'error')
+    }
+  } catch (e) {
+    showToast('❌ 批量同步失败', 'error')
+  }
+}
+
+// ============ 批量检查云端同步状态 ============
+async function onBatchCheckSync() {
+  if (isCheckingSync.value) return
+  isCheckingSync.value = true
+  showToast('正在检查云端同步状态...')
+
+  try {
+    const result = await batchCheckCloudSync()
+    if (result.success) {
+      showToast(`✅ 检查完成: ${result.synced} 已同步, ${result.unsynced} 未同步`)
+      // 刷新模板列表以获取最新状态
+      await loadTemplateList()
+    } else {
+      showToast('❌ 检查失败', 'error')
+    }
+  } catch (e) {
+    showToast('❌ 检查失败', 'error')
+  } finally {
+    isCheckingSync.value = false
+  }
+}
+
+// ============ 安全删除 ============
+const deletingIds = ref<Set<string>>(new Set())
+
+async function onSafeDeleteTemplate(tpl: any) {
+  if (deletingIds.value.has(tpl.id)) return
+  
+  const confirmMessage = `确定要安全删除模板「${tpl.name}」吗？\n\n⚠️ 此操作将：\n1. 先删除云端数据\n2. 云端删除成功后，再删除本地数据\n\n如果云端删除失败，本地数据将保留。\n\n此操作不可恢复！`
+  
+  if (!confirm(confirmMessage)) return
+  
+  deletingIds.value.add(tpl.id)
+  showToast('正在安全删除...')
+  
+  try {
+    const result = await safeDeleteTemplate(tpl.id)
+    if (result.success) {
+      // 从列表中移除
+      const index = templateList.value.findIndex(t => t.id === tpl.id)
+      if (index > -1) {
+        templateList.value.splice(index, 1)
+      }
+      showToast(`✅ ${result.message}`)
+    } else {
+      if (result.cloudDeleted) {
+        showToast(`⚠️ 云端已删除，但本地删除失败: ${result.message}`, 'warn')
+      } else {
+        showToast(`❌ 删除失败: ${result.message}`, 'error')
+      }
+    }
+  } catch (e) {
+    showToast('❌ 删除失败', 'error')
+  } finally {
+    deletingIds.value.delete(tpl.id)
   }
 }
 
@@ -3202,7 +3327,18 @@ label {
 .tpl-thumb-placeholder { font-size: 24px; }
 
 .tpl-info { flex: 1; min-width: 0; cursor: pointer; }
-.tpl-name { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tpl-name { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; padding-right: 18px; }
+.tpl-cloud-status {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.tpl-cloud-status.synced { opacity: 1; }
+.tpl-cloud-status:hover { opacity: 1; transform: translateY(-50%) scale(1.2); }
 .tpl-cat { font-size: 11px; color: #999; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
 .tpl-vip-badge {
   display: inline-block;
@@ -3238,6 +3374,37 @@ label {
 
 .tpl-btn:hover { background: #e8e8e8; }
 .tpl-btn.danger:hover { background: #ffebee; }
+.tpl-btn.sync-btn { color: #ff9800; }
+.tpl-btn.sync-btn:hover { background: #fff3e0; }
+.tpl-btn.danger { color: #d32f2f; }
+.tpl-btn.danger:hover { background: #ffebee; }
+
+.resync-all-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.resync-all-btn:hover { background: #ffe0b2; }
+
+.check-sync-btn {
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.check-sync-btn:hover { background: #bbdefb; }
+.check-sync-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* 历史版本 */
 .history-item {

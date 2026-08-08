@@ -190,3 +190,79 @@ export async function fetchCloudSyncStatus(): Promise<{ enabled: boolean; envId:
     return { enabled: false, envId: '', message: e?.response?.data?.error || e?.message || '查询失败' }
   }
 }
+
+export async function fetchCloudTemplates(): Promise<Array<{ id: string; name: string; status: string; updatedAt: string }>> {
+  try {
+    const res = await api.get('/api/cloud-sync/templates')
+    if (res.data.success) return res.data.data || []
+    return []
+  } catch (e: any) {
+    console.warn('获取云模板列表失败:', e?.message)
+    return []
+  }
+}
+
+export async function checkCloudTemplateExists(id: string): Promise<{ exists: boolean; data?: any }> {
+  try {
+    const res = await api.get(`/api/cloud-sync/check/${id}`)
+    if (res.data.success) return res.data.data
+    return { exists: false }
+  } catch (e: any) {
+    return { exists: false }
+  }
+}
+
+export async function resyncTemplate(id: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await api.post(`/api/cloud-sync/resync/${id}`)
+    return { success: res.data.success, message: res.data.message || '' }
+  } catch (e: any) {
+    return { success: false, message: e?.response?.data?.error || e?.message || '同步失败' }
+  }
+}
+
+export async function resyncAllTemplates(): Promise<{ success: boolean; message: string; synced: number }> {
+  try {
+    const res = await api.post('/api/cloud-sync/resync-all')
+    return { success: res.data.success, message: res.data.message || '', synced: res.data.synced || 0 }
+  } catch (e: any) {
+    return { success: false, message: e?.response?.data?.error || e?.message || '批量同步失败', synced: 0 }
+  }
+}
+
+export async function safeDeleteTemplate(id: string): Promise<{ success: boolean; message: string; cloudDeleted: boolean; localDeleted: boolean }> {
+  try {
+    const res = await api.delete(`/api/templates/${id}/safe-delete`)
+    return { 
+      success: res.data.success, 
+      message: res.data.message || '',
+      cloudDeleted: res.data.cloudDeleted || false,
+      localDeleted: res.data.localDeleted || false
+    }
+  } catch (e: any) {
+    return { 
+      success: false, 
+      message: e?.response?.data?.error || e?.message || '删除失败',
+      cloudDeleted: e?.response?.data?.cloudDeleted || false,
+      localDeleted: e?.response?.data?.localDeleted || false
+    }
+  }
+}
+
+export async function batchCheckCloudSync(): Promise<{ success: boolean; checked: number; synced: number; unsynced: number }> {
+  try {
+    const res = await api.get('/api/cloud-sync/batch-check')
+    if (res.data.success) {
+      return {
+        success: true,
+        checked: res.data.data.checked || 0,
+        synced: res.data.data.synced || 0,
+        unsynced: res.data.data.unsynced || 0
+      }
+    }
+    return { success: false, checked: 0, synced: 0, unsynced: 0 }
+  } catch (e: any) {
+    console.warn('批量检查云同步状态失败:', e?.message)
+    return { success: false, checked: 0, synced: 0, unsynced: 0 }
+  }
+}

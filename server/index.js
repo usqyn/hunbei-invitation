@@ -226,6 +226,8 @@ async function initDatabase() {
   try { db.run("ALTER TABLE templates ADD COLUMN vipLevel TEXT DEFAULT 'free'") } catch (_) {}
   // 迁移：为 orders 表添加 paid_at 字段
   try { db.run("ALTER TABLE orders ADD COLUMN paid_at TEXT") } catch (_) {}
+  // 迁移：为 templates 添加 cloud_synced 字段（0=未同步, 1=已同步到云数据库）
+  try { db.run("ALTER TABLE templates ADD COLUMN cloud_synced INTEGER DEFAULT 0") } catch (_) {}
   // 已有模板全部标记为 published
   db.run("UPDATE templates SET status = 'published' WHERE status IS NULL OR status = ''")
 
@@ -1232,7 +1234,7 @@ app.get('/api/music', (req, res) => {
 })
 
 // 创建模板
-app.post('/api/templates', requireAdmin, (req, res) => {
+app.post('/api/templates', requireAdmin, async (req, res) => {
   try {
     const body = req.body
     if (!body.name || !body.category) {
@@ -1297,18 +1299,30 @@ app.post('/api/templates', requireAdmin, (req, res) => {
 
     const result = db.exec("SELECT * FROM templates WHERE id = ?", [id])
     const template = rowToObject(result)
-    res.json({ success: true, data: template })
 
-    // 异步同步到云数据库（不阻塞响应）
-    cloudSync.syncTemplateToCloud(id, template, 'create').catch(e =>
-      console.warn('[cloudSync] 后台同步失败:', e.message))
+    // 同步等待云端写入结果
+    let cloudSynced = false
+    try {
+      cloudSynced = await cloudSync.syncTemplateToCloud(id, template, 'create')
+    } catch (e) {
+      console.warn('[cloudSync] 同步失败:', e.message)
+    }
+
+    // 更新云端同步状态
+    db.run("UPDATE templates SET cloud_synced = ? WHERE id = ?", [cloudSynced ? 1 : 0, id])
+    saveDatabaseDebounced()
+
+    // 返回最新状态
+    const updatedResult = db.exec("SELECT * FROM templates WHERE id = ?", [id])
+    const updatedTemplate = rowToObject(updatedResult)
+    res.json({ success: true, data: updatedTemplate })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
 })
 
 // 更新模板
-app.put('/api/templates/:id', requireAdmin, (req, res) => {
+app.put('/api/templates/:id', requireAdmin, async (req, res) => {
   try {
     const existing = db.exec("SELECT id FROM templates WHERE id = ?", [req.params.id])
     if (!existing.length || !existing[0].values.length) {
@@ -1390,11 +1404,23 @@ app.put('/api/templates/:id', requireAdmin, (req, res) => {
 
     const result = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
     const template = rowToObject(result)
-    res.json({ success: true, data: template })
 
-    // 异步同步到云数据库（不阻塞响应）
-    cloudSync.syncTemplateToCloud(req.params.id, template, 'update').catch(e =>
-      console.warn('[cloudSync] 后台同步失败:', e.message))
+    // 同步等待云端写入结果
+    let cloudSynced = false
+    try {
+      cloudSynced = await cloudSync.syncTemplateToCloud(req.params.id, template, 'update')
+    } catch (e) {
+      console.warn('[cloudSync] 同步失败:', e.message)
+    }
+
+    // 更新云端同步状态
+    db.run("UPDATE templates SET cloud_synced = ? WHERE id = ?", [cloudSynced ? 1 : 0, req.params.id])
+    saveDatabaseDebounced()
+
+    // 返回最新状态
+    const updatedResult = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
+    const updatedTemplate = rowToObject(updatedResult)
+    res.json({ success: true, data: updatedTemplate })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -1417,6 +1443,46 @@ app.delete('/api/templates/:id', requireAdmin, (req, res) => {
       console.warn('[cloudSync] 后台删除失败:', e.message))
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 安全删除模板（先删云端，成功后再删本地）
+app.delete('/api/templates/:id/safe-delete', requireAdmin, async (req, res) => {
+  try {
+    const existing = db.exec("SELECT id, name FROM templates WHERE id = ?", [req.params.id])
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ success: false, error: '模板不存在' })
+    }
+    const templateName = existing[0].values[0][1]
+
+    // 先尝试删除云端数据
+    const cloudDeleteSuccess = await cloudSync.deleteTemplateFromCloud(req.params.id)
+    
+    if (!cloudDeleteSuccess) {
+      return res.status(500).json({ 
+        success: false, 
+        error: '云端删除失败，本地数据未删除',
+        cloudDeleted: false,
+        localDeleted: false
+      })
+    }
+
+    // 云端删除成功，再删除本地数据
+    db.run("UPDATE templates SET status = 'deleted', cloud_synced = 0, updatedAt = ? WHERE id = ?", 
+      [new Date().toISOString(), req.params.id])
+    bumpVersion()
+    saveDatabase()
+
+    console.log(`[safeDelete] ✅ 模板已安全删除: ${req.params.id} (${templateName})`)
+    res.json({ 
+      success: true, 
+      message: '模板已安全删除（云端+本地）',
+      cloudDeleted: true,
+      localDeleted: true
+    })
+  } catch (e) {
+    console.error('[safeDelete] 删除失败:', e.message)
+    res.status(500).json({ success: false, error: '删除失败' })
   }
 })
 
@@ -2699,6 +2765,167 @@ app.get('/api/cloud-sync/status', requireAdmin, (req, res) => {
       message: enabled ? '云同步已启用' : 'CLOUDBASE_APIKEY 未配置，云同步已禁用',
     },
   })
+})
+
+// ============ 查询云数据库模板列表 ============
+app.get('/api/cloud-sync/templates', requireAdmin, async (req, res) => {
+  try {
+    const result = await cloudSync.fetchCloudTemplates(100)
+    res.json({ success: result.success, data: result.data, error: result.error })
+  } catch (e) {
+    console.error('[cloudSync] 查询云模板列表失败:', e.message)
+    res.status(500).json({ success: false, error: '查询云模板失败' })
+  }
+})
+
+// ============ 检查单个模板是否在云数据库中 ============
+app.get('/api/cloud-sync/check/:id', requireAdmin, async (req, res) => {
+  try {
+    const result = await cloudSync.checkCloudTemplateExists(req.params.id)
+    res.json({ success: true, data: result })
+  } catch (e) {
+    console.error('[cloudSync] 检查云模板失败:', e.message)
+    res.status(500).json({ success: false, error: '检查云模板失败' })
+  }
+})
+
+// ============ 重新同步单个模板到云 ============
+app.post('/api/cloud-sync/resync/:id', requireAdmin, async (req, res) => {
+  try {
+    const existing = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ success: false, error: '模板不存在' })
+    }
+    const template = rowToObject(existing)
+    const success = await cloudSync.syncTemplateToCloud(req.params.id, template, 'resync')
+    if (success) {
+      db.run("UPDATE templates SET cloud_synced = 1 WHERE id = ?", [req.params.id])
+      saveDatabaseDebounced()
+    }
+    res.json({ success, message: success ? '重新同步成功' : '同步失败' })
+  } catch (e) {
+    console.error('[cloudSync] 重新同步失败:', e.message)
+    res.status(500).json({ success: false, error: '重新同步失败' })
+  }
+})
+
+// ============ 批量重新同步所有未同步模板 ============
+app.post('/api/cloud-sync/resync-all', requireAdmin, async (req, res) => {
+  try {
+    const unsynced = db.exec("SELECT id FROM templates WHERE cloud_synced = 0 AND status != 'deleted'")
+    if (!unsynced.length || !unsynced[0].values.length) {
+      return res.json({ success: true, message: '没有需要同步的模板', synced: 0 })
+    }
+    const ids = unsynced[0].values.map(row => row[0])
+    let syncedCount = 0
+    // 先返回响应，后台继续同步
+    res.json({ success: true, message: `开始同步 ${ids.length} 个模板...`, synced: 0, total: ids.length })
+    // 后台异步执行同步
+    for (const id of ids) {
+      try {
+        const existing = db.exec("SELECT * FROM templates WHERE id = ?", [id])
+        if (existing.length && existing[0].values.length) {
+          const template = rowToObject(existing)
+          const success = await cloudSync.syncTemplateToCloud(id, template, 'resync-all')
+          if (success) {
+            db.run("UPDATE templates SET cloud_synced = 1 WHERE id = ?", [id])
+            syncedCount++
+          }
+        }
+      } catch (e) {
+        console.warn(`[cloudSync] 同步模板 ${id} 失败:`, e.message)
+      }
+    }
+    saveDatabaseDebounced()
+    console.log(`[cloudSync] 批量同步完成: ${syncedCount}/${ids.length}`)
+  } catch (e) {
+    console.error('[cloudSync] 批量重新同步失败:', e.message)
+  }
+})
+
+// ============ 强制重新同步所有模板到云端 ============
+app.post('/api/cloud-sync/force-resync-all', requireAdmin, async (req, res) => {
+  console.log('[force-resync] 收到请求')
+  try {
+    const templates = db.exec("SELECT id FROM templates WHERE status != 'deleted'")
+    if (!templates.length || !templates[0].values.length) {
+      console.log('[force-resync] 没有模板')
+      return res.json({ success: true, message: '没有模板需要同步', synced: 0 })
+    }
+    const ids = templates[0].values.map(row => row[0])
+    console.log(`[force-resync] 开始同步 ${ids.length} 个模板`)
+    // 先返回响应，后台继续同步
+    res.json({ success: true, message: `开始强制同步 ${ids.length} 个模板...`, synced: 0, total: ids.length })
+    // 后台异步执行同步
+    let syncedCount = 0
+    for (const id of ids) {
+      try {
+        const existing = db.exec("SELECT * FROM templates WHERE id = ?", [id])
+        if (existing.length && existing[0].values.length) {
+          const template = rowToObject(existing)
+          console.log(`[force-resync] 同步: ${id} (${template.name})`)
+          const success = await cloudSync.syncTemplateToCloud(id, template, 'force-resync')
+          console.log(`[force-resync] 结果: ${success}`)
+          if (success) {
+            db.run("UPDATE templates SET cloud_synced = 1 WHERE id = ?", [id])
+            syncedCount++
+          }
+        }
+      } catch (e) {
+        console.warn(`[force-resync] 强制同步模板 ${id} 失败:`, e.message)
+      }
+    }
+    saveDatabaseDebounced()
+    console.log(`[force-resync] 完成: ${syncedCount}/${ids.length}`)
+  } catch (e) {
+    console.error('[cloudSync] 强制同步失败:', e.message)
+  }
+})
+
+// ============ 批量检查云端同步状态 ============
+app.get('/api/cloud-sync/batch-check', requireAdmin, async (req, res) => {
+  try {
+    // 获取所有未删除的模板
+    const templates = db.exec("SELECT id FROM templates WHERE status != 'deleted'")
+    if (!templates.length || !templates[0].values.length) {
+      return res.json({ success: true, data: { checked: 0, synced: 0, unsynced: 0 } })
+    }
+
+    const ids = templates[0].values.map(row => row[0])
+    let syncedCount = 0
+    let unsyncedCount = 0
+    const results = []
+
+    for (const id of ids) {
+      const cloudResult = await cloudSync.checkCloudTemplateExists(id)
+      const isInCloud = cloudResult.exists
+
+      // 更新本地状态
+      db.run("UPDATE templates SET cloud_synced = ? WHERE id = ?", [isInCloud ? 1 : 0, id])
+      
+      if (isInCloud) {
+        syncedCount++
+      } else {
+        unsyncedCount++
+      }
+      results.push({ id, cloudSynced: isInCloud })
+    }
+
+    saveDatabaseDebounced()
+    console.log(`[cloudSync] 批量检查完成: ${syncedCount} 已同步, ${unsyncedCount} 未同步`)
+    res.json({ 
+      success: true, 
+      data: { 
+        checked: ids.length, 
+        synced: syncedCount, 
+        unsynced: unsyncedCount,
+        results 
+      } 
+    })
+  } catch (e) {
+    console.error('[cloudSync] 批量检查失败:', e.message)
+    res.status(500).json({ success: false, error: '批量检查失败' })
+  }
 })
 
 // ============ 404 处理 ============
