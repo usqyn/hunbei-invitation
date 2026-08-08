@@ -71,6 +71,7 @@ const buildTemplateQuery = (ctx) => {
 }
 
 // GET /api/templates — 模板列表（支持分页）
+// 注意：列表接口不做 resolveCloudFields（太慢），cloud:// URL 由前端 CloudImage 组件处理
 const listTemplates = async (ctx) => {
   const conditions = buildTemplateQuery(ctx)
   const { page, limit, skip, hasPaging } = parsePagination(ctx.query)
@@ -79,8 +80,6 @@ const listTemplates = async (ctx) => {
   let q = collection('templates').where(conditions).orderBy('updatedAt', 'desc')
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
-    await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-    normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
     const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
     const list = (res.data || []).map(t => {
       const light = { ...t }
@@ -90,8 +89,6 @@ const listTemplates = async (ctx) => {
     return paginateResponse(list, page, limit, total)
   }
   const res = await q.limit(100).get()
-  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   // 列表接口排除大字段，避免响应超过 1MB 限制
   const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
   const list = (res.data || []).map(t => {
@@ -114,8 +111,6 @@ const listSimilarTemplates = async (ctx) => {
     .orderBy('likes', 'desc')
     .limit(6)
     .get()
-  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
   const list = (res.data || []).map(t => {
     const light = { ...t }
@@ -231,6 +226,7 @@ const deleteTemplate = async (ctx) => {
 // ============ 商品别名路由（与 templates 共享数据源） ============
 
 // GET /api/products — 商品列表（默认按 likes 倒序）
+// 列表接口不做 resolveCloudFields，cloud:// URL 由前端 CloudImage 组件处理
 const listProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
@@ -241,8 +237,6 @@ const listProducts = async (ctx) => {
       collection('templates').where(conditions).count(),
       q.skip(skip).limit(limit).get(),
     ])
-    await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-    normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
     const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
     const list = (res.data || []).map(t => {
       const light = { ...t }
@@ -252,8 +246,6 @@ const listProducts = async (ctx) => {
     return paginateResponse(list, page, limit, countRes.total || 0)
   }
   const res = await q.limit(20).get()
-  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
   const list = (res.data || []).map(t => {
     const light = { ...t }
@@ -268,8 +260,6 @@ const listRecommendProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
   const res = await collection('templates').where(conditions).orderBy('likes', 'desc').limit(10).get()
-  await resolveCloudFields(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  normalizeUploadPaths(res.data || [], ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
   const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
   const list = (res.data || []).map(t => {
     const light = { ...t }

@@ -8,6 +8,8 @@
  */
 
 const tcb = require('@cloudbase/node-sdk')
+const https = require('https')
+const http = require('http')
 
 const ENV_ID = 'cloud1-d4gyvmo1d9a1e148a'
 const API_KEY = process.env.CLOUDBASE_APIKEY || ''
@@ -103,6 +105,72 @@ function isEnabled() {
 }
 
 /**
+ * 下载文件并上传到云存储
+ * @param {string} fileUrl - 文件的 HTTP/HTTPS URL 或 data: URI
+ * @param {string} cloudPath - 云存储路径，如 templates/cover/xxx.jpg
+ * @returns {Promise<string>} cloud:// 文件 ID 或空字符串
+ */
+async function uploadFileToCloud(fileUrl, cloudPath) {
+  if (!syncEnabled || !app || !fileUrl) return ''
+  // 跳过已有的 cloud:// URL
+  if (fileUrl.startsWith('cloud://')) return fileUrl
+
+  try {
+    let fileBuffer
+    if (fileUrl.startsWith('data:')) {
+      // data: URI → 解析 base64
+      const base64 = fileUrl.split(',')[1]
+      if (!base64) return ''
+      fileBuffer = Buffer.from(base64, 'base64')
+    } else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+      fileBuffer = await downloadFile(fileUrl)
+    } else {
+      return ''
+    }
+
+    if (!fileBuffer || !fileBuffer.length) return ''
+
+    // 上传到云存储
+    const uploadRes = await app.uploadFile({
+      cloudPath,
+      fileContent: fileBuffer,
+    })
+    if (uploadRes && uploadRes.fileID) {
+      console.log(`[cloudSync] ☁️  文件已上传到云存储: ${cloudPath} -> ${uploadRes.fileID}`)
+      return uploadRes.fileID
+    }
+  } catch (e) {
+    console.warn(`[cloudSync] 文件上传到云存储失败: ${fileUrl.slice(0, 80)}... -> ${cloudPath}:`, e.message)
+  }
+  return ''
+}
+
+/**
+ * 下载文件为 Buffer
+ */
+function downloadFile(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https://') ? https : http
+    const req = client.get(url, { timeout: 15000 }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        // 跟随重定向
+        return downloadFile(res.headers.location).then(resolve).catch(reject)
+      }
+      if (res.statusCode !== 200) {
+        res.resume()
+        return reject(new Error(`HTTP ${res.statusCode}`))
+      }
+      const chunks = []
+      res.on('data', (chunk) => chunks.push(chunk))
+      res.on('end', () => resolve(Buffer.concat(chunks)))
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')) })
+  })
+}
+
+/**
  * 同步模板到云数据库（直接写入）
  */
 async function syncTemplateToCloud(id, templateData, action = 'create') {
@@ -121,12 +189,27 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
 
   try {
     const normalized = normalizeTemplateData(templateData)
+
+    // 上传图片文件到云存储，获取 cloud:// URL
+    const ts = Date.now()
+    const coverUrl = rewriteLocalhostUrl(normalized.cover)
+    const bgUrl = rewriteLocalhostUrl(normalized.backgroundImage)
+    const renderUrl = rewriteLocalhostUrl(normalized.renderedImage)
+    const thumbUrl = rewriteLocalhostUrl(normalized.thumbnail)
+
+    const [cloudCover, cloudBg, cloudRender, cloudThumb] = await Promise.all([
+      coverUrl ? uploadFileToCloud(coverUrl, `templates/cover/${id}_${ts}.jpg`) : Promise.resolve(''),
+      bgUrl ? uploadFileToCloud(bgUrl, `templates/bg/${id}_${ts}.jpg`) : Promise.resolve(''),
+      renderUrl ? uploadFileToCloud(renderUrl, `templates/render/${id}_${ts}.jpg`) : Promise.resolve(''),
+      thumbUrl ? uploadFileToCloud(thumbUrl, `templates/thumb/${id}_${ts}.jpg`) : Promise.resolve(''),
+    ])
+
     const payload = {
       id,
       name: normalized.name || '',
       subtitle: normalized.subtitle || '',
       category: normalized.category || '',
-      cover: rewriteLocalhostUrl(normalized.cover),
+      cover: cloudCover || coverUrl,
       primaryColor: normalized.primaryColor || '#e84a6e',
       likes: normalized.likes || 0,
       pageCount: normalized.pageCount || 10,
@@ -135,9 +218,11 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
       canvasSize: normalized.canvasSize || { width: 375, height: 667 },
       orientation: normalized.orientation || 'portrait',
       background: normalized.background || {},
+      backgroundImage: cloudBg || bgUrl || '',
       tags: normalized.tags || [],
       status: 'published',
-      renderedImage: rewriteLocalhostUrl(normalized.renderedImage),
+      renderedImage: cloudRender || renderUrl,
+      thumbnail: cloudThumb || thumbUrl || '',
       is_paid: normalized.is_paid || normalized.isPaid || 0,
       price: normalized.price || 0,
       is_premium: normalized.is_premium || normalized.isPremium || 0,

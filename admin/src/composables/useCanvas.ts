@@ -1026,15 +1026,19 @@ export function useCanvas(opts: UseCanvasOptions) {
           const loadOpts = isDataUrl ? {} : { crossOrigin: 'anonymous' }
           fabric.FabricImage.fromURL(newSrc, loadOpts).then(newImg => {
             if (!newImg || !fabricCanvas.value) return
-            const scaleX = (obj.width || 1) / (newImg.width || 1)
-            const scaleY = (obj.height || 1) / (newImg.height || 1)
+            // 保持宽高比：用统一缩放因子，使新图片适配旧图片的包围框
+            const oldW = obj.width || 1
+            const oldH = obj.height || 1
+            const newW = newImg.width || 1
+            const newH = newImg.height || 1
+            const scale = Math.min(oldW / newW, oldH / newH)
             newImg.set({
               left: obj.left,
               top: obj.top,
               originX: 'center',
               originY: 'center',
-              scaleX,
-              scaleY,
+              scaleX: scale,
+              scaleY: scale,
               opacity: obj.opacity,
               angle: obj.angle,
             })

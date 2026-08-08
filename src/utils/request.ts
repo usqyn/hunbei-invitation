@@ -90,7 +90,13 @@ export function request<T = any>(options: string | {
               }
             }
           } else {
-            resolve(result as T)
+            // iOS 微信云函数可能返回 null/undefined 或不完整响应
+            if (result === null || result === undefined) {
+              console.error('[request] 云函数返回为空:', options.url)
+              reject(new Error('云函数返回为空'))
+            } else {
+              resolve(result as T)
+            }
           }
         },
         fail: (err: any) => {

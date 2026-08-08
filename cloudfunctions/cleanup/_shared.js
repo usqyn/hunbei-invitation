@@ -164,14 +164,21 @@ const getCloudUrl = async (fileID) => {
 }
 
 // 批量获取云存储 URL（减少 N+1 调用）
+// getTempFileURL 单次最多 20 条，超出需分批
+const BATCH_SIZE = 20
 const getCloudUrls = async (fileIDs) => {
   if (!fileIDs || !fileIDs.length) return []
   const cloudOnes = fileIDs.filter(f => typeof f === 'string' && f.startsWith('cloud://'))
   if (!cloudOnes.length) return fileIDs
+  const map = {}
   try {
-    const res = await cloud.getTempFileURL({ fileList: cloudOnes })
-    const map = {}
-    res.fileList.forEach(item => { if (item.tempFileURL) map[item.fileID] = item.tempFileURL })
+    for (let i = 0; i < cloudOnes.length; i += BATCH_SIZE) {
+      const batch = cloudOnes.slice(i, i + BATCH_SIZE)
+      const res = await cloud.getTempFileURL({ fileList: batch })
+      if (res && res.fileList) {
+        res.fileList.forEach(item => { if (item.tempFileURL) map[item.fileID] = item.tempFileURL })
+      }
+    }
     return fileIDs.map(f => (typeof f === 'string' && map[f]) ? map[f] : f)
   } catch (e) {
     console.error('getCloudUrls 失败:', e)

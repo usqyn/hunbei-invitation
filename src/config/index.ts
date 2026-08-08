@@ -100,7 +100,7 @@ export function getFunctionName(path: string): string {
   if (path.startsWith('/api/orders')) return FN.order
   if (path === '/api/vip/order' || path.startsWith('/api/vip/order')) return FN.order
   if (path.startsWith('/api/works')) return FN.work
-  if (path === '/api/categories' || path.startsWith('/api/templates') || path.startsWith('/api/products')) return FN.template
+  if (path.startsWith('/api/categories') || path.startsWith('/api/templates') || path.startsWith('/api/products')) return FN.template
   // /api/user/login 走 common；其余 /api/user/* 走 user
   if (path === '/api/user/login') return FN.common
   if (path.startsWith('/api/user/') || path === '/api/user/info' || path === '/api/user/profile') return FN.user

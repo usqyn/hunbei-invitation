@@ -48,7 +48,7 @@
     </view>
 
     <!-- 错误状态 -->
-    <view v-else-if="loadError && filteredTemplates.length === 0" class="error-state" @click="loadTemplates">
+    <view v-else-if="loadError && filteredTemplates.length === 0" class="error-state" @click="retryLoad">
       <image class="error-icon-image" :src="pageConfig.errorIcon" mode="aspectFit" />
       <text class="error-text">{{ pageConfig.errorText }}</text>
     </view>
@@ -69,13 +69,13 @@
         >
           <!-- 模板封面图（按真实比例显示） -->
           <view class="cover-wrap" :style="getCoverStyle(template)">
-            <image
+            <CloudImage
               class="template-cover"
               :src="getImageUrl(template)"
               mode="aspectFit"
-              lazy-load
+              :lazy-load="true"
               @error="onImageError($event, template)"
-            ></image>
+            />
             <!-- 渐变遮罩 - 底部 -->
             <view class="cover-gradient"></view>
             <!-- 右上角价格/VIP标签 -->
@@ -219,6 +219,7 @@ import { request } from '@/utils/request'
 import { resolveUrl } from '@/utils/url'
 import { useUserStore } from '@/stores/user'
 import { useFeedback } from '@/composables/useFeedback'
+import CloudImage from '@/components/CloudImage.vue'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
 const { haptic } = useFeedback()
@@ -337,17 +338,18 @@ onMounted(async () => {
   }
 
   loading.value = true
-
-  // 并行加载分类和模板，不再串行等待
-  const [categories, templates] = await Promise.all([
-    fetchCategories(),
-    fetchTemplates(),
-  ])
-
-  buildState(categories, templates)
-
-  loading.value = false
-  enableShareMenu()
+  try {
+    // 串行调用避免 iOS 并发云函数问题
+    const categories = await fetchCategories()
+    const templates = await fetchTemplates()
+    buildState(categories, templates)
+  } catch (e) {
+    console.error('模板页初始化失败:', e)
+    loadError.value = true
+  } finally {
+    loading.value = false
+    enableShareMenu()
+  }
 })
 
 onLoad(() => {
@@ -415,7 +417,7 @@ async function fetchCategories() {
 async function fetchTemplates(): Promise<TemplateItem[]> {
   loadError.value = false
   try {
-    const data = await request<TemplateItem[]>({ url: '/api/templates', hideLoading: true })
+    const data = await request<TemplateItem[]>({ url: '/api/templates?page=1&limit=20', hideLoading: true })
     if (data && Array.isArray(data)) {
       return data.map(pickCardFields)
     }
@@ -466,6 +468,22 @@ function pickCardFields(t: TemplateItem): TemplateItem {
     updatedAt: t.updatedAt,
     createdAt: t.createdAt,
   } as TemplateItem
+}
+
+// 重试加载
+async function retryLoad() {
+  loading.value = true
+  loadError.value = false
+  try {
+    const categories = await fetchCategories()
+    const templates = await fetchTemplates()
+    buildState(categories, templates)
+  } catch (e) {
+    console.error('模板页重试加载失败:', e)
+    loadError.value = true
+  } finally {
+    loading.value = false
+  }
 }
 
 // ============ 方法 ============

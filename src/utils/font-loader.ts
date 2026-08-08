@@ -104,7 +104,7 @@ function loadCustomFont(fontFamily: string): Promise<void> {
     const rawFontUrl = fontMap[fontFamily] || (FONT_ALIASES[fontFamily] ? fontMap[FONT_ALIASES[fontFamily]] : '')
     if (typeof rawFontUrl !== 'string' || !rawFontUrl) {
       // 云函数模式下字体不可用属于正常情况，降级为 log
-      if (USE_CLOUD_FUNCTIONS) console.log(`[FontLoader] Font not available (cloud mode): ${fontFamily}`)
+      if (USE_CLOUD_FUNCTIONS) console.warn(`[FontLoader] Font not available (cloud mode): ${fontFamily} - 请通过管理后台上传字体到云存储`)
       resolve()
       return
     }
