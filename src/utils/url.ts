@@ -112,7 +112,15 @@ async function getRefreshUrlFn(): Promise<(fileID: string) => Promise<string>> {
   _refreshUrlFn = async (fileID: string): Promise<string> => {
     const fnName = getFunctionName('/api/refresh-url')
     const t0 = Date.now()
+    // 超时保护：iOS 上云函数偶发 success/fail 均不回调，避免永久挂起
     const res = await new Promise<any>((resolve, reject) => {
+      let settled = false
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        console.error(`[cloud-url] 刷新URL超时(15s): ${fileID}`)
+        reject(new Error('刷新 URL 超时'))
+      }, 15000)
       wx.cloud.callFunction({
         name: fnName,
         data: {
@@ -122,8 +130,18 @@ async function getRefreshUrlFn(): Promise<(fileID: string) => Promise<string>> {
           body: { fileID },
           headers: {},
         },
-        success: (r: any) => resolve(r.result),
-        fail: (err: any) => reject(err),
+        success: (r: any) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          resolve(r.result)
+        },
+        fail: (err: any) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          reject(err)
+        },
       })
     })
     const elapsed = Date.now() - t0

@@ -338,6 +338,20 @@ function monitorNetwork() {
   })
 }
 
+// ============ 本地兜底模板列表 ============
+// 云函数在 iOS 上偶发超时/挂起/返回空，此时回退到本地静态模板，
+// 保证页面不为空白（点击本地模板会提示稍后重试）
+const LOCAL_TEMPLATE_LIST: TemplateItem[] = [
+  { id: 'local-1', name: '好久不见', subtitle: 'Our Wedding', category: 'wedding', cover: '/static/images/templates/wedding-1.svg', likes: 9999, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
+  { id: 'local-2', name: '适我愿兮', subtitle: 'Love Forever', category: 'wedding', cover: '/static/images/templates/wedding-2.svg', likes: 8866, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 12, createdAt: '', updatedAt: '' },
+  { id: 'local-3', name: '佳偶天成', subtitle: 'A Perfect Match', category: 'wedding', cover: '/static/images/templates/wedding-3.svg', likes: 7680, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
+  { id: 'local-4', name: '最美的遇见', subtitle: 'Proposal', category: 'engagement', cover: '/static/images/templates/template-1.svg', likes: 5321, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-5', name: '节日快乐', subtitle: 'Happy Holiday', category: 'festival-invitation', cover: '/static/images/templates/invitation-1.svg', likes: 4210, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-6', name: '甜蜜派对', subtitle: 'Sweet Party', category: 'festival-invitation', cover: '/static/images/templates/invitation-2.svg', likes: 3980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-7', name: '百日宴', subtitle: 'Baby Party', category: 'baby', cover: '/static/images/templates/template-5.svg', likes: 2870, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-8', name: '乔迁之喜', subtitle: 'Housewarming', category: 'house', cover: '/static/images/templates/template-3.svg', likes: 2150, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+]
+
 // ============ 生命周期 ============
 onMounted(async () => {
   const pages = getCurrentPages()
@@ -444,7 +458,7 @@ async function fetchCategories() {
   }))
 }
 
-// 获取模板数据（纯数据，不写 reactive state）— 失败自动重试 1 次
+// 获取模板数据（纯数据，不写 reactive state）— 失败自动重试1次，仍失败回退本地静态模板
 async function fetchTemplates(): Promise<TemplateItem[]> {
   loadError.value = false
   const MAX_ATTEMPTS = 2
@@ -453,7 +467,7 @@ async function fetchTemplates(): Promise<TemplateItem[]> {
       const t0 = Date.now()
       const data = await request<TemplateItem[]>({ url: '/api/templates?page=1&limit=20', hideLoading: true })
       const elapsed = Date.now() - t0
-      if (data && Array.isArray(data)) {
+      if (data && Array.isArray(data) && data.length > 0) {
         if (attempt > 1) console.log(`[template] 第${attempt}次重试成功, 耗时${elapsed}ms, 数量=${data.length}`)
         return data.map(pickCardFields)
       }
@@ -463,19 +477,17 @@ async function fetchTemplates(): Promise<TemplateItem[]> {
         await new Promise(r => setTimeout(r, 800))
         continue
       }
-      // 最后一次仍异常，返回空
-      return []
     } catch (e) {
       console.error(`[template] 加载模板列表失败(attempt=${attempt}):`, e)
       if (attempt < MAX_ATTEMPTS) {
         await new Promise(r => setTimeout(r, 800))
         continue
       }
-      loadError.value = true
-      return []
     }
   }
-  return []
+  // 云函数彻底失败：回退本地静态模板，保证 iOS 上页面不为空白
+  console.warn(`[template] 云函数加载模板失败，回退本地静态模板(${LOCAL_TEMPLATE_LIST.length}个), network=${_networkType}`)
+  return LOCAL_TEMPLATE_LIST.map(t => ({ ...t }))
 }
 
 // 将分类与模板交叉关联，写入 reactive state
@@ -562,6 +574,11 @@ function getSortLabel(value: string): string {
 
 function onSelectTemplate(template: TemplateItem) {
   if (navigating.value) return
+  // 本地兜底模板没有真实数据，点击提示稍后重试
+  if (typeof template.id === 'string' && template.id.startsWith('local-')) {
+    uni.showToast({ title: '模板数据加载失败，请稍后重试', icon: 'none' })
+    return
+  }
   // 登录拦截：未登录时跳转登录页
   if (!userStore.requireLogin()) return
 
