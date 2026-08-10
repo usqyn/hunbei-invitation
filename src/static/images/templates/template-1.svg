@@ -8,5 +8,5 @@
   <rect width="800" height="600" fill="url(#bg)"/>
   <text x="400" y="280" font-size="60" fill="white" text-anchor="middle" font-family="Arial">💒 婚礼请柬</text>
   <text x="400" y="350" font-size="30" fill="white" text-anchor="middle" font-family="Arial">我们结婚啦</text>
-  <text x="400" y="400" font-size="24" fill="white" text-anchor="middle" font-family="Arial">新郎 & 新娘</text>
+  <text x="400" y="400" font-size="24" fill="white" text-anchor="middle" font-family="Arial">新郎 &amp; 新娘</text>
 </svg>

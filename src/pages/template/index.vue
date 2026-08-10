@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page">
     <!-- 顶部标题栏（融合搜索入口） -->
     <view class="header">
@@ -342,14 +342,14 @@ function monitorNetwork() {
 // 云函数在 iOS 上偶发超时/挂起/返回空，此时回退到本地静态模板，
 // 保证页面不为空白（点击本地模板会提示稍后重试）
 const LOCAL_TEMPLATE_LIST: TemplateItem[] = [
-  { id: 'local-1', name: '好久不见', subtitle: 'Our Wedding', category: 'wedding', cover: '/static/images/templates/wedding-1.svg', likes: 9999, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
-  { id: 'local-2', name: '适我愿兮', subtitle: 'Love Forever', category: 'wedding', cover: '/static/images/templates/wedding-2.svg', likes: 8866, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 12, createdAt: '', updatedAt: '' },
-  { id: 'local-3', name: '佳偶天成', subtitle: 'A Perfect Match', category: 'wedding', cover: '/static/images/templates/wedding-3.svg', likes: 7680, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
-  { id: 'local-4', name: '最美的遇见', subtitle: 'Proposal', category: 'engagement', cover: '/static/images/templates/template-1.svg', likes: 5321, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
-  { id: 'local-5', name: '节日快乐', subtitle: 'Happy Holiday', category: 'festival-invitation', cover: '/static/images/templates/invitation-1.svg', likes: 4210, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
-  { id: 'local-6', name: '甜蜜派对', subtitle: 'Sweet Party', category: 'festival-invitation', cover: '/static/images/templates/invitation-2.svg', likes: 3980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
-  { id: 'local-7', name: '百日宴', subtitle: 'Baby Party', category: 'baby', cover: '/static/images/templates/template-5.svg', likes: 2870, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
-  { id: 'local-8', name: '乔迁之喜', subtitle: 'Housewarming', category: 'house', cover: '/static/images/templates/template-3.svg', likes: 2150, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-1', name: '好久不见', subtitle: 'Our Wedding', category: 'wedding', cover: '/static/images/templates/wedding-1.png', likes: 9999, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
+  { id: 'local-2', name: '适我愿兮', subtitle: 'Love Forever', category: 'wedding', cover: '/static/images/templates/wedding-2.png', likes: 8866, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 12, createdAt: '', updatedAt: '' },
+  { id: 'local-3', name: '佳偶天成', subtitle: 'A Perfect Match', category: 'wedding', cover: '/static/images/templates/wedding-3.png', likes: 7680, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
+  { id: 'local-4', name: '最美的遇见', subtitle: 'Proposal', category: 'engagement', cover: '/static/images/templates/template-1.png', likes: 5321, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-5', name: '节日快乐', subtitle: 'Happy Holiday', category: 'festival-invitation', cover: '/static/images/templates/invitation-1.png', likes: 4210, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-6', name: '甜蜜派对', subtitle: 'Sweet Party', category: 'festival-invitation', cover: '/static/images/templates/invitation-2.png', likes: 3980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-7', name: '百日宴', subtitle: 'Baby Party', category: 'baby', cover: '/static/images/templates/template-5.png', likes: 2870, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-8', name: '乔迁之喜', subtitle: 'Housewarming', category: 'house', cover: '/static/images/templates/template-3.png', likes: 2150, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
 ]
 
 // ============ 生命周期 ============
@@ -617,7 +617,7 @@ function onSelectTemplate(template: TemplateItem) {
 function getImageUrl(template: TemplateItem): string {
   if (template.cover) return resolveUrl(template.cover)
   if (template.image) return resolveUrl(template.image)
-  return '/static/images/templates/wedding-1.svg'
+  return '/static/images/templates/wedding-1.png'
 }
 
 // 根据模板真实比例计算卡片高度
@@ -636,7 +636,7 @@ function getCoverStyle(template: TemplateItem): Record<string, string> {
 
 function onImageError(e: any, template: TemplateItem) {
   console.warn(`[template] 封面图加载失败: id=${template.id}, src=${getImageUrl(template)}, errMsg=${e?.detail?.errMsg || e?.errMsg || 'unknown'}`)
-  template.cover = '/static/images/templates/wedding-1.svg'
+  template.cover = '/static/images/templates/wedding-1.png'
 }
 
 function openSearch() {

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="share-page">
     <!-- 顶部标题栏 -->
     <view class="share-header">
@@ -192,7 +192,7 @@ onMounted(() => {
   shareDesc.value = `诚挚邀请您参加我们的婚礼，见证我们的爱情之路，共享美好时刻！`
 
   // 封面使用模板的封面图
-  coverImage.value = templateStore.templateData.coverImage || '/static/images/templates/wedding-1.svg'
+  coverImage.value = templateStore.templateData.coverImage || '/static/images/templates/wedding-1.png'
 
   enableShareMenu()
 })

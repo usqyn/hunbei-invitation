@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="flip-editor">
     <!-- 顶部导航栏 -->
     <view class="editor-header">
@@ -68,7 +68,7 @@
             <CloudImage
               v-if="el.type === 'image'"
               custom-class="flip-image"
-              :src="el.text || '/static/images/templates/wedding-1.svg'"
+              :src="el.text || '/static/images/templates/wedding-1.png'"
               mode="aspectFit"
             />
             <text

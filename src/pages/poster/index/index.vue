@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page">
     <!-- 顶部标题栏 -->
     <view class="header">
@@ -210,7 +210,7 @@ function formatLikes(num: number | undefined): string {
 function onImageError(e: any, template: PosterTemplate) {
   const idx = posterTemplates.value.findIndex(t => t.id === template.id)
   if (idx >= 0) {
-    posterTemplates.value[idx] = { ...posterTemplates.value[idx], cover_url: '/static/images/templates/wedding-1.svg' }
+    posterTemplates.value[idx] = { ...posterTemplates.value[idx], cover_url: '/static/images/templates/wedding-1.png' }
   }
 }
 

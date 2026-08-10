@@ -1,4 +1,4 @@
-// 首页分类 - 与模板系统中的分类ID保持一致
+﻿// 首页分类 - 与模板系统中的分类ID保持一致
 // categoryId 对应 templates.ts 中的 category 字段
 export interface HomeCategory {
   id: number           // 首页分类ID
@@ -43,12 +43,12 @@ export const HOME_TABS = ['网红爆款', '新婚', '节日邀请', '限时免�
 
 // 精选卡片 - 对应模板系统中的实际模板
 export const HOME_FEATURED_CARDS = [
-  { id: 1, title: '好久不见', type: 'wedding-1', date: '2050.05.20', image: '/static/images/templates/wedding-1.svg' },
-  { id: 2, title: '适我愿兮', type: 'wedding-2', date: '2050.05.18', image: '/static/images/templates/wedding-2.svg' },
-  { id: 3, title: '佳偶天成', type: 'wedding-3', date: '2050.05.15', image: '/static/images/templates/wedding-3.svg' },
-  { id: 4, title: '最美的遇见', type: 'proposal-1', date: '2050.06.15', image: '/static/images/templates/template-1.svg' },
-  { id: 5, title: '节日快乐', type: 'festival-invitation-1', date: '2050.06.15', image: '/static/images/templates/invitation-1.svg' },
-  { id: 6, title: '甜蜜派对', type: 'festival-invitation-2', date: '2050.06.10', image: '/static/images/templates/invitation-2.svg' },
-  { id: 7, title: '百日宴', type: 'baby-2', date: '2050.08.20', image: '/static/images/templates/template-5.svg' },
-  { id: 8, title: '乔迁之喜', type: 'housewarming-1', date: '2050.09.10', image: '/static/images/templates/template-3.svg' },
+  { id: 1, title: '好久不见', type: 'wedding-1', date: '2050.05.20', image: '/static/images/templates/wedding-1.png' },
+  { id: 2, title: '适我愿兮', type: 'wedding-2', date: '2050.05.18', image: '/static/images/templates/wedding-2.png' },
+  { id: 3, title: '佳偶天成', type: 'wedding-3', date: '2050.05.15', image: '/static/images/templates/wedding-3.png' },
+  { id: 4, title: '最美的遇见', type: 'proposal-1', date: '2050.06.15', image: '/static/images/templates/template-1.png' },
+  { id: 5, title: '节日快乐', type: 'festival-invitation-1', date: '2050.06.15', image: '/static/images/templates/invitation-1.png' },
+  { id: 6, title: '甜蜜派对', type: 'festival-invitation-2', date: '2050.06.10', image: '/static/images/templates/invitation-2.png' },
+  { id: 7, title: '百日宴', type: 'baby-2', date: '2050.08.20', image: '/static/images/templates/template-5.png' },
+  { id: 8, title: '乔迁之喜', type: 'housewarming-1', date: '2050.09.10', image: '/static/images/templates/template-3.png' },
 ]

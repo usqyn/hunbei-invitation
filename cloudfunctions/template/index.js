@@ -53,6 +53,35 @@ const listCategories = async (ctx) => {
 
 // ============ 模板列表 ============
 
+// 列表记录裁剪 + 封面清洗：
+// 1. 移除非列表所需的大字段（data/elements/pages/background/canvasSize/tags）
+// 2. data:image base64 封面会撑爆云函数 1MB 响应上限（实测单图可达 478KB，
+//    limit=20 时极易超限导致 iOS callFunction 失败），必须置空，前端显示兜底图
+const listHeavyFields = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+
+const sanitizeListRecord = (t) => {
+  const light = { ...t }
+  listHeavyFields.forEach(f => { delete light[f] })
+  ;['cover', 'image', 'thumbnail', 'renderedImage'].forEach(f => {
+    const v = light[f]
+    if (typeof v === 'string' && v.startsWith('data:image')) light[f] = ''
+  })
+  return light
+}
+
+// 批量处理列表记录的封面字段：
+// - data:image base64 → 置空
+// - cloud:// → 换取 https 临时 URL（一次批量 getTempFileURL）
+// - /uploads/ 相对路径 → 生产 HTTPS 域名
+const sanitizeListCovers = async (list) => {
+  list.forEach(sanitizeListRecord)
+  if (list.length) {
+    await resolveCloudFields(list, ['cover', 'image', 'thumbnail'])
+    normalizeUploadPaths(list, ['cover', 'image', 'thumbnail'])
+  }
+  return list
+}
+
 // 构建模板查询条件（管理员传 all=true 可看全部；普通用户仅看 published）
 const buildTemplateQuery = (ctx) => {
   const conditions = {}
@@ -71,7 +100,6 @@ const buildTemplateQuery = (ctx) => {
 }
 
 // GET /api/templates — 模板列表（支持分页）
-// 注意：列表接口不做 resolveCloudFields（太慢），cloud:// URL 由前端 CloudImage 组件处理
 const listTemplates = async (ctx) => {
   const conditions = buildTemplateQuery(ctx)
   const { page, limit, skip, hasPaging } = parsePagination(ctx.query)
@@ -80,22 +108,11 @@ const listTemplates = async (ctx) => {
   let q = collection('templates').where(conditions).orderBy('updatedAt', 'desc')
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
-    const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
-    const list = (res.data || []).map(t => {
-      const light = { ...t }
-      HEAVY_FIELDS.forEach(f => { delete light[f] })
-      return light
-    })
+    const list = await sanitizeListCovers(res.data || [])
     return paginateResponse(list, page, limit, total)
   }
   const res = await q.limit(100).get()
-  // 列表接口排除大字段，避免响应超过 1MB 限制
-  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
-  const list = (res.data || []).map(t => {
-    const light = { ...t }
-    HEAVY_FIELDS.forEach(f => { delete light[f] })
-    return light
-  })
+  const list = await sanitizeListCovers(res.data || [])
   return Object.assign(ok(list), { total: list.length })
 }
 
@@ -111,12 +128,7 @@ const listSimilarTemplates = async (ctx) => {
     .orderBy('likes', 'desc')
     .limit(6)
     .get()
-  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
-  const list = (res.data || []).map(t => {
-    const light = { ...t }
-    HEAVY_FIELDS.forEach(f => { delete light[f] })
-    return light
-  })
+  const list = await sanitizeListCovers(res.data || [])
   return ok(list)
 }
 
@@ -226,7 +238,6 @@ const deleteTemplate = async (ctx) => {
 // ============ 商品别名路由（与 templates 共享数据源） ============
 
 // GET /api/products — 商品列表（默认按 likes 倒序）
-// 列表接口不做 resolveCloudFields，cloud:// URL 由前端 CloudImage 组件处理
 const listProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
@@ -237,21 +248,11 @@ const listProducts = async (ctx) => {
       collection('templates').where(conditions).count(),
       q.skip(skip).limit(limit).get(),
     ])
-    const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
-    const list = (res.data || []).map(t => {
-      const light = { ...t }
-      HEAVY_FIELDS.forEach(f => { delete light[f] })
-      return light
-    })
+    const list = await sanitizeListCovers(res.data || [])
     return paginateResponse(list, page, limit, countRes.total || 0)
   }
   const res = await q.limit(20).get()
-  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
-  const list = (res.data || []).map(t => {
-    const light = { ...t }
-    HEAVY_FIELDS.forEach(f => { delete light[f] })
-    return light
-  })
+  const list = await sanitizeListCovers(res.data || [])
   return Object.assign(ok(list), { total: list.length })
 }
 
@@ -260,12 +261,7 @@ const listRecommendProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
   const res = await collection('templates').where(conditions).orderBy('likes', 'desc').limit(10).get()
-  const HEAVY_FIELDS = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
-  const list = (res.data || []).map(t => {
-    const light = { ...t }
-    HEAVY_FIELDS.forEach(f => { delete light[f] })
-    return light
-  })
+  const list = await sanitizeListCovers(res.data || [])
   return ok(list)
 }
 
