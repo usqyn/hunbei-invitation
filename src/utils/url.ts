@@ -111,6 +111,7 @@ async function getRefreshUrlFn(): Promise<(fileID: string) => Promise<string>> {
   // #ifdef MP-WEIXIN
   _refreshUrlFn = async (fileID: string): Promise<string> => {
     const fnName = getFunctionName('/api/refresh-url')
+    const t0 = Date.now()
     const res = await new Promise<any>((resolve, reject) => {
       wx.cloud.callFunction({
         name: fnName,
@@ -125,7 +126,11 @@ async function getRefreshUrlFn(): Promise<(fileID: string) => Promise<string>> {
         fail: (err: any) => reject(err),
       })
     })
-    if (res && res.success && res.data?.url) return res.data.url
+    const elapsed = Date.now() - t0
+    if (res && res.success && res.data?.url) {
+      return res.data.url
+    }
+    console.error(`[cloud-url] 刷新URL失败: elapsed=${elapsed}ms, fileID=${fileID}, res=`, res)
     throw new Error(res?.error || '刷新 URL 失败')
   }
   // #endif

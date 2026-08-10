@@ -229,13 +229,13 @@
     }
   ],
   "preloadRule": {
+    "pages/index/index": {
+      "network": "all",
+      "packages": ["pages/template", "pages/preview", "pages/share"]
+    },
     "pages/template/index": {
       "network": "wifi",
       "packages": ["pages/editor"]
-    },
-    "pages/index/index": {
-      "network": "wifi",
-      "packages": ["pages/preview", "pages/share"]
     }
   },
   "globalStyle": {

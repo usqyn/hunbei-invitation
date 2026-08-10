@@ -58,6 +58,7 @@ export function request<T = any>(options: string | {
       const fnName = getFunctionName(options.url)
       const cleanPath = options.url.indexOf('?') === -1 ? options.url : options.url.slice(0, options.url.indexOf('?'))
       const queryObj = parseUrlQuery(options.url)
+      const _t0 = Date.now()
       wx.cloud.callFunction({
         name: fnName,
         data: {
@@ -68,12 +69,14 @@ export function request<T = any>(options: string | {
           headers: header,
         },
         success: (res: any) => {
+          const elapsed = Date.now() - _t0
           if (!options.hideLoading) hideLoadingSafe()
           const result = res.result
           if (result && typeof result === 'object' && 'success' in result) {
             if (result.success) {
               resolve(result.data !== undefined ? (result.data as T) : (result as T))
             } else {
+              console.error(`[request] 云函数业务失败: ${options.url}, elapsed=${elapsed}ms, error=`, result.error)
               if (result.error === '登录已过期' || result.error === '请先登录') {
                 if (!_isRedirecting) {
                   _isRedirecting = true
@@ -92,15 +95,18 @@ export function request<T = any>(options: string | {
           } else {
             // iOS 微信云函数可能返回 null/undefined 或不完整响应
             if (result === null || result === undefined) {
-              console.error('[request] 云函数返回为空:', options.url)
+              console.error(`[request] 云函数返回为空: ${options.url}, elapsed=${Date.now() - _t0}ms, result=`, result)
               reject(new Error('云函数返回为空'))
             } else {
+              console.warn(`[request] 云函数返回非标准格式: ${options.url}, elapsed=${Date.now() - _t0}ms, keys=`, Object.keys(result))
               resolve(result as T)
             }
           }
         },
         fail: (err: any) => {
+          const elapsed = Date.now() - _t0
           if (!options.hideLoading) hideLoadingSafe()
+          console.error(`[request] 云函数调用失败: ${options.url}, elapsed=${elapsed}ms, err=`, err)
           uni.showToast({ title: '网络异常', icon: 'none' })
           reject(new Error(err.errMsg || '网络异常'))
         },
@@ -163,7 +169,10 @@ export function request<T = any>(options: string | {
           reject(new Error(msg))
         }
       },
-      fail: (err: any) => reject(new Error(err.errMsg || '网络异常')),
+      fail: (err: any) => {
+        console.error(`[request] HTTP请求失败: ${options.url}, err=`, err)
+        reject(new Error(err.errMsg || '网络异常'))
+      },
       complete: () => { if (!options.hideLoading) hideLoadingSafe() },
     })
   })

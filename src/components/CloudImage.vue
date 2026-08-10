@@ -38,7 +38,7 @@ const emit = defineEmits<{
 
 const displayUrl = ref('')
 const retryCount = ref(0)
-const MAX_RETRY = 1
+const MAX_RETRY = 2
 
 // 解析 URL：如果是 cloud:// 异步换取临时 URL，否则同步处理
 async function refreshDisplayUrl() {
@@ -48,10 +48,17 @@ async function refreshDisplayUrl() {
   }
   if (isCloudUrl(props.src)) {
     // 先用缓存（同步）快速渲染，再异步刷新
-    displayUrl.value = resolveCloudUrlSync(props.src)
+    const cached = resolveCloudUrlSync(props.src)
+    if (cached && cached !== props.src) {
+      // 有缓存：直接用缓存 URL
+      displayUrl.value = cached
+    } else {
+      // 无缓存：先显示 cloud:// 让平台尝试加载，同时异步换取 https URL
+      displayUrl.value = props.src
+    }
     try {
       const fresh = await resolveCloudUrl(props.src)
-      if (fresh !== displayUrl.value) {
+      if (fresh && fresh !== displayUrl.value) {
         displayUrl.value = fresh
       }
     } catch (e) {
@@ -68,9 +75,10 @@ watch(() => props.src, () => {
   refreshDisplayUrl()
 })
 
-// 图片加载失败处理：cloud:// URL 清缓存重试一次
+// 图片加载失败处理：cloud:// URL 清缓存重试
 function handleError() {
   if (retryCount.value >= MAX_RETRY) {
+    console.warn('[cloud-image] 达到最大重试次数, 放弃:', props.src)
     emit('error')
     return
   }
@@ -79,6 +87,7 @@ function handleError() {
     return
   }
   retryCount.value++
+  console.warn(`[cloud-image] 加载失败(retry=${retryCount.value}):`, props.src)
   // 清除缓存后重新换取
   invalidateCloudUrl(props.src)
   refreshDisplayUrl()

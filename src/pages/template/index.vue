@@ -321,6 +321,23 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
   return sorted
 })
 
+// ============ 监控：记录平台与网络信息 ============
+function getPlatformInfo(): string {
+  try {
+    // @ts-ignore
+    const sys = uni.getSystemInfoSync()
+    return `${sys.platform}|${sys.system}|${sys.brand||''}|${sys.model||''}`
+  } catch { return 'unknown' }
+}
+
+let _networkType = 'unknown'
+function monitorNetwork() {
+  // @ts-ignore
+  wx?.getNetworkType?.({
+    success: (res: any) => { _networkType = res.networkType || 'unknown' },
+  })
+}
+
 // ============ 生命周期 ============
 onMounted(async () => {
   const pages = getCurrentPages()
@@ -337,14 +354,21 @@ onMounted(async () => {
     activeFilter.value = options.filter
   }
 
+  monitorNetwork()
+
   loading.value = true
+  const t0 = Date.now()
   try {
     // 串行调用避免 iOS 并发云函数问题
     const categories = await fetchCategories()
+    const t1 = Date.now()
     const templates = await fetchTemplates()
+    const t2 = Date.now()
+    console.log(`[template] 数据加载完成: categories=${t1 - t0}ms, templates=${t2 - t1}ms, total=${t2 - t0}ms, platform=${getPlatformInfo()}, network=${_networkType}, count=${templates.length}`)
     buildState(categories, templates)
   } catch (e) {
-    console.error('模板页初始化失败:', e)
+    const tErr = Date.now()
+    console.error(`[template] 初始化失败(${tErr - t0}ms):`, e, `platform=${getPlatformInfo()}, network=${_networkType}`)
     loadError.value = true
   } finally {
     loading.value = false
@@ -386,26 +410,33 @@ onShareTimeline(() => {
   }
 })
 
-// 获取分类数据（纯数据，不写 reactive state）
+// 获取分类数据（纯数据，不写 reactive state）— 失败自动重试 1 次
 async function fetchCategories() {
-  try {
-    const data = await request<{ id: string; name: string; icon: string; count: number }[]>({
-      url: '/api/categories?noCounts=1', hideLoading: true,
-    })
-    if (data && Array.isArray(data)) {
-      return data.map((cat: any) => {
-        const staticCat = STATIC_CATEGORIES.find(s => s.id === cat.id)
-        return {
-          id: cat.id,
-          name: staticCat?.name || cat.name,
-          icon: staticCat?.icon || '/static/images/icons/document.svg',
-          count: cat.count ?? 0,
-          templates: [] as TemplateItem[],
-        }
+  const MAX_ATTEMPTS = 2
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const data = await request<{ id: string; name: string; icon: string; count: number }[]>({
+        url: '/api/categories?noCounts=1', hideLoading: true,
       })
+      if (data && Array.isArray(data)) {
+        return data.map((cat: any) => {
+          const staticCat = STATIC_CATEGORIES.find(s => s.id === cat.id)
+          return {
+            id: cat.id,
+            name: staticCat?.name || cat.name,
+            icon: staticCat?.icon || '/static/images/icons/document.svg',
+            count: cat.count ?? 0,
+            templates: [] as TemplateItem[],
+          }
+        })
+      }
+    } catch (e) {
+      console.warn(`[template] 加载分类失败(attempt=${attempt}):`, e)
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(r => setTimeout(r, 500))
+        continue
+      }
     }
-  } catch (e) {
-    console.warn('加载分类失败，回退静态分类:', e)
   }
   // 兜底：静态分类
   return STATIC_CATEGORIES.map(cat => ({
@@ -413,17 +444,36 @@ async function fetchCategories() {
   }))
 }
 
-// 获取模板数据（纯数据，不写 reactive state）
+// 获取模板数据（纯数据，不写 reactive state）— 失败自动重试 1 次
 async function fetchTemplates(): Promise<TemplateItem[]> {
   loadError.value = false
-  try {
-    const data = await request<TemplateItem[]>({ url: '/api/templates?page=1&limit=20', hideLoading: true })
-    if (data && Array.isArray(data)) {
-      return data.map(pickCardFields)
+  const MAX_ATTEMPTS = 2
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const t0 = Date.now()
+      const data = await request<TemplateItem[]>({ url: '/api/templates?page=1&limit=20', hideLoading: true })
+      const elapsed = Date.now() - t0
+      if (data && Array.isArray(data)) {
+        if (attempt > 1) console.log(`[template] 第${attempt}次重试成功, 耗时${elapsed}ms, 数量=${data.length}`)
+        return data.map(pickCardFields)
+      }
+      // data 为空数组或非数组：可能云函数返回了不完整响应
+      console.warn(`[template] 模板数据异常: attempt=${attempt}, data=`, data, `elapsed=${elapsed}ms`)
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(r => setTimeout(r, 800))
+        continue
+      }
+      // 最后一次仍异常，返回空
+      return []
+    } catch (e) {
+      console.error(`[template] 加载模板列表失败(attempt=${attempt}):`, e)
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(r => setTimeout(r, 800))
+        continue
+      }
+      loadError.value = true
+      return []
     }
-  } catch (e) {
-    console.error('加载模板列表失败:', e)
-    loadError.value = true
   }
   return []
 }
@@ -474,12 +524,14 @@ function pickCardFields(t: TemplateItem): TemplateItem {
 async function retryLoad() {
   loading.value = true
   loadError.value = false
+  const t0 = Date.now()
   try {
     const categories = await fetchCategories()
     const templates = await fetchTemplates()
+    console.log(`[template] 重试加载完成: ${Date.now() - t0}ms, count=${templates.length}, network=${_networkType}`)
     buildState(categories, templates)
   } catch (e) {
-    console.error('模板页重试加载失败:', e)
+    console.error(`[template] 重试加载失败(${Date.now() - t0}ms):`, e)
     loadError.value = true
   } finally {
     loading.value = false
@@ -566,6 +618,7 @@ function getCoverStyle(template: TemplateItem): Record<string, string> {
 }
 
 function onImageError(e: any, template: TemplateItem) {
+  console.warn(`[template] 封面图加载失败: id=${template.id}, src=${getImageUrl(template)}, errMsg=${e?.detail?.errMsg || e?.errMsg || 'unknown'}`)
   template.cover = '/static/images/templates/wedding-1.svg'
 }
 
