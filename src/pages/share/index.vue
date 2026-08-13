@@ -206,7 +206,6 @@ function enableShareMenu() {
   uni.showShareMenu({
     withShareTicket: true,
     menus: ['shareAppMessage', 'shareTimeline'],
-    success: () => console.log('share menu enabled'),
     fail: (err: any) => console.warn('share menu fail:', err?.errMsg || err),
   })
 }

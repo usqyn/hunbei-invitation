@@ -10,13 +10,15 @@
 const tcb = require('@cloudbase/node-sdk')
 const https = require('https')
 const http = require('http')
+const fs = require('fs')
+const path = require('path')
 
 const ENV_ID = 'cloud1-d4gyvmo1d9a1e148a'
 const API_KEY = process.env.CLOUDBASE_APIKEY || ''
-const ASSETS_BASE = process.env.ASSETS_BASE || 'https://api.TOYtamaxia.com'
+const UPLOADS_ROOT = path.join(__dirname, 'uploads')
 
 const syncEnabled = !!API_KEY
-console.log(`[cloudSync] 初始化: env=${ENV_ID}, apiKey=${syncEnabled ? '已配置' : '❌ 未配置'}, assetsBase=${ASSETS_BASE}`)
+console.log(`[cloudSync] 初始化: env=${ENV_ID}, apiKey=${syncEnabled ? '已配置' : '❌ 未配置'}`)
 
 // 初始化 SDK（仅在 API_KEY 配置时）
 let app, db
@@ -37,31 +39,45 @@ if (syncEnabled) {
 }
 
 /**
- * 将 localhost/127.0.0.1 的 URL 替换为 HTTPS 生产域名
+ * 将本地资源 URL（127.0.0.1/localhost）或相对路径（/uploads/xxx）映射为本地磁盘文件路径。
+ * admin 上传的图片都落在 server/uploads，直接读磁盘即可，无需网络下载。
  */
-function rewriteLocalhostUrl(url) {
-  if (!url || typeof url !== 'string') return url || ''
-  return url
-    .replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+\//g, ASSETS_BASE.endsWith('/') ? ASSETS_BASE : ASSETS_BASE + '/')
+function localUrlToFilePath(url) {
+  if (!url || typeof url !== 'string') return ''
+  let pathname = url
+  try {
+    if (/^https?:\/\//i.test(url)) pathname = new URL(url).pathname
+  } catch (_) { pathname = url }
+  // 兼容 /uploads/xxx、uploads/xxx、http://host/uploads/xxx 三种写法
+  // 统一提取为相对于 UPLOADS_ROOT 的相对路径（如 poster/xxx.jpg）
+  if (pathname.startsWith('/uploads/')) pathname = pathname.slice(1)
+  if (pathname.startsWith('uploads/')) pathname = pathname.slice('uploads/'.length)
+  // 防目录穿越：解析后的绝对路径必须位于 UPLOADS_ROOT 内
+  const abs = path.resolve(UPLOADS_ROOT, pathname)
+  if (abs !== UPLOADS_ROOT && !abs.startsWith(UPLOADS_ROOT + path.sep)) return ''
+  return fs.existsSync(abs) ? abs : ''
 }
 
 /**
- * 递归替换对象中的所有字符串值中的 localhost URL
+ * 判断 URL 是否为本地资源（本地 server 或相对路径）
  */
-function rewriteLocalhostUrls(obj) {
-  if (!obj || typeof obj !== 'object') return obj
-  if (Array.isArray(obj)) return obj.map(rewriteLocalhostUrls)
-  const result = {}
-  for (const [key, value] of Object.entries(obj)) {
-    if (typeof value === 'string') {
-      result[key] = rewriteLocalhostUrl(value)
-    } else if (typeof value === 'object' && value !== null) {
-      result[key] = rewriteLocalhostUrls(value)
-    } else {
-      result[key] = value
-    }
-  }
-  return result
+function isLocalAssetUrl(url) {
+  if (!url || typeof url !== 'string') return false
+  return url.includes('127.0.0.1') || url.includes('localhost') ||
+    url.startsWith('/uploads/') || url.startsWith('uploads/')
+}
+
+/**
+ * 解析资源 URL：仅做类型识别，不改写地址。
+ * - cloud:// / data: → 原样返回
+ * - 本地 /uploads/ 相对路径 → 返回相对路径，由 uploadFileToCloud 从磁盘读取
+ * - 其余完整 URL → 原样返回（uploadFileToCloud 尝试网络下载）
+ * 不再拼装任何生产资源域名（图片统一走云存储 cloud://，本地相对路径直接读磁盘上传）。
+ */
+function resolveAssetUrl(url) {
+  if (!url || typeof url !== 'string') return ''
+  if (url.startsWith('cloud://') || url.startsWith('data:')) return url
+  return url
 }
 
 /**
@@ -96,8 +112,7 @@ function normalizeTemplateData(templateData) {
     }
   }
 
-  // 递归替换所有 localhost URL
-  return rewriteLocalhostUrls(data)
+  return data
 }
 
 function isEnabled() {
@@ -122,8 +137,24 @@ async function uploadFileToCloud(fileUrl, cloudPath) {
       const base64 = fileUrl.split(',')[1]
       if (!base64) return ''
       fileBuffer = Buffer.from(base64, 'base64')
-    } else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      fileBuffer = await downloadFile(fileUrl)
+    } else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') ||
+               fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
+      // 1) 本地磁盘优先：admin 上传的图片就存在 server/uploads，直接读文件
+      const localPath = localUrlToFilePath(fileUrl)
+      if (localPath) {
+        try {
+          fileBuffer = fs.readFileSync(localPath)
+          console.log(`[cloudSync] 📂 从本地磁盘读取: ${localPath}`)
+        } catch (_) { fileBuffer = null }
+      }
+      // 2) 本地读不到再尝试网络下载（远程 https 资源）
+      if (!fileBuffer && (fileUrl.startsWith('http://') || fileUrl.startsWith('https://'))) {
+        fileBuffer = await downloadFile(fileUrl)
+      }
+      if (!fileBuffer || !fileBuffer.length) {
+        console.warn(`[cloudSync] 资源不可用(本地无文件且网络下载失败): ${fileUrl.slice(0, 80)}`)
+        return ''
+      }
     } else {
       return ''
     }
@@ -143,6 +174,41 @@ async function uploadFileToCloud(fileUrl, cloudPath) {
     console.warn(`[cloudSync] 文件上传到云存储失败: ${fileUrl.slice(0, 80)}... -> ${cloudPath}:`, e.message)
   }
   return ''
+}
+
+/**
+ * 递归迁移对象中的本地资源 URL 到云存储
+ * @param {*} obj 模板数据对象（data/elements/pages/background 等）
+ * @param {string} prefix 云存储路径前缀
+ */
+async function migrateLocalUrlsDeep(obj, prefix) {
+  if (!obj || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      await migrateLocalUrlsDeep(obj[i], prefix)
+    }
+    return obj
+  }
+  for (const key of Object.keys(obj)) {
+    const value = obj[key]
+    if (typeof value === 'string') {
+      if (isLocalAssetUrl(value)) {
+        const ext = path.extname(value.split('?')[0]) || '.jpg'
+        const cloudPath = `${prefix}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
+        const fileID = await uploadFileToCloud(value, cloudPath)
+        if (fileID) {
+          obj[key] = fileID
+        } else {
+          // 上传失败：本地资源在云端无意义，置空避免假域名/本地地址残留
+          console.warn(`[cloudSync] 嵌套图片上传失败，置空: ${value.slice(0, 60)}`)
+          obj[key] = ''
+        }
+      }
+    } else if (value && typeof value === 'object') {
+      await migrateLocalUrlsDeep(value, prefix)
+    }
+  }
+  return obj
 }
 
 /**
@@ -190,12 +256,20 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
   try {
     const normalized = normalizeTemplateData(templateData)
 
-    // 上传图片文件到云存储，获取 cloud:// URL
+    // 嵌套字段（data/elements/pages/background）里的本地图片 → 先上传云存储替换为 cloud://
     const ts = Date.now()
-    const coverUrl = rewriteLocalhostUrl(normalized.cover)
-    const bgUrl = rewriteLocalhostUrl(normalized.backgroundImage)
-    const renderUrl = rewriteLocalhostUrl(normalized.renderedImage)
-    const thumbUrl = rewriteLocalhostUrl(normalized.thumbnail)
+    await Promise.all([
+      migrateLocalUrlsDeep(normalized.data, `templates/data/${id}`),
+      migrateLocalUrlsDeep(normalized.elements, `templates/elements/${id}`),
+      migrateLocalUrlsDeep(normalized.pages, `templates/pages/${id}`),
+      migrateLocalUrlsDeep(normalized.background, `templates/bg/${id}`),
+    ])
+
+    // 上传顶层图片文件到云存储，获取 cloud:// URL
+    const coverUrl = resolveAssetUrl(normalized.cover)
+    const bgUrl = resolveAssetUrl(normalized.backgroundImage)
+    const renderUrl = resolveAssetUrl(normalized.renderedImage)
+    const thumbUrl = resolveAssetUrl(normalized.thumbnail)
 
     const [cloudCover, cloudBg, cloudRender, cloudThumb] = await Promise.all([
       coverUrl ? uploadFileToCloud(coverUrl, `templates/cover/${id}_${ts}.jpg`) : Promise.resolve(''),
@@ -209,7 +283,8 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
       name: normalized.name || '',
       subtitle: normalized.subtitle || '',
       category: normalized.category || '',
-      cover: cloudCover || coverUrl,
+      // 上传失败且是本地地址 → 置空，绝不让假域名/本地地址进云端
+      cover: cloudCover || (isLocalAssetUrl(coverUrl) ? '' : coverUrl),
       primaryColor: normalized.primaryColor || '#e84a6e',
       likes: normalized.likes || 0,
       pageCount: normalized.pageCount || 10,
@@ -218,11 +293,11 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
       canvasSize: normalized.canvasSize || { width: 375, height: 667 },
       orientation: normalized.orientation || 'portrait',
       background: normalized.background || {},
-      backgroundImage: cloudBg || bgUrl || '',
+      backgroundImage: cloudBg || (isLocalAssetUrl(bgUrl) ? '' : bgUrl || ''),
       tags: normalized.tags || [],
       status: 'published',
-      renderedImage: cloudRender || renderUrl,
-      thumbnail: cloudThumb || thumbUrl || '',
+      renderedImage: cloudRender || (isLocalAssetUrl(renderUrl) ? '' : renderUrl),
+      thumbnail: cloudThumb || (isLocalAssetUrl(thumbUrl) ? '' : thumbUrl || ''),
       is_paid: normalized.is_paid || normalized.isPaid || 0,
       price: normalized.price || 0,
       is_premium: normalized.is_premium || normalized.isPremium || 0,

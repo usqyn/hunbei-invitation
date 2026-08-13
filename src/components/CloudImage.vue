@@ -4,15 +4,15 @@
     :mode="mode"
     :lazy-load="lazyLoad"
     :fade-show="fadeShow"
-    :style="customStyle"
-    :class="customClass"
+    :style="finalStyle"
+    :class="finalClass"
     @error="handleError"
     @load="handleLoad"
   />
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, useAttrs, computed } from 'vue'
 import { resolveUrl, isCloudUrl, resolveCloudUrl, resolveCloudUrlSync, invalidateCloudUrl } from '@/utils/url'
 
 const props = withDefaults(defineProps<{
@@ -30,6 +30,13 @@ const props = withDefaults(defineProps<{
   customStyle: '',
   customClass: '',
 })
+
+const attrs = useAttrs()
+
+// 将父级通过 class/style 透传的属性与 props.customClass/customStyle 合并，
+// 确保外部 <CloudImage class="xxx" /> 的样式能作用到内部 <image>。
+const finalClass = computed(() => [attrs.class, props.customClass].filter(Boolean).join(' '))
+const finalStyle = computed(() => [attrs.style, props.customStyle].filter(Boolean))
 
 const emit = defineEmits<{
   (e: 'load'): void
@@ -65,7 +72,20 @@ async function refreshDisplayUrl() {
       console.warn('[cloud-image] 解析 cloud URL 失败:', props.src, e)
     }
   } else {
-    displayUrl.value = resolveUrl(props.src)
+    const resolved = resolveUrl(props.src)
+    displayUrl.value = resolved
+    // resolveUrl 可能把 /uploads/ 相对路径映射为 cloud://（云函数模式兜底），
+    // 此时同样异步换取 https 临时 URL，与其他 cloud:// 链路一致
+    if (isCloudUrl(resolved)) {
+      try {
+        const fresh = await resolveCloudUrl(resolved)
+        if (fresh && fresh !== displayUrl.value) {
+          displayUrl.value = fresh
+        }
+      } catch (e) {
+        console.warn('[cloud-image] 解析兜底 cloud URL 失败:', resolved, e)
+      }
+    }
   }
 }
 

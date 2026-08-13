@@ -4,7 +4,7 @@ export interface HomeCategory {
   id: number           // 首页分类ID
   name: string         // 显示名称
   image: string        // 分类图标图片路径
-  categoryId: string   // 对应模板系统的分类ID(wedding/birthday/baby/graduation/festival/business)
+  categoryId: string   // 对应模板系统的分类ID(wedding/engagement/consultation-tea/festival/business/baby/graduation/festival-invitation/house)
 }
 
 export interface PosterCategory {
@@ -16,11 +16,11 @@ export interface PosterCategory {
 export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 1, name: '新婚', image: '/static/images/categories/wedding.jpg', categoryId: 'wedding' },
   { id: 2, name: '求婚', image: '/static/images/categories/proposal.jpg', categoryId: 'engagement' },
-  { id: 3, name: '商量茶', image: '/static/images/categories/consultation-tea.jpg', categoryId: 'creative' },
-  { id: 4, name: '割礼', image: '/static/images/categories/ceremony.jpg', categoryId: 'birthday' },
-  { id: 5, name: '耳环礼', image: '/static/images/categories/earring.jpg', categoryId: 'poster' },
+  { id: 3, name: '商量茶', image: '/static/images/categories/consultation-tea.jpg', categoryId: 'consultation-tea' },
+  { id: 4, name: '割礼', image: '/static/images/categories/ceremony.jpg', categoryId: 'festival' },
+  { id: 5, name: '耳环礼', image: '/static/images/categories/earring.jpg', categoryId: 'business' },
   { id: 6, name: '周岁宴', image: '/static/images/categories/baby.jpg', categoryId: 'baby' },
-  { id: 7, name: '升学宴', image: '/static/images/categories/graduation.jpg', categoryId: 'study' },
+  { id: 7, name: '升学宴', image: '/static/images/categories/graduation.jpg', categoryId: 'graduation' },
   { id: 8, name: '节日请柬', image: '/static/images/categories/festival-invitation.jpg', categoryId: 'festival-invitation' },
   { id: 9, name: '乔迁', image: '/static/images/categories/housewarming.jpg', categoryId: 'house' },
 ]

@@ -439,13 +439,15 @@ onShow(() => {
 }
 
 .product-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16rpx;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   padding: 16rpx;
 }
 
 .product-card {
+  width: calc(50% - 8rpx);
+  margin-bottom: 16rpx;
   background: #fff;
   border-radius: 24rpx;
   overflow: hidden;

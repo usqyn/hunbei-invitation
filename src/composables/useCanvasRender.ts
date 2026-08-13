@@ -292,6 +292,21 @@ export function useCanvasRender(options: {
     return result
   }
 
+  /**
+   * 解析图片元素的 image mode。
+   *
+   * admin 端 fabric 渲染图片元素时始终按元素框拉伸（scaleX = width/img.width, scaleY = height/img.height，
+   * 见 admin/src/composables/useCanvas.ts loadElementsToCanvas），即 fill 语义；
+   * 序列化器输出的 style.scale（默认 'cover'）只是一个记录字段，admin 渲染时并未真正裁剪。
+   * 小程序端必须对齐该语义（所见即所得），否则比例不匹配的图片（如真实照片放入固定占位框）
+   * 会被 aspectFill 等比放大后裁掉一部分，出现"图片被放大、只显示一半"。
+   */
+  function resolveImageMode(el: EditableElement): string {
+    const scale = (el.style as any)?.scale
+    if (scale === 'contain') return 'aspectFit'
+    return 'scaleToFill'
+  }
+
   function getShapeStyle(el: EditableElement): Record<string, string> {
     const st: any = el.style || {}
     const style: Record<string, string> = {
@@ -341,5 +356,6 @@ export function useCanvasRender(options: {
     detectTextDirection,
     getTextStyle,
     getShapeStyle,
+    resolveImageMode,
   }
 }

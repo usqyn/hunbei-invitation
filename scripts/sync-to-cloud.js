@@ -12,12 +12,12 @@ const tcb = require('@cloudbase/node-sdk')
 const ENV_ID = 'cloud1-d4gyvmo1d9a1e148a'
 const DB_PATH = path.join(__dirname, '..', 'server', 'data.db')
 
-// 生产域名：与 server/cloudSync.js 保持一致
-const ASSETS_BASE = process.env.ASSETS_BASE || 'https://api.TOYtamaxia.com'
+// 兜底资源域名：原生产资源域名公网不存在已废弃；正常数据应已全部为 cloud://
+// （本地图片由 cloudSync 上传云存储），此处仅在遇到 localhost/相对路径时兜底拼接。
+const ASSETS_BASE = process.env.ASSETS_BASE || 'https://cloud1-d4gyvmo1d9a1e148a.service.tcloudbase.com'
 
 /**
- * 将 localhost/127.0.0.1 的 URL 替换为 HTTPS 生产域名
- * 与 server/cloudSync.js 的 rewriteLocalhostUrl 行为一致
+ * 将 localhost/127.0.0.1 的 URL 替换为 HTTPS 兜底域名
  */
 function rewriteLocalhostUrl(url) {
   if (!url || typeof url !== 'string') return url || ''

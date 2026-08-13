@@ -546,7 +546,6 @@ function enableShareMenu() {
   uni.showShareMenu({
     withShareTicket: true,
     menus: ['shareAppMessage', 'shareTimeline'],
-    success: () => console.log('share menu enabled'),
     fail: (err: any) => console.warn('share menu fail:', err?.errMsg || err),
   })
 }
@@ -798,11 +797,11 @@ onUnmounted(() => {
   }
 }
 
-/* 分类网格 */
+/* 分类网格（flex 双列布局，iOS WKWebView 对 CSS Grid 支持不完整） */
 .category-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24rpx;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   padding: 32rpx 24rpx;
   background: #ffffff;
   margin: 24rpx 24rpx 0;
@@ -811,6 +810,8 @@ onUnmounted(() => {
 }
 
 .category-item {
+  width: calc(33.333% - 16rpx);
+  margin-bottom: 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1283,8 +1284,8 @@ onUnmounted(() => {
 
 /* 分类模板数量网格 */
 .category-count-grid {
-  display: grid;
-  grid-template-columns: repeat(1, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16rpx;
 }
 

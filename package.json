@@ -5,8 +5,8 @@
   "scripts": {
     "dev:h5": "uni",
     "build:h5": "uni build",
-    "dev:mp-weixin": "uni -p mp-weixin && node scripts/copy-cloudfunctions.js dev",
-    "build:mp-weixin": "uni build -p mp-weixin && node scripts/copy-cloudfunctions.js build",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build:mp-weixin": "uni build -p mp-weixin",
     "sync-cloud": "node scripts/copy-cloudfunctions.js"
   },
   "dependencies": {

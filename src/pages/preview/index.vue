@@ -159,7 +159,7 @@
               v-if="el.type === 'image'"
               class="preview-section-image"
               :src="el.text"
-              mode="aspectFill"
+              :mode="resolveImageMode(el)"
               custom-class="preview-section-image"
               @error="onImageError"
             />
@@ -335,6 +335,7 @@ const {
   updateCardHeight,
   getCanvasElementStyle,
   getTextStyle,
+  resolveImageMode,
 } = useCanvasRender({
   getElements: () => editorStore.editableElements,
   getCanvasSize: () => editorStore.canvasSize,
@@ -568,7 +569,6 @@ function enableShareMenu() {
   uni.showShareMenu({
     withShareTicket: true,
     menus: ['shareAppMessage', 'shareTimeline'],
-    success: () => console.log('share menu enabled'),
     fail: (err: any) => console.warn('share menu fail:', err?.errMsg || err),
   })
 }

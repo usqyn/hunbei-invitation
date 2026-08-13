@@ -58,6 +58,9 @@
       <view v-if="filteredTemplates.length === 0" class="empty-state">
         <image class="empty-icon-image" :src="pageConfig.emptyIcon" mode="aspectFit" />
         <text class="empty-text">{{ pageConfig.emptyText }}</text>
+        <view class="empty-btn" @click="resetToAll">
+          <text class="empty-btn-text">查看全部模板</text>
+        </view>
       </view>
 
       <view class="template-grid">
@@ -72,7 +75,7 @@
             <CloudImage
               class="template-cover"
               :src="getImageUrl(template)"
-              mode="aspectFit"
+              mode="aspectFill"
               :lazy-load="true"
               @error="onImageError($event, template)"
             />
@@ -210,13 +213,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { onLoad, onShow, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import type { TemplateItem, TemplateCategory } from '@/types'
 import { HOME_CATEGORIES } from '@/constants/categories'
 import { TEMPLATE_PAGE_CONFIG } from '@/config'
 import { request } from '@/utils/request'
-import { resolveUrl } from '@/utils/url'
+import { resolveUrl, isCloudUrl } from '@/utils/url'
 import { useUserStore } from '@/stores/user'
 import { useFeedback } from '@/composables/useFeedback'
 import CloudImage from '@/components/CloudImage.vue'
@@ -224,20 +227,37 @@ import CloudImage from '@/components/CloudImage.vue'
 const pageConfig = TEMPLATE_PAGE_CONFIG
 const { haptic } = useFeedback()
 
+// ============ 安全初始化：iOS 上任何一步崩溃都会导致页面白屏 ============
+let userStore: ReturnType<typeof useUserStore>
+try {
+  userStore = useUserStore()
+  console.log('[template] init: userStore OK')
+} catch (e: any) {
+  console.error('[template] init FAIL: useUserStore', e?.message || e)
+  // 提供安全降级，避免后续引用崩溃
+  userStore = {
+    isVip: () => false,
+    requireLogin: () => true,
+  } as any
+}
+
 const isPurchased = computed(() => {
-  // TODO: 从用户订单状态获取真实购买状态
-  return userStore.isVip()
+  try {
+    return userStore.isVip()
+  } catch { return false }
 })
 
 // 分类列表（静态配置，与 HOME_CATEGORIES 的 categoryId 保持一致）
+// id 与数据库模板的 category 字段一致：割礼=festival、耳环礼=business、
+// 升学宴=graduation、商量茶=consultation-tea（曾用 birthday/poster/study/creative）
 const STATIC_CATEGORIES = [
   { id: 'wedding', name: '婚礼请柬', icon: '/static/images/categories/wedding.jpg' },
   { id: 'engagement', name: '求婚', icon: '/static/images/categories/proposal.jpg' },
-  { id: 'creative', name: '商量茶', icon: '/static/images/categories/consultation-tea.jpg' },
-  { id: 'birthday', name: '割礼', icon: '/static/images/categories/ceremony.jpg' },
-  { id: 'poster', name: '耳环礼', icon: '/static/images/categories/earring.jpg' },
+  { id: 'consultation-tea', name: '商量茶', icon: '/static/images/categories/consultation-tea.jpg' },
+  { id: 'festival', name: '割礼', icon: '/static/images/categories/ceremony.jpg' },
+  { id: 'business', name: '耳环礼', icon: '/static/images/categories/earring.jpg' },
   { id: 'baby', name: '周岁宴', icon: '/static/images/categories/baby.jpg' },
-  { id: 'study', name: '升学宴', icon: '/static/images/categories/graduation.jpg' },
+  { id: 'graduation', name: '升学宴', icon: '/static/images/categories/graduation.jpg' },
   { id: 'festival-invitation', name: '节日请柬', icon: '/static/images/categories/festival-invitation.jpg' },
   { id: 'house', name: '乔迁', icon: '/static/images/categories/housewarming.jpg' },
 ]
@@ -249,6 +269,11 @@ const activeCategory = ref<string>('wedding')
 const searchKeyword = ref<string>('')
 const loading = ref(false)
 const loadError = ref(false)
+
+// 封面图加载失败的模板 ID → 本地兜底图（reactive 触发模板重渲染）
+const imageOverrides = reactive<Record<string, string>>({})
+// iOS 云存储 URL 全部不可用时（如"请先登录"），跳过云 URL 避免逐个重试
+let cloudUrlBroken = false
 
 const filters = [
   { label: '全部', value: 'all' },
@@ -263,7 +288,6 @@ const sortOptions = [
   { label: '最新', value: 'date' },
 ]
 const activeSort = ref<string>('likes')
-const userStore = useUserStore()
 const navigating = ref(false)
 
 // 弹层显隐
@@ -273,55 +297,63 @@ const showFilterSheet = ref(false)
 
 // ============ 计算属性 ============
 const filteredTemplates = computed<TemplateItem[]>(() => {
-  let list = allTemplates.value
+  try {
+    let list = allTemplates.value
 
-  // 按分类筛选
-  if (activeCategory.value && activeCategory.value !== 'all') {
-    list = list.filter(t => t.category === activeCategory.value)
+    // 按分类筛选
+    if (activeCategory.value && activeCategory.value !== 'all') {
+      list = list.filter(t => t.category === activeCategory.value)
+    }
+
+    // 按付费状态筛选：统一使用 Boolean() 判断，兼容 is_paid 为数字或布尔值的情况
+    if (activeFilter.value === 'free') {
+      list = list.filter(t => !Boolean(t.is_paid))
+    } else if (activeFilter.value === 'paid') {
+      list = list.filter(t => Boolean(t.is_paid))
+    } else if (activeFilter.value === 'vip') {
+      list = list.filter((t: any) => Boolean(t.is_paid) && t.vip_free === true)
+    }
+
+    // 按关键词搜索（名称/副标题/分类名称/标签/元素内容）
+    if (searchKeyword.value) {
+      const kw = searchKeyword.value.toLowerCase()
+      list = list.filter(t => {
+        if (t.name && t.name.toLowerCase().includes(kw)) return true
+        if (t.subtitle && t.subtitle.toLowerCase().includes(kw)) return true
+        const cat = HOME_CATEGORIES.find(c => c.categoryId === t.category)
+        if (cat && cat.name.toLowerCase().includes(kw)) return true
+        if (t.tags && t.tags.some(tag => tag.toLowerCase().includes(kw))) return true
+        return false
+      })
+    }
+
+    // 排序
+    const sorted = [...list]
+    if (activeSort.value === 'likes') {
+      sorted.sort((a, b) => (b.likes || 0) - (a.likes || 0))
+    } else if (activeSort.value === 'date') {
+      sorted.sort((a, b) => {
+        const ta = new Date((a as any).updatedAt || (a as any).createdAt || 0).getTime()
+        const tb = new Date((b as any).updatedAt || (b as any).createdAt || 0).getTime()
+        return tb - ta
+      })
+    }
+
+    return sorted
+  } catch (e: any) {
+    console.error('[template] filteredTemplates computed crashed:', e?.message || e)
+    return []
   }
-
-  // 按付费状态筛选：统一使用 Boolean() 判断，兼容 is_paid 为数字或布尔值的情况
-  if (activeFilter.value === 'free') {
-    list = list.filter(t => !Boolean(t.is_paid))
-  } else if (activeFilter.value === 'paid') {
-    list = list.filter(t => Boolean(t.is_paid))
-  } else if (activeFilter.value === 'vip') {
-    list = list.filter((t: any) => Boolean(t.is_paid) && t.vip_free === true)
-  }
-
-  // 按关键词搜索（名称/副标题/分类名称/标签/元素内容）
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase()
-    list = list.filter(t => {
-      // 名称
-      if (t.name && t.name.toLowerCase().includes(kw)) return true
-      // 副标题
-      if (t.subtitle && t.subtitle.toLowerCase().includes(kw)) return true
-      // 分类名称
-      const cat = HOME_CATEGORIES.find(c => c.categoryId === t.category)
-      if (cat && cat.name.toLowerCase().includes(kw)) return true
-      // 标签
-      if (t.tags && t.tags.some(tag => tag.toLowerCase().includes(kw))) return true
-      return false
-    })
-  }
-
-  // 排序
-  const sorted = [...list]
-  if (activeSort.value === 'likes') {
-    sorted.sort((a, b) => (b.likes || 0) - (a.likes || 0))
-  } else if (activeSort.value === 'date') {
-    sorted.sort((a, b) => {
-      const ta = new Date((a as any).updatedAt || (a as any).createdAt || 0).getTime()
-      const tb = new Date((b as any).updatedAt || (b as any).createdAt || 0).getTime()
-      return tb - ta
-    })
-  }
-
-  return sorted
 })
 
 // ============ 监控：记录平台与网络信息 ============
+function getPurePlatform(): string {
+  try {
+    // @ts-ignore
+    return uni.getSystemInfoSync().platform || ''
+  } catch { return '' }
+}
+
 function getPlatformInfo(): string {
   try {
     // @ts-ignore
@@ -350,16 +382,48 @@ const LOCAL_TEMPLATE_LIST: TemplateItem[] = [
   { id: 'local-6', name: '甜蜜派对', subtitle: 'Sweet Party', category: 'festival-invitation', cover: '/static/images/templates/invitation-2.png', likes: 3980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   { id: 'local-7', name: '百日宴', subtitle: 'Baby Party', category: 'baby', cover: '/static/images/templates/template-5.png', likes: 2870, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   { id: 'local-8', name: '乔迁之喜', subtitle: 'Housewarming', category: 'house', cover: '/static/images/templates/template-3.png', likes: 2150, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  // 以下 4 个补充分类，确保 iOS 云函数不可用走本地兜底时，从首页任意分类入口进入都不空白
+  { id: 'local-9', name: '商量茶', subtitle: 'Tea Ceremony', category: 'consultation-tea', cover: '/static/images/templates/template-1.png', likes: 1980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-10', name: '割礼', subtitle: 'Ceremony', category: 'festival', cover: '/static/images/templates/template-3.png', likes: 1860, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-11', name: '耳环礼', subtitle: 'Earring Gift', category: 'business', cover: '/static/images/templates/invitation-2.png', likes: 1720, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-12', name: '升学宴', subtitle: 'Graduation', category: 'graduation', cover: '/static/images/templates/template-5.png', likes: 1650, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
 ]
+
+// ============ 安全读取 storage（iOS 上 getStorageSync 可能抛异常） ============
+function safeGetStorage(key: string): string {
+  try {
+    // @ts-ignore
+    const v = uni.getStorageSync(key)
+    return v != null ? String(v) : ''
+  } catch {
+    return ''
+  }
+}
 
 // ============ 生命周期 ============
 onMounted(async () => {
+  let _costStart = Date.now()
+  // 辅助：打印醒目的汇总日志（避免被控制台缓冲区冲掉后丢失关键信息）
+  const logSummary = (tag: string) => {
+    const covers = allTemplates.value.map(t => ({ id: t.id, cover: t.cover?.substring(0, 30) })).slice(0, 5)
+    console.log(`\n[template] ██████████████████████████████████████████████████████████████████████████\n[template] █  PAGE READY (v2) █  tag=${tag}  loading=${loading.value}  allTemplates=${allTemplates.value.length}  filtered=${filteredTemplates.value.length}  cloudBroken=${cloudUrlBroken}  overrides=${Object.keys(imageOverrides).length}  cost=${Date.now()-_costStart}ms  platform=${platform}\n[template] █  coversSample=${JSON.stringify(covers)}\n[template] ██████████████████████████████████████████████████████████████████████████\n`)
+  }
+  const platform = getPlatformInfo()
+  try {
+  // iOS 诊断：记录页面入口
+  try {
+    console.log(`[template] onMounted START, platform=${getPlatformInfo()}`)
+  } catch {}
+
   const pages = getCurrentPages()
   const curPage = pages[pages.length - 1] as any
   const options = curPage?.options || {}
 
   if (options.category) {
-    activeCategory.value = options.category
+    // 校验分类参数有效性：无效值（旧分享链接/历史入口）时回退默认分类，避免过滤后模板列表空白
+    const catValid = STATIC_CATEGORIES.some(c => c.id === options.category)
+    activeCategory.value = catValid ? options.category : 'wedding'
+    if (!catValid) console.warn(`[template] 无效分类参数: ${options.category}, 回退 wedding`)
   }
   if (options.search) {
     searchKeyword.value = decodeURIComponent(options.search)
@@ -372,20 +436,96 @@ onMounted(async () => {
 
   loading.value = true
   const t0 = Date.now()
+  // 提取纯平台标识用于超时分支判断（如 'ios' / 'android' / 'devtools'）
+  const isIOS = /^ios/i.test(getPurePlatform())
+
+  // 检查云开发是否可用（App.onLaunch 已做 init + 健康检查）
+  const cloudInitOk = safeGetStorage('cloud_init_ok') !== '0'
+  const cloudAvailable = cloudInitOk && safeGetStorage('cloud_available') !== '0'
+
+  // 提取到闭包内复用，避免重复构造兜底数据
+  const makeFallbackCategories = () => STATIC_CATEGORIES.map(cat => ({ id: cat.id, name: cat.name, icon: cat.icon, count: 0, templates: [] as TemplateItem[] }))
+  const makeFallbackTemplates = () => LOCAL_TEMPLATE_LIST.map(t => ({ ...t }))
+
+  if (!cloudInitOk) {
+    // 云开发 init 失败（极少见），直接走本地兜底
+    console.log(`[template] cloud init failed, using local data, platform=${platform}`)
+    safeBuildState(makeFallbackCategories(), makeFallbackTemplates())
+    loading.value = false
+    logSummary('cloud_init_fail')
+    enableShareMenu()
+    return
+  }
+
+  // 健康检查明确返回失败 → 跳过云调用，秒出本地数据
+  if (!cloudAvailable && safeGetStorage('cloud_checked_at')) {
+    console.log(`[template] cloud health check failed, using local data, platform=${platform}`)
+    safeBuildState(makeFallbackCategories(), makeFallbackTemplates())
+    loading.value = false
+    logSummary('cloud_unavailable')
+    enableShareMenu()
+    return
+  }
+
+  // iOS 已知问题：云函数回调可能不触发，用 8s 竞速超时避免无限等待
+  // 安卓/开发者工具超时给 15s（云服务冷启动约 3-5s）
+  const LOAD_TIMEOUT = isIOS ? 8000 : 15000
+  let summaryTag = 'cloud_ok'
+
   try {
-    // 串行调用避免 iOS 并发云函数问题
-    const categories = await fetchCategories()
-    const t1 = Date.now()
-    const templates = await fetchTemplates()
-    const t2 = Date.now()
-    console.log(`[template] 数据加载完成: categories=${t1 - t0}ms, templates=${t2 - t1}ms, total=${t2 - t0}ms, platform=${getPlatformInfo()}, network=${_networkType}, count=${templates.length}`)
-    buildState(categories, templates)
+    console.log(`[template] step1: fetching data, timeout=${LOAD_TIMEOUT}ms`)
+    if (isIOS) {
+      // iOS 单云函数串行：分类直接用静态配置（分类仅补充数量，非关键路径），
+      // 只发起一次模板云函数调用，避免 2 个并发云函数在 iOS 上互相拖慢导致超时
+      console.log('[template] iOS mode: categories=static, fetch templates only')
+      const templates = await Promise.race([
+        fetchTemplates(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('load_timeout')), LOAD_TIMEOUT)
+        ),
+      ]) as TemplateItem[]
+      const t2 = Date.now()
+      console.log(`[template] data loaded [v2-ios]: ${t2 - t0}ms, platform=${platform}, network=${_networkType}, count=${templates.length}`)
+      safeBuildState(makeFallbackCategories(), templates)
+    } else {
+      // 安卓/开发者工具：并行请求分类和模板
+      const result = await Promise.race([
+        Promise.all([fetchCategories(), fetchTemplates()]),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('load_timeout')), LOAD_TIMEOUT)
+        ),
+      ]) as [CategoryItem[], TemplateItem[]]
+
+      console.log(`[template] step2: data fetched, building state`)
+      const [categories, templates] = result
+      const t2 = Date.now()
+      console.log(`[template] data loaded [v2]: ${t2 - t0}ms, platform=${platform}, network=${_networkType}, count=${templates.length}`)
+      safeBuildState(categories, templates)
+    }
+    console.log(`[template] step3: buildState done, cats=${categoryList.value.length}, temps=${allTemplates.value.length}`)
   } catch (e) {
     const tErr = Date.now()
-    console.error(`[template] 初始化失败(${tErr - t0}ms):`, e, `platform=${getPlatformInfo()}, network=${_networkType}`)
-    loadError.value = true
+    const isTimeout = e instanceof Error && e.message === 'load_timeout'
+    console.error(`[template] load failed(${tErr - t0}ms, ${isTimeout ? 'timeout' : 'error'}):`, e, `platform=${platform}`)
+    summaryTag = isTimeout ? 'timeout' : 'cloud_error'
+    // 快速降级到本地静态数据，保证页面不白屏
+    safeBuildState(makeFallbackCategories(), makeFallbackTemplates())
   } finally {
     loading.value = false
+    logSummary(summaryTag)
+    enableShareMenu()
+  }
+  } catch (fatalErr: any) {
+    // 最终防线：onMounted 中任何未预见的异常都确保页面降级而非白屏
+    console.error('[template] FATAL onMounted:', fatalErr?.message || fatalErr)
+    try {
+      safeBuildState(
+        STATIC_CATEGORIES.map(cat => ({ id: cat.id, name: cat.name, icon: cat.icon, count: 0, templates: [] as TemplateItem[] })),
+        LOCAL_TEMPLATE_LIST.map(t => ({ ...t }))
+      )
+    } catch {}
+    loading.value = false
+    logSummary('fatal_catch')
     enableShareMenu()
   }
 })
@@ -433,10 +573,15 @@ async function fetchCategories() {
         url: '/api/categories?noCounts=1', hideLoading: true,
       })
       if (data && Array.isArray(data)) {
-        return data.map((cat: any) => {
+        return data.map((cat: any, index: number) => {
+          // 云数据库分类记录可能没有 id 字段（只有 _id，id 为 undefined）
+          // 若直接用 undefined，分类选中判断 activeCategory === cat.id 会全部为 true（点击后全选）
+          // 修复：优先 id 匹配，其次 name 匹配静态分类，保证 id 稳定唯一
           const staticCat = STATIC_CATEGORIES.find(s => s.id === cat.id)
+            || STATIC_CATEGORIES.find(s => s.name === cat.name)
+          const id = staticCat ? staticCat.id : (cat.id || `cat-${index}`)
           return {
-            id: cat.id,
+            id,
             name: staticCat?.name || cat.name,
             icon: staticCat?.icon || '/static/images/icons/document.svg',
             count: cat.count ?? 0,
@@ -465,7 +610,7 @@ async function fetchTemplates(): Promise<TemplateItem[]> {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const t0 = Date.now()
-      const data = await request<TemplateItem[]>({ url: '/api/templates?page=1&limit=20', hideLoading: true })
+      const data = await request<TemplateItem[]>({ url: '/api/templates?page=1&limit=100', hideLoading: true })
       const elapsed = Date.now() - t0
       if (data && Array.isArray(data) && data.length > 0) {
         if (attempt > 1) console.log(`[template] 第${attempt}次重试成功, 耗时${elapsed}ms, 数量=${data.length}`)
@@ -505,6 +650,29 @@ function buildState(categories: any[], templates: TemplateItem[]) {
     count: countMap[cat.id] || cat.count || 0,
     templates: templates.filter(t => t.category === cat.id),
   }))
+}
+
+// iOS 安全版本：任何异常都不会导致白屏
+function safeBuildState(categories: any[], templates: TemplateItem[]) {
+  try {
+    // 本地兜底模板全部为免费：若当前是付费/VIP 筛选，必然过滤为空列表，
+    // 自动重置为「全部」，避免 iOS 兜底场景下模板区域空白
+    const isFallbackData = templates.length > 0 && templates.every(t => typeof t.id === 'string' && (t.id as string).startsWith('local-'))
+    if (isFallbackData && (activeFilter.value === 'paid' || activeFilter.value === 'vip')) {
+      console.log('[template] 本地兜底数据下重置付费筛选 -> all')
+      activeFilter.value = 'all'
+    }
+    buildState(categories, templates)
+  } catch (e: any) {
+    console.error('[template] buildState crashed:', e?.message || e)
+    // 最终兜底：用硬编码的最小模板集
+    try {
+      allTemplates.value = LOCAL_TEMPLATE_LIST.map(t => ({ ...t }))
+      categoryList.value = STATIC_CATEGORIES.map(cat => ({
+        id: cat.id, name: cat.name, icon: cat.icon, count: 0, templates: [] as TemplateItem[],
+      }))
+    } catch {}
+  }
 }
 
 // 模板列表卡片展示所需字段（避免把 elements/sections/pages/renderedImage 等大字段塞进 setData）
@@ -553,6 +721,13 @@ async function retryLoad() {
 // ============ 方法 ============
 function onSelectCategory(catId: string) {
   activeCategory.value = catId
+}
+
+// 空状态兜底：一键重置所有筛选，展示全部模板（兼容 activeCategory='all' 不过滤分类）
+function resetToAll() {
+  activeCategory.value = 'all'
+  activeFilter.value = 'all'
+  searchKeyword.value = ''
 }
 
 function getCategoryName(categoryId: string): string {
@@ -615,6 +790,14 @@ function onSelectTemplate(template: TemplateItem) {
 }
 
 function getImageUrl(template: TemplateItem): string {
+  // 封面图曾经加载失败 → 直接用本地兜底图
+  if (imageOverrides[template.id]) {
+    return imageOverrides[template.id]
+  }
+  // 云存储全部不可用（iOS "请先登录"）→ cloud URL 直接换本地兜底
+  if (cloudUrlBroken && template.cover && isCloudUrl(template.cover)) {
+    return '/static/images/templates/wedding-1.png'
+  }
   if (template.cover) return resolveUrl(template.cover)
   if (template.image) return resolveUrl(template.image)
   return '/static/images/templates/wedding-1.png'
@@ -635,8 +818,15 @@ function getCoverStyle(template: TemplateItem): Record<string, string> {
 }
 
 function onImageError(e: any, template: TemplateItem) {
-  console.warn(`[template] 封面图加载失败: id=${template.id}, src=${getImageUrl(template)}, errMsg=${e?.detail?.errMsg || e?.errMsg || 'unknown'}`)
-  template.cover = '/static/images/templates/wedding-1.png'
+  const src = getImageUrl(template)
+  console.warn(`[template] 封面图加载失败: id=${template.id}, src=${src}, errMsg=${e?.detail?.errMsg || e?.errMsg || 'unknown'}`)
+  // reactive 写入触发模板重渲染 → getImageUrl 返回本地兜底图
+  imageOverrides[template.id] = '/static/images/templates/wedding-1.png'
+  // 首个 cloud:// URL 失败 → 标记全部云存储 URL 不可用，后续卡片秒切本地图
+  if (!cloudUrlBroken && template.cover && isCloudUrl(template.cover)) {
+    cloudUrlBroken = true
+    console.log('[template] 检测到云存储 URL 不可用，全局降级到本地封面图')
+  }
 }
 
 function openSearch() {
@@ -660,6 +850,8 @@ function onBack() {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
+  /* iOS WKWebView 100vh 缺陷：改用 stretch 作为后备 */
+  min-height: -webkit-fill-available;
   background: #f2f2f7;
   display: flex;
   flex-direction: column;
@@ -942,15 +1134,18 @@ function onBack() {
   height: 0;
 }
 
+/* iOS WKWebView 对 CSS Grid 支持不完整（gap/repeat 渲染失效导致空白），改用 flex 双列 */
 .template-grid {
   padding: 24rpx 24rpx 0;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24rpx;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 .template-card {
-  width: 100%;
+  /* 两列布局：每列宽 = (100% - 24rpx间距) / 2，底部留 24rpx 间距 */
+  width: calc(50% - 12rpx);
+  margin-bottom: 24rpx;
   background: #ffffff;
   border-radius: 24rpx;
   overflow: hidden;
@@ -975,23 +1170,29 @@ function onBack() {
   overflow: hidden;
 }
 
-/* 封面图 */
+/* 封面图
+   注意：父容器 .cover-wrap 用 height:0 + padding-top 撑高（content-box 高度为 0），
+   height:100% 会按规范解析为 0（iOS WKWebView 严格遵循，导致封面错位/右移）。
+   改用 top/bottom 拉伸：absolute 的 top/bottom 参照 padding-box（即撑高后的真实高度），跨端可靠。 */
 .template-cover {
   position: absolute;
   top: 0;
+  bottom: 0;
   left: 0;
+  right: 0;
   width: 100%;
   height: 100%;
   display: block;
 }
 
-/* 渐变遮罩 - 仅底部信息区 */
+/* 渐变遮罩 - 仅底部信息区（同根因：height:50% 解析为 0，改用 top:50% + bottom:0 定位） */
 .cover-gradient {
   position: absolute;
+  top: 50%;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 50%;
+  height: auto;
   background: linear-gradient(to bottom,
     rgba(0, 0, 0, 0) 0%,
     rgba(0, 0, 0, 0.45) 70%,
@@ -1106,6 +1307,20 @@ function onBack() {
 .empty-text {
   font-size: 28rpx;
   color: #6e6e80;
+}
+
+.empty-btn {
+  margin-top: 32rpx;
+  padding: 16rpx 48rpx;
+  background: linear-gradient(135deg, #e84a6e, #ff6b6b);
+  border-radius: 44rpx;
+  box-shadow: 0 8rpx 24rpx rgba(232, 74, 110, 0.25);
+}
+
+.empty-btn-text {
+  font-size: 28rpx;
+  color: #ffffff;
+  font-weight: 500;
 }
 
 /* 底部 */

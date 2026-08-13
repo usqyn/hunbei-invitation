@@ -32,13 +32,19 @@ const FN_DIR = path.join(__dirname, '../cloudfunctions')
 function apiRequest(action, body = {}) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({ action, ...body })
+    // 认证格式与 @cloudbase/node-sdk 一致：Bearer + X-Timestamp + X-Signature-Expires
+    const timestamp = Math.floor(Date.now() / 1000)
     const options = {
       hostname: `${ENV_ID}.api.tcloudbasegateway.com`,
       path: '/',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': API_KEY,
+        'Authorization': `Bearer ${API_KEY}`,
+        'X-Timestamp': String(timestamp),
+        'X-Signature-Expires': '600',
+        'User-Agent': 'tcb-node-sdk/deploy-script',
+        'X-SDK-Version': 'tcb-deploy-script',
         'Content-Length': Buffer.byteLength(payload),
       },
     }

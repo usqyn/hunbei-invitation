@@ -164,8 +164,8 @@ const getCloudUrl = async (fileID) => {
 }
 
 // 批量获取云存储 URL（减少 N+1 调用）
-// getTempFileURL 单次最多 20 条，超出需分批
-const BATCH_SIZE = 20
+// getTempFileURL 单次最多 50 条，超出需分批
+const BATCH_SIZE = 50
 const getCloudUrls = async (fileIDs) => {
   if (!fileIDs || !fileIDs.length) return []
   const cloudOnes = fileIDs.filter(f => typeof f === 'string' && f.startsWith('cloud://'))
@@ -199,6 +199,8 @@ const deleteCloudFile = async (fileID) => {
 const resolveCloudFields = async (records, fields) => {
   if (!records) return records
   const arr = Array.isArray(records) ? records : [records]
+  // 先把 /uploads/ 相对路径归一化为 cloud:// fileID，再统一换 https 临时 URL
+  normalizeUploadPaths(records, fields)
   // 收集所有 cloud:// fileID
   const fileIDs = new Set()
   for (const rec of arr) {
@@ -225,23 +227,30 @@ const resolveCloudFields = async (records, fields) => {
   return records
 }
 
-// 将相对路径（/uploads/xxx.jpg）和旧域名路径转换为完整 HTTPS URL
-// 用于云函数模式下弥补 migrate-assets 不完全的情况
-// 注意：cloud:// URL 应在此之前由 resolveCloudFields 处理
-const PRODUCTION_ASSETS_BASE = 'https://api.TOYtamaxia.com'
+// 将相对路径（/uploads/xxx.jpg）与 localhost HTTP 旧 URL 统一归一化为云存储文件 ID
+// cloud://envId/uploads/xxx.jpg —— 这是云存储的合法 fileID，后续由 resolveCloudFields /
+// 前端 resolveCloudUrl 换取可访问的 https 临时 URL（636c-*.tcb.qcloud.la CDN 直链）。
+// 切勿把 /uploads/ 拼接到云 API 网关域名：网关不存在 /uploads/ 静态路径，会产生 404 死链
+// （历史上曾因假域名 api.TOYtamaxia.com 拼错，换了真网关域名后 404 暴露在控制台）。
+// PRODUCTION_ASSETS_BASE 仅保留导出兼容历史调用方，不再用于拼接图片路径。
+const PRODUCTION_ASSETS_BASE = `https://${envId}.service.tcloudbase.com`
+
+const toCloudFileID = (path) => `cloud://${envId}/${path.replace(/^\/+/, '')}`
 
 const normalizeToHttpsUrl = (url) => {
   if (!url || typeof url !== 'string') return url || ''
   if (url.startsWith('cloud://')) return url
   // 已经是 HTTPS（非 localhost）→ 直接返回
   if (url.startsWith('https://')) return url
-  // HTTP 旧地址（localhost/127.0.0.1）→ 替换为生产 HTTPS 域名
+  // HTTP 旧地址（localhost/127.0.0.1）→ 映射云存储 uploads 路径
   if (url.startsWith('http://')) {
-    return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1):\d+\//, PRODUCTION_ASSETS_BASE.endsWith('/') ? PRODUCTION_ASSETS_BASE : PRODUCTION_ASSETS_BASE + '/')
+    const m = url.match(/^https?:\/\/[^/]+(\/uploads\/.+)$/)
+    if (m) return toCloudFileID(m[1])
+    return url.replace(/^http:\/\//, 'https://')
   }
-  // 相对路径：拼接生产域名
+  // 相对路径 → 云存储文件 ID
   if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
-    return PRODUCTION_ASSETS_BASE + (url.startsWith('/') ? url : '/' + url)
+    return toCloudFileID(url)
   }
   return url
 }
@@ -286,6 +295,8 @@ const normalizeUploadPathsDeep = (obj) => {
 // 就地修改对象，同时返回对象
 const resolveCloudUrlsDeep = async (obj) => {
   if (!obj) return obj
+  // 先把嵌套的 /uploads/ 相对路径归一化为 cloud:// fileID，再统一换 https 临时 URL
+  normalizeUploadPathsDeep(obj)
   // 1. 收集所有 cloud:// fileID
   const fileIDs = new Set()
   const collect = (v) => {

@@ -53,11 +53,24 @@ const listCategories = async (ctx) => {
 
 // ============ 模板列表 ============
 
+// 列表查询字段投影：数据库只返回列表所需字段，避免把 data/elements/pages 等
+// 大 JSON（单模板可达几十 KB）全部拉进云函数内存——这是 limit 调大后
+// 3 秒超时（FUNCTIONS_TIME_LIMIT_EXCEEDED）的根因之一
+const LIST_FIELDS = {
+  id: true, name: true, subtitle: true, category: true,
+  cover: true, image: true, thumbnail: true, renderedImage: true,
+  likes: true, price: true, is_paid: true, is_premium: true, vip_free: true,
+  vipLevel: true, templateType: true, orientation: true, pageCount: true,
+  status: true, createdAt: true, updatedAt: true,
+}
+
 // 列表记录裁剪 + 封面清洗：
-// 1. 移除非列表所需的大字段（data/elements/pages/background/canvasSize/tags）
+// 1. 移除非列表所需的大字段（data/elements/pages/background/tags）
+//    注意：canvasSize 必须保留 —— 前端 getCoverStyle 依赖它按真实比例撑高封面容器，
+//    缺失会导致 aspectFill 裁切过多 / 容器比例失真（列表封面"只显示半截"的历史问题）
 // 2. data:image base64 封面会撑爆云函数 1MB 响应上限（实测单图可达 478KB，
 //    limit=20 时极易超限导致 iOS callFunction 失败），必须置空，前端显示兜底图
-const listHeavyFields = ['data', 'elements', 'pages', 'background', 'canvasSize', 'tags']
+const listHeavyFields = ['data', 'elements', 'pages', 'background', 'tags']
 
 const sanitizeListRecord = (t) => {
   const light = { ...t }
@@ -105,7 +118,7 @@ const listTemplates = async (ctx) => {
   const { page, limit, skip, hasPaging } = parsePagination(ctx.query)
   const countRes = await collection('templates').where(conditions).count()
   const total = countRes.total || 0
-  let q = collection('templates').where(conditions).orderBy('updatedAt', 'desc')
+  let q = collection('templates').where(conditions).orderBy('updatedAt', 'desc').field(LIST_FIELDS)
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
     const list = await sanitizeListCovers(res.data || [])
@@ -126,6 +139,7 @@ const listSimilarTemplates = async (ctx) => {
   const res = await collection('templates')
     .where({ status: 'published', id: _.neq(templateId), category })
     .orderBy('likes', 'desc')
+    .field(LIST_FIELDS)
     .limit(6)
     .get()
   const list = await sanitizeListCovers(res.data || [])
@@ -242,7 +256,7 @@ const listProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
   const { page, limit, skip, hasPaging } = parsePagination(ctx.query)
-  let q = collection('templates').where(conditions).orderBy('likes', 'desc')
+  let q = collection('templates').where(conditions).orderBy('likes', 'desc').field(LIST_FIELDS)
   if (hasPaging) {
     const [countRes, res] = await Promise.all([
       collection('templates').where(conditions).count(),
@@ -260,7 +274,7 @@ const listProducts = async (ctx) => {
 const listRecommendProducts = async (ctx) => {
   const conditions = { status: 'published' }
   if (ctx.query.category) conditions.category = ctx.query.category
-  const res = await collection('templates').where(conditions).orderBy('likes', 'desc').limit(10).get()
+  const res = await collection('templates').where(conditions).orderBy('likes', 'desc').field(LIST_FIELDS).limit(10).get()
   const list = await sanitizeListCovers(res.data || [])
   return ok(list)
 }

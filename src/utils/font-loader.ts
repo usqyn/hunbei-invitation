@@ -49,7 +49,6 @@ function fetchFontMap(): Promise<void> {
           headers: {},
         },
         success: (res: any) => {
-          console.log('[FontLoader] Cloud function result:', res.result)
           const result = res.result
           const raw = (result?.success && result.data) || result || {}
           fontMap = Array.isArray(raw)

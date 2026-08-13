@@ -142,7 +142,7 @@
                   'canvas-element--no-interact': el.editable === false,
                   'canvas-element--dragging': dragging
                 }"
-                :style="getCanvasElementStyle(el)"
+                :style="canvasElementStyle(el)"
                 @touchstart="el.editable === false ? null : onElementTouchStart(idx, $event)"
                 @touchmove.stop.prevent="onElementTouchMove"
                 @touchend="onElementTouchEnd"
@@ -153,16 +153,16 @@
                   v-if="el.type === 'image'"
                   custom-class="canvas-image"
                   :src="el.text"
-                  mode="aspectFill"
+                  :mode="imageMode(el)"
                   :fade-show="false"
                   @error="onImageError"
                 />
                 <text
                   v-else-if="el.type === 'text'"
                   class="canvas-text"
-                  :style="getTextStyle(el)"
+                  :style="textElementStyle(el)"
                   user-select
-                >{{ formatBiDi(resolveText(el.text)) }}</text>
+                >{{ bidiText(resolveText(el.text)) }}</text>
                 <!-- 贴纸：作为图片渲染（admin 序列化器已把 sticker 转为 image） -->
                 <CloudImage
                   v-else-if="el.type === 'sticker'"
@@ -176,7 +176,7 @@
                 <view
                   v-else-if="el.type === 'shape'"
                   class="canvas-shape"
-                  :style="getShapeStyle(el)"
+                  :style="shapeElementStyle(el)"
                 ></view>
                 <!-- 分组：递归渲染子元素（group 的 children 在 el.text 中以 JSON 存储不太合理，
                      这里作为占位容器，实际分组元素在 admin 序列化时已展开为顶层元素） -->
@@ -188,9 +188,9 @@
                 <text
                   v-else
                   class="canvas-text"
-                  :style="getTextStyle(el)"
+                  :style="textElementStyle(el)"
                   user-select
-                >{{ formatBiDi(resolveText(el.text)) }}</text>
+                >{{ bidiText(resolveText(el.text)) }}</text>
                 <!-- 缩放手柄（选中时显示） -->
                 <view
                   v-if="editorStore.selectedElement === idx && el.editable !== false"
@@ -413,6 +413,7 @@ const {
   getCanvasElementStyle,
   getTextStyle,
   getShapeStyle,
+  resolveImageMode,
 } = useCanvasRender({
   getElements: () => editorStore.editableElements,
   getCanvasSize: () => editorStore.canvasSize,
@@ -434,6 +435,26 @@ function onRenderedImageLoad(e: any) {
 function onRenderedImageError() {
   console.warn('renderedImage 加载失败，回退到百分比定位渲染')
   renderedImageStale.value = true
+}
+
+// 本地包装函数：模板中直接引用「解构自 useCanvasRender 的函数」时，
+// Vue 编译器会生成 e.unref(D)(t) 调用模式，微信开发者工具转译该模式会
+// 引用错乱，导致 "e.unref(...) is not a function" 运行时错误。
+// 函数声明形式编译器可静态识别为非 ref，生成直接调用，跨端可靠。
+function canvasElementStyle(el: EditableElement): Record<string, string> {
+  return getCanvasElementStyle(el)
+}
+function textElementStyle(el: EditableElement): Record<string, string> {
+  return getTextStyle(el)
+}
+function shapeElementStyle(el: EditableElement): Record<string, string> {
+  return getShapeStyle(el)
+}
+function imageMode(el: EditableElement): string {
+  return resolveImageMode(el)
+}
+function bidiText(text: string): string {
+  return formatBiDi(text)
 }
 
 // 交互层元素定位：基于 renderedImage 实际显示尺寸，将 Admin px 值转为百分比

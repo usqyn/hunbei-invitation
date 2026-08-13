@@ -1,7 +1,30 @@
-import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName } from '@/config'
+import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName, CLOUD_BASE } from '@/config'
+import { getWechatEnvVersion, WECHAT_ENV } from '@/config/env'
 
 // 云函数模式下兜底的资源域名（当 API_BASE 为 localhost 时使用）
-const CLOUD_FALLBACK_ASSETS_BASE = 'https://api.TOYtamaxia.com'
+// 原生产资源域名（api 子域）公网不存在已废弃，统一以云 API 网关域名兜底。
+const CLOUD_FALLBACK_ASSETS_BASE = CLOUD_BASE
+
+// 云开发环境 ID：从 CLOUD_BASE（https://<envId>.service.tcloudbase.com）提取
+// 用于把 /uploads/ 相对路径映射为云存储文件 ID cloud://envId/uploads/...
+// （云网关 /uploads/ 路径不存在，拼网关会产生 404；cloud:// 由 resolveCloudUrl 换临时 URL）
+const CLOUD_ENV_ID = CLOUD_BASE.replace(/^https:\/\//, '').replace(/\.service\.tcloudbase\.com$/, '')
+
+// 本地开发（微信开发者工具 develop 模式）：云函数/云数据库返回的封面等资源 URL
+// 若指向线上资源域名，本机可能无法解析（历史上曾因假域名导致图片全部加载失败，
+// ERR_NAME_NOT_RESOLVED）。此处把线上资源域名主机重写为本地后端
+// （VITE_WECHAT_DEV_API），仅 develop 模式生效，trial/release 不受影响。
+const DEV_ASSETS_BASE =
+  getWechatEnvVersion() === WECHAT_ENV.develop
+    ? (import.meta.env.VITE_WECHAT_DEV_API || 'http://127.0.0.1:3001')
+    : ''
+
+// 本地开发：将线上资源域名重写为本地后端地址
+function rewriteDevAssets(url: string): string {
+  if (!DEV_ASSETS_BASE || !url.startsWith(CLOUD_FALLBACK_ASSETS_BASE)) return url
+  const path = url.substring(CLOUD_FALLBACK_ASSETS_BASE.length)
+  return DEV_ASSETS_BASE + (path.startsWith('/') ? path : '/' + path)
+}
 
 /**
  * 将后端返回的相对路径解析为完整 URL
@@ -11,16 +34,27 @@ const CLOUD_FALLBACK_ASSETS_BASE = 'https://api.TOYtamaxia.com'
  */
 export function resolveUrl(url: string | undefined | null): string {
   if (!url) return ''
+  // 输入即线上资源域名 → 直接重写（开发模式）
+  const devRewritten = rewriteDevAssets(url)
+  if (devRewritten !== url) return devRewritten
+  const resolved = resolveUrlInternal(url)
+  // 内部拼装也可能落到线上资源域名（CLOUD_FALLBACK_ASSETS_BASE），统一重写
+  return rewriteDevAssets(resolved)
+}
+
+function resolveUrlInternal(url: string | undefined | null): string {
+  if (!url) return ''
   if (url.startsWith('http://')) {
     const isLocalhost = url.includes('127.0.0.1') || url.includes('localhost')
     // 非 localhost HTTP → 自动升级 HTTPS
     if (!isLocalhost) {
       return url.replace('http://', 'https://')
     }
-    // localhost HTTP → 云函数模式下替换为 HTTPS 生产域名
+    // localhost HTTP → 云函数模式下映射为云存储文件 ID（/uploads/ 路径）
     if (USE_CLOUD_FUNCTIONS) {
       const pathIdx = url.indexOf('/', url.indexOf('://') + 3)
       const path = pathIdx !== -1 ? url.substring(pathIdx) : '/'
+      if (path.startsWith('/uploads/')) return `cloud://${CLOUD_ENV_ID}${path}`
       return CLOUD_FALLBACK_ASSETS_BASE + path
     }
     return url
@@ -35,6 +69,10 @@ export function resolveUrl(url: string | undefined | null): string {
     url.startsWith('static/')
   ) {
     return url
+  }
+  // 云函数模式下：/uploads/ 相对路径直接映射为云存储文件 ID（避免拼网关 404）
+  if (USE_CLOUD_FUNCTIONS && (url.startsWith('/uploads/') || url.startsWith('uploads/'))) {
+    return `cloud://${CLOUD_ENV_ID}/${url.replace(/^\/+/, '')}`
   }
   // 相对路径拼接 API_BASE
   // 云函数模式下 API_BASE 可能是 localhost（体验版 fallback），此时用生产域名兜底

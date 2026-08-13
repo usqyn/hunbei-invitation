@@ -808,12 +808,14 @@ onShow(() => {
 }
 
 .tools-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 32rpx 24rpx;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 .tool-item {
+  width: calc(25% - 18rpx);
+  margin-bottom: 32rpx;
   display: flex;
   flex-direction: column;
   align-items: center;

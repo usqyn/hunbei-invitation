@@ -1,0 +1,9 @@
+{
+  "name": "backfill-covers",
+  "version": "1.0.0",
+  "description": "一次性迁移：封面 base64 上传云存储 + SVG 改 PNG",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

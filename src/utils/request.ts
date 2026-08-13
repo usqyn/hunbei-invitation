@@ -61,7 +61,7 @@ export function request<T = any>(options: string | {
       const _t0 = Date.now()
       // iOS 上云函数偶发 success/fail 均不回调导致 Promise 永久挂起，
       // 必须加超时保护：超时后 reject，页面可重试或回退兜底数据
-      const _cloudTimeout = 30000
+      const _cloudTimeout = 10000
       let _cloudSettled = false
       const _timer = setTimeout(() => {
         if (_cloudSettled) return

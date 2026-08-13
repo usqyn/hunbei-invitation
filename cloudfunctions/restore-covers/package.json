@@ -1,0 +1,9 @@
+{
+  "name": "restore-covers",
+  "version": "1.0.0",
+  "description": "一次性恢复：从 data/elements/pages 提取 base64 重新上传云存储修复 cover",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

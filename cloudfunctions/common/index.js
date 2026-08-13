@@ -224,9 +224,8 @@ const updateFeedback = async (ctx) => {
 // POST /api/refresh-url — 单个 fileID 换取新临时 URL
 // 请求体：{ fileID: 'cloud://xxx' }
 // 响应：{ success, data: { url, fileID } }
+// 注意：无需鉴权 —— 知道 fileID 即等同于拥有访问权限（云存储 fileID 本身不可猜测）
 const refreshUrl = async (ctx) => {
-  const auth = requireAuth(ctx.event)
-  if (!auth.ok) return auth.body
   const { fileID } = ctx.body
   if (!fileID || typeof fileID !== 'string') return httpFail('缺少 fileID')
   // 仅支持 cloud:// 协议（https URL 无法刷新）
@@ -239,9 +238,8 @@ const refreshUrl = async (ctx) => {
 // POST /api/refresh-urls — 批量 fileID 换取临时 URL（单次最多 50 个）
 // 请求体：{ fileIDs: ['cloud://xxx', ...] }
 // 响应：{ success, data: [{ url, fileID }] }
+// 注意：无需鉴权，同 refreshUrl
 const refreshUrls = async (ctx) => {
-  const auth = requireAuth(ctx.event)
-  if (!auth.ok) return auth.body
   const { fileIDs } = ctx.body
   if (!fileIDs || !Array.isArray(fileIDs)) return httpFail('缺少 fileIDs 数组')
   if (fileIDs.length > 50) return httpFail('单次最多 50 个 fileID')
