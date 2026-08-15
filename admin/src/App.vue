@@ -36,6 +36,8 @@
         <button class="tb-btn primary" @click="addText">✎ 添加文字</button>
         <button class="tb-btn" @click="triggerImageUpload">🖼 添加图片</button>
         <input ref="fileInput" type="file" accept="image/*" style="display:none" @change="onImageFile" />
+        <button class="tb-btn" @click="triggerPsdImport" title="导入 Photoshop 源文件（PSD）">🎨 导入 PSD</button>
+        <input ref="psdInput" type="file" accept=".psd" style="display:none" @change="onPsdFile" />
 
         <span class="toolbar-divider"></span>
 
@@ -985,6 +987,15 @@
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
+
+    <!-- PSD 导入预览确认 -->
+    <PsdImportDialog
+      :visible="showPsdDialog"
+      :result="psdImportResult"
+      :available-fonts="psdAvailableFonts"
+      @close="showPsdDialog = false"
+      @confirm="onPsdImportConfirm"
+    />
     </template>
   </div>
 </template>
@@ -1014,6 +1025,8 @@ import {
 import PublishWizard from './components/PublishWizard.vue'
 import AdminLogin from './components/AdminLogin.vue'
 import PosterManager from './views/PosterManager.vue'
+import PsdImportDialog from './components/PsdImportDialog.vue'
+import { parsePsdFile, type PsdImportResult, type PsdLayerPreview } from './utils/psd-import'
 import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot, PageMode } from './types/canvas'
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
 import { CATEGORIES } from './types/template'
@@ -1428,6 +1441,7 @@ function onPublishSuccess() {
 const appRootRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const psdInput = ref<HTMLInputElement | null>(null)
 
 // ============ 本地状态 ============
 const leftTab = ref<'material' | 'layers' | 'templates'>('material')
@@ -1462,6 +1476,7 @@ const {
   setBackground,
   addText: canvasAddText,
   addImage: canvasAddImage,
+  importPsdLayers,
   deleteSelected,
   deleteElement,
   toggleVisibility,
@@ -1684,6 +1699,13 @@ const currentTemplateName = ref('')
 const currentTemplateCategory = ref('wedding')
 const currentTemplateSubtitle = ref('')
 const showPublishWizard = ref(false)
+
+// ============ PSD 导入状态 ============
+const showPsdDialog = ref(false)
+const psdImportResult = ref<PsdImportResult | null>(null)
+const psdImporting = ref(false)
+// 导入预览可选的字体（系统内置 + 已上传 + PSD 原始字体）
+const psdAvailableFonts = computed(() => [...new Set([...fontList.value, ...(psdImportResult.value?.layers ?? []).map(l => l.fontName).filter(Boolean) as string[]])])
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
@@ -2196,9 +2218,55 @@ function addSmartField(sf: SmartFieldConfig) {
   })
 }
 
-// 文件上传
-function triggerImageUpload() {
-  fileInput.value?.click()
+// PSD 导入
+function triggerPsdImport() {
+  psdInput.value?.click()
+}
+
+async function onPsdFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = ''
+  if (psdImporting.value) return
+  try {
+    psdImporting.value = true
+    showToast('PSD 解析中…（大文件可能需要几秒）')
+    // 等待下一帧让 toast 渲染，避免大文件解析期间 UI 冻结无反馈
+    await new Promise(r => setTimeout(r, 50))
+    const result = await parsePsdFile(file, fontList.value)
+    psdImportResult.value = result
+    showPsdDialog.value = true
+    if (result.layers.length === 0) {
+      showToast('PSD 中无可导入的图层（均已隐藏或为调整层）', 'error')
+    } else {
+      showToast(`解析完成：${result.layers.length} 层可导入，${result.skipped.length} 层跳过`)
+    }
+  } catch (err) {
+    alert('PSD 导入失败：' + (err as Error).message)
+  } finally {
+    psdImporting.value = false
+  }
+}
+
+// 用户确认导入：清空画布 → 设置 PSD 尺寸 → 按图层导入
+async function onPsdImportConfirm(payload: { width: number; height: number; layers: PsdLayerPreview[] }) {
+  showPsdDialog.value = false
+  // 切回单页画布模式（PSD 是单画布源文件）；切模式会重建 Fabric 画布（watch pageMode → dispose/init），需等重建完成
+  if (pageMode.value !== 'single') {
+    onPageModeChange('single')
+    await nextTick()
+  }
+  clearCanvas()
+  setSize({ width: payload.width, height: payload.height })
+  sizeLabel.value = '自定义'
+  const { imported, failed } = await importPsdLayers(payload.layers)
+  if (failed > 0) {
+    showToast(`PSD 导入完成：成功 ${imported} 层，失败 ${failed} 层，请检查图层`, 'error')
+  } else {
+    showToast(`PSD 导入成功：${imported} 层`)
+  }
+  psdImportResult.value = null
 }
 
 async function onImageFile(e: Event) {

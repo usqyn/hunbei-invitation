@@ -49,10 +49,11 @@ describe('getPresetsByCategory', () => {
     expect(result.every(p => p.category === 'layout')).toBe(true)
   })
 
-  it('scene + layout 的总数应等于全部预设', () => {
+  it('scene + kz + layout 的总数应等于全部预设', () => {
     const scenes = getPresetsByCategory('scene')
+    const kz = getPresetsByCategory('kz')
     const layouts = getPresetsByCategory('layout')
-    expect(scenes.length + layouts.length).toBe(ALL_PRESETS.length)
+    expect(scenes.length + kz.length + layouts.length).toBe(ALL_PRESETS.length)
   })
 
   it("传不存在的分类应返回空数组", () => {

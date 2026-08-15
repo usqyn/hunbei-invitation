@@ -10,6 +10,7 @@ import type {
   CanvasSize,
   CanvasDraft,
 } from '../types/canvas'
+import type { PsdLayerPreview } from '../utils/psd-import'
 import {
   createId,
   DEFAULT_CANVAS_SIZE,
@@ -583,6 +584,98 @@ export function useCanvas(opts: UseCanvasOptions) {
       console.error('addImage failed:', err, 'src:', src.slice(0, 80))
       return null
     })
+  }
+
+  // 批量导入 PSD 图层（自底向上顺序 = z-index 顺序）
+  // 文字层复用 addText 标准链路（direction:'auto' → resolveRtlTextOptions 自动处理哈萨克阿拉伯文 RTL），
+  // 图片层按图层原始坐标/尺寸精确定位（不做 80% 收缩），支持透明 PNG。
+  async function importPsdLayers(layers: PsdLayerPreview[]) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return { imported: 0, failed: 0 }
+    let imported = 0
+    let failed = 0
+    for (const layer of layers) {
+      try {
+        if (layer.type === 'text' && layer.text && layer.text.length > 0) {
+          addText({
+            id: createId('text'),
+            type: 'text',
+            name: layer.name || '文字',
+            x: layer.left + layer.width / 2,
+            y: layer.top + layer.height / 2,
+            width: layer.width,
+            height: layer.height,
+            rotation: layer.rotation || 0,
+            opacity: layer.opacity ?? 1,
+            locked: false,
+            visible: true,
+            zIndex: elements.value.length,
+            editable: true,
+            dataKey: undefined,
+            content: layer.text,
+            fontFamily: layer.mappedFont || '思源宋体, serif',
+            fontSize: layer.fontSize && layer.fontSize > 0 ? layer.fontSize : 24,
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            color: layer.color || '#333333',
+            textAlign: layer.textAlign || 'center',
+            direction: 'auto',
+            lineHeight: layer.lineHeight ?? 1.5,
+            letterSpacing: layer.letterSpacing ?? 0,
+            strokeColor: layer.strokeColor || 'transparent',
+            strokeWidth: layer.strokeWidth ?? 0,
+            shadowColor: 'transparent',
+            shadowOffsetX: 0,
+            shadowOffsetY: 0,
+            shadowBlur: 0,
+            textDecoration: 'none',
+          })
+          imported++
+          continue
+        }
+        if (layer.type === 'image' && layer.dataUrl) {
+          const el = await addImage(layer.dataUrl, {
+            id: createId('image'),
+            type: 'image',
+            name: layer.name || '图片',
+            x: layer.left + layer.width / 2,
+            y: layer.top + layer.height / 2,
+            width: layer.width,
+            height: layer.height,
+            rotation: layer.rotation || 0,
+            opacity: layer.opacity ?? 1,
+            locked: false,
+            visible: true,
+            zIndex: elements.value.length,
+            editable: true,
+          })
+          if (!el) {
+            failed++
+            continue
+          }
+          // addImage 会按画布宽度 80% 收缩，导入需精确尺寸：移除收缩缩放
+          const obj = canvas.getObjects().find(o => o.id === el.id)
+          if (obj && obj.width && obj.height) {
+            obj.set({
+              scaleX: layer.width / obj.width,
+              scaleY: layer.height / obj.height,
+              angle: layer.rotation || 0,
+            })
+          }
+          imported++
+          continue
+        }
+        failed++
+      } catch (err) {
+        console.error('PSD 图层导入失败:', layer.name, err)
+        failed++
+      }
+    }
+    canvas.discardActiveObject()
+    canvas.renderAll()
+    updateZIndexFromFabric()
+    pushHistory('psd-import')
+    return { imported, failed }
   }
 
   // 删除选中元素
@@ -1534,6 +1627,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     setBackground,
     addText,
     addImage,
+    importPsdLayers,
     deleteSelected,
     deleteElement,
     toggleVisibility,

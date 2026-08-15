@@ -10,6 +10,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "ag-psd": "^31.0.2",
     "axios": "^1.18.1",
     "bidi-shaper": "^0.1.2",
     "fabric": "^6.4.3",
