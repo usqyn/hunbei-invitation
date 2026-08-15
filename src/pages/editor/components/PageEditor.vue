@@ -35,7 +35,9 @@
           </template>
           <template v-else-if="sec.type === 'image'">
             <CloudImage
+              class="section-image"
               custom-class="section-image"
+              :style="sectionImageFillStyle"
               :src="sec.image || '/static/images/icons/img-placeholder.svg'"
               mode="aspectFit"
               :custom-style="getImageSectionStyle(sec)"
@@ -265,6 +267,11 @@ const templateStore = useTemplateStore()
 const worksStore = useWorksStore()
 const { goBack, isDirty } = useGoBack()
 const { haptic } = useFeedback()
+
+// 分页图片宿主填充样式：作用于 <CloudImage> 宿主节点（:style），内层 <image> 尺寸见 getImageSectionStyle。
+// mp-weixin 自定义组件默认样式隔离（isolated），页面 scoped class 无法作用到组件内部节点，
+// 内层 <image> 无尺寸时按默认 320×240 渲染 → 图片被拉长、位置偏移（iOS 必现）。
+const sectionImageFillStyle = 'width:100%;height:100%'
 
 // 图片属性面板显示控制
 const showImagePanel = ref(false)
@@ -539,7 +546,12 @@ function onRotateHandleTouchEnd() {
 
 // 图片 section 的变换样式
 function getImageSectionStyle(sec: PageSection): Record<string, string> {
-  const style: Record<string, string> = {}
+  const style: Record<string, string> = {
+    // 内层 <image> 显式填充宿主节点：mp-weixin 自定义组件默认样式隔离（isolated），
+    // 页面 scoped class 无法作用到组件内部节点，无尺寸时按默认 320×240 渲染 → 拉长/偏移（iOS 必现）
+    width: '100%',
+    height: '100%',
+  }
   // 透明度
   if (sec.opacity != null) style.opacity = String(sec.opacity)
   // 构建复合 transform：旋转 + 缩放

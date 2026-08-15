@@ -67,7 +67,10 @@
           >
             <CloudImage
               v-if="el.type === 'image'"
+              class="flip-image"
               custom-class="flip-image"
+              :style="flipImageFillStyle"
+              :custom-style="flipImageFillStyle"
               :src="el.text || '/static/images/templates/wedding-1.png'"
               mode="aspectFit"
             />
@@ -249,6 +252,11 @@ const templateStore = useTemplateStore()
 const worksStore = useWorksStore()
 const { goBack, isDirty } = useGoBack()
 const { haptic } = useFeedback()
+
+// 翻页图片内联填充样式：同时作用于 <CloudImage> 宿主节点（:style）与内层 <image>（custom-style）。
+// mp-weixin 自定义组件默认样式隔离（isolated），页面 scoped class 无法作用到组件内部节点，
+// 内层 <image> 无尺寸时按默认 320×240 + scaleToFill 渲染 → 图片被拉长、位置偏移（iOS 必现）。
+const flipImageFillStyle = 'position:absolute;left:0;top:0;width:100%;height:100%'
 
 // 缓存系统屏幕信息，避免每次 touchmove 都调用 getSystemInfoSync
 const _screenInfo = (() => {

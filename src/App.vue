@@ -25,9 +25,14 @@ onLaunch(async () => {
     uni.setStorageSync('cloud_init_ok', '0')
   }
   
-  // 后台健康检查：延迟 2s 后用一次轻量云函数调用验证云开发真正可用
-  // 解决 iOS 上 init 成功但实际不可用的问题
-  setTimeout(() => {
+  // 后台健康检查：延迟 12s 后用轻量云函数调用验证云开发真正可用。
+  // 之前 2s 太早：iOS 冷启动时首次云调用常超时，误判"云不可用"并写入
+  // cloud_available=0，导致模板广场整会话回退本地占位数据（假阴性）。
+  // 现改为延迟 12s + 失败自动重试 2 次（间隔 5s），全部失败才标记不可用。
+  let _healthAttempts = 0
+  const runHealthCheck = () => {
+    _healthAttempts += 1
+    const start = Date.now()
     try {
       // @ts-ignore
       wx.cloud.callFunction({
@@ -35,21 +40,30 @@ onLaunch(async () => {
         data: { path: '/api/version', httpMethod: 'GET', body: {}, headers: {}, query: {} },
         success: () => {
           uni.setStorageSync('cloud_available', '1')
-          console.log('[cloud] health check: OK')
-        },
-        fail: () => {
-          uni.setStorageSync('cloud_available', '0')
-          console.warn('[cloud] health check: FAIL')
-        },
-        complete: () => {
           uni.setStorageSync('cloud_checked_at', String(Date.now()))
+          console.log(`[cloud] health check: OK (attempt ${_healthAttempts}, ${Date.now() - start}ms)`)
+        },
+        fail: (err: any) => {
+          console.warn(`[cloud] health check: FAIL (attempt ${_healthAttempts}, ${Date.now() - start}ms)`, err?.errMsg || err)
+          if (_healthAttempts < 3) {
+            setTimeout(runHealthCheck, 5000)
+          } else {
+            uni.setStorageSync('cloud_available', '0')
+            uni.setStorageSync('cloud_checked_at', String(Date.now()))
+          }
         }
       })
     } catch (e) {
-      uni.setStorageSync('cloud_available', '0')
       console.warn('[cloud] health check: ERROR', e)
+      if (_healthAttempts < 3) {
+        setTimeout(runHealthCheck, 5000)
+      } else {
+        uni.setStorageSync('cloud_available', '0')
+        uni.setStorageSync('cloud_checked_at', String(Date.now()))
+      }
     }
-  }, 2000)
+  }
+  setTimeout(runHealthCheck, 12000)
 
   // 开发版 & 体验版延迟开启 vConsole（避免初始化冲突）
   try {
@@ -80,4 +94,10 @@ onShow(() => {
 
 <style lang="scss">
 @use './styles/global.scss' as *;
+
+/* 根节点铺满视口：flex:1 + height:0 的子容器依赖此确定高度链，
+   iOS 内嵌 WKWebView 中 100vh/-webkit-fill-available 均不可靠，page 原生高度最稳 */
+page {
+  height: 100%;
+}
 </style>

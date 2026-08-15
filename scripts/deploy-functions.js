@@ -34,9 +34,10 @@ function apiRequest(action, body = {}) {
     const payload = JSON.stringify({ action, ...body })
     // 认证格式与 @cloudbase/node-sdk 一致：Bearer + X-Timestamp + X-Signature-Expires
     const timestamp = Math.floor(Date.now() / 1000)
+    const seqId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const options = {
-      hostname: `${ENV_ID}.api.tcloudbasegateway.com`,
-      path: '/',
+      hostname: `${ENV_ID}.tcb-api.tencentcloudapi.com`,
+      path: `/admin?env=${ENV_ID}&seqId=${seqId}`,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

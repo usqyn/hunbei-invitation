@@ -140,7 +140,7 @@ const fallbackProducts: Product[] = [
   },
   {
     id: 3, name: '定制电子请柬', slogan: '【H5互动式】', spec: '在线制作+宾客回执',
-    image: '/static/images/mall/banner3.png', badge: '新品', promo: '免费修改3次', price: '99', originalPrice: '199',
+    image: '/static/images/mall/banner3.jpg', badge: '新品', promo: '免费修改3次', price: '99', originalPrice: '199',
     tags: ['电子请柬', '个性定制'], category: 3,
     detail: '婚纱照定制H5电子请柬，支持音乐、相册、地图导航、宾客回执功能。提供哈萨克风格模板可选，一键分享至微信朋友圈。'
   },
@@ -176,7 +176,7 @@ const fallbackProducts: Product[] = [
   },
   {
     id: 9, name: '伴手礼定制套装', slogan: '【回礼首选】', spec: '50份起订',
-    image: '/static/images/mall/banner3.png', badge: '', promo: '免费设计包装', price: '68', originalPrice: '',
+    image: '/static/images/mall/banner3.jpg', badge: '', promo: '免费设计包装', price: '68', originalPrice: '',
     tags: ['伴手礼', '定制'], category: 4,
     detail: '婚礼伴手礼定制，含哈萨克风格定制礼盒、手工香皂、蜜饯糖果、感谢卡。每份独立包装，50份起订，可根据预算调整内容搭配。'
   },
@@ -200,7 +200,7 @@ const fallbackProducts: Product[] = [
   },
   {
     id: 13, name: '婚礼摄影套餐', slogan: '【精修+相册】', spec: '双机位+12寸相册',
-    image: '/static/images/mall/banner3.png', badge: '推荐', promo: '赠摆台2个', price: '3980', originalPrice: '4980',
+    image: '/static/images/mall/banner3.jpg', badge: '推荐', promo: '赠摆台2个', price: '3980', originalPrice: '4980',
     tags: ['摄影', '相册'], category: 5,
     detail: '婚礼摄影套餐，双机位全程拍摄，含200张精修照片、12寸水晶相册一本、全部底片。赠送10寸摆台2个，记录婚礼每个动人瞬间。'
   },

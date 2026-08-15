@@ -151,7 +151,10 @@
               >
                 <CloudImage
                   v-if="el.type === 'image'"
+                  class="canvas-image"
                   custom-class="canvas-image"
+                  :style="canvasImageFillStyle"
+                  :custom-style="canvasImageFillStyle"
                   :src="el.text"
                   :mode="imageMode(el)"
                   :fade-show="false"
@@ -166,7 +169,10 @@
                 <!-- 贴纸：作为图片渲染（admin 序列化器已把 sticker 转为 image） -->
                 <CloudImage
                   v-else-if="el.type === 'sticker'"
+                  class="canvas-image canvas-sticker"
                   custom-class="canvas-image canvas-sticker"
+                  :style="canvasImageFillStyle"
+                  :custom-style="canvasImageFillStyle"
                   :src="el.text"
                   mode="aspectFit"
                   :fade-show="false"
@@ -444,6 +450,11 @@ function onRenderedImageError() {
 function canvasElementStyle(el: EditableElement): Record<string, string> {
   return getCanvasElementStyle(el)
 }
+
+// 画布图片内联填充样式：同时作用于 <CloudImage> 宿主节点（:style）与内层 <image>（custom-style）。
+// mp-weixin 自定义组件默认样式隔离（isolated），页面 scoped class 无法作用到组件内部节点，
+// 内层 <image> 无尺寸时按默认 320×240 + scaleToFill 渲染 → 图片被拉长、位置偏移（iOS 必现）。
+const canvasImageFillStyle = 'position:absolute;left:0;top:0;width:100%;height:100%'
 function textElementStyle(el: EditableElement): Record<string, string> {
   return getTextStyle(el)
 }

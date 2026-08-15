@@ -36,7 +36,14 @@ const attrs = useAttrs()
 // 将父级通过 class/style 透传的属性与 props.customClass/customStyle 合并，
 // 确保外部 <CloudImage class="xxx" /> 的样式能作用到内部 <image>。
 const finalClass = computed(() => [attrs.class, props.customClass].filter(Boolean).join(' '))
-const finalStyle = computed(() => [attrs.style, props.customStyle].filter(Boolean))
+// 统一归一化为单条 CSS 字符串（对象/数组形式在 mp-weixin 的 WXML style 绑定上不可靠，
+// 会导致内部 <image> 拿不到宽高等内联样式、按默认尺寸渲染造成错位/偏移）
+const toCssText = (s: string | Record<string, any> | undefined): string => {
+  if (!s) return ''
+  if (typeof s === 'string') return s
+  return Object.entries(s).map(([k, v]) => `${k}:${v}`).join(';')
+}
+const finalStyle = computed(() => [attrs.style, props.customStyle].map(toCssText).filter(Boolean).join(';'))
 
 const emit = defineEmits<{
   (e: 'load'): void

@@ -16,7 +16,7 @@ const {
   requireAuth,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute,
-  uploadToCloud, getCloudUrl, createRouter,
+  uploadToCloud, getCloudUrl, getCloudUrls, createRouter,
 } = require('./_shared')
 
 // 允许的文件扩展名 → MIME 映射

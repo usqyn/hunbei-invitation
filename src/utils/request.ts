@@ -59,9 +59,10 @@ export function request<T = any>(options: string | {
       const cleanPath = options.url.indexOf('?') === -1 ? options.url : options.url.slice(0, options.url.indexOf('?'))
       const queryObj = parseUrlQuery(options.url)
       const _t0 = Date.now()
-      // iOS 上云函数偶发 success/fail 均不回调导致 Promise 永久挂起，
+      // 云函数调用偶发 success/fail 均不回调导致 Promise 永久挂起，
       // 必须加超时保护：超时后 reject，页面可重试或回退兜底数据
-      const _cloudTimeout = 10000
+      // 20s：与模板广场等页面的统一超时一致，覆盖真机冷启动场景
+      const _cloudTimeout = 20000
       let _cloudSettled = false
       const _timer = setTimeout(() => {
         if (_cloudSettled) return

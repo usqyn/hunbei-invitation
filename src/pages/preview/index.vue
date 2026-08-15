@@ -124,7 +124,7 @@
       <!-- 画布模式：绝对定位渲染 -->
       <template v-else-if="isCanvasMode">
         <view v-if="editorStore.renderedImage" class="preview-card preview-card--canvas" :style="[canvasCardStyle, canvasBackgroundStyle]">
-          <CloudImage class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" custom-class="rendered-image" />
+          <CloudImage class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" custom-class="rendered-image" :style="previewImageWidthStyle" :custom-style="previewImageWidthStyle" />
         </view>
         <view v-else class="preview-card preview-card--canvas" :style="[canvasCardStyle, canvasBackgroundStyle]">
           <view
@@ -137,8 +137,10 @@
             <CloudImage
               v-if="el.type === 'image'"
               class="preview-image-el"
+              :style="canvasImageFillStyle"
+              :custom-style="canvasImageFillStyle"
               :src="el.text"
-              mode="scaleToFill"
+              :mode="resolveImageMode(el)"
               custom-class="preview-image-el"
               @error="onImageError"
             />
@@ -158,6 +160,8 @@
             <CloudImage
               v-if="el.type === 'image'"
               class="preview-section-image"
+              :style="previewSectionImageFillStyle"
+              :custom-style="previewSectionImageFillStyle"
               :src="el.text"
               :mode="resolveImageMode(el)"
               custom-class="preview-section-image"
@@ -314,6 +318,13 @@ const worksStore = useWorksStore()
 
 const { haptic, feedbackSuccess, feedbackError, feedbackWarning } = useFeedback()
 const { loading: exportingLoading, run: runExport } = useAsyncAction()
+
+// 图片内联填充样式：同时作用于 <CloudImage> 宿主节点（:style）与内层 <image>（custom-style）。
+// mp-weixin 自定义组件默认样式隔离（isolated），页面 scoped class 无法作用到组件内部节点，
+// 内层 <image> 无尺寸时按默认 320×240 渲染 → 图片被拉长、位置偏移（iOS 必现）。
+const canvasImageFillStyle = 'position:absolute;left:0;top:0;width:100%;height:100%'
+const previewImageWidthStyle = 'width:100%'
+const previewSectionImageFillStyle = 'width:100%;height:100%'
 
 // 跟踪所有 setTimeout，组件卸载时统一清理，防止内存泄漏
 let _timers: ReturnType<typeof setTimeout>[] = []

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page">
     <!-- 顶部标题栏（融合搜索入口） -->
     <view class="header">
@@ -54,7 +54,7 @@
     </view>
 
     <!-- 模板列表网格 -->
-    <scroll-view v-else class="template-scroll" scroll-y>
+    <scroll-view v-else class="template-scroll" scroll-y :style="scrollAreaStyle">
       <view v-if="filteredTemplates.length === 0" class="empty-state">
         <image class="empty-icon-image" :src="pageConfig.emptyIcon" mode="aspectFit" />
         <text class="empty-text">{{ pageConfig.emptyText }}</text>
@@ -68,12 +68,15 @@
           v-for="template in filteredTemplates"
           :key="template.id"
           class="template-card"
+          :style="getCardStyle()"
           @click="onSelectTemplate(template)"
         >
-          <!-- 模板封面图（按真实比例显示） -->
+          <!-- 模板封面图（按真实比例显示，尺寸由 getCoverStyle 显式 px 指定） -->
           <view class="cover-wrap" :style="getCoverStyle(template)">
             <CloudImage
               class="template-cover"
+              custom-class="template-cover"
+              :custom-style="getCoverStyle(template)"
               :src="getImageUrl(template)"
               mode="aspectFill"
               :lazy-load="true"
@@ -347,13 +350,6 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
 })
 
 // ============ 监控：记录平台与网络信息 ============
-function getPurePlatform(): string {
-  try {
-    // @ts-ignore
-    return uni.getSystemInfoSync().platform || ''
-  } catch { return '' }
-}
-
 function getPlatformInfo(): string {
   try {
     // @ts-ignore
@@ -374,17 +370,17 @@ function monitorNetwork() {
 // 云函数在 iOS 上偶发超时/挂起/返回空，此时回退到本地静态模板，
 // 保证页面不为空白（点击本地模板会提示稍后重试）
 const LOCAL_TEMPLATE_LIST: TemplateItem[] = [
-  { id: 'local-1', name: '好久不见', subtitle: 'Our Wedding', category: 'wedding', cover: '/static/images/templates/wedding-1.png', likes: 9999, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
-  { id: 'local-2', name: '适我愿兮', subtitle: 'Love Forever', category: 'wedding', cover: '/static/images/templates/wedding-2.png', likes: 8866, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 12, createdAt: '', updatedAt: '' },
-  { id: 'local-3', name: '佳偶天成', subtitle: 'A Perfect Match', category: 'wedding', cover: '/static/images/templates/wedding-3.png', likes: 7680, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
-  { id: 'local-4', name: '最美的遇见', subtitle: 'Proposal', category: 'engagement', cover: '/static/images/templates/template-1.png', likes: 5321, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-1', name: '好久不见', subtitle: 'Our Wedding', category: 'wedding', cover: '/static/images/templates/wedding-5.png', likes: 9999, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
+  { id: 'local-2', name: '适我愿兮', subtitle: 'Love Forever', category: 'wedding', cover: '/static/images/templates/wedding-6.png', likes: 8866, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 12, createdAt: '', updatedAt: '' },
+  { id: 'local-3', name: '佳偶天成', subtitle: 'A Perfect Match', category: 'wedding', cover: '/static/images/templates/invitation-1.png', likes: 7680, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 10, createdAt: '', updatedAt: '' },
+  { id: 'local-4', name: '最美的遇见', subtitle: 'Proposal', category: 'engagement', cover: '/static/images/templates/template-5.png', likes: 5321, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   { id: 'local-5', name: '节日快乐', subtitle: 'Happy Holiday', category: 'festival-invitation', cover: '/static/images/templates/invitation-1.png', likes: 4210, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   { id: 'local-6', name: '甜蜜派对', subtitle: 'Sweet Party', category: 'festival-invitation', cover: '/static/images/templates/invitation-2.png', likes: 3980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   { id: 'local-7', name: '百日宴', subtitle: 'Baby Party', category: 'baby', cover: '/static/images/templates/template-5.png', likes: 2870, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
-  { id: 'local-8', name: '乔迁之喜', subtitle: 'Housewarming', category: 'house', cover: '/static/images/templates/template-3.png', likes: 2150, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-8', name: '乔迁之喜', subtitle: 'Housewarming', category: 'house', cover: '/static/images/templates/invitation-2.png', likes: 2150, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   // 以下 4 个补充分类，确保 iOS 云函数不可用走本地兜底时，从首页任意分类入口进入都不空白
-  { id: 'local-9', name: '商量茶', subtitle: 'Tea Ceremony', category: 'consultation-tea', cover: '/static/images/templates/template-1.png', likes: 1980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
-  { id: 'local-10', name: '割礼', subtitle: 'Ceremony', category: 'festival', cover: '/static/images/templates/template-3.png', likes: 1860, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-9', name: '商量茶', subtitle: 'Tea Ceremony', category: 'consultation-tea', cover: '/static/images/templates/template-5.png', likes: 1980, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
+  { id: 'local-10', name: '割礼', subtitle: 'Ceremony', category: 'festival', cover: '/static/images/templates/invitation-2.png', likes: 1860, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   { id: 'local-11', name: '耳环礼', subtitle: 'Earring Gift', category: 'business', cover: '/static/images/templates/invitation-2.png', likes: 1720, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
   { id: 'local-12', name: '升学宴', subtitle: 'Graduation', category: 'graduation', cover: '/static/images/templates/template-5.png', likes: 1650, price: 0, is_paid: 0, is_premium: 0, vip_free: 0, templateType: 'canvas', orientation: 'portrait', pageCount: 8, createdAt: '', updatedAt: '' },
 ]
@@ -436,8 +432,6 @@ onMounted(async () => {
 
   loading.value = true
   const t0 = Date.now()
-  // 提取纯平台标识用于超时分支判断（如 'ios' / 'android' / 'devtools'）
-  const isIOS = /^ios/i.test(getPurePlatform())
 
   // 检查云开发是否可用（App.onLaunch 已做 init + 健康检查）
   const cloudInitOk = safeGetStorage('cloud_init_ok') !== '0'
@@ -457,51 +451,31 @@ onMounted(async () => {
     return
   }
 
-  // 健康检查明确返回失败 → 跳过云调用，秒出本地数据
+  // 健康检查标记不可用 → 不再秒退本地（避免 iOS 冷启动时检查过早导致的假阴性），
+  // 继续走真实拉取，由页面 20s 超时 + 本地兜底双保险兜底
   if (!cloudAvailable && safeGetStorage('cloud_checked_at')) {
-    console.log(`[template] cloud health check failed, using local data, platform=${platform}`)
-    safeBuildState(makeFallbackCategories(), makeFallbackTemplates())
-    loading.value = false
-    logSummary('cloud_unavailable')
-    enableShareMenu()
-    return
+    console.warn(`[template] cloud health check reported unavailable, still trying real fetch, platform=${platform}`)
   }
 
-  // iOS 已知问题：云函数回调可能不触发，用 8s 竞速超时避免无限等待
-  // 安卓/开发者工具超时给 15s（云服务冷启动约 3-5s）
-  const LOAD_TIMEOUT = isIOS ? 8000 : 15000
+  // 统一两端超时：iOS 早期因云函数 bug 采用 8s 竞速，导致真机冷启动场景频繁
+  // 回退本地兜底（真实模板不显示）；相关 bug（分类 id/URL/字体）已修复，
+  // 现统一 20s 并行拉取，两端行为一致。云函数真挂起时由 request 层超时兜底。
+  const LOAD_TIMEOUT = 20000
   let summaryTag = 'cloud_ok'
 
   try {
     console.log(`[template] step1: fetching data, timeout=${LOAD_TIMEOUT}ms`)
-    if (isIOS) {
-      // iOS 单云函数串行：分类直接用静态配置（分类仅补充数量，非关键路径），
-      // 只发起一次模板云函数调用，避免 2 个并发云函数在 iOS 上互相拖慢导致超时
-      console.log('[template] iOS mode: categories=static, fetch templates only')
-      const templates = await Promise.race([
-        fetchTemplates(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('load_timeout')), LOAD_TIMEOUT)
-        ),
-      ]) as TemplateItem[]
-      const t2 = Date.now()
-      console.log(`[template] data loaded [v2-ios]: ${t2 - t0}ms, platform=${platform}, network=${_networkType}, count=${templates.length}`)
-      safeBuildState(makeFallbackCategories(), templates)
-    } else {
-      // 安卓/开发者工具：并行请求分类和模板
-      const result = await Promise.race([
-        Promise.all([fetchCategories(), fetchTemplates()]),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('load_timeout')), LOAD_TIMEOUT)
-        ),
-      ]) as [CategoryItem[], TemplateItem[]]
+    const result = await Promise.race([
+      Promise.all([fetchCategories(), fetchTemplates()]),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('load_timeout')), LOAD_TIMEOUT)
+      ),
+    ]) as [CategoryItem[], TemplateItem[]]
 
-      console.log(`[template] step2: data fetched, building state`)
-      const [categories, templates] = result
-      const t2 = Date.now()
-      console.log(`[template] data loaded [v2]: ${t2 - t0}ms, platform=${platform}, network=${_networkType}, count=${templates.length}`)
-      safeBuildState(categories, templates)
-    }
+    const [categories, templates] = result
+    const t2 = Date.now()
+    console.log(`[template] data loaded: ${t2 - t0}ms, platform=${platform}, network=${_networkType}, count=${templates.length}`)
+    safeBuildState(categories, templates)
     console.log(`[template] step3: buildState done, cats=${categoryList.value.length}, temps=${allTemplates.value.length}`)
   } catch (e) {
     const tErr = Date.now()
@@ -528,6 +502,7 @@ onMounted(async () => {
     logSummary('fatal_catch')
     enableShareMenu()
   }
+  measureScrollArea()
 })
 
 onLoad(() => {
@@ -789,39 +764,107 @@ function onSelectTemplate(template: TemplateItem) {
   })
 }
 
+// 本地兜底封面：wedding-5.png（533x800 ≈ 1.501，本地素材中与容器 1.779 最接近，裁切最小）
+const FALLBACK_COVER = '/static/images/templates/wedding-5.png'
+
 function getImageUrl(template: TemplateItem): string {
-  // 封面图曾经加载失败 → 直接用本地兜底图
+  // 封面图曾经加载失败 → 直接用本地兜底图（wedding-5.png 533x800≈1.501，与容器 1.779 最接近，裁切最小）
   if (imageOverrides[template.id]) {
     return imageOverrides[template.id]
   }
   // 云存储全部不可用（iOS "请先登录"）→ cloud URL 直接换本地兜底
   if (cloudUrlBroken && template.cover && isCloudUrl(template.cover)) {
-    return '/static/images/templates/wedding-1.png'
+    return FALLBACK_COVER
   }
   if (template.cover) return resolveUrl(template.cover)
   if (template.image) return resolveUrl(template.image)
-  return '/static/images/templates/wedding-1.png'
+  return FALLBACK_COVER
 }
 
-// 根据模板真实比例计算卡片高度
-// 竖版（375x667）→ 比例 0.562 → 卡片宽 339rpx * 1.778 = 603rpx 高
-// 横版（750x375）→ 比例 2.0 → 卡片宽 339rpx * 0.5 = 170rpx 高（过矮，使用 min-height）
-function getCoverStyle(template: TemplateItem): Record<string, string> {
+// 根据模板真实比例计算封面/容器尺寸（JS 显式像素，不用百分比 padding-top 与
+// absolute+百分比填充：iOS WKWebView 在这类组合下会解析为 0 或退化为拉伸）
+// 返回单条 CSS 字符串，同时作用于 .cover-wrap 与 <CloudImage>（custom-style 专用通道，
+// 不依赖 class/style 宿主透传：mp-weixin 自定义组件上透传不可靠，会导致图片错位/偏移）
+function getCoverStyle(template: TemplateItem): string {
   const cs = template.canvasSize
-  // 没有尺寸信息时用默认竖版比例
-  if (!cs || !cs.width || !cs.height) {
-    return { paddingTop: '177.87%' }  // 667/375 * 100% = 177.87%
+  // 卡片宽度 = (窗口宽 - 48rpx 网格内边距 - 24rpx 列间距) / 2 = 0.452 × 窗口宽
+  const cardWidth = getCardWidth()
+  let ratio = 1.7787 // 无尺寸信息时默认竖版比例 667/375
+  if (cs && cs.width && cs.height) {
+    ratio = cs.height / cs.width
   }
-  // 用 paddingTop 百分比代替 aspect-ratio（小程序兼容性更好）
-  const ratio = (cs.height / cs.width * 100).toFixed(2)
-  return { paddingTop: ratio + '%' }
+  const h = Math.max(40, Math.round(cardWidth * ratio))
+  return `width:${Math.round(cardWidth)}px;height:${h}px`
+}
+
+function getCardWidth(): number {
+  try {
+    // @ts-ignore
+    const info = uni.getWindowInfo ? uni.getWindowInfo() : uni.getSystemInfoSync()
+    const w = info?.windowWidth || 375
+    return Math.max(40, w * 0.452)
+  } catch {
+    return 169.5 // 375 * 0.452 兜底
+  }
+}
+
+// 卡片宽度：JS 显式像素（不用 calc(50% - 12rpx)：iOS WKWebView 中 calc+rpx 解析失败
+// 会导致卡片宽=0、整页空白；内联 px 与 CSS calc 宽度 0.452×winW 完全一致）
+function getCardStyle(): Record<string, string> {
+  return { width: getCardWidth() + 'px' }
+}
+
+// ===== 滚动容器确定高度 =====
+// iOS 嵌入 WKWebView 中 100vh / -webkit-fill-available 均不可靠，flex:1+height:0 可能塌陷为 0；
+// 渲染后实测顶部区域高度，用内联 px 给 scroll-view 设置确定高度，彻底脱离高度链
+const scrollHeight = ref(0)
+
+const scrollAreaStyle = computed<Record<string, string>>(() => ({
+  height: (scrollHeight.value > 0 ? scrollHeight.value : fallbackScrollHeight()) + 'px'
+}))
+
+function fallbackScrollHeight(): number {
+  try {
+    // @ts-ignore
+    const info = uni.getWindowInfo ? uni.getWindowInfo() : uni.getSystemInfoSync()
+    const h = info?.windowHeight || 667
+    return Math.max(200, h - 300)
+  } catch {
+    return 367
+  }
+}
+
+// 渲染稳定后实测：滚动容器位置/高度、网格内容高度、首张卡片尺寸
+function measureScrollArea() {
+  setTimeout(() => {
+    try {
+      const query = uni.createSelectorQuery()
+      query.select('.template-scroll').boundingClientRect()
+      query.select('.template-grid').boundingClientRect()
+      query.select('.template-card').boundingClientRect()
+      query.exec((res: any[]) => {
+        const scrollRect = res?.[0] || null
+        const gridRect = res?.[1] || null
+        const cardRect = res?.[2] || null
+        // @ts-ignore
+        const info = uni.getWindowInfo ? uni.getWindowInfo() : uni.getSystemInfoSync()
+        const winH = info?.windowHeight || 0
+        if (scrollRect && winH > 0) {
+          scrollHeight.value = Math.max(200, Math.round(winH - scrollRect.top))
+        }
+        console.log(`[template] MEASURE: winH=${winH} scroll=${JSON.stringify(scrollRect && { top: scrollRect.top, height: scrollRect.height })} grid=${JSON.stringify(gridRect && { height: gridRect.height })} firstCard=${JSON.stringify(cardRect && { width: cardRect.width, height: cardRect.height })} computedScrollH=${scrollHeight.value}`)
+      })
+    } catch (e) {
+      console.warn('[template] measure failed:', e)
+    }
+  }, 400)
 }
 
 function onImageError(e: any, template: TemplateItem) {
   const src = getImageUrl(template)
   console.warn(`[template] 封面图加载失败: id=${template.id}, src=${src}, errMsg=${e?.detail?.errMsg || e?.errMsg || 'unknown'}`)
   // reactive 写入触发模板重渲染 → getImageUrl 返回本地兜底图
-  imageOverrides[template.id] = '/static/images/templates/wedding-1.png'
+  imageOverrides[template.id] = FALLBACK_COVER
   // 首个 cloud:// URL 失败 → 标记全部云存储 URL 不可用，后续卡片秒切本地图
   if (!cloudUrlBroken && template.cover && isCloudUrl(template.cover)) {
     cloudUrlBroken = true
@@ -849,6 +892,7 @@ function onBack() {
 
 <style lang="scss" scoped>
 .page {
+  height: 100%; /* 配合全局 page{height:100%}：保证 flex 链有确定高度（iOS 100vh/fill-available 均不可靠） */
   min-height: 100vh;
   /* iOS WKWebView 100vh 缺陷：改用 stretch 作为后备 */
   min-height: -webkit-fill-available;
@@ -1129,6 +1173,7 @@ function onBack() {
 }
 
 /* ===== 模板网格 ===== */
+/* 高度由 JS 内联 px 覆盖（scrollAreaStyle 实测确定），flex:1/height:0 仅作极端兜底 */
 .template-scroll {
   flex: 1;
   height: 0;
@@ -1143,7 +1188,7 @@ function onBack() {
 }
 
 .template-card {
-  /* 两列布局：每列宽 = (100% - 24rpx间距) / 2，底部留 24rpx 间距 */
+  /* 宽度由 JS 内联 px 覆盖（getCardStyle = 0.452×winW，与 calc 一致）；此处保留作无 JS 时的兜底 */
   width: calc(50% - 12rpx);
   margin-bottom: 24rpx;
   background: #ffffff;
@@ -1161,28 +1206,22 @@ function onBack() {
   }
 }
 
-/* 封面容器：按真实比例显示 */
+/* 封面容器：尺寸由 JS 内联 width/height px 显式指定（getCoverStyle），
+   不做 absolute+百分比/百分比 padding（iOS WKWebView 解析为 0 或拉伸） */
 .cover-wrap {
   position: relative;
   width: 100%;
-  height: 0;  /* padding-top 撑高方案：height:0 + paddingTop% */
+  height: 0; /* 内联 style 覆盖；仅作无 JS 时兜底 */
   background: linear-gradient(135deg, #f0f0f5 0%, #e8e8f0 100%);
   overflow: hidden;
 }
 
-/* 封面图
-   注意：父容器 .cover-wrap 用 height:0 + padding-top 撑高（content-box 高度为 0），
-   height:100% 会按规范解析为 0（iOS WKWebView 严格遵循，导致封面错位/右移）。
-   改用 top/bottom 拉伸：absolute 的 top/bottom 参照 padding-box（即撑高后的真实高度），跨端可靠。 */
+/* 封面图：普通流布局，尺寸由内联 width/height px 显式指定（custom-style 通道），
+   并加 100%×100% 兜底（cover-wrap 已由内联 px 定型，百分比相对确定尺寸可靠） */
 .template-cover {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
 }
 
 /* 渐变遮罩 - 仅底部信息区（同根因：height:50% 解析为 0，改用 top:50% + bottom:0 定位） */

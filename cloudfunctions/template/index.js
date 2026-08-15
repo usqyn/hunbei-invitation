@@ -27,8 +27,10 @@ const {
 // ?noCounts=1 跳过 aggregate 聚合统计（由客户端自行计算）
 const listCategories = async (ctx) => {
   const catsRes = await collection('categories').limit(100).get()
+  // 注意：云数据库记录主键是 _id，集合里并没有 id 字段；
+  // 用 c._id 兜底，否则返回的 id 全是 undefined，前端分类匹配/计数全部失效
   const cats = (catsRes.data || []).map(c => ({
-    id: c.id, name: c.name, icon: c.icon || '', count: 0,
+    id: c._id || c.id, name: c.name, icon: c.icon || '', count: 0,
   }))
   // 跳过聚合：客户端会从已加载的模板数据中计算分类数量
   if (ctx.query.noCounts === '1') {
