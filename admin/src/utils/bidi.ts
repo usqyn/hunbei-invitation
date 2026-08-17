@@ -36,3 +36,51 @@ export function shapeText(text: string | undefined | null): string {
     return text
   }
 }
+
+// 括号镜像（视觉序反转时成对括号需要互换方向）
+const BIDI_MIRROR: Record<string, string> = {
+  ')': '(', '(': ')', ']': '[', '[': ']', '}': '{', '{': '}', '>': '<', '<': '>',
+}
+// 哈萨克专属字母：用于判断「哈萨克语境」，从而安全地把成形后落到 0647 的 ە 还原为 06D5
+// （哈萨克阿拉伯文不使用阿拉伯 h=ه，其 h 为 ھ 06BE）
+const KZ_SPECIFIC_LETTERS = /[\u06C7\u06C6\u06CB\u06D5\u06BE\u06D0\u06AF\u06AD]/
+
+/**
+ * 视觉顺序 → 逻辑顺序（针对 RTL 文本）
+ * 很多 PSD/设计工具导出的哈萨克·阿拉伯文本以「视觉顺序 + 预成形字形」存储：
+ *  1. 保护 لا 系列连字（U+FEF5-FEFC）为单个单元，避免反转后拆开错位
+ *  2. NFKC 还原成形字形为基础字母
+ *  3. 整行反转 + 括号镜像，再把 [A-Za-z0-9] 连续段反转回来（数字/拉丁段保持 LTR）
+ *  4. 哈萨克语境下把成形后落到 0647 的 ە 还原为 06D5
+ * 仅处理含 RTL 字符的文本；多行文本逐行反转、保持行序。
+ */
+export function visualToLogicalRtl(text: string): string {
+  if (!containsRtl(text)) return text
+  return text
+    .split('\n')
+    .map((line) => {
+      // 保护 لا 连字为单个标记，反转后还原为 لا（0644 0627）
+      const protectedLine = line.replace(/[\uFEF5-\uFEFC]/g, '\uE000')
+      const chars = [...protectedLine.normalize('NFKC')]
+      const reversed = chars.reverse().map((c) => BIDI_MIRROR[c] || c)
+      const out: string[] = []
+      let i = 0
+      while (i < reversed.length) {
+        if (/[A-Za-z0-9]/.test(reversed[i])) {
+          let j = i
+          while (j < reversed.length && /[A-Za-z0-9]/.test(reversed[j])) j++
+          out.push(reversed.slice(i, j).reverse().join(''))
+          i = j
+        } else {
+          out.push(reversed[i])
+          i++
+        }
+      }
+      let result = out.join('').replace(/\uE000/g, '\u0644\u0627')
+      if (KZ_SPECIFIC_LETTERS.test(result)) {
+        result = result.replace(/\u0647/g, '\u06D5')
+      }
+      return result
+    })
+    .join('\n')
+}

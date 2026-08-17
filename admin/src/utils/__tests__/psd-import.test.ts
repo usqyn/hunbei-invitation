@@ -8,6 +8,10 @@ import {
   mapJustification,
   mapFontName,
   MAX_PSD_DIMENSION,
+  resolveLineHeight,
+  LINE_HEIGHT_MIN,
+  LINE_HEIGHT_MAX,
+  parseLayerEffects,
 } from '../psd-import'
 
 describe('normalizeText', () => {
@@ -130,9 +134,33 @@ describe('mapFontName', () => {
     expect(mapFontName('思源宋体', available).mapped).toBe('思源宋体, serif')
   })
 
-  it('未命中 → 无映射（RTL 文本由现有链路兜底 KazakhSoftAsilya）', () => {
+  it('拉丁别名映射：SourceHanSerif* → 思源宋体', () => {
+    expect(mapFontName('SourceHanSerifCN-Regular', available).mapped).toBe('思源宋体, serif')
+    expect(mapFontName('SourceHanSerifSC-Bold', available).mapped).toBe('思源宋体, serif')
+  })
+
+  it('拉丁别名映射：SourceHanSans* → 思源黑体', () => {
+    expect(mapFontName('SourceHanSansCN-Medium', available).mapped).toBe('思源黑体, sans-serif')
+  })
+
+  it('拉丁别名映射：AlimamaFangYuanTiVF-Regular → AlimamaFangYuanTiVF', () => {
+    expect(mapFontName('AlimamaFangYuanTiVF-Regular', ['思源宋体, serif', 'AlimamaFangYuanTiVF']).mapped).toBe('AlimamaFangYuanTiVF')
+  })
+
+  it('未命中 → 无映射（不做顶替式假修复，由导入流程上报缺失）', () => {
     expect(mapFontName('NotoNaskhArabic-Regular', available).mapped).toBeUndefined()
     expect(mapFontName('UKIJTuz', available).mapped).toBeUndefined()
+  })
+
+  it('精确匹配优先于子串匹配：KazakhSoftAsilyaQaniq 映射到自身而非 KazakhSoftAsilya', () => {
+    expect(mapFontName('KazakhSoftAsilyaQaniq', available).mapped).toBe('KazakhSoftAsilyaQaniq')
+    expect(mapFontName('KazakhSoftAsilyaQaniq', available).replacement).toBe(false)
+  })
+
+  it('ALKATIPBasma 不在字体表时不映射（真实字体需上传后才可用，不做别名顶替）', () => {
+    expect(mapFontName('ALKATIPBasma', available).mapped).toBeUndefined()
+    // 上传真实字体后精确命中
+    expect(mapFontName('ALKATIPBasma', [...available, 'ALKATIPBasma']).mapped).toBe('ALKATIPBasma')
   })
 
   it('空值安全', () => {
@@ -163,5 +191,150 @@ describe('colorToHex', () => {
 describe('安全上限', () => {
   it('MAX_PSD_DIMENSION 应为 10000（与 ag-psd 安全指南一致）', () => {
     expect(MAX_PSD_DIMENSION).toBe(10000)
+  })
+})
+
+describe('resolveLineHeight', () => {
+  it('leading/fontSize → 行高比值（四舍五入 2 位）', () => {
+    expect(resolveLineHeight(40, 40, false).value).toBe(1)
+    expect(resolveLineHeight(11.04, 12, false).value).toBe(0.92)
+  })
+
+  it('在 [0.8, 3] 范围内不钳制', () => {
+    expect(resolveLineHeight(0.92 * 12, 12, false)).toEqual({ value: 0.92, clamped: false })
+    expect(resolveLineHeight(3 * 10, 10, false)).toEqual({ value: 3, clamped: false })
+  })
+
+  it('超上限钳制到 3 并标记 clamped（用户案例：6.88）', () => {
+    const r = resolveLineHeight(55.04, 8, false)
+    expect(r.value).toBe(3)
+    expect(r.clamped).toBe(true)
+  })
+
+  it('低于下限钳制到 0.8 并标记 clamped', () => {
+    const r = resolveLineHeight(0.5 * 20, 20, false)
+    expect(r.value).toBe(0.8)
+    expect(r.clamped).toBe(true)
+  })
+
+  it('leading 为 0 且 autoLeading → 默认 1.2', () => {
+    expect(resolveLineHeight(0, 12, true).value).toBe(1.2)
+    expect(resolveLineHeight(0, 12, true).clamped).toBe(false)
+  })
+
+  it('无 leading / 无字号 → undefined', () => {
+    expect(resolveLineHeight(undefined, 12, false).value).toBeUndefined()
+    expect(resolveLineHeight(0, 12, false).value).toBeUndefined()
+    expect(resolveLineHeight(24, undefined, false).value).toBeUndefined()
+  })
+
+  it('范围常量与钳制区间一致', () => {
+    expect(LINE_HEIGHT_MIN).toBe(0.8)
+    expect(LINE_HEIGHT_MAX).toBe(3)
+  })
+})
+
+describe('parseLayerEffects', () => {
+  const DPI = 72
+  const UNIT = 'PPI' as const
+
+  it('dropShadow：角度/距离/模糊 → offsetX/offsetY/blur（0° = 正右）', () => {
+    const r = parseLayerEffects({
+      dropShadow: [{
+        enabled: true,
+        color: { r: 0, g: 0, b: 0 },
+        opacity: 0.5,
+        distance: { value: 10, units: 'Pixels' },
+        angle: 0,
+        size: { value: 4, units: 'Pixels' },
+      }],
+    }, DPI, UNIT, 100, 100)
+    expect(r.dropShadow).toEqual({
+      color: '#000000',
+      opacity: 0.5,
+      offsetX: 10,
+      offsetY: 0,
+      blur: 4,
+    })
+    expect(r.lost).toEqual([])
+  })
+
+  it('dropShadow：90° = 正上（y 取负）', () => {
+    const r = parseLayerEffects({
+      dropShadow: [{
+        enabled: true,
+        color: { r: 0, g: 0, b: 0 },
+        opacity: 1,
+        distance: { value: 6, units: 'Pixels' },
+        angle: 90,
+        size: { value: 0, units: 'Pixels' },
+      }],
+    }, DPI, UNIT, 100, 100)
+    expect(r.dropShadow?.offsetY).toBe(-6)
+  })
+
+  it('dropShadow：Points 单位按分辨率换算', () => {
+    const r = parseLayerEffects({
+      dropShadow: [{
+        enabled: true,
+        color: { r: 0, g: 0, b: 0 },
+        opacity: 1,
+        distance: { value: 1, units: 'Points' },
+        angle: 0,
+        size: { value: 2, units: 'Points' },
+      }],
+    }, 144, UNIT, 100, 100)
+    expect(r.dropShadow?.offsetX).toBe(2)
+    expect(r.dropShadow?.blur).toBe(4)
+  })
+
+  it('stroke：纯色外部描边', () => {
+    const r = parseLayerEffects({
+      stroke: [{
+        enabled: true,
+        fillType: 'color',
+        color: { r: 255, g: 0, b: 0 },
+        opacity: 0.8,
+        size: { value: 3, units: 'Pixels' },
+        position: 'inside',
+      }],
+    }, DPI, UNIT, 100, 100)
+    expect(r.stroke).toEqual({ color: '#ff0000', opacity: 0.8, size: 3, position: 'inside' })
+  })
+
+  it('stroke：渐变/图案填充 → 记入 lost', () => {
+    const r = parseLayerEffects({
+      stroke: [{
+        enabled: true,
+        fillType: 'gradient',
+        color: { r: 255, g: 0, b: 0 },
+        opacity: 1,
+        size: { value: 3, units: 'Pixels' },
+      }],
+    }, DPI, UNIT, 100, 100)
+    expect(r.stroke).toBeUndefined()
+    expect(r.lost).toContain('渐变/图案描边')
+  })
+
+  it('不支持的效果（内阴影/发光/斜面等）→ lost', () => {
+    const r = parseLayerEffects({
+      innerShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }],
+      bevel: { enabled: true, style: 'innerBevel' },
+      gradientOverlay: { enabled: true },
+    }, DPI, UNIT, 100, 100)
+    expect(r.lost).toEqual(expect.arrayContaining(['内阴影', '斜面浮雕', '渐变叠加']))
+  })
+
+  it('disabled 的效果被忽略；effects.disabled 整体忽略', () => {
+    const on = parseLayerEffects({ dropShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }] }, DPI, UNIT, 100, 100)
+    expect(on.dropShadow).toBeDefined()
+    const off = parseLayerEffects({ dropShadow: [{ enabled: false, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }] }, DPI, UNIT, 100, 100)
+    expect(off.dropShadow).toBeUndefined()
+    const global = parseLayerEffects({ disabled: true, dropShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }] }, DPI, UNIT, 100, 100)
+    expect(global.dropShadow).toBeUndefined()
+  })
+
+  it('空/undefined 安全', () => {
+    expect(parseLayerEffects(undefined, DPI, UNIT, 100, 100).lost).toEqual([])
   })
 })

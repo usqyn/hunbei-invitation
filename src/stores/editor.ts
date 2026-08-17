@@ -55,6 +55,7 @@ export const useEditorStore = defineStore('editor', () => {
   const currentWorkId = ref<string | null>(null)
   const templateLoading = ref(false)
   const currentTemplateVipLevel = ref<'free' | 'personal' | 'pro'>('free')
+  const currentTemplateCategory = ref<string>('wedding')
 
   const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })
   const background = ref<{ type: string; color1: string; color2?: string; angle?: number; image?: string }>({ type: 'solid', color1: '#ffffff' })
@@ -295,6 +296,9 @@ export const useEditorStore = defineStore('editor', () => {
 
     // 设置模板 VIP 等级
     currentTemplateVipLevel.value = template.vipLevel || 'free'
+
+    // 记录模板分类（用于分享默认文案等场景化逻辑）
+    currentTemplateCategory.value = template.category || 'wedding'
 
     // 设置模板类型
     templateType.value = template.templateType || 'canvas'
@@ -752,6 +756,24 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
+  /** 将占位符字段值同步到所有模式元素文本中的 token（只替换 {key}，不整层覆盖文本） */
+  function syncTokenToAllModes(key: string, value: string) {
+    const token = `{${key}}`
+    const apply = (el: EditableElement) => {
+      if (el.type !== 'text' || !el.text || !el.text.includes(token)) return
+      el.text = el.text.split(token).join(value)
+      applyRtlStyleIfNeeded(el, el.text)
+    }
+    editableElements.forEach(apply)
+    pageSections.forEach(sec => {
+      if (sec.type !== 'image' && sec.text && sec.text.includes(token)) {
+        sec.text = sec.text.split(token).join(value)
+        sec.style = applyRtlStyle(sec.style, sec.text)
+      }
+    })
+    flipPages.forEach(page => (page.elements || []).forEach(apply))
+  }
+
   function syncSmartField(key: string, value: string) {
     syncFieldToAllModes(key, value)
     syncFieldToBasicInfo(key, value)
@@ -872,12 +894,13 @@ export const useEditorStore = defineStore('editor', () => {
   return {
     showTextEditor, showSectionTextEditor, showBasicInfoEditor,
     selectedElement, editingText,
-    editableElements, currentTemplateId, currentWorkId, templateLoading, currentTemplateVipLevel, canvasSize, background, renderedImage,
+    editableElements, currentTemplateId, currentWorkId, templateLoading, currentTemplateVipLevel, currentTemplateCategory, canvasSize, background, renderedImage,
     templateType, pageSections, activeSectionId,
     flipPages, currentFlipPageIndex,
     history, historyIndex, canUndo, canRedo, canReset,
     loadTemplateById, restoreTemplate, restoreFromWorkData, openSectionTextEditor, closeTextEditor, closeSectionTextEditor, confirmTextEdit,
     closeBasicInfoEditor, syncSmartField, syncBasicInfoToElements, syncFieldToAllModes,
+    syncTokenToAllModes,
     selectMaterial, applyImageToElement: selectMaterial, setCurrentWorkId,
     buildEditorData,
     updatePageSection, updatePageSectionText, updatePageSectionImage,

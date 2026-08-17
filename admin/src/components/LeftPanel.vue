@@ -254,13 +254,15 @@
       <div v-if="loadingTemplates" class="empty-hint">加载中...</div>
       <div v-else-if="!templateList.length" class="empty-hint">暂无模板<br/>先在画布制作，再发布</div>
       <div v-for="tpl in templateList" :key="tpl.id" class="template-item" :class="{ active: currentTemplateId === tpl.id }">
-        <div class="tpl-thumb" @click="$emit('loadTemplate', tpl.id)">
-          <img v-if="tpl.cover" :src="tpl.cover.startsWith('http') ? tpl.cover : API_BASE + tpl.cover" class="tpl-thumb-img" />
-          <div v-else class="tpl-thumb-placeholder">📄</div>
-        </div>
-        <div class="tpl-info" @click="$emit('loadTemplate', tpl.id)">
-          <div class="tpl-name">{{ tpl.name }}</div>
-          <div class="tpl-cat">{{ getCategoryName(tpl.category) }}</div>
+        <div class="tpl-main">
+          <div class="tpl-thumb" @click="$emit('loadTemplate', tpl.id)">
+            <img v-if="tpl.cover" :src="tpl.cover.startsWith('http') ? tpl.cover : API_BASE + tpl.cover" class="tpl-thumb-img" />
+            <div v-else class="tpl-thumb-placeholder">📄</div>
+          </div>
+          <div class="tpl-info" @click="$emit('loadTemplate', tpl.id)">
+            <div class="tpl-name">{{ tpl.name }}</div>
+            <div class="tpl-cat">{{ getCategoryName(tpl.category) }}</div>
+          </div>
         </div>
         <div class="tpl-actions">
           <button class="tpl-btn" @click="$emit('cloneTemplate', tpl)" title="克隆">📋</button>
@@ -1047,8 +1049,8 @@ function onBgImageFile(e: Event) {
 
 .template-item {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
@@ -1057,6 +1059,13 @@ function onBgImageFile(e: Event) {
 
 .template-item:hover { background: #f5f7fa; }
 .template-item.active { background: #e3f2fd; }
+
+.tpl-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 
 .tpl-thumb {
   width: 44px;
@@ -1071,14 +1080,22 @@ function onBgImageFile(e: Event) {
   cursor: pointer;
 }
 
-.tpl-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+.tpl-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tpl-thumb-placeholder { font-size: 24px; }
 
 .tpl-info { flex: 1; min-width: 0; cursor: pointer; }
 .tpl-name { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tpl-cat { font-size: 11px; color: #999; margin-top: 2px; }
 
-.tpl-actions { display: flex; gap: 2px; }
+.tpl-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px dashed #f0f0f0;
+}
 
 .tpl-btn {
   padding: 4px 6px;

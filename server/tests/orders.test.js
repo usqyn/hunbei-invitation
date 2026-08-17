@@ -133,7 +133,7 @@ describe('VIP order creation and pricing', () => {
     expect(res.body.success).toBe(false)
   })
 
-  it('creates a VIP order with server-side pricing and activates VIP', async () => {
+  it('creates a VIP order with server-side pricing and activates VIP after pay', async () => {
     const phone = '1360000VIP1'
     const token = 'Bearer ' + makeToken({ phone })
     // 先登录创建用户（vip/order 的 UPDATE 需要用户已存在才能使 vip/status 生效）
@@ -147,11 +147,17 @@ describe('VIP order creation and pricing', () => {
     expect(res.body.success).toBe(true)
     expect(res.body.data.orderId).toBeDefined()
     expect(res.body.data.prepayId).toBeDefined()
-    expect(res.body.data.expireAt).toBeDefined()
-    // monthly -> 30 天，expireAt 应为未来时间
-    expect(Number(res.body.data.expireAt)).toBeGreaterThan(Date.now())
 
-    // VIP 状态应已生效
+    // 订单创建后 VIP 不应立即生效（安全修复：仅支付后激活）
+    const before = await request(app).get('/api/vip/status').set('Authorization', token)
+    expect(before.body.data.isVip).toBe(false)
+
+    // 完成模拟支付后 VIP 权益发放
+    const payRes = await request(app)
+      .post(`/api/orders/${res.body.data.orderId}/pay`)
+      .set('Authorization', token)
+    expect(payRes.status).toBe(200)
+
     const status = await request(app).get('/api/vip/status').set('Authorization', token)
     expect(status.status).toBe(200)
     expect(status.body.data.isVip).toBe(true)
@@ -159,7 +165,7 @@ describe('VIP order creation and pricing', () => {
   })
 
   it('applies server-side pricing for all valid plans', async () => {
-    // 服务端定价表：monthly=9.9, quarterly=19.9, yearly=58.0
+    // 服务端定价表：monthly=29, quarterly=69, yearly=199（与前端 vip/index.vue 及 PRICES 一致）
     // 每种套餐都应创建成功并返回 orderId
     const plans = ['monthly', 'quarterly', 'yearly']
     for (const plan of plans) {
@@ -182,9 +188,16 @@ describe('VIP order creation and pricing', () => {
       )
       expect(vipOrder).toBeTruthy()
       // 校验服务端定价
-      const expected = { monthly: 9.9, quarterly: 19.9, yearly: 58 }[plan]
+      const expected = { monthly: 29, quarterly: 69, yearly: 199 }[plan]
       expect(Number(vipOrder.totalAmount)).toBe(expected)
-      expect(vipOrder.status).toBe('paid')
+      // 订单创建后为 pending（安全修复：支付后才变 paid）
+      expect(vipOrder.status).toBe('pending')
+      // 完成模拟支付后订单状态变为 paid
+      const payRes = await request(app)
+        .post(`/api/orders/${vipOrder.id}/pay`)
+        .set('Authorization', token)
+      expect(payRes.status).toBe(200)
+      expect(payRes.body.data.status).toBe('paid')
     }
   })
 })

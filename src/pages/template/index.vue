@@ -86,7 +86,10 @@
             <view class="cover-gradient"></view>
             <!-- 右上角价格/VIP标签 -->
             <view class="price-badge">
-              <view v-if="template.is_paid && template.is_premium" class="vip-badge">
+              <view v-if="isLimitedTemplate(template)" class="limit-badge">
+                <text class="limit-badge-text">限数</text>
+              </view>
+              <view v-else-if="template.is_paid && template.is_premium" class="vip-badge">
                 <text class="vip-badge-text">VIP</text>
               </view>
               <view v-else-if="template.is_paid" class="price-tag">
@@ -99,7 +102,7 @@
             <!-- 底部信息浮层 -->
             <view class="cover-info">
               <text class="cover-title">{{ template.name }}</text>
-              <text v-if="template.subtitle" class="cover-subtitle">{{ template.subtitle }}</text>
+              <text v-if="template.subtitle" class="cover-subtitle" :class="{ 'rtl-text': isRtlText(template.subtitle) }">{{ formatBiDi(template.subtitle) }}</text>
             </view>
           </view>
         </view>
@@ -222,7 +225,14 @@ import type { TemplateItem, TemplateCategory } from '@/types'
 import { HOME_CATEGORIES } from '@/constants/categories'
 import { TEMPLATE_PAGE_CONFIG } from '@/config'
 import { request } from '@/utils/request'
+import { fetchTemplateQuota } from '@/api'
+import { formatBiDi } from '@/utils/font-loader'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { resolveUrl, isCloudUrl } from '@/utils/url'
+
+function isRtlText(text: string | undefined | null): boolean {
+  return !!text && RTL_CHAR_REGEX.test(text)
+}
 import { useUserStore } from '@/stores/user'
 import { useFeedback } from '@/composables/useFeedback'
 import CloudImage from '@/components/CloudImage.vue'
@@ -281,6 +291,7 @@ let cloudUrlBroken = false
 const filters = [
   { label: '全部', value: 'all' },
   { label: '免费', value: 'free' },
+  { label: '限数', value: 'limited' },
   { label: '付费', value: 'paid' },
   { label: 'VIP免费', value: 'vip' },
 ]
@@ -311,8 +322,10 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
     // 按付费状态筛选：统一使用 Boolean() 判断，兼容 is_paid 为数字或布尔值的情况
     if (activeFilter.value === 'free') {
       list = list.filter(t => !Boolean(t.is_paid))
+    } else if (activeFilter.value === 'limited') {
+      list = list.filter(t => isLimitedTemplate(t))
     } else if (activeFilter.value === 'paid') {
-      list = list.filter(t => Boolean(t.is_paid))
+      list = list.filter(t => Boolean(t.is_paid) && !isLimitedTemplate(t))
     } else if (activeFilter.value === 'vip') {
       list = list.filter((t: any) => Boolean(t.is_paid) && t.vip_free === true)
     }
@@ -722,6 +735,13 @@ function getSortLabel(value: string): string {
   return s ? s.label : '排序'
 }
 
+// 限数版模板判定：vipLevel === 'limited'，或兼容旧数据（is_paid 且非 VIP 免费且非专业版）
+function isLimitedTemplate(t: any): boolean {
+  if (!t) return false
+  if (t.vipLevel === 'limited') return true
+  return Boolean(t.is_paid) && !Boolean(t.is_premium) && !Boolean(t.vip_free)
+}
+
 function onSelectTemplate(template: TemplateItem) {
   if (navigating.value) return
   // 本地兜底模板没有真实数据，点击提示稍后重试
@@ -731,6 +751,12 @@ function onSelectTemplate(template: TemplateItem) {
   }
   // 登录拦截：未登录时跳转登录页
   if (!userStore.requireLogin()) return
+
+  // 限数版模板：非 VIP 用户先查免费次数，不足则引导分享/解锁/VIP
+  if (isLimitedTemplate(template) && !userStore.isVip()) {
+    handleLimitedTemplate(template)
+    return
+  }
 
   if (Boolean(template.is_paid)) {
     const isVip = userStore.isVip()
@@ -761,6 +787,59 @@ function onSelectTemplate(template: TemplateItem) {
   uni.navigateTo({
     url: `/pages/editor/index?templateId=${template.id}`,
     fail: () => { navigating.value = false },
+  })
+}
+
+// 限数版模板点击：查询剩余免费次数，不足时弹出 分享得次数 / 单次解锁 / 开通VIP 三出口
+async function handleLimitedTemplate(template: TemplateItem) {
+  haptic('light')
+  const price = template.price || 9.9
+  let quota: any = null
+  try {
+    quota = await fetchTemplateQuota(template.id)
+  } catch (e) {
+    uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
+    return
+  }
+  if (!quota || quota.limitless || quota.remaining > 0) {
+    // 有剩余次数（或已解锁/VIP）：直接进入编辑器（次数在编辑器内扣减）
+    navigating.value = true
+    uni.navigateTo({
+      url: `/pages/editor/index?templateId=${template.id}`,
+      fail: () => { navigating.value = false },
+    })
+    return
+  }
+  // 免费次数已用完：三出口
+  uni.showActionSheet({
+    itemList: ['分享好友得免费次数', `¥${price} 解锁模板`, '开通VIP免费使用'],
+    success: (res) => {
+      if (res.tapIndex === 0) {
+        guideShareForQuota(template)
+      } else if (res.tapIndex === 1) {
+        uni.navigateTo({
+          url: `/pages/vip/index?mode=purchase&templateId=${template.id}&price=${price}`,
+        })
+      } else if (res.tapIndex === 2) {
+        uni.navigateTo({ url: '/pages/vip/index' })
+      }
+    },
+  })
+}
+
+// 引导分享：提示用户分享当前模板给好友，好友打开后即获得免费次数
+function guideShareForQuota(template: TemplateItem) {
+  uni.showModal({
+    title: '分享得次数',
+    content: '分享本模板给微信好友，好友打开后您即可获得 1 次免费制作机会（每日限 1 次）',
+    confirmText: '去分享',
+    success: (r) => {
+      if (r.confirm) {
+        uni.navigateTo({
+          url: `/pages/preview/index?templateId=${template.id}&shareGuide=1`,
+        })
+      }
+    },
   })
 }
 
@@ -1292,6 +1371,21 @@ function onBack() {
   font-size: 18rpx;
   color: #ffffff;
   font-weight: 600;
+}
+
+.limit-badge {
+  background: linear-gradient(135deg, #7c5cff 0%, #5a3df0 60%, #4a2fd8 100%);
+  padding: 6rpx 16rpx;
+  border-radius: 100rpx;
+  box-shadow: 0 4rpx 14rpx rgba(90, 61, 240, 0.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.limit-badge-text {
+  font-size: 18rpx;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 2rpx;
 }
 
 /* 底部信息浮层 */

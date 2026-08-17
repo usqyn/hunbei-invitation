@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { writePsd, readPsd, type Psd } from 'ag-psd'
-import { flattenPsdLayers, getResolutionInfo } from '../psd-import'
+import { flattenPsdLayers, getResolutionInfo, dominantRunFontSize, transformScale } from '../psd-import'
 
 // jsdom 无 node-canvas：ag-psd 的 useImageData 内部用 ctx.createImageData 分配像素缓冲，
 // 这里提供最小占位（ag-psd 会自行写入 data，不需要真实绘制）
@@ -90,13 +90,13 @@ const source: Psd = {
 
 describe('PSD 读写往返 + 图层展平（ag-psd 真实序列化）', () => {
   let psd: Psd
-  let layers: ReturnType<typeof flattenPsdLayers>
+  let layers: Awaited<ReturnType<typeof flattenPsdLayers>>
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const buffer = writePsd(source)
     psd = readPsd(buffer, { useImageData: true, skipThumbnail: true, skipLinkedFilesData: true })
     const { resolution, unit } = getResolutionInfo(psd.imageResources)
-    layers = flattenPsdLayers(psd, {
+    layers = await flattenPsdLayers(psd, {
       resolution,
       resolutionUnit: unit,
       availableFonts: ['KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq', '思源宋体, serif', '思源黑体, sans-serif', 'Arial, sans-serif'],
@@ -129,8 +129,9 @@ describe('PSD 读写往返 + 图层展平（ag-psd 真实序列化）', () => {
     expect(t!.fontName).toBe('KazakhSoftAsilya')
     expect(t!.mappedFont).toBe('KazakhSoftAsilya')
     expect(t!.color).toBe('#c81e3c')
-    // leading 480 (1/1000 em) / 36 → 13.33
-    expect(t!.lineHeight).toBe(13.33)
+    // leading 480 (1/1000 em) / 36 → 13.33，超出可渲染范围 → 钳制到 3，并产生钳制警告
+    expect(t!.lineHeight).toBe(3)
+    expect(t!.warnings.some(w => w.includes('行高'))).toBe(true)
   })
 
   it('旋转文字：90° 旋转正确', () => {
@@ -148,22 +149,45 @@ describe('PSD 读写往返 + 图层展平（ag-psd 真实序列化）', () => {
 
 describe('直接构造图层（模拟真实 Photoshop 读取结果，规避 writePsd 写入限制）', () => {
   // ag-psd 写入器已知限制：opacity 与 justification 不能正确往返（读取真实 PSD 无此问题）
-  const makeLayers = (children: any[]) => flattenPsdLayers(
+  const makeLayers = async (children: any[]) => flattenPsdLayers(
     { width: 100, height: 100, children } as any,
     { resolution: 72, resolutionUnit: 'PPI', availableFonts: [] },
   )
 
-  it('opacity 0-255 → 0-1', () => {
-    const { layers } = makeLayers([{
-      name: 'x', opacity: 200,
+  it('opacity 保持 ag-psd 的 0-1 归一化值（防双重除以 255 回归）', async () => {
+    // ag-psd 读取真实 PSD 时 opacity 已是 0-1（psdReader: readUint8 / 0xff）
+    const full = (await makeLayers([{
+      name: 'x', opacity: 1,
       left: 0, top: 0, right: 50, bottom: 50,
       text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
-    }])
-    expect(layers[0].opacity).toBeCloseTo(200 / 255, 3)
+    }])).layers[0]
+    expect(full.opacity).toBe(1)
+
+    const half = (await makeLayers([{
+      name: 'x', opacity: 0.5,
+      left: 0, top: 0, right: 50, bottom: 50,
+      text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+    }])).layers[0]
+    expect(half.opacity).toBe(0.5)
+
+    const empty = (await makeLayers([{
+      name: 'x', opacity: 0,
+      left: 0, top: 0, right: 50, bottom: 50,
+      text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+    }])).layers[0]
+    expect(empty.opacity).toBe(0)
+
+    // 缺失时默认完全可见
+    const missing = (await makeLayers([{
+      name: 'x',
+      left: 0, top: 0, right: 50, bottom: 50,
+      text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+    }])).layers[0]
+    expect(missing.opacity).toBe(1)
   })
 
-  it('justification 变体映射为 justify', () => {
-    const { layers } = makeLayers([{
+  it('justification 变体映射为 justify', async () => {
+    const { layers } = await makeLayers([{
       name: 'x', opacity: 255,
       left: 0, top: 0, right: 50, bottom: 50,
       text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } }, paragraphStyle: { justification: 'justify-all' } },
@@ -171,12 +195,152 @@ describe('直接构造图层（模拟真实 Photoshop 读取结果，规避 writ
     expect(layers[0].textAlign).toBe('justify')
   })
 
-  it('颜色 alpha 保留为 8 位 hex', () => {
-    const { layers } = makeLayers([{
+  it('颜色 alpha 保留为 8 位 hex', async () => {
+    const { layers } = await makeLayers([{
       name: 'x', opacity: 255,
       left: 0, top: 0, right: 50, bottom: 50,
       text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 128 } } },
     }])
     expect(layers[0].color).toBe('#00000080')
+  })
+
+  it('direction：RTL 文本（含逻辑序基础字母）→ rtl，拉丁文本 → ltr', async () => {
+    const { layers } = await makeLayers([
+      {
+        name: 'rtl', opacity: 255,
+        left: 0, top: 0, right: 50, bottom: 50,
+        text: { text: '\u0642\u0649\u0632 \u062a\u0648\u064a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+      },
+      {
+        name: 'ltr', opacity: 255,
+        left: 0, top: 0, right: 50, bottom: 50,
+        text: { text: 'Hello', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+      },
+    ])
+    expect(layers.find(l => l.name === 'rtl')!.direction).toBe('rtl')
+    expect(layers.find(l => l.name === 'ltr')!.direction).toBe('ltr')
+  })
+
+  it('视觉序+预成形字形文本：自动转换为逻辑序（真实 PSD 样本），逻辑序文本保持不变', async () => {
+    const { layers } = await makeLayers([
+      {
+        name: '视觉序', opacity: 255,
+        left: 0, top: 0, right: 50, bottom: 50,
+        // :ﻰﺘﺗﻪﻣﺭﯘﻗ （Photoshop 视觉顺序 + 预成形字形）→ 逻辑序「قۇرمەتتى:」
+        text: { text: '\u003a\ufef0\ufe98\ufe97\ufeea\ufee3\ufead\ufbd8\ufed7', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+      },
+      {
+        name: '逻辑序', opacity: 255,
+        left: 0, top: 0, right: 50, bottom: 50,
+        text: { text: '\u0642\u0649\u0632 \u062a\u0648\u064a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+      },
+    ])
+    expect(layers.find(l => l.name === '视觉序')!.text).toBe('\u0642\u06c7\u0631\u0645\u06d5\u062a\u062a\u0649\u003a')
+    expect(layers.find(l => l.name === '视觉序')!.direction).toBe('rtl')
+    expect(layers.find(l => l.name === '逻辑序')!.text).toBe('\u0642\u0649\u0632 \u062a\u0648\u064a')
+  })
+
+  it('视觉序图层名自动转换为逻辑序', async () => {
+    // ﻰﺘﺗﻪﻣﺭﯘﻗ → قۇرمەتتى
+    const { layers } = await makeLayers([{
+      name: '\ufef0\ufe98\ufe97\ufeea\ufee3\ufead\ufbd8\ufed7', opacity: 255,
+      left: 0, top: 0, right: 50, bottom: 50,
+      text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 255 } } },
+    }])
+    expect(layers[0].name).toBe('\u0642\u06c7\u0631\u0645\u06d5\u062a\u062a\u0649')
+  })
+})
+
+describe('字号/颜色解析修复（真实升学宴 PSD 场景）', () => {
+  const makeLayers = async (children: any[]) => flattenPsdLayers(
+    { width: 100, height: 100, children } as any,
+    { resolution: 72, resolutionUnit: 'PPI', availableFonts: [] },
+  )
+
+  it('dominantRunFontSize：style.fontSize 缺失时取最长 run 的字号', () => {
+    expect(dominantRunFontSize([
+      { length: 1, style: { fontSize: 70 } },
+      { length: 130, style: { fontSize: 60 } },
+    ])).toBe(60)
+    expect(dominantRunFontSize([{ length: 5, style: { fontSize: 14 } }])).toBe(14)
+    expect(dominantRunFontSize(undefined)).toBeUndefined()
+    expect(dominantRunFontSize([])).toBeUndefined()
+    expect(dominantRunFontSize([{ length: 3, style: {} }])).toBeUndefined()
+  })
+
+  it('transformScale：自由变换缩放 1.28 / 恒等 / 旋转矩阵', () => {
+    expect(transformScale([1.28007, 0, 0, 1.28007, 502, 231])).toBeCloseTo(1.28007, 3)
+    expect(transformScale([1, 0, 0, 1, 50, 60])).toBe(1)
+    expect(transformScale([0, 1, -1, 0, 100, 300])).toBe(1)
+    expect(transformScale(undefined)).toBe(1)
+    expect(transformScale([0.999, 0, 0, 0.999, 0, 0])).toBe(1)
+  })
+
+  it('多样式段落（styleRuns）：正文取最长 run 字号 60pt，不再兜底 24px', async () => {
+    const { layers } = await makeLayers([{
+      name: '正文', opacity: 255,
+      left: 0, top: 0, right: 500, bottom: 300,
+      text: {
+        text: 'a'.repeat(130),
+        transform: [1, 0, 0, 1, 0, 0],
+        style: { font: { name: 'ALKATIPBasma' }, leading: 55, autoLeading: false, fillColor: { r: 160, g: 98, b: 5 } },
+        styleRuns: [
+          { length: 1, style: { fontSize: 70 } },
+          { length: 130, style: { fontSize: 60 } },
+        ],
+      },
+    }])
+    expect(layers[0].fontSize).toBe(60)
+    expect(layers[0].fontSizePt).toBe(60)
+    // leading 55 / 60 → 0.92
+    expect(layers[0].lineHeight).toBe(0.92)
+  })
+
+  it('自由变换缩放的文字层：字号 × 1.28（93.74pt → 120px）', async () => {
+    const { layers } = await makeLayers([{
+      name: '标题', opacity: 255,
+      left: 0, top: 0, right: 500, bottom: 300,
+      text: {
+        text: 'title',
+        transform: [1.28007, 0, 0, 1.28007, 502, 231],
+        style: { font: { name: 'KazakhSoftAsilyaQaniq' }, fontSize: 93.74478, fillColor: { r: 0, g: 0, b: 0 } },
+      },
+    }])
+    expect(layers[0].fontSize).toBe(120)
+    expect(layers[0].fontSizePt).toBe(120)
+  })
+
+  it('颜色叠加效果（solidFill）优先于 fillColor：金色标题不再变黑', async () => {
+    const { layers, warnings } = await makeLayers([{
+      name: '标题', opacity: 255,
+      left: 0, top: 0, right: 500, bottom: 300,
+      text: {
+        text: 'title',
+        transform: [1, 0, 0, 1, 0, 0],
+        style: { font: { name: 'KazakhSoftAsilyaQaniq' }, fontSize: 93.74478, fillColor: { r: 0, g: 0, b: 0 } },
+      },
+      effects: {
+        solidFill: [{ enabled: true, color: { r: 216, g: 156, b: 68 } }],
+      },
+    }])
+    expect(layers[0].color).toBe('#d89c44')
+    // 颜色叠加已还原为文字颜色，不再报告「无法还原」
+    expect(warnings.some(w => w.includes('颜色叠加'))).toBe(false)
+  })
+
+  it('solidFill 未启用时回退 fillColor', async () => {
+    const { layers } = await makeLayers([{
+      name: '标题', opacity: 255,
+      left: 0, top: 0, right: 500, bottom: 300,
+      text: {
+        text: 'title',
+        transform: [1, 0, 0, 1, 0, 0],
+        style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 10, g: 20, b: 30 } },
+      },
+      effects: {
+        solidFill: [{ enabled: false, color: { r: 216, g: 156, b: 68 } }],
+      },
+    }])
+    expect(layers[0].color).toBe('#0a141e')
   })
 })

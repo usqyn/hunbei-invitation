@@ -107,7 +107,7 @@ export interface TemplateItem {
   updatedAt?: string
   templateType?: TemplateType
   pages?: FlipPage[]
-  vipLevel?: 'free' | 'personal' | 'pro'
+  vipLevel?: 'free' | 'limited' | 'personal' | 'pro'
 }
 
 // 分类

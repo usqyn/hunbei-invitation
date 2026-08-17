@@ -388,6 +388,22 @@ const extraFields = computed(() => {
     })
   }
 
+  // 新增：占位符 token 字段（token 化元素无 dataKey，其字段在此展示为文本输入项；
+  // 哈语日期/星期/时间段走上方专用选择器区，year/month/day 走上方日期占位符区）
+  allAvailableKeys.value.forEach(key => {
+    if (!seen.has(key) && key in SMART_FIELD_META) {
+      seen.add(key)
+      const meta = SMART_FIELD_META[key]
+      result.push({
+        key,
+        label: meta.label,
+        icon: meta.icon,
+        placeholder: meta.placeholder,
+        value: props.templateData?.[key] || '',
+      })
+    }
+  })
+
   return result
 })
 

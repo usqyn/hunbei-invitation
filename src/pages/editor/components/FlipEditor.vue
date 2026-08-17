@@ -236,7 +236,7 @@ import { usePinchGesture } from '../composables/usePinchGesture'
 import { useFrameThrottle } from '../composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
-import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { resolveTextPlaceholders, extractTokenKeys } from '@/utils/resolveTextPlaceholders'
 import { formatBiDi } from '@/utils/font-loader'
 import { buildImageCssFilterFromElement } from '@/utils/imageFilter'
 import { uploadImage } from '@/api'
@@ -305,6 +305,14 @@ const allTemplateDataKeys = computed(() => {
   editorStore.pageSections.forEach(sec => { if (sec.dataKey) keys.add(sec.dataKey) })
   editorStore.flipPages.forEach(page => {
     (page.elements || []).forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
+  })
+  // 新增：占位符 token 收集（token 化元素无 dataKey，扫描文本补齐表单字段）
+  ;[
+    ...editorStore.editableElements,
+    ...editorStore.pageSections,
+    ...editorStore.flipPages.flatMap(page => page.elements || []),
+  ].forEach(el => {
+    extractTokenKeys((el as { text?: string }).text || '').forEach(k => keys.add(k))
   })
   return Array.from(keys)
 })
@@ -683,7 +691,7 @@ function getCurrentPageElements() {
 }
 
 function resolveText(text: string): string {
-  return resolveDatePlaceholders(text, templateStore.templateData)
+  return resolveTextPlaceholders(text, templateStore.templateData)
 }
 
 function selectPage(idx: number) {

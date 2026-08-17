@@ -287,6 +287,14 @@ const allTemplateDataKeys = computed(() => {
   editorStore.flipPages.forEach(page => {
     (page.elements || []).forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
   })
+  // 新增：占位符 token 收集（token 化元素无 dataKey，扫描文本补齐表单字段）
+  ;[
+    ...editorStore.editableElements,
+    ...editorStore.pageSections,
+    ...editorStore.flipPages.flatMap(page => page.elements || []),
+  ].forEach(el => {
+    extractTokenKeys((el as { text?: string }).text || '').forEach(k => keys.add(k))
+  })
   return Array.from(keys)
 })
 

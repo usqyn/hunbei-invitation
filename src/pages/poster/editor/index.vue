@@ -454,7 +454,7 @@ import { request } from '@/utils/request'
 import { uploadImage } from '@/api'
 import type { PosterEditableAreaRuntime, PosterWork } from '@/types/poster'
 import { useRtl } from '@/composables/useRtl'
-import { RTL_CHAR_REGEX, FONT_FAMILY_BASE } from '@/constants/editor'
+import { RTL_CHAR_REGEX, FONT_FAMILY_BASE, isRtlCapableFont } from '@/constants/editor'
 
 const posterStore = usePosterStore()
 const { goBack } = useGoBack()
@@ -530,10 +530,11 @@ function getAreaStyle(area: PosterEditableAreaRuntime): Record<string, string> {
 function getTextStyle(area: PosterEditableAreaRuntime): Record<string, string> {
   const cw = canvasSize.value.width
   const fontSizePx = (area._fontSize || 28) / cw * 100
-  // RTL 文本兜底：含哈语/阿拉伯字符时强制使用 KazakhSoftAsilya 字体，保证字符连写
+  // RTL 文本兜底：含哈语/阿拉伯字符时默认强制使用 KazakhSoftAsilya 字体，保证字符连写；
+  // 但元素显式选择 RTL 白名单字体（如 ALKATIPBasma）时保留所选字体
   // 与 useCanvasRender.getTextStyle 对齐
   const isRtl = RTL_CHAR_REGEX.test(area._text || '')
-  const fontFamily = isRtl
+  const fontFamily = (isRtl && !isRtlCapableFont(area._fontFamily))
     ? `'KazakhSoftAsilya', ${FONT_FAMILY_BASE}`
     : (area._fontFamily || 'sans-serif')
   return {

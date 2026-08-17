@@ -138,6 +138,7 @@ export const bgColors = [
 export const fontListBase = [
   'KazakhSoftAsilya',
   'KazakhSoftAsilyaQaniq',
+  'AlimamaFangYuanTiVF',
   '思源宋体, serif',
   '思源黑体, sans-serif',
   '华文楷体, KaiTi, serif',

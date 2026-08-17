@@ -1,6 +1,6 @@
 import * as fabric from 'fabric'
 import { loadSVGFromString, util as fabricUtil } from 'fabric'
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, watchEffect, nextTick } from 'vue'
 import type {
   AnyCanvasElement,
   TextElement,
@@ -11,6 +11,7 @@ import type {
   CanvasDraft,
 } from '../types/canvas'
 import type { PsdLayerPreview } from '../utils/psd-import'
+import { PLACEHOLDER_DEFS } from '../constants/placeholder-defs'
 import {
   createId,
   DEFAULT_CANVAS_SIZE,
@@ -99,6 +100,9 @@ export function useCanvas(opts: UseCanvasOptions) {
   // loadDraft 期间阻止历史记录：图片异步加载完成时 suppressHistory 可能已恢复为 false，
   // 此标志确保 loadDraft 的所有异步任务结束前都不记录多余历史
   let isLoadDrafting = false
+  // loadDraft 嵌套计数：快速连续 undo/redo 时，前一次 loadDraft 的图片加载完成
+  // 不能提前关闭后一次 loadDraft 的保护标志（否则 object:added 会把撤销后的状态压回历史栈）
+  let loadDraftCount = 0
 
   // 复制缓冲区
   const clipboard = ref<AnyCanvasElement | null>(null)
@@ -129,6 +133,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     })
 
     fabricCanvas.value = canvas
+    syncCanvasCssSize()
 
     // 选中事件 → 同步到 Vue
     canvas.on('selection:created', syncSelectionFromFabric)
@@ -258,6 +263,28 @@ export function useCanvas(opts: UseCanvasOptions) {
     pushHistory('initial')
   }
 
+  // fabric 的 setDimensions 会直接写 canvas 元素内联样式（style.width/height），
+  // 与 Vue 的 :style 绑定冲突，导致模板加载后画布保持全尺寸。这里强制同步为 canvasSize × zoom。
+  function syncCanvasCssSize() {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const w = (canvasSize.value.width * zoom.value) + 'px'
+    const h = (canvasSize.value.height * zoom.value) + 'px'
+    const els: Array<HTMLCanvasElement | undefined> = [
+      (canvas as any).lowerCanvasEl,
+      (canvas as any).upperCanvasEl,
+    ]
+    els.forEach(el => {
+      if (el) {
+        el.style.width = w
+        el.style.height = h
+      }
+    })
+  }
+
+  // zoom / canvasSize 变化时保持画布 CSS 尺寸正确
+  watchEffect(syncCanvasCssSize)
+
   function syncSelectionFromFabric() {
     const canvas = fabricCanvas.value
     if (!canvas) return
@@ -282,6 +309,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
     canvas.setDimensions({ width: size.width, height: size.height })
     canvas.renderAll()
+    syncCanvasCssSize()
     pushHistory('set size')
   }
 
@@ -587,7 +615,8 @@ export function useCanvas(opts: UseCanvasOptions) {
   }
 
   // 批量导入 PSD 图层（自底向上顺序 = z-index 顺序）
-  // 文字层复用 addText 标准链路（direction:'auto' → resolveRtlTextOptions 自动处理哈萨克阿拉伯文 RTL），
+  // 文字层复用 addText 标准链路（direction 由 PSD 提取时按内容判定并显式传入，
+  // 哈萨克阿拉伯文 RTL 文本已在导入时转为逻辑序 + rtl），
   // 图片层按图层原始坐标/尺寸精确定位（不做 80% 收缩），支持透明 PNG。
   async function importPsdLayers(layers: PsdLayerPreview[]) {
     const canvas = fabricCanvas.value
@@ -610,7 +639,7 @@ export function useCanvas(opts: UseCanvasOptions) {
             locked: false,
             visible: true,
             zIndex: elements.value.length,
-            editable: true,
+            editable: layer.editable ?? true,
             dataKey: undefined,
             content: layer.text,
             fontFamily: layer.mappedFont || '思源宋体, serif',
@@ -619,15 +648,15 @@ export function useCanvas(opts: UseCanvasOptions) {
             fontStyle: 'normal',
             color: layer.color || '#333333',
             textAlign: layer.textAlign || 'center',
-            direction: 'auto',
+            direction: layer.direction || 'auto',
             lineHeight: layer.lineHeight ?? 1.5,
             letterSpacing: layer.letterSpacing ?? 0,
             strokeColor: layer.strokeColor || 'transparent',
             strokeWidth: layer.strokeWidth ?? 0,
-            shadowColor: 'transparent',
-            shadowOffsetX: 0,
-            shadowOffsetY: 0,
-            shadowBlur: 0,
+            shadowColor: layer.shadowColor || 'transparent',
+            shadowOffsetX: layer.shadowOffsetX ?? 0,
+            shadowOffsetY: layer.shadowOffsetY ?? 0,
+            shadowBlur: layer.shadowBlur ?? 0,
             textDecoration: 'none',
           })
           imported++
@@ -647,7 +676,7 @@ export function useCanvas(opts: UseCanvasOptions) {
             locked: false,
             visible: true,
             zIndex: elements.value.length,
-            editable: true,
+            editable: layer.editable ?? true,
           })
           if (!el) {
             failed++
@@ -986,6 +1015,102 @@ export function useCanvas(opts: UseCanvasOptions) {
     }
   }
 
+  // ---- 文字特效应用（供 updateSelected 与 loadDraft 复用）----
+  // 基于 model 元素（el）无条件应用渐变/阴影/长阴影/霓虹/下划线，
+  // 保证撤销/重做/加载草稿重建对象时特效不丢失
+  function applyTextFxToObject(textObj: fabric.IText, el: TextElement) {
+    const tAny = el as any
+
+    // 渐变填充
+    const gf = tAny.gradientFill as { c1: string; c2: string } | undefined
+    let fillValue: any = el.color
+    if (gf) {
+      fillValue = new fabric.Gradient({
+        type: 'linear',
+        coords: { x1: 0, y1: 0, x2: (textObj.width || 200), y2: 0 },
+        colorStops: [
+          { offset: 0, color: gf.c1 },
+          { offset: 1, color: gf.c2 },
+        ],
+      } as any)
+    }
+    textObj.set('fill', fillValue)
+
+    // 阴影 / 长阴影 / 霓虹
+    if (tAny.neonGlow) {
+      // 霓虹发光：外发光
+      const neonColor = tAny.neonColor || el.color
+      textObj.set('shadow', new fabric.Shadow({
+        color: neonColor, blur: 15, offsetX: 0, offsetY: 0,
+      }))
+    } else if (tAny.longShadow) {
+      // 长阴影特效
+      const lsColor = tAny.longShadowColor || el.color
+      const lsBlur = tAny.longShadowBlur || 0
+      const lsLen = tAny.longShadowLength || 8
+      textObj.set('shadow', new fabric.Shadow({
+        color: lsColor, blur: lsBlur, offsetX: lsLen, offsetY: lsLen,
+      }))
+    } else if (el.shadowColor && el.shadowColor !== 'transparent' && el.shadowBlur > 0) {
+      // 普通阴影
+      textObj.set('shadow', new fabric.Shadow({
+        color: el.shadowColor, blur: el.shadowBlur, offsetX: el.shadowOffsetX, offsetY: el.shadowOffsetY,
+      }))
+    } else {
+      textObj.set('shadow', null)
+    }
+
+    // 下划线 / 删除线
+    textObj.set('textDecoration', el.textDecoration ?? 'none')
+  }
+
+  // ---- 图片特效应用（滤镜/圆角/边框，供 updateSelected 与 loadDraft 复用）----
+  function applyImageFxToObject(imgObj: any, el: ImageElement) {
+    // CSS filter 滤镜
+    const brightness = el.brightness ?? 100
+    const contrast = el.contrast ?? 0
+    const saturate = el.saturate ?? 100
+    const blur = el.blur ?? 0
+    const grayscale = el.grayscale ?? 0
+    const cssFilter = `brightness(${brightness}%) contrast(${100 + contrast}%) saturate(${saturate}%) blur(${blur}px) grayscale(${grayscale}%)`
+    imgObj.set('filters', [])
+    imgObj.set('dirty', true)
+    // 使用 CSS filter 通过样式注入
+    try {
+      const imgEl = imgObj._element
+      if (imgEl && imgEl.style) {
+        imgEl.style.filter = cssFilter
+      }
+    } catch (e) {
+      console.warn('Failed to apply CSS filter:', e)
+    }
+    // borderRadius → clipPath
+    const br = el.borderRadius ?? 0
+    if (br > 0) {
+      imgObj.set('clipPath', new fabric.Rect({
+        absolutePositioned: true,
+        width: imgObj.width,
+        height: imgObj.height,
+        rx: br,
+        ry: br,
+        originX: 'left',
+        originY: 'top',
+      }))
+    } else {
+      imgObj.set('clipPath', null)
+    }
+    // border
+    const bw = el.borderWidth ?? 0
+    const bc = el.borderColor
+    if (bw > 0 && bc) {
+      imgObj.set('stroke', bc)
+      imgObj.set('strokeWidth', bw)
+    } else {
+      imgObj.set('stroke', undefined)
+      imgObj.set('strokeWidth', 0)
+    }
+  }
+
   // ---- 更新选中元素属性 ----
   function updateSelected(patch: Partial<TextElement> | Partial<ImageElement>) {
     const canvas = fabricCanvas.value
@@ -997,6 +1122,10 @@ export function useCanvas(opts: UseCanvasOptions) {
     const obj = canvas.getObjects().find(o => o.id === selectedId.value)
     if (!obj) return
 
+    // 属性面板/格式刷修改不触发 fabric 事件：先冲刷挂起的防抖历史（拖拽/删除等），
+    // 让本次修改成为历史栈中的独立一条，避免撤销时一次回退多个操作
+    flushPendingHistory()
+
     // 更新我们自己的数据模型
     Object.assign(el, patch)
 
@@ -1004,23 +1133,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (el.type === 'text') {
       const t = el as TextElement
       const textObj = obj as fabric.IText
-
-      // 文字特效处理
-      const patchAny = patch as any
-      let fillValue: string | fabric.Gradient | undefined = patch.color ?? t.color
-
-      // 渐变文字
-      if (patchAny.gradientFill) {
-        const gf = patchAny.gradientFill as { c1: string; c2: string }
-        fillValue = new fabric.Gradient({
-          type: 'linear',
-          coords: { x1: 0, y1: 0, x2: (obj.width || 200), y2: 0 },
-          colorStops: [
-            { offset: 0, color: gf.c1 },
-            { offset: 1, color: gf.c2 },
-          ],
-        } as any)
-      }
 
       // GitHub bidi-shaper 对称实现：updateSelected 时也要解析 RTL 字体
       // 用 patch 应用后的最新 t（已经 Object.assign 过）来判断 direction / fontFamily
@@ -1038,7 +1150,6 @@ export function useCanvas(opts: UseCanvasOptions) {
         fontSize: patch.fontSize ?? t.fontSize,
         fontWeight: patch.fontWeight ?? t.fontWeight,
         fontStyle: patch.fontStyle ?? t.fontStyle,
-        fill: fillValue,
         textAlign: patch.textAlign ?? t.textAlign,
         lineHeight: patch.lineHeight ?? t.lineHeight,
         charSpacing: effectiveCharSpacing,
@@ -1050,32 +1161,15 @@ export function useCanvas(opts: UseCanvasOptions) {
         direction: rtlUpdate.direction,
       })
 
-      // 阴影
-      if (patch.shadowColor !== undefined || patch.shadowBlur !== undefined || patchAny.longShadow) {
-        if (patchAny.longShadow) {
-          // 长阴影特效
-          const lsColor = patchAny.longShadowColor || t.color
-          const lsBlur = patchAny.longShadowBlur || 0
-          const lsLen = patchAny.longShadowLength || 8
-          textObj.set('shadow', new fabric.Shadow({
-            color: lsColor, blur: lsBlur, offsetX: lsLen, offsetY: lsLen,
-          }))
-        } else if (t.shadowColor && t.shadowColor !== 'transparent' && t.shadowBlur > 0) {
-          textObj.set('shadow', new fabric.Shadow({
-            color: t.shadowColor, blur: t.shadowBlur, offsetX: t.shadowOffsetX, offsetY: t.shadowOffsetY,
-          }))
-        } else {
-          textObj.set('shadow', null)
-        }
+      // 目标对象可能被拖拽缩放（scale ≠ 1）：显式设置字号时重置缩放，
+      // 让 fontSize 直接等于视觉字号，避免刷过去的字号被目标 scale 放大/缩小
+      if (patch.fontSize !== undefined) {
+        textObj.set({ scaleX: 1, scaleY: 1 })
       }
 
-      // 霓虹发光：双层描边+外发光
-      if (patchAny.neonGlow) {
-        const neonColor = patchAny.neonColor || t.color
-        textObj.set('shadow', new fabric.Shadow({
-          color: neonColor, blur: 15, offsetX: 0, offsetY: 0,
-        }))
-      }
+      // 渐变 / 阴影 / 长阴影 / 霓虹 / 下划线：基于合并后的 t 无条件应用。
+      // 格式刷"源带特效 → 刷上""源无特效 → 清掉目标特效"均正确（el 已合并 patch 的值）
+      applyTextFxToObject(textObj, t)
     }
 
     if (el.type === 'image') {
@@ -1153,53 +1247,14 @@ export function useCanvas(opts: UseCanvasOptions) {
         opacity: imgPatch.opacity ?? img.opacity,
         angle: imgPatch.rotation ?? img.rotation,
       })
-      // 应用图片滤镜（CSS filter 方式）
-      const brightness = patch.brightness ?? img.brightness
-      const contrast = patch.contrast ?? img.contrast
-      const saturate = patch.saturate ?? img.saturate
-      const blur = patch.blur ?? img.blur
-      const grayscale = patch.grayscale ?? img.grayscale
-      const cssFilter = `brightness(${brightness}%) contrast(${100 + contrast}%) saturate(${saturate}%) blur(${blur}px) grayscale(${grayscale}%)`
-      ;(obj as any).set('filters', [])
-      ;(obj as any).set('dirty', true)
-      // 使用 CSS filter 通过样式注入
-      // 安全检查：通过 Fabric 原生 API 应用滤镜，避免直接操作内部实现导致异常
-      try {
-        const el = (obj as any)._element
-        if (el && el.style) {
-          el.style.filter = cssFilter
-        }
-      } catch (e) {
-        console.warn('Failed to apply CSS filter:', e)
-      }
-      // borderRadius → clipPath
-      const br = patch.borderRadius ?? img.borderRadius
-      const bw = patch.borderWidth ?? img.borderWidth
-      const bc = patch.borderColor ?? img.borderColor
-      if (br > 0) {
-        ;(obj as any).set('clipPath' as any, new fabric.Rect({
-          absolutePositioned: true,
-          width: (obj as any).width,
-          height: (obj as any).height,
-          rx: br,
-          ry: br,
-          originX: 'left',
-          originY: 'top',
-        }))
-      } else {
-        ;(obj as any).set('clipPath' as any, null)
-      }
-      // border
-      if (bw > 0 && bc) {
-        ;(obj as any).set('stroke', bc)
-        ;(obj as any).set('strokeWidth', bw)
-      } else {
-        ;(obj as any).set('stroke', undefined)
-        ;(obj as any).set('strokeWidth', 0)
-      }
+      // 图片特效（CSS filter / 圆角 clipPath / 边框）：基于合并后的 img 无条件应用
+      applyImageFxToObject(obj, img)
     }
 
     canvas.renderAll()
+
+    // 本次样式修改作为独立历史条目（去重会拦截与栈顶相同的重复压栈）
+    pushHistory('update style')
     opts.onSelectionChange?.(el)
   }
 
@@ -1235,6 +1290,13 @@ export function useCanvas(opts: UseCanvasOptions) {
       el.height = (obj.height || el.height) * scaleY
       if (el.type === 'text') {
         el.content = o.text ?? el.content
+        // 字号归一化：把对象缩放折算进 fontSize 并重置 scale，
+        // 保证模型 fontSize = 视觉字号（格式刷/属性面板/序列化取到的都是正确值）
+        const displayFontSize = (o.fontSize || el.fontSize || 24) * scaleX
+        if (Math.abs(displayFontSize - el.fontSize) > 0.5) {
+          el.fontSize = Math.round(displayFontSize)
+          o.set({ scaleX: 1, scaleY: 1 })
+        }
       }
     })
   }
@@ -1307,12 +1369,54 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.renderAll()
   }
 
+  /**
+   * 全量占位符实时预览（注册表驱动）：
+   * 覆盖全部 17 个中文/哈语 token，预览值优先级：元素 defaults（标记/识别回填的原文）> dateValues > 注册表示例值。
+   * 新增占位符只需在 constants/placeholder-defs.ts 注册表追加一行，本函数零改动。
+   */
+  function refreshAllPlaceholders(dateValues: Record<string, string | undefined>) {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const tokenRe = new RegExp(`\\{(${PLACEHOLDER_DEFS.map(d => d.key).join('|')})\\}`)
+    const previewValues: Record<string, string> = Object.fromEntries(PLACEHOLDER_DEFS.map(d => [d.key, d.preview]))
+    elements.value.forEach(el => {
+      if (el.type !== 'text') return
+      const t = el as TextElement
+      if (!tokenRe.test(t.content)) return
+      let resolved = t.content
+      for (const def of PLACEHOLDER_DEFS) {
+        const token = `{${def.key}}`
+        if (!resolved.includes(token)) continue
+        const value = (t.defaults && t.defaults[def.key]) || dateValues[def.key] || previewValues[def.key]
+        if (value) resolved = resolved.split(token).join(value)
+      }
+      const obj = canvas.getObjects().find(o => o.id === el.id)
+      if (!obj) return
+      const textObj = obj as fabric.IText
+      textObj.set('text', resolved)
+      // 替换后重新解析 RTL：如果替换后的文本含哈语字符，强制使用 KazakhSoftAsilya 字体
+      const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+      const containsRtl = RTL_REGEX.test(resolved)
+      if (containsRtl) {
+        const rtlDraft = resolveRtlTextOptions({ ...t, content: resolved } as TextElement)
+        textObj.set({
+          fontFamily: rtlDraft.fontFamily,
+          charSpacing: rtlDraft.charSpacing,
+          direction: rtlDraft.direction,
+          textAlign: t.textAlign || 'right',
+        })
+      }
+    })
+    canvas.renderAll()
+  }
+
   function loadDraft(draft: CanvasDraft, loadOpts?: { resetHistory?: boolean }) {
     const canvas = fabricCanvas.value
     if (!canvas) return
 
     suppressHistory = true
     // loadDraft 期间阻止异步图片加载触发多余历史记录
+    loadDraftCount++
     isLoadDrafting = true
     // 收集所有异步图片加载 Promise，待全部完成后再恢复历史记录
     const imagePromises: Promise<void>[] = []
@@ -1323,6 +1427,7 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     canvasSize.value = { ...draft.canvasSize }
     canvas.setDimensions({ width: draft.canvasSize.width, height: draft.canvasSize.height })
+    syncCanvasCssSize()
     background.value = { ...draft.background }
     applyBackground(draft.background)
     opts?.onBackgroundChange?.(draft.background)
@@ -1355,6 +1460,8 @@ export function useCanvas(opts: UseCanvasOptions) {
           direction: rtlDraft.direction,
           lockRotation: el.locked, selectable: !el.locked,
         })
+        // 恢复文字特效（渐变/阴影/长阴影/霓虹/下划线），撤销/重做/加载草稿时不丢失
+        applyTextFxToObject(t, et)
         ;t.id = el.id
         ;t.elementType = 'text'
         addTasks.push(() => canvas.add(t))
@@ -1373,6 +1480,8 @@ export function useCanvas(opts: UseCanvasOptions) {
               opacity: ie.opacity, angle: ie.rotation,
               lockRotation: ie.locked, selectable: !ie.locked,
             })
+            // 恢复图片特效（CSS filter / 圆角 clipPath / 边框）
+            applyImageFxToObject(img, ie)
             ;img.id = ie.id
             ;img.elementType = 'image'
             ;img.srcUrl = ie.src
@@ -1386,6 +1495,34 @@ export function useCanvas(opts: UseCanvasOptions) {
         })
         elements.value.push(el)
       } else if (el.type === 'sticker') {
+        const se = el as StickerElement
+        // 防御性：PSD 导入等场景可能产生 sticker 类型，尝试以 SVG 形式渲染上画布，
+        // 避免撤销/重做后贴纸元素只存在于 model、画布上消失
+        if (se.svgContent) {
+          addTasks.push(() => {
+            loadSVGFromString(se.svgContent).then((result: any) => {
+              if (!fabricCanvas.value) return
+              const svgObj = fabricUtil.groupSVGElements(result.objects, result.options)
+              if (!svgObj) return
+              const sx = se.width / (svgObj.width || 1)
+              const sy = se.height / (svgObj.height || 1)
+              svgObj.set({
+                left: se.x, top: se.y,
+                originX: 'center', originY: 'center',
+                scaleX: sx, scaleY: sy,
+                opacity: se.opacity, angle: se.rotation,
+                lockRotation: se.locked, selectable: !se.locked,
+              })
+              ;(svgObj as any).id = se.id
+              ;(svgObj as any).elementType = 'sticker'
+              canvas.add(svgObj)
+              updateZIndexFromFabric()
+              canvas.renderAll()
+            }).catch(() => {
+              // 贴纸 SVG 加载失败不中断其他元素
+            })
+          })
+        }
         elements.value.push(el)
       }
     })
@@ -1407,19 +1544,38 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     // 等待所有异步图片加载完成后，关闭 isLoadDrafting 标志
     // 避免图片加载完成时 object:added 事件触发多余的历史记录
+    // 用嵌套计数：只有所有 loadDraft 都结束时才真正关闭标志
     if (imagePromises.length > 0) {
       Promise.all(imagePromises).finally(() => {
-        isLoadDrafting = false
+        loadDraftCount--
+        isLoadDrafting = loadDraftCount > 0
       })
     } else {
       // 无异步图片任务，立即关闭标志
-      isLoadDrafting = false
+      loadDraftCount--
+      isLoadDrafting = loadDraftCount > 0
     }
   }
 
   function pushHistory(description = 'change') {
     if (suppressHistory) return
     const draft = getDraft()
+
+    // 去重：与当前指针指向的快照完全一致时不压栈。
+    // 消除双重压栈：canvas.remove/add 触发的 object:added/removed 防抖
+    // 与函数末尾显式 pushHistory（duplicate/bringToFront/editing:exited 等）会压入相同状态
+    const top = history.value[historyIdx.value]
+    if (top) {
+      try {
+        if (JSON.stringify(top) === JSON.stringify(draft)) {
+          // 状态未变化：保持当前指针（若已在栈顶则不动；若已回退则视为原地踏步）
+          updateCanUndoRedo()
+          return
+        }
+      } catch (e) {
+        // 序列化失败时跳过去重
+      }
+    }
 
     // 如果当前不在栈顶（已回退过），截断之后的历史
     if (historyIdx.value < history.value.length - 1) {
@@ -1447,8 +1603,25 @@ export function useCanvas(opts: UseCanvasOptions) {
     }, 300)
   }
 
+  // 立即冲刷挂起的防抖历史。
+  // updateSelected / nudgeElement 等"直接改 model + canvas、不触发 fabric 事件"的操作
+  // 在应用修改前先 flush，把拖拽/删除等上一个交互的状态定格为独立历史条目，
+  // 保证撤销时每个操作都能单独回退，不会一次跳回好几步
+  function flushPendingHistory() {
+    if (pushTimer) {
+      clearTimeout(pushTimer)
+      pushTimer = null
+      pushHistory('modify')
+    }
+  }
+
   function undo() {
     if (historyIdx.value <= 0) return
+    // 清除未触发的 300ms 防抖定时器，避免撤销后旧定时器把状态重新压栈、截断 redo 栈
+    if (pushTimer) {
+      clearTimeout(pushTimer)
+      pushTimer = null
+    }
     historyIdx.value -= 1
     const draft = history.value[historyIdx.value]
     suppressHistory = true
@@ -1459,6 +1632,11 @@ export function useCanvas(opts: UseCanvasOptions) {
 
   function redo() {
     if (historyIdx.value >= history.value.length - 1) return
+    // 同 undo：清除防抖定时器，避免重做后旧定时器污染历史栈
+    if (pushTimer) {
+      clearTimeout(pushTimer)
+      pushTimer = null
+    }
     historyIdx.value += 1
     const draft = history.value[historyIdx.value]
     suppressHistory = true
@@ -1562,6 +1740,8 @@ export function useCanvas(opts: UseCanvasOptions) {
       el.x = (obj.left || 0)
       el.y = (obj.top || 0)
     }
+    // 方向键微调直接改坐标不触发 fabric 事件：记录独立历史，避免撤销一次跳回好几步
+    pushHistory('nudge')
   }
 
   // 原地复制（Ctrl+D）
@@ -1665,5 +1845,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     nudgeElement,
     duplicateSelected,
     refreshDatePlaceholders,
+    refreshAllPlaceholders,
   }
 }

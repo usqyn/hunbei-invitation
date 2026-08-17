@@ -349,9 +349,18 @@ async function deleteTemplateFromCloud(id) {
     return true
   } catch (e) {
     const elapsed = Date.now() - startTime
+    const errMsg = String(e?.message || e || '')
+    // 幂等处理：云端文档不存在/已被删除时，视为删除成功
+    // 避免"云端文档已丢失 → 本地永远删不掉"的死结
+    if (/(not\s+exist|not\s+found|doesn'?t\s+exist|document.*deleted|collection.*not)/i.test(errMsg)) {
+      console.log(`[cloudSync] ⚠️ 云端文档不存在，视为删除成功: ${id}`)
+      console.log(`[cloudSync]    耗时: ${elapsed}ms`)
+      console.log(`[cloudSync] ────────────────────────────────────────`)
+      return true
+    }
     console.error(`[cloudSync] ❌ 模板删除失败: ${id}`)
     console.error(`[cloudSync]    耗时: ${elapsed}ms`)
-    console.error(`[cloudSync]    错误: ${e.message}`)
+    console.error(`[cloudSync]    错误: ${errMsg}`)
     console.log(`[cloudSync] ────────────────────────────────────────`)
     return false
   }
@@ -401,10 +410,111 @@ async function checkCloudTemplateExists(id) {
   }
 }
 
+/**
+ * 拉取云端全量模板文档（完整数据，用于「云端 → 本地」同步）
+ * 云数据库单次 get() 最多返回 100 条，需要分页循环拉取
+ */
+async function fetchFullCloudTemplates(limit = 1000) {
+  if (!syncEnabled || !db) {
+    return { success: false, error: '云同步未启用', data: [] }
+  }
+  const templates = []
+  try {
+    const pageSize = 100
+    let skip = 0
+    while (templates.length < limit) {
+      const result = await db.collection('templates').skip(skip).limit(pageSize).get()
+      const batch = result.data || []
+      if (!batch.length) break
+      for (const t of batch) templates.push(t)
+      if (batch.length < pageSize) break
+      skip += batch.length
+    }
+    console.log(`[cloudSync] 📥 从云端拉取全量模板: ${templates.length} 条`)
+    return { success: true, data: templates }
+  } catch (e) {
+    console.error('[cloudSync] 拉取云端全量模板失败:', e.message)
+    return { success: false, error: e.message, data: [] }
+  }
+}
+
+// 云端文件下载缓存：同一 fileID 只下载一次，避免重复下载
+const cloudFileCache = new Map()
+// 简单并发限制：同时最多 6 个云文件下载
+const MAX_CONCURRENT_DOWNLOADS = 6
+let activeDownloads = 0
+const downloadQueue = []
+
+/**
+ * 下载云存储文件（cloud://）到本地 uploads/cloud-pull，返回本地可访问 URL
+ * @param {string} fileID - cloud:// 格式的文件 ID
+ * @returns {Promise<string>} /uploads/cloud-pull/xxx 或空字符串（失败）
+ */
+async function downloadCloudFileToLocal(fileID) {
+  if (!syncEnabled || !app || !fileID || typeof fileID !== 'string') return ''
+  // 非 cloud:// 的 URL 无需下载，原样返回（http/https/相对路径 admin 可直接访问）
+  if (!fileID.startsWith('cloud://')) return fileID
+  // 命中缓存直接返回
+  if (cloudFileCache.has(fileID)) return cloudFileCache.get(fileID)
+
+  // 并发限制
+  if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) {
+    await new Promise(resolve => downloadQueue.push(resolve))
+  }
+  activeDownloads++
+  try {
+    // 从 fileID 推断扩展名
+    const extMatch = fileID.match(/\.(jpg|jpeg|png|gif|webp|svg|mp3|mp4|ttf|woff|woff2|json)(?:\?.*)?$/i)
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg'
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`
+    const pullDir = path.join(UPLOADS_ROOT, 'cloud-pull')
+    fs.mkdirSync(pullDir, { recursive: true })
+    const localPath = path.join(pullDir, fileName)
+
+    await app.downloadFile({ fileID, tempFilePath: localPath })
+    const localUrl = `/uploads/cloud-pull/${fileName}`
+    cloudFileCache.set(fileID, localUrl)
+    console.log(`[cloudSync] ⬇️  云端文件已下载: ${String(fileID).slice(0, 60)}... -> ${localUrl}`)
+    return localUrl
+  } catch (e) {
+    console.warn(`[cloudSync] 下载云端文件失败: ${String(fileID).slice(0, 60)}... -> ${e.message}`)
+    return ''
+  } finally {
+    activeDownloads--
+    if (downloadQueue.length) downloadQueue.shift()()
+  }
+}
+
+/**
+ * 递归迁移对象中的 cloud:// 图片为本地 URL
+ * @param {*} obj 模板数据对象（data/elements/pages/background 等）
+ */
+async function migrateCloudUrlsDeep(obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      await migrateCloudUrlsDeep(obj[i])
+    }
+    return obj
+  }
+  for (const key of Object.keys(obj)) {
+    const value = obj[key]
+    if (typeof value === 'string' && value.startsWith('cloud://')) {
+      obj[key] = await downloadCloudFileToLocal(value)
+    } else if (value && typeof value === 'object') {
+      await migrateCloudUrlsDeep(value)
+    }
+  }
+  return obj
+}
+
 module.exports = {
   isEnabled,
   syncTemplateToCloud,
   deleteTemplateFromCloud,
   fetchCloudTemplates,
   checkCloudTemplateExists,
+  fetchFullCloudTemplates,
+  downloadCloudFileToLocal,
+  migrateCloudUrlsDeep,
 }

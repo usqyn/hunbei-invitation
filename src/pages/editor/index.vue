@@ -371,6 +371,31 @@
       @reset="onTextStyleReset"
     />
 
+    <!-- 导出完成推荐弹层：保存相册后展示商品推荐，3 秒后自动关闭并提示 -->
+    <view v-if="showRecommendModal" class="recommend-mask" @click="closeRecommendModal">
+      <view class="recommend-panel" @click.stop>
+        <view class="recommend-header">
+          <text class="recommend-title">🎉 导出成功，已保存到相册</text>
+          <text class="recommend-sub">搭配好物推荐</text>
+        </view>
+        <scroll-view class="recommend-list" scroll-x :show-scrollbar="false">
+          <view
+            v-for="p in recommendProducts"
+            :key="p.id"
+            class="recommend-item"
+            @click="goToProduct(p)"
+          >
+            <CloudImage class="recommend-img" :src="p.image || p.cover || ''" mode="aspectFill" custom-class="recommend-img" />
+            <text class="recommend-name">{{ p.name || p.title || '推荐好物' }}</text>
+            <text class="recommend-price">¥{{ p.price || 0 }}</text>
+          </view>
+        </scroll-view>
+        <view class="recommend-close" @click="closeRecommendModal">
+          <text class="recommend-close-text">我知道了</text>
+        </view>
+      </view>
+    </view>
+
   </view>
 </template>
 
@@ -384,14 +409,15 @@ import { useUserStore, VIP_LIMITS } from '@/stores/user'
 import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
-import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { resolveTextPlaceholders, extractTokenKeys } from '@/utils/resolveTextPlaceholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { usePinchGesture } from './composables/usePinchGesture'
 import { useFrameThrottle } from './composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { exportInvitation, uploadImage } from '@/api'
+import { exportInvitation, uploadImage, consumeTemplateQuota, fetchTemplateQuota, fetchRecommendProducts } from '@/api'
+import { showRewardedAd } from '@/utils/rewarded-ad'
 import PageEditor from './components/PageEditor.vue'
 import FlipEditor from './components/FlipEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
@@ -555,6 +581,14 @@ const allTemplateDataKeys = computed(() => {
   editorStore.flipPages.forEach(page => {
     (page.elements || []).forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
   })
+  // 新增：占位符 token 收集（token 化元素无 dataKey，扫描文本补齐表单字段）
+  ;[
+    ...editorStore.editableElements,
+    ...editorStore.pageSections,
+    ...editorStore.flipPages.flatMap(page => page.elements || []),
+  ].forEach(el => {
+    extractTokenKeys((el as { text?: string }).text || '').forEach(k => keys.add(k))
+  })
   return Array.from(keys)
 })
 
@@ -612,6 +646,7 @@ let _sizeTimer: ReturnType<typeof setTimeout> | null = null
 let _mountTimers: ReturnType<typeof setTimeout>[] = []
 function onSmartFieldUpdate(key: string, value: string) {
   editorStore.syncSmartField(key, value)
+  editorStore.syncTokenToAllModes(key, value)
   renderedImageStale.value = true
   hasUnsavedChanges.value = true
   // 输入阿拉伯文时触发字体加载
@@ -1190,7 +1225,7 @@ watch(() => editorStore.selectedElement, () => {
 })
 
 function resolveText(text: string): string {
-  return resolveDatePlaceholders(text, templateStore.templateData)
+  return resolveTextPlaceholders(text, templateStore.templateData)
 }
 
 function updateCardSize() {
@@ -1613,6 +1648,54 @@ async function autoSaveWork() {
 }
 
 let isExporting = false
+
+// ========== 导出完成推荐（C3：保存相册 → 商品推荐 → 3秒提示） ==========
+const showRecommendModal = ref(false)
+const recommendProducts = ref<any[]>([])
+let _recommendTimer: ReturnType<typeof setTimeout> | null = null
+
+const FALLBACK_RECOMMEND = [
+  { id: 'rec-1', name: '精美喜糖盒', price: 9.9, image: '/static/images/products/sugar-box.png', cover: '' },
+  { id: 'rec-2', name: '定制请柬信封', price: 19.9, image: '/static/images/products/envelope.png', cover: '' },
+  { id: 'rec-3', name: '伴手礼丝带', price: 6.9, image: '/static/images/products/ribbon.png', cover: '' },
+]
+
+async function loadRecommendProducts() {
+  if (recommendProducts.value.length) return
+  try {
+    const category = editorStore.currentTemplateCategory || 'wedding'
+    const data = await fetchRecommendProducts(category)
+    if (data && Array.isArray(data) && data.length) {
+      recommendProducts.value = data.slice(0, 6)
+      return
+    }
+  } catch (e) {
+    console.warn('[editor] load recommend products failed:', e)
+  }
+  recommendProducts.value = FALLBACK_RECOMMEND
+}
+
+function showRecommendAfterExport() {
+  showRecommendModal.value = true
+  loadRecommendProducts()
+  if (_recommendTimer) clearTimeout(_recommendTimer)
+  _recommendTimer = setTimeout(() => {
+    showRecommendModal.value = false
+    uni.showToast({ title: '导出成功，已保存到相册', icon: 'success' })
+  }, 3000)
+}
+
+function closeRecommendModal() {
+  if (_recommendTimer) clearTimeout(_recommendTimer)
+  showRecommendModal.value = false
+  uni.showToast({ title: '导出成功，已保存到相册', icon: 'success' })
+}
+
+function goToProduct(p: any) {
+  closeRecommendModal()
+  uni.navigateTo({ url: `/pages/mall/index${p.id ? '?productId=' + p.id : ''}` })
+}
+
 function handleExport() {
   if (isExporting) return
   isExporting = true
@@ -1639,7 +1722,10 @@ function handleExport() {
           })
         } else {
           track('click_export', { export_type: 'free' })
-          doExport({ watermark: true, quality: 'normal' }).finally(() => { isExporting = false })
+          // C4：免费导出前播放激励视频（看完获得下载资格；广告未配置/失败时放行）
+          showRewardedAd().then(() => {
+            return doExport({ watermark: true, quality: 'normal' })
+          }).finally(() => { isExporting = false })
         }
       },
       fail: () => {
@@ -1692,7 +1778,8 @@ async function doExport(options: { watermark: boolean; quality: string }) {
       uni.saveImageToPhotosAlbum({
         filePath: downloadResult.tempFilePath,
         success: () => {
-          uni.showToast({ title: options.watermark ? '已导出（带水印）' : '高清导出成功', icon: 'success' })
+          // C3：导出成功 → 展示商品推荐弹层，3 秒后提示完成
+          showRecommendAfterExport()
           resolve()
         },
         fail: (err) => {
@@ -1808,6 +1895,9 @@ async function loadEditorData(options: any) {
       const templateId = options.templateId || options.id
       if (templateId) {
         await editorStore.loadTemplateById(templateId)
+        // 限数版模板：非 VIP 用户从模板新建时扣减 1 次免费额度（仅新建场景扣，编辑已有作品不扣）
+        const quotaOk = await consumeLimitedQuotaIfNeeded(templateId)
+        if (!quotaOk) return
         track('edit_start', { template_id: templateId })
       } else {
         await editorStore.restoreTemplate()
@@ -1824,6 +1914,55 @@ async function loadEditorData(options: any) {
     loadError.value = true
   } finally {
     isLoading.value = false
+  }
+}
+
+// 限数版模板扣减：非 VIP 从模板新建时消耗 1 次免费额度；次数用完时弹窗引导并退出
+async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean> {
+  try {
+    const level = editorStore.currentTemplateVipLevel
+    if (level !== 'limited' || userStore.isVip()) return true
+    try {
+      await consumeTemplateQuota(templateId)
+      return true
+    } catch (err: any) {
+      if (err?.message === 'QUOTA_EXHAUSTED') {
+        const price = (editorStore as any).currentTemplate?.price || 9.9
+        uni.showActionSheet({
+          itemList: ['分享好友得免费次数', `¥${price} 解锁模板`, '开通VIP免费使用'],
+          success: (res: any) => {
+            if (res.tapIndex === 0) {
+              uni.showModal({
+                title: '分享得次数',
+                content: '分享本模板给微信好友，好友打开后您即可获得 1 次免费制作机会（每日限 1 次）',
+                confirmText: '去分享',
+                success: (r: any) => {
+                  if (r.confirm) {
+                    uni.reLaunch({ url: `/pages/preview/index?templateId=${templateId}&shareGuide=1` })
+                  } else {
+                    uni.navigateBack()
+                  }
+                },
+              })
+            } else if (res.tapIndex === 1) {
+              uni.redirectTo({ url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}` })
+            } else if (res.tapIndex === 2) {
+              uni.redirectTo({ url: '/pages/vip/index' })
+            } else {
+              uni.navigateBack()
+            }
+          },
+          fail: () => { uni.navigateBack() },
+        })
+        return false
+      }
+      // 其他错误（网络等）：放行，不阻断编辑（下次保存导出时会再次受限）
+      console.warn('[editor] consume quota failed:', err?.message || err)
+      return true
+    }
+  } catch (e) {
+    console.warn('[editor] quota check failed:', e)
+    return true
   }
 }
 
@@ -2458,6 +2597,101 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
   padding: 20rpx 16rpx;
   min-height: 0;
+}
+
+/* ===== 导出完成推荐弹层 ===== */
+.recommend-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+}
+
+.recommend-panel {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 36rpx 0 calc(40rpx + env(safe-area-inset-bottom));
+  animation: recommendSlideUp 0.3s ease-out;
+}
+
+@keyframes recommendSlideUp {
+  from { transform: translateY(60%); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.recommend-header {
+  padding: 0 40rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.recommend-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #333333;
+}
+
+.recommend-sub {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+.recommend-list {
+  white-space: nowrap;
+  padding: 0 24rpx;
+}
+
+.recommend-item {
+  display: inline-flex;
+  flex-direction: column;
+  width: 200rpx;
+  margin-right: 20rpx;
+  background: #fafafa;
+  border-radius: 16rpx;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.recommend-img {
+  width: 200rpx;
+  height: 200rpx;
+  background: #f0f0f0;
+}
+
+.recommend-name {
+  font-size: 24rpx;
+  color: #333333;
+  padding: 12rpx 16rpx 4rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recommend-price {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #e84a6e;
+  padding: 0 16rpx 16rpx;
+}
+
+.recommend-close {
+  margin: 28rpx 40rpx 0;
+  height: 84rpx;
+  border-radius: 42rpx;
+  background: #e84a6e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recommend-close-text {
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 600;
 }
 
 /* ===== 底部工具栏 ===== */

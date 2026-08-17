@@ -413,6 +413,23 @@ describe('serializeElement', () => {
       expect(result.style?.font).toBe('KazakhSoftAsilyaQaniq')
     })
 
+    it('RTL 文本显式选择白名单字体 ALKATIPBasma 时应保留所选字体（不做顶替）', () => {
+      const rtlEl = {
+        id: 't-rtl-alkatip',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        content: 'توي تاماش',
+        direction: 'rtl',
+        fontFamily: 'ALKATIPBasma',
+        letterSpacing: 2,
+      }
+      const result = serializeElement(rtlEl)!
+      expect(result.style?.font).toBe('ALKATIPBasma')
+    })
+
     it('含哈语占位符 {kzGroomName} 的文本应预标记为 RTL（占位符本身是 ASCII，但替换后是哈语）', () => {
       const kzEl = {
         id: 't-kz-placeholder',

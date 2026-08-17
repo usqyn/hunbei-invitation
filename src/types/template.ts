@@ -224,9 +224,10 @@ export interface TemplateItem {
   is_premium?: boolean
   price?: number
   vip_free?: boolean
-  // 会员等级：free=免费基础 / personal=个人VIP / pro=专业版
-  // free: 免费无水印，限制作次数
-  // personal: 个人VIP，无水印，更多次数
-  // pro: 专业版，全部权益，最高次数
-  vipLevel?: 'free' | 'personal' | 'pro'
+  // 会员等级：free=免费版 / limited=限数版(VIP版，非VIP每模板免费用1次) / personal=个人VIP / pro=专业版
+  // free: 免费无限次使用，无水印
+  // limited: 展示带水印，非VIP每模板限1次（分享得次数/9.9解锁/开通VIP可突破）
+  // personal: 个人VIP，无水印
+  // pro: 专业版，全部权益
+  vipLevel?: 'free' | 'limited' | 'personal' | 'pro'
 }

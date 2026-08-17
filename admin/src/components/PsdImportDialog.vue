@@ -15,6 +15,17 @@
             <span v-if="result.resolutionUnit === 'PPI'">（{{ result.resolution }} DPI）</span>
           </div>
 
+          <!-- 缺少字体专区：完整列出缺失字体（不折叠），引导上传真实字体 -->
+          <div v-if="missingFonts.length > 0" class="psd-report psd-report--fonts">
+            <div class="psd-report-title">🔤 缺少字体（{{ missingFonts.length }}）</div>
+            <div class="psd-report-body">
+              <div v-for="(m, i) in missingFonts" :key="i" class="psd-report-item">
+                字体「{{ m.name }}」缺少 · {{ m.count }} 个图层使用 —— 请登录管理后台 → 字体上传 上传该字体文件后重新导入；
+                未上传前导入的文字将以 KazakhSoftAsilya / 默认字体渲染（与设计稿有差异）
+              </div>
+            </div>
+          </div>
+
           <div v-if="reportWarnings.length > 0" class="psd-report">
             <div class="psd-report-title">⚠️ 导入提示（{{ reportWarnings.length }}）</div>
             <div class="psd-report-body">
@@ -49,6 +60,7 @@
                       :value="getEdit(layer).text"
                       rows="2"
                       placeholder="（PSD 未提取到文字）"
+                      :style="textareaRtlStyle(getEdit(layer).text)"
                       @input="setEdit(layer, 'text', ($event.target as HTMLTextAreaElement).value)"
                     ></textarea>
                   </div>
@@ -76,6 +88,7 @@
                     <span v-if="layer.textAlign">对齐 {{ layer.textAlign }}</span>
                     <span v-if="layer.lineHeight">行高 {{ layer.lineHeight }}</span>
                     <span v-if="layer.strokeWidth">描边 {{ layer.strokeWidth }}px</span>
+                    <span v-if="layer.shadowBlur">投影 {{ layer.shadowOffsetX }},{{ layer.shadowOffsetY }} 模糊{{ layer.shadowBlur }}</span>
                   </div>
                 </template>
                 <div v-else class="psd-layer-extra">
@@ -83,8 +96,15 @@
                   <span>不透明度 {{ Math.round(layer.opacity * 100) }}%</span>
                 </div>
 
+                <!-- 用户可编辑开关：占位符/照片默认可编辑，其余默认锁定 -->
+                <label class="psd-layer-editable">
+                  <input type="checkbox" :checked="isLayerEditable(layer)" @change="setLayerEditable(layer, ($event.target as HTMLInputElement).checked)" />
+                  用户可编辑
+                  <span v-if="!isLayerEditable(layer)" class="psd-layer-lock-hint">（导入后锁定，用户不可拖动/修改）</span>
+                </label>
+
                 <div v-if="layer.warnings.length > 0" class="psd-layer-warnings">
-                  <div v-for="(w, i) in layer.warnings" :key="i">⚠ {{ w }}</div>
+                  <div v-for="(w, i) in dedupe(layer.warnings)" :key="i">⚠ {{ w }}</div>
                 </div>
               </div>
             </div>
@@ -125,6 +145,60 @@ interface TextEdit {
   fontName: string
 }
 
+// 默认可编辑规则：占位符文本（如 {year}、{kzGroomName}）与照片类图片（头像/新郎/新娘/合影等）默认可编辑，其余锁定
+const PLACEHOLDER_RE = /\{[^}]{1,40}\}/
+const PHOTO_NAME_RE = /照片|photo|头像|新郎|新娘|合影|婚纱|pic|avatar/i
+
+function defaultEditable(layer: PsdLayerPreview): boolean {
+  if (layer.type === 'text') {
+    return PLACEHOLDER_RE.test(layer.text || '')
+  }
+  return PHOTO_NAME_RE.test(layer.name || '')
+}
+
+// 用户可编辑标记：layerId → boolean（未标记时回退到 defaultEditable）
+const editableFlags = ref<Record<string, boolean>>({})
+
+watch(
+  () => props.result,
+  (result) => {
+    editableFlags.value = {}
+    if (!result) return
+    for (const layer of result.layers) {
+      editableFlags.value[layer.id] = defaultEditable(layer)
+    }
+  },
+)
+
+function isLayerEditable(layer: PsdLayerPreview): boolean {
+  return editableFlags.value[layer.id] ?? defaultEditable(layer)
+}
+
+function setLayerEditable(layer: PsdLayerPreview, value: boolean) {
+  editableFlags.value[layer.id] = value
+}
+
+// 与 useCanvas.resolveRtlTextOptions 一致：RTL 文本默认哈萨克字体，其余默认思源宋体
+const RTL_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+
+function defaultFontFor(layer: PsdLayerPreview): string {
+  if (layer.mappedFont) return layer.mappedFont
+  return layer.text && RTL_RE.test(layer.text) ? 'KazakhSoftAsilya' : '思源宋体, serif'
+}
+
+// 校对输入框 RTL 感知：当前编辑文本含 RTL 字符时，输入框按 RTL 渲染（所见即所得，避免"倒着写"错觉）
+function textareaRtlStyle(text: string | undefined): Record<string, string> {
+  return text && RTL_RE.test(text) ? { direction: 'rtl', textAlign: 'right' } : {}
+}
+
+function makeEdit(layer: PsdLayerPreview): TextEdit {
+  return {
+    text: layer.text ?? '',
+    fontSize: layer.fontSize || 24,
+    fontName: defaultFontFor(layer),
+  }
+}
+
 const edits = ref<Record<string, TextEdit>>({})
 
 watch(
@@ -134,11 +208,7 @@ watch(
     if (!result) return
     for (const layer of result.layers) {
       if (layer.type === 'text') {
-        edits.value[layer.id] = {
-          text: layer.text ?? '',
-          fontSize: layer.fontSize || 24,
-          fontName: layer.mappedFont || (layer.text ? 'KazakhSoftAsilya' : '思源宋体, serif'),
-        }
+        edits.value[layer.id] = makeEdit(layer)
       }
     }
   },
@@ -159,20 +229,36 @@ const fontOptions = computed(() => {
 // 倒序展示（最上层在前），导入顺序仍为文档顺序（自底向上）
 const topDownLayers = computed(() => (props.result ? [...props.result.layers].reverse() : []))
 
-const reportWarnings = computed(() => props.result?.warnings ?? [])
+// 去重并标注重复次数（同一模板多个图层会产生相同提示，折叠为 ×N）
+const reportWarnings = computed(() => {
+  const counts = new Map<string, number>()
+  for (const w of props.result?.warnings ?? []) counts.set(w, (counts.get(w) || 0) + 1)
+  return [...counts.entries()].map(([text, n]) => (n > 1 ? `${text}（×${n}）` : text))
+})
+
+// 缺少字体专区：未映射到任何可用字体的 PSD 字体（完整展开，不做折叠）
+const missingFonts = computed(() => {
+  const counts = new Map<string, number>()
+  for (const l of props.result?.layers ?? []) {
+    if (l.type === 'text' && l.fontName && !l.mappedFont) {
+      counts.set(l.fontName, (counts.get(l.fontName) || 0) + 1)
+    }
+  }
+  return [...counts.entries()].map(([name, count]) => ({ name, count }))
+})
+
+function dedupe(items: string[]): string[] {
+  const counts = new Map<string, number>()
+  for (const w of items) counts.set(w, (counts.get(w) || 0) + 1)
+  return [...counts.entries()].map(([text, n]) => (n > 1 ? `${text}（×${n}）` : text))
+}
 
 function getEdit(layer: PsdLayerPreview): TextEdit {
-  return (
-    edits.value[layer.id] || {
-      text: layer.text ?? '',
-      fontSize: layer.fontSize || 24,
-      fontName: layer.mappedFont || '思源宋体, serif',
-    }
-  )
+  return edits.value[layer.id] || makeEdit(layer)
 }
 
 function setEdit(layer: PsdLayerPreview, field: keyof TextEdit, value: string | number) {
-  if (!edits.value[layer.id]) edits.value[layer.id] = { text: layer.text ?? '', fontSize: layer.fontSize || 24, fontName: layer.mappedFont || '思源宋体, serif' }
+  if (!edits.value[layer.id]) edits.value[layer.id] = makeEdit(layer)
   ;(edits.value[layer.id] as any)[field] = value
 }
 
@@ -183,11 +269,13 @@ function onClose() {
 function onConfirm() {
   if (!props.result) return
   const layers = props.result.layers.map((layer) => {
-    if (layer.type !== 'text') return layer
+    const editable = editableFlags.value[layer.id] ?? defaultEditable(layer)
+    if (layer.type !== 'text') return { ...layer, editable }
     const edit = edits.value[layer.id]
-    if (!edit) return layer
+    if (!edit) return { ...layer, editable }
     return {
       ...layer,
+      editable,
       text: edit.text.trim(),
       fontSize: edit.fontSize > 0 ? edit.fontSize : layer.fontSize,
       fontName: edit.fontName,
@@ -374,6 +462,26 @@ function onConfirm() {
   margin-top: 6px;
   font-size: 11px;
   color: #999;
+}
+.psd-layer-editable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #444;
+  cursor: pointer;
+  user-select: none;
+}
+.psd-layer-editable input {
+  accent-color: #e84a6e;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+.psd-layer-lock-hint {
+  font-size: 11px;
+  color: #bbb;
 }
 .psd-layer-warnings {
   margin-top: 6px;

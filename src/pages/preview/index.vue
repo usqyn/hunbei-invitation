@@ -299,14 +299,15 @@ import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
 import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
-import { RTL_CHAR_REGEX, FONT_FAMILY_BASE } from '@/constants/editor'
+import { RTL_CHAR_REGEX, FONT_FAMILY_BASE, isRtlCapableFont } from '@/constants/editor'
+import { getSceneShareText } from '@/constants/share-text'
 import { track } from '@/utils/track'
-import { resolveDatePlaceholders } from '@/utils/placeholders'
+import { resolveTextPlaceholders } from '@/utils/resolveTextPlaceholders'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchSharedWorkApi } from '@/api'
+import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchSharedWorkApi, fetchTemplateQuota, shareReward } from '@/api'
 import type { EditableElement, Work } from '@/types'
 import Watermark from '@/components/Watermark.vue'
 import CloudImage from '@/components/CloudImage.vue'
@@ -368,6 +369,7 @@ const shouldShowWatermark = computed(() => {
   const vipLevel = userStore.getVipLevel()
   const templateLevel = editorStore.currentTemplateVipLevel
   if (templateLevel === 'free') return false
+  if (templateLevel === 'limited') return vipLevel < 1
   if (templateLevel === 'personal') return vipLevel < 1
   if (templateLevel === 'pro') return vipLevel < 2
   return false
@@ -428,7 +430,7 @@ async function loadRecommendProducts() {
 }
 
 function resolveText(text: string): string {
-  return resolveDatePlaceholders(text, templateStore.templateData)
+  return resolveTextPlaceholders(text, templateStore.templateData)
 }
 
 function updateCardSize() {
@@ -549,6 +551,10 @@ async function loadData() {
     }
   }
   track('preview_view', { template_id: templateId.value })
+  // 分享奖励：好友打开分享卡片（携带 inviterPhone）→ 给分享者限数模板 +1 次
+  if (shareInviterPhone.value && templateId.value && shareInviterPhone.value !== userStore.phone) {
+    shareReward({ templateId: templateId.value, phone: shareInviterPhone.value }).catch(() => {})
+  }
   nextTick(() => {
     trackTimer(() => updateCardSize(), 100)
     trackTimer(() => measureZoomHeight(), 150)
@@ -572,9 +578,28 @@ onMounted(() => {
   enableShareMenu()
 })
 
-onLoad(() => {
+onLoad((options) => {
   enableShareMenu()
+  // 分享奖励链路：好友通过分享卡片打开本页时携带分享者手机号，打开后给分享者发放模板次数
+  if (options) {
+    shareInviterPhone.value = (options as any).inviterPhone || ''
+    if ((options as any).shareGuide === '1') {
+      shareGuideToast()
+    }
+  }
 })
+
+// 分享引导提示（限数版次数用完，从广场跳转而来）
+let _shareGuideShown = false
+function shareGuideToast() {
+  if (_shareGuideShown) return
+  _shareGuideShown = true
+  setTimeout(() => {
+    uni.showToast({ title: '点击右上角分享给好友，获得免费次数', icon: 'none', duration: 2500 })
+  }, 600)
+}
+
+const shareInviterPhone = ref('')
 
 function enableShareMenu() {
   uni.showShareMenu({
@@ -669,11 +694,20 @@ onShareAppMessage(() => {
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
   if (workId) params.push(`workId=${workId}`)
+  // 携带分享者手机号：好友打开后触发分享奖励（限数模板得次数）
+  const myPhone = userStore.phone
+  if (myPhone) params.push(`inviterPhone=${myPhone}`)
   if (params.length) path += '?' + params.join('&')
   const info = templateStore.basicInfo
   const groom = info.groomName || ''
   const bride = info.brideName || ''
-  const title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : 'TOYtamaxia'
+  const category = editorStore.currentTemplateCategory
+  let title: string
+  if (category === 'wedding') {
+    title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : 'TOYtamaxia'
+  } else {
+    title = getSceneShareText(category).title
+  }
   return {
     title,
     path,
@@ -690,7 +724,13 @@ onShareTimeline(() => {
   const info = templateStore.basicInfo
   const groom = info.groomName || ''
   const bride = info.brideName || ''
-  const title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : 'TOYtamaxia'
+  const category = editorStore.currentTemplateCategory
+  let title: string
+  if (category === 'wedding') {
+    title = groom && bride ? `${groom} ❤ ${bride} 的婚礼邀请` : 'TOYtamaxia'
+  } else {
+    title = getSceneShareText(category).title
+  }
   return {
     title,
     query: params.join('&'),
@@ -816,15 +856,55 @@ const handleMore = () => {
   })
 }
 
-const handleCreate = () => {
+const handleCreate = async () => {
   if (!userStore.requireLogin()) return
   haptic('medium')
   const templateId = editorStore.currentTemplateId
+  const templateLevel = editorStore.currentTemplateVipLevel
+  // 限数版模板：非 VIP 用户进入前校验剩余免费次数，不足则引导 分享得次数/单次解锁/开通VIP
+  if (templateLevel === 'limited' && templateId && !userStore.isVip()) {
+    try {
+      const quota = await fetchTemplateQuota(templateId)
+      if (!quota.limitless && quota.remaining <= 0) {
+        showLimitExhausted(templateId)
+        return
+      }
+    } catch (e) {
+      // 网络异常放行（编辑器内会再次校验并扣减）
+    }
+  }
   if (templateId) {
     uni.navigateTo({ url: `/pages/editor/index?templateId=${templateId}` })
   } else {
     uni.navigateTo({ url: '/pages/editor/index' })
   }
+}
+
+// 限数版次数用完：弹出 分享得次数 / 单次解锁 / 开通VIP 三出口
+function showLimitExhausted(templateId: string) {
+  const tpl = (editorStore as any).currentTemplate
+  const price = tpl?.price || 9.9
+  uni.showActionSheet({
+    itemList: ['分享好友得免费次数', `¥${price} 解锁模板`, '开通VIP免费使用'],
+    success: (res: any) => {
+      if (res.tapIndex === 0) {
+        uni.showModal({
+          title: '分享得次数',
+          content: '分享本模板给微信好友，好友打开后您即可获得 1 次免费制作机会（每日限 1 次）',
+          confirmText: '去分享',
+          success: (r: any) => {
+            if (r.confirm) uni.showShareMenu({})
+          },
+        })
+      } else if (res.tapIndex === 1) {
+        uni.navigateTo({
+          url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}`,
+        })
+      } else if (res.tapIndex === 2) {
+        uni.navigateTo({ url: '/pages/vip/index' })
+      }
+    },
+  })
 }
 
 const goToVip = () => {
@@ -943,9 +1023,10 @@ function getFlipTextStyle(el: any): Record<string, string> {
   const detectedDirection = RTL_CHAR_REGEX.test(el.text) ? 'rtl' : 'ltr'
   const direction = style.direction === 'auto' ? detectedDirection : (style.direction || 'ltr')
   const isRtl = direction === 'rtl'
-  // RTL 文本（含哈语占位符替换后的实际内容）强制使用 KazakhSoftAsilya 字体，
-  // 与 useCanvasRender.getTextStyle 对齐，保证占位符替换前后字体格式一致
-  const fontFamily = isRtl
+  // RTL 文本（含哈语占位符替换后的实际内容）默认强制使用 KazakhSoftAsilya 字体，
+  // 与 useCanvasRender.getTextStyle 对齐，保证占位符替换前后字体格式一致；
+  // 元素显式选择 RTL 白名单字体（如 ALKATIPBasma）时保留所选字体
+  const fontFamily = (isRtl && !isRtlCapableFont(style.font))
     ? `'KazakhSoftAsilya', ${FONT_FAMILY_BASE}`
     : (style.font ? `"${style.font}", ${FONT_FAMILY_BASE}` : FONT_FAMILY_BASE)
   return {

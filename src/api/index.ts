@@ -294,6 +294,19 @@ export function payOrder(orderId: string) {
   return request<{ prepayId: string }>({ url: `/api/orders/${orderId}/pay`, method: 'POST' })
 }
 
+// ========== 限数版配额 / 分享奖励 / 单次解锁 ==========
+export function fetchTemplateQuota(templateId: string) {
+  return request<{ remaining: number; limitless: boolean }>({ url: '/api/quota', data: { templateId } })
+}
+
+export function consumeTemplateQuota(templateId: string) {
+  return request<{ remaining: number; limitless: boolean }>({ url: '/api/quota/consume', method: 'POST', data: { templateId } })
+}
+
+export function shareReward(data: { templateId: string; phone: string }) {
+  return request<{ remaining: number; rewarded: boolean }>({ url: '/api/share/reward', method: 'POST', data })
+}
+
 // ========== 足迹/通知/反馈 ==========
 export function fetchFootprints() {
   return request<any[]>({ url: '/api/footprints' })

@@ -249,6 +249,25 @@ export async function safeDeleteTemplate(id: string): Promise<{ success: boolean
   }
 }
 
+export async function hardDeleteTemplate(id: string): Promise<{ success: boolean; message: string; cloudDeleted: boolean; localDeleted: boolean }> {
+  try {
+    const res = await api.delete(`/api/templates/${id}/hard-delete`)
+    return {
+      success: res.data.success,
+      message: res.data.message || '',
+      cloudDeleted: res.data.cloudDeleted || false,
+      localDeleted: res.data.localDeleted || false
+    }
+  } catch (e: any) {
+    return {
+      success: false,
+      message: e?.response?.data?.error || e?.message || '彻底删除失败',
+      cloudDeleted: e?.response?.data?.cloudDeleted || false,
+      localDeleted: e?.response?.data?.localDeleted || false
+    }
+  }
+}
+
 export async function batchCheckCloudSync(): Promise<{ success: boolean; checked: number; synced: number; unsynced: number }> {
   try {
     const res = await api.get('/api/cloud-sync/batch-check')
@@ -264,5 +283,30 @@ export async function batchCheckCloudSync(): Promise<{ success: boolean; checked
   } catch (e: any) {
     console.warn('批量检查云同步状态失败:', e?.message)
     return { success: false, checked: 0, synced: 0, unsynced: 0 }
+  }
+}
+
+// ============ 从云端拉取模板到本地 ============
+export interface PullCloudTemplatesResult {
+  success: boolean
+  total?: number
+  inserted?: number
+  updated?: number
+  skipped?: number
+  failed?: number
+  error?: string
+}
+
+export async function pullTemplatesFromCloud(): Promise<PullCloudTemplatesResult> {
+  try {
+    // 图片下载耗时较长，放宽超时到 120s
+    const res = await api.post('/api/cloud-sync/pull', {}, { timeout: 120000 })
+    if (res.data.success) {
+      return { success: true, ...(res.data.data || {}) }
+    }
+    return { success: false, error: res.data.error || '拉取失败' }
+  } catch (e: any) {
+    console.warn('从云端拉取模板失败:', e?.message)
+    return { success: false, error: e?.response?.data?.error || e?.message || '拉取失败' }
   }
 }

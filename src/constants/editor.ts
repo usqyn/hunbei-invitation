@@ -10,6 +10,16 @@ export const DEFAULT_LETTER_SPACING = 2
 
 export const RTL_CHAR_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 
+// 哈萨克/阿拉伯可渲染字体白名单：元素显式选择这些字体时，渲染链路不再强制替换为 KazakhSoftAsilya
+export const RTL_CAPABLE_FONTS = ['KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq', 'ALKATIPBasma']
+
+/** 判断字体是否为白名单内的 RTL 可渲染字体（取字体栈第一个名字，忽略大小写/引号） */
+export function isRtlCapableFont(font: string | undefined): boolean {
+  if (!font) return false
+  const primary = font.split(',')[0].trim().replace(/['"]/g, '').toLowerCase()
+  return RTL_CAPABLE_FONTS.some((f) => f.toLowerCase() === primary)
+}
+
 export const FONT_FAMILY_BASE = "'KazakhSoftAsilya', 'Scheherazade New', 'Amiri', 'Noto Sans Arabic', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Arial', sans-serif"
 
 export const DEFAULT_TEMPLATE_DATA: TemplateData = {

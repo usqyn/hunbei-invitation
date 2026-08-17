@@ -15,6 +15,7 @@
       <view class="wechat-card">
         <view class="wechat-card-thumb">
           <CloudImage class="wechat-card-img" :src="coverImage" mode="aspectFill" custom-class="wechat-card-img" />
+          <Watermark v-if="shouldShowWatermark" :show="true" text="TOYtamaxia" :font-size="20" :opacity="0.2" :gap-x="140" :gap-y="100" class="share-card-watermark" />
         </view>
         <view class="wechat-card-body">
           <text class="wechat-card-title">{{ shareTitle || '分享标题' }}</text>
@@ -140,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
@@ -149,11 +150,28 @@ import { useFeedback } from '@/composables/useFeedback'
 import { useRtl } from '@/composables/useRtl'
 import { generatePoster } from '@/api'
 import CloudImage from '@/components/CloudImage.vue'
+import Watermark from '@/components/Watermark.vue'
+import { useUserStore } from '@/stores/user'
+import { getSceneShareText } from '@/constants/share-text'
+import { request } from '@/utils/request'
+import type { TemplateItem } from '@/types'
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
+const userStore = useUserStore()
 const { goBack } = useGoBack()
 const { haptic } = useFeedback()
+
+// 水印策略：免费版无水印，限数版/VIP版/付费版对非对应会员展示水印（防截图）
+const shouldShowWatermark = computed(() => {
+  const vipLevel = userStore.getVipLevel()
+  const templateLevel = editorStore.currentTemplateVipLevel
+  if (templateLevel === 'free') return false
+  if (templateLevel === 'limited') return vipLevel < 1
+  if (templateLevel === 'personal') return vipLevel < 1
+  if (templateLevel === 'pro') return vipLevel < 2
+  return false
+})
 
 // 分享信息
 const shareTitle = ref('')
@@ -161,45 +179,72 @@ const shareDesc = ref('')
 const coverImage = ref('')
 const showTemplateLib = ref(false)
 const isGenerating = ref(false)
+// 当前模板分类（决定默认分享文案；从 editorStore 或模板详情获取）
+const sceneCategory = ref('wedding')
 
 // 哈萨克语阿拉伯文 RTL 输入支持
 const titleRtl = useRtl(() => shareTitle.value || '')
 const descRtl = useRtl(() => shareDesc.value || '')
 
-// 预设文案库
-const templateList = ref([
-  '诚挚邀请您参加我们的婚礼，见证我们的爱情之路，共享美好时刻！',
-  '我们决定携手步入婚姻殿堂，诚邀您共同见证这一美好瞬间。',
-  '谨于公历二〇五〇年五月二十日举行结婚典礼，敬备喜筵，恭候光临。',
-  '您的出席将是我们最大的荣幸，期待与您分享这份喜悦！',
-  '执子之手，与子偕老。我们的婚礼，诚邀您的见证与祝福。',
-  '在这美好的日子里，我们将携手步入婚姻殿堂，期待您的光临。',
-])
+// 预设文案库（按分类从 share-text 常量加载）
+const templateList = ref<string[]>([...getSceneShareText().copies])
 
-// 从模板 store 初始化
-onMounted(() => {
+/**
+ * 初始化分享默认值：标题/描述/文案库按模板分类选择；封面默认模板自身（换封面功能保留，不在此处重置）。
+ * 幂等，可重复调用。
+ */
+function initShareDefaults() {
+  const scene = getSceneShareText(sceneCategory.value)
   const info = templateStore.basicInfo
-  const groom = info.groomName || '新郎'
-  const bride = info.brideName || '新娘'
 
-  // 默认标题：姓名+的婚礼邀请
-  shareTitle.value = `${groom}❤${bride}的婚礼邀请`
-  if (shareTitle.value.length > 48) {
-    shareTitle.value = shareTitle.value.substring(0, 48)
+  // 默认标题：婚礼用新人名字，其他场景用分类默认标题
+  if (sceneCategory.value === 'wedding') {
+    const groom = info.groomName || '新郎'
+    const bride = info.brideName || '新娘'
+    shareTitle.value = `${groom}❤${bride}的婚礼邀请`
+    if (shareTitle.value.length > 48) {
+      shareTitle.value = shareTitle.value.substring(0, 48)
+    }
+  } else {
+    shareTitle.value = scene.title
   }
 
-  // 默认描述
-  shareDesc.value = `诚挚邀请您参加我们的婚礼，见证我们的爱情之路，共享美好时刻！`
+  // 默认描述 + 文案库
+  shareDesc.value = scene.desc
+  templateList.value = scene.copies
 
   // 封面使用模板的封面图
   coverImage.value = templateStore.templateData.coverImage || '/static/images/templates/wedding-1.png'
 
   enableShareMenu()
+}
+
+// 从模板 store 初始化
+onMounted(() => {
+  initShareDefaults()
 })
 
-// 页面加载即启用分享菜单（比 onMounted 更早，兼容分包页面）
-onLoad(() => {
+// 页面加载即启用分享菜单（比 onMounted 更早，兼容分包页面）；
+// 作品页深链进入时 store 可能为空，先拉取模板详情补全封面/分类/新人名字
+onLoad(async (options: any) => {
   enableShareMenu()
+  const templateId = options?.templateId || editorStore.currentTemplateId
+  const hasStoreData = !!templateStore.templateData.coverImage ||
+    !!(templateStore.basicInfo && (templateStore.basicInfo.groomName || templateStore.basicInfo.brideName))
+  if (templateId && !hasStoreData) {
+    try {
+      const t = await request<TemplateItem>({ url: `/api/templates/${templateId}`, hideLoading: true })
+      if (t) {
+        sceneCategory.value = t.category || 'wedding'
+        templateStore.templateData.coverImage = t.data?.coverImage || t.cover || templateStore.templateData.coverImage
+        if (t.data?.inviter) templateStore.basicInfo.groomName = t.data.inviter
+        if (t.data?.invitee) templateStore.basicInfo.brideName = t.data.invitee
+      }
+    } catch (e) {
+      console.warn('share page template load failed:', e)
+    }
+    initShareDefaults()
+  }
 })
 
 function enableShareMenu() {
@@ -527,12 +572,17 @@ function goToMall() {
 }
 
 .wechat-card-thumb {
+  position: relative;
   width: 140rpx;
   height: 112rpx;
   border-radius: 8rpx;
   overflow: hidden;
   flex-shrink: 0;
   background: #f5f5f5;
+}
+
+.share-card-watermark {
+  border-radius: 8rpx;
 }
 
 .wechat-card-img {

@@ -659,12 +659,12 @@ router.post('/templates', requireAdmin, (req, res) => {
     if (typeof name !== 'string' || name.length > 100) {
       return res.status(400).json({ success: false, error: '模板名称不能超过 100 个字符' })
     }
-    // 数据校验：config 序列化后长度上限 5MB，防止恶意超大 payload
-    const MAX_JSON_LENGTH = 5 * 1024 * 1024
+    // 数据校验：config 序列化后长度上限 15MB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 15 * 1024 * 1024
     if (config !== undefined && config !== null) {
       const configStr = JSON.stringify(config)
       if (configStr.length > MAX_JSON_LENGTH) {
-        return res.status(400).json({ success: false, error: 'config 数据过大，超过 5MB 限制' })
+        return res.status(400).json({ success: false, error: 'config 数据过大，超过 15MB 限制' })
       }
     }
     const id = req.body.id || `tpl_${uuidv4().substring(0, 8)}`
@@ -710,12 +710,12 @@ router.put('/templates/:id', requireAdmin, (req, res) => {
     if (name !== undefined && (typeof name !== 'string' || name.length > 100)) {
       return res.status(400).json({ success: false, error: '模板名称不能超过 100 个字符' })
     }
-    // 数据校验：config 序列化后长度上限 5MB，防止恶意超大 payload
-    const MAX_JSON_LENGTH = 5 * 1024 * 1024
+    // 数据校验：config 序列化后长度上限 15MB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 15 * 1024 * 1024
     if (config !== undefined && config !== null) {
       const configStr = JSON.stringify(config)
       if (configStr.length > MAX_JSON_LENGTH) {
-        return res.status(400).json({ success: false, error: 'config 数据过大，超过 5MB 限制' })
+        return res.status(400).json({ success: false, error: 'config 数据过大，超过 15MB 限制' })
       }
     }
 

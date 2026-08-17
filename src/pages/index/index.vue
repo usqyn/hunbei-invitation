@@ -134,16 +134,17 @@
             <CloudImage class="card-image" :src="card.image" mode="aspectFill" @error="onImageError" />
             <view class="card-overlay"></view>
             <view class="card-badge-wrap">
-              <view class="card-vip-tag">
+              <view class="card-vip-tag" v-if="card.isPaid">
                 <text class="vip-icon">♛</text>
-                VIP
+                <text v-if="card.price > 0">VIP ¥{{ card.price }}</text>
+                <text v-else>VIP</text>
               </view>
               <view class="card-hot-tag" v-if="card.isHot">HOT</view>
             </view>
             <view class="card-info">
               <text class="card-title">{{ card.title }}</text>
               <view class="card-meta">
-                <text class="card-date">{{ card.date }}</text>
+                <text class="card-date" :class="{ 'rtl-text': isRtlText(card.date) }">{{ formatBiDi(card.date) }}</text>
                 <view class="card-views" v-if="card.views">
                   <text class="view-icon">👁</text>
                   <text class="view-count">{{ formatCount(card.views) }}</text>
@@ -187,7 +188,7 @@
             </view>
             <view class="card-info">
               <text class="card-title">{{ card.name }}</text>
-              <text class="card-sub">{{ card.subtitle }}</text>
+              <text class="card-sub" :class="{ 'rtl-text': isRtlText(card.subtitle) }">{{ formatBiDi(card.subtitle) }}</text>
             </view>
           </view>
           <!-- 加载骨架 -->
@@ -294,7 +295,12 @@ import { useUserStore } from '@/stores/user'
 import { t } from '@/locales'
 import '@/locales/kk'
 import '@/locales/zh-CN'
-import { formatBiDi } from '@/utils/font-loader'
+import { formatBiDi, preloadRtlFonts } from '@/utils/font-loader'
+import { RTL_CHAR_REGEX } from '@/constants/editor'
+
+function isRtlText(text: string | undefined | null): boolean {
+  return !!text && RTL_CHAR_REGEX.test(text)
+}
 
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
@@ -305,6 +311,7 @@ const featuredTemplates = ref<any[]>([])
 const isSearchFocused = ref(false)
 const loadingPaid = ref(true)
 const loadingPoster = ref(true)
+const fontsReady = ref(false)
 const userStore = useUserStore()
 
 const categories = HOME_CATEGORIES
@@ -319,6 +326,8 @@ const featuredCards = computed(() => {
     image: resolveUrl(t.cover || t.image || ''),
     isHot: (t.likes || 0) > 1000,
     views: t.likes || 0,
+    isPaid: t.is_paid ? 1 : 0,
+    price: t.price || 0,
   }))
   if (apiCards.length >= 8) return apiCards.slice(0, 8)
   // 不足 8 个，用本地静态卡片补齐（保留旧数据兼容性）
@@ -540,6 +549,10 @@ onMounted(() => {
 
 onLoad(() => {
   enableShareMenu()
+  // 预加载哈萨克/阿拉伯字体：首页卡片小字可能包含 RTL 文本，需在首屏尽快加载字体
+  preloadRtlFonts().then(() => {
+    fontsReady.value = true
+  })
 })
 
 function enableShareMenu() {

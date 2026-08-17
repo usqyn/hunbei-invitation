@@ -57,9 +57,9 @@
 
       <div class="toolbar-right">
         <span class="zoom-label">缩放 {{ Math.round(zoom * 100) }}%</span>
-        <button class="tb-btn sm" @click="zoom = Math.max(0.3, zoom - 0.1)">−</button>
-        <button class="tb-btn sm" @click="zoom = 1">100%</button>
-        <button class="tb-btn sm" @click="zoom = Math.min(3, zoom + 0.1)">+</button>
+        <button class="tb-btn sm" @click="applyZoom(zoom - 0.1)">−</button>
+        <button class="tb-btn sm" @click="applyZoom(1)">100%</button>
+        <button class="tb-btn sm" @click="applyZoom(zoom + 0.1)">+</button>
         <span class="toolbar-divider"></span>
         <button class="tb-btn sm" :class="{ active: showGrid }" @click="toggleGrid" title="网格/吸附">{{ showGrid ? '🧲' : '⊞' }}</button>
         <span class="toolbar-divider"></span>
@@ -258,36 +258,43 @@
             <button class="check-sync-btn" @click="onBatchCheckSync" :disabled="isCheckingSync" title="检查云端同步状态">
               {{ isCheckingSync ? '⏳ 检查中...' : '🔍 检查状态' }}
             </button>
+            <button class="pull-cloud-btn" @click="onPullFromCloud" :disabled="isPullingFromCloud" title="从云端拉取模板到本地">
+              {{ isPullingFromCloud ? '⏳ 拉取中...' : '⬇️ 从云端拉取' }}
+            </button>
             <button v-if="hasUnsyncedTemplates" class="resync-all-btn" @click="onResyncAll" title="批量重新同步未同步的模板">🔄 同步全部</button>
           </div>
           <div v-if="loadingTemplates" class="empty-hint">加载中...</div>
           <div v-else-if="!templateList.length" class="empty-hint">暂无模板<br/>先在画布制作，再发布</div>
           <div v-for="tpl in templateList" :key="tpl.id" class="template-item" :class="{ active: currentTemplateId === tpl.id }">
-            <div class="tpl-thumb" @click="onLoadTemplate(tpl.id)">
-              <img v-if="tpl.cover" :src="tpl.cover.startsWith('http') ? tpl.cover : API_BASE + tpl.cover" class="tpl-thumb-img" />
-              <div v-else class="tpl-thumb-placeholder">📄</div>
-            </div>
-            <div class="tpl-info" @click="onLoadTemplate(tpl.id)">
-              <div class="tpl-name">
-                {{ tpl.name }}
-                <span class="tpl-cloud-status" :class="{ 'synced': tpl.cloud_synced }" :title="tpl.cloud_synced ? '已同步到微信云' : '未同步到云'">
-                  {{ tpl.cloud_synced ? '☁️' : '⚠️' }}
-                </span>
+            <div class="tpl-main">
+              <div class="tpl-thumb" @click="onLoadTemplate(tpl.id)">
+                <img v-if="tpl.cover" :src="tpl.cover.startsWith('http') ? tpl.cover : API_BASE + tpl.cover" class="tpl-thumb-img" />
+                <div v-else class="tpl-thumb-placeholder">📄</div>
               </div>
-              <div class="tpl-cat">
-                {{ getCategoryName(tpl.category) }}
-                <span class="tpl-vip-badge" :class="'vip-' + (tpl.vipLevel || 'free')">{{ vipLevelLabel(tpl.vipLevel) }}</span>
+              <div class="tpl-info" @click="onLoadTemplate(tpl.id)">
+                <div class="tpl-name">
+                  {{ tpl.name }}
+                  <span class="tpl-cloud-status" :class="{ 'synced': tpl.cloud_synced }" :title="tpl.cloud_synced ? '已同步到微信云' : '未同步到云'">
+                    {{ tpl.cloud_synced ? '☁️' : '⚠️' }}
+                  </span>
+                </div>
+                <div class="tpl-cat">
+                  {{ getCategoryName(tpl.category) }}
+                  <span class="tpl-vip-badge" :class="'vip-' + (tpl.vipLevel || 'free')">{{ vipLevelLabel(tpl.vipLevel) }}</span>
+                </div>
               </div>
             </div>
             <div class="tpl-actions">
               <select class="tpl-vip-select" :value="tpl.vipLevel || 'free'" @change="onChangeTemplateVip(tpl, $event)">
                 <option value="free">免费</option>
+                <option value="limited">限数版</option>
                 <option value="personal">个人VIP</option>
                 <option value="pro">专业版</option>
               </select>
-              <button v-if="!tpl.cloud_synced" class="tpl-btn sync-btn" @click="onResyncTemplate(tpl)" title="重新同步到云">🔄</button>
+              <button v-if="!tpl.cloud_synced && tpl.status !== 'deleted'" class="tpl-btn sync-btn" @click="onResyncTemplate(tpl)" title="重新同步到云">🔄</button>
               <button class="tpl-btn" @click="onCloneTemplate(tpl)" title="克隆">📋</button>
               <button class="tpl-btn danger" @click="onSafeDeleteTemplate(tpl)" title="安全删除（先删云端再删本地）">🗑</button>
+              <button class="tpl-btn danger" @click="onHardDeleteTemplate(tpl)" title="彻底删除（云端+本地物理删除，不可恢复）">⛔</button>
             </div>
           </div>
           <div class="section-divider"></div>
@@ -303,42 +310,27 @@
 
       <!-- 中间画布 -->
       <section class="canvas-area">
-        <!-- 单页模式：手机框 -->
+        <!-- 单页模式：页面画布 -->
         <template v-if="pageMode === 'single'">
-          <div class="canvas-scroll" @wheel.prevent="onWheel">
-            <div
-              class="phone-frame"
+          <div ref="canvasScrollRef" class="canvas-scroll" @wheel="onWheel">
+            <canvas
+              ref="canvasRef"
+              class="fabric-canvas page-canvas"
               :style="{
                 width: (canvasSize.width * zoom) + 'px',
                 height: (canvasSize.height * zoom) + 'px',
               }"
-            >
-              <div
-                class="phone-notch"
-                :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
-              ></div>
-              <canvas
-                ref="canvasRef"
-                class="fabric-canvas"
-                :style="{
-                  width: (canvasSize.width * zoom) + 'px',
-                  height: (canvasSize.height * zoom) + 'px',
-                }"
-                @dragover="onCanvasDragOver"
-                @drop="onCanvasDrop"
-              ></canvas>
-              <div
-                class="phone-home"
-                :style="{ width: (80 * zoom) + 'px', height: (6 * zoom) + 'px' }"
-              ></div>
-            </div>
+              @dragover="onCanvasDragOver"
+              @drop="onCanvasDrop"
+            ></canvas>
           </div>
         </template>
         <!-- 长页面模式：滚动视口 -->
         <template v-else-if="pageMode === 'long'">
-          <div class="viewport-wrap" @wheel.prevent="onWheel">
+          <div class="viewport-wrap" @wheel="onWheel">
             <div class="viewport-header">长页面 · 可上下拖动元素</div>
             <div
+              ref="canvasScrollRef"
               class="viewport-scroll"
               :style="{ height: (667 * zoom) + 'px' }"
             >
@@ -360,9 +352,9 @@
         </template>
         <!-- 横屏卡片模式 -->
         <template v-else-if="pageMode === 'landscape'">
-          <div class="card-wrap" @wheel.prevent="onWheel">
+          <div class="card-wrap" @wheel="onWheel">
             <div class="card-header">横屏卡片 · 宽 {{ canvasSize.width }} × 高 {{ canvasSize.height }}</div>
-            <div class="card-viewport">
+            <div ref="canvasScrollRef" class="card-viewport">
               <div
                 class="card-frame"
                 :style="{
@@ -387,8 +379,7 @@
         </template>
         <!-- 翻页模式：单页画布 + 翻页切换 UI -->
         <template v-else-if="pageMode === 'flip'">
-          <div class="canvas-scroll" @wheel.prevent="onWheel">
-            <!-- 翻页工具栏 -->
+          <div ref="canvasScrollRef" class="canvas-scroll flip-scroll" @wheel="onWheel">
             <div class="flip-toolbar">
               <button class="flip-btn" :disabled="currentFlipPageIndex === 0" @click="prevFlipPage">‹ 上一页</button>
               <span class="flip-page-info">
@@ -413,34 +404,22 @@
                 <span class="flip-thumb-name">{{ p.name }}</span>
               </div>
             </div>
-            <div
-              class="phone-frame"
+            <canvas
+              ref="canvasRef"
+              class="fabric-canvas page-canvas"
               :style="{
                 width: (canvasSize.width * zoom) + 'px',
                 height: (canvasSize.height * zoom) + 'px',
               }"
-            >
-              <div
-                class="phone-notch"
-                :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
-              ></div>
-              <canvas
-                ref="canvasRef"
-                class="fabric-canvas"
-                :style="{
-                  width: (canvasSize.width * zoom) + 'px',
-                  height: (canvasSize.height * zoom) + 'px',
-                }"
-                @dragover="onCanvasDragOver"
-                @drop="onCanvasDrop"
-              ></canvas>
-            </div>
+              @dragover="onCanvasDragOver"
+              @drop="onCanvasDrop"
+            ></canvas>
             <div class="flip-hint">翻页模式：每页独立设计，切换前会自动保存当前页内容</div>
           </div>
         </template>
         <!-- 兜底 -->
         <template v-else>
-          <div class="canvas-scroll" @wheel.prevent="onWheel">
+          <div ref="canvasScrollRef" class="canvas-scroll" @wheel="onWheel">
             <canvas ref="canvasRef" class="fabric-canvas"></canvas>
           </div>
         </template>
@@ -548,10 +527,17 @@
           <template v-else-if="selectedElement.type === 'text'">
             <div class="section-title">文字内容</div>
             <textarea
+              id="text-content-editor"
               class="form-textarea"
               :value="(selectedElement as any).content"
               @change="e => updateSelected({ content: (e.target as HTMLTextAreaElement).value })"
             ></textarea>
+
+            <PlaceholderMarkPanel
+              :content="(selectedElement as any).content || ''"
+              :defaults="(selectedElement as any).defaults || {}"
+              @update="onPlaceholderMark"
+            />
 
             <div class="section-title">字体与大小</div>
             <div class="form-row">
@@ -1020,12 +1006,15 @@ import {
   resyncTemplate,
   resyncAllTemplates,
   safeDeleteTemplate,
+  hardDeleteTemplate,
   batchCheckCloudSync,
+  pullTemplatesFromCloud,
 } from './composables/useApi'
 import PublishWizard from './components/PublishWizard.vue'
 import AdminLogin from './components/AdminLogin.vue'
 import PosterManager from './views/PosterManager.vue'
 import PsdImportDialog from './components/PsdImportDialog.vue'
+import PlaceholderMarkPanel from './components/PlaceholderMarkPanel.vue'
 import { parsePsdFile, type PsdImportResult, type PsdLayerPreview } from './utils/psd-import'
 import type { TextElement, ImageElement, CanvasBackground, CanvasSize, AnyCanvasElement, HistorySnapshot, PageMode } from './types/canvas'
 import { CANVAS_PRESETS, DEFAULT_CANVAS_SIZE } from './types/canvas'
@@ -1039,6 +1028,8 @@ import type { ColorScheme } from './constants/colorSchemes'
 import { serializeElement } from './utils/element-serializer'
 import { useFlipPages } from './composables/useFlipPages'
 import { shapeText, containsRtl } from './utils/bidi'
+import { fontListBase } from './constants/config-data'
+import { ensureFontLoaded } from './utils/font-loader'
 
 /**
  * 等待浏览器 @font-face 加载完成（特别是哈萨克字体 KazakhSoftAsilya）
@@ -1144,22 +1135,10 @@ const SMART_FIELDS: SmartFieldConfig[] = [
 // 日期占位符预览值
 const dateValues = reactive<Record<string, string>>({ year: '', month: '', day: '' })
 watch(dateValues, (val) => {
-  refreshDatePlaceholders(val)
+  refreshAllPlaceholders(val)
 }, { deep: true })
 
-// 字体列表
-const fontListBase = [
-  'KazakhSoftAsilya',
-  'KazakhSoftAsilyaQaniq',
-  '思源宋体, serif',
-  '思源黑体, sans-serif',
-  '华文楷体, KaiTi, serif',
-  '华文行楷, serif',
-  '华文隶书, serif',
-  'Arial, sans-serif',
-  'Georgia, serif',
-]
-
+// 字体列表（基础字体来自 constants/config-data 单一来源，用户上传的字体会前置拼接）
 const uploadedFontNames = ref<string[]>([])
 const fontList = computed(() => [...uploadedFontNames.value, ...fontListBase])
 
@@ -1181,7 +1160,10 @@ async function onFontUpload(e: Event) {
 async function loadUploadedFonts() {
   try {
     const fontMap = await fetchFonts()
-    uploadedFontNames.value = Object.keys(fontMap)
+    // fontMap 为 [{ filename, url }] 数组，取 filename 作为字体名
+    uploadedFontNames.value = fontMap.map(f => f.filename)
+    // 注入浏览器 FontFace，画布渲染与 PNG 导出使用真实字体
+    await Promise.all(fontMap.map(f => ensureFontLoaded(f.filename, f.url)))
   } catch {}
 }
 
@@ -1296,6 +1278,8 @@ function onLoginSuccess(_token: string) {
   initEditorAfterAuth()
   checkCloudSyncStatus()
   showToast('登录成功 ✅')
+  // 静默自动从云端拉取模板（不阻塞初始化，失败仅 console 提示）
+  autoPullFromCloud()
 }
 
 // ============ 云同步状态 ============
@@ -1316,6 +1300,8 @@ async function checkCloudSyncStatus() {
 // ============ 云同步重试 ============
 const isCheckingSync = ref(false)
 const syncingIds = ref<Set<string>>(new Set())
+// ============ 从云端拉取 ============
+const isPullingFromCloud = ref(false)
 
 const hasUnsyncedTemplates = computed(() => {
   return templateList.value.some(t => !t.cloud_synced)
@@ -1386,6 +1372,56 @@ async function onBatchCheckSync() {
   }
 }
 
+// ============ 从云端拉取模板到本地 ============
+async function onPullFromCloud() {
+  if (isPullingFromCloud.value) return
+  isPullingFromCloud.value = true
+  showToast('正在从云端拉取模板...')
+
+  try {
+    const result = await pullTemplatesFromCloud()
+    if (result.success) {
+      const parts = [
+        result.inserted ? `新增 ${result.inserted} 个` : '',
+        result.updated ? `更新 ${result.updated} 个` : '',
+        result.skipped ? `跳过 ${result.skipped} 个` : '',
+        result.failed ? `失败 ${result.failed} 个` : '',
+      ].filter(Boolean)
+      showToast(`✅ 拉取完成: ${parts.join('，') || '云端无变化'}`)
+      // 刷新模板列表
+      await loadTemplateList()
+    } else {
+      showToast(`❌ ${result.error || '拉取失败'}`, 'error')
+    }
+  } catch (e) {
+    showToast('❌ 从云端拉取失败', 'error')
+  } finally {
+    isPullingFromCloud.value = false
+  }
+}
+
+// ============ 自动从云端拉取（登录后静默执行一次） ============
+let hasAutoPulled = false
+async function autoPullFromCloud() {
+  if (hasAutoPulled) return
+  hasAutoPulled = true
+  try {
+    const result = await pullTemplatesFromCloud()
+    if (result.success) {
+      if (result.inserted || result.updated) {
+        await loadTemplateList()
+        console.log(`[自动同步] 从云端拉取完成: 新增 ${result.inserted} 个, 更新 ${result.updated} 个, 跳过 ${result.skipped} 个`)
+      } else {
+        console.log('[自动同步] 云端无新增/更新模板')
+      }
+    } else {
+      console.warn('[自动同步] 从云端拉取失败:', result.error)
+    }
+  } catch (e) {
+    console.warn('[自动同步] 从云端拉取异常:', e?.message || e)
+  }
+}
+
 // ============ 安全删除 ============
 const deletingIds = ref<Set<string>>(new Set())
 
@@ -1422,6 +1458,39 @@ async function onSafeDeleteTemplate(tpl: any) {
   }
 }
 
+async function onHardDeleteTemplate(tpl: any) {
+  if (deletingIds.value.has(tpl.id)) return
+
+  const confirmMessage = `确定要彻底删除模板「${tpl.name}」吗？\n\n⚠️ 此操作将：\n1. 删除云端数据\n2. 本地记录物理删除\n\n彻底删除后无法恢复，请谨慎操作！`
+
+  if (!confirm(confirmMessage)) return
+
+  deletingIds.value.add(tpl.id)
+  showToast('正在彻底删除...')
+
+  try {
+    const result = await hardDeleteTemplate(tpl.id)
+    if (result.success) {
+      // 从列表中移除
+      const index = templateList.value.findIndex(t => t.id === tpl.id)
+      if (index > -1) {
+        templateList.value.splice(index, 1)
+      }
+      if (result.cloudDeleted) {
+        showToast(`✅ ${result.message}`)
+      } else {
+        showToast(`⚠️ ${result.message}`, 'warn')
+      }
+    } else {
+      showToast(`❌ 删除失败: ${result.message}`, 'error')
+    }
+  } catch (e) {
+    showToast('❌ 彻底删除失败', 'error')
+  } finally {
+    deletingIds.value.delete(tpl.id)
+  }
+}
+
 function onLogout() {
   clearAdminToken()
   isLoggedIn.value = false
@@ -1440,6 +1509,7 @@ function onPublishSuccess() {
 // ============ DOM refs ============
 const appRootRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const canvasScrollRef = ref<HTMLElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const psdInput = ref<HTMLInputElement | null>(null)
 
@@ -1503,6 +1573,7 @@ const {
   clearCanvas,
   dispose,
   refreshDatePlaceholders,
+  refreshAllPlaceholders,
   fabricCanvas,
 } = useCanvas({
   canvasRef,
@@ -1564,24 +1635,39 @@ const painterState = ref<{
 } | null>(null)
 
 // 从元素对象抽取可被复制的样式字段（不含 id/位置/尺寸/内容/可见性/锁定等）
+// 注意：undefined 字段必须归一化为默认值，否则应用时 `patch.x ?? t.x` 会保留目标的旧值，
+// 导致"源没有描边/阴影/特效"时刷过去清不掉目标上的样式。
 function extractElementStyle(el: any): Record<string, any> {
   if (el.type === 'text') {
     return {
+      // 基础文字样式
       fontFamily: el.fontFamily, fontSize: el.fontSize, fontWeight: el.fontWeight,
       fontStyle: el.fontStyle, color: el.color, textAlign: el.textAlign,
       direction: el.direction, lineHeight: el.lineHeight, letterSpacing: el.letterSpacing,
-      strokeColor: el.strokeColor, strokeWidth: el.strokeWidth,
-      shadowColor: el.shadowColor, shadowOffsetX: el.shadowOffsetX,
-      shadowOffsetY: el.shadowOffsetY, shadowBlur: el.shadowBlur,
-      textDecoration: el.textDecoration,
+      textDecoration: el.textDecoration || 'none',
+      // 描边（归一化默认值）
+      strokeColor: el.strokeColor || 'transparent', strokeWidth: el.strokeWidth ?? 0,
+      // 阴影（归一化默认值）
+      shadowColor: el.shadowColor || 'transparent', shadowBlur: el.shadowBlur ?? 0,
+      shadowOffsetX: el.shadowOffsetX ?? 0, shadowOffsetY: el.shadowOffsetY ?? 0,
+      // 文字特效：渐变 / 长阴影 / 霓虹（源无特效时也要显式携带字段，用于清除目标特效）
+      gradientFill: el.gradientFill,
+      longShadow: el.longShadow || false, longShadowColor: el.longShadowColor,
+      longShadowLength: el.longShadowLength ?? 8, longShadowBlur: el.longShadowBlur ?? 0,
+      neonGlow: el.neonGlow || false, neonColor: el.neonColor,
+      // 透明度 / 旋转（属于样式，一起刷）
+      opacity: el.opacity ?? 1, rotation: el.rotation ?? 0,
     }
   }
   if (el.type === 'image') {
+    // 注意：scale/mask 仅在最终渲染（小程序端）生效，admin 画布上不显示，
+    // 格式刷不复制它们，避免"数据变了但画布预览没变"的困惑。
     return {
-      scale: el.scale, mask: el.mask, borderRadius: el.borderRadius,
-      borderColor: el.borderColor, borderWidth: el.borderWidth,
-      brightness: el.brightness, contrast: el.contrast, blur: el.blur,
-      grayscale: el.grayscale, saturate: el.saturate,
+      borderRadius: el.borderRadius ?? 0,
+      borderColor: el.borderColor || 'transparent', borderWidth: el.borderWidth ?? 0,
+      brightness: el.brightness ?? 100, contrast: el.contrast ?? 0,
+      blur: el.blur ?? 0, grayscale: el.grayscale ?? 0, saturate: el.saturate ?? 100,
+      opacity: el.opacity ?? 1, rotation: el.rotation ?? 0,
     }
   }
   return {}
@@ -1668,6 +1754,13 @@ function onRestoreVersion(idx: number) {
   if (!ver) return
   if (!confirm(`恢复到 v${historyVersions.value.length - idx}？当前未保存的更改将丢失。`)) return
   loadDraft(ver.draft)
+  refreshAllPlaceholders(dateValues)
+}
+
+// 占位符手动标记：更新元素后立即刷新画布预览（token 显示为回填值/示例值）
+function onPlaceholderMark(patch: { content: string; defaults: Record<string, string> }) {
+  updateSelected(patch)
+  refreshAllPlaceholders(dateValues)
 }
 
 async function onCanvasDrop(e: DragEvent) {
@@ -1740,7 +1833,9 @@ function getCanvasEl(): HTMLCanvasElement | null {
 async function loadTemplateList() {
   loadingTemplates.value = true
   try {
-    templateList.value = await fetchTemplates()
+    const list = await fetchTemplates()
+    // 双保险：过滤已软删除的模板（即使后端缓存/旧数据也不会显示）
+    templateList.value = list.filter((t: any) => t.status !== 'deleted')
   } catch (e) {
     console.error('loadTemplateList error:', e)
     templateList.value = []
@@ -1810,6 +1905,7 @@ async function onLoadTemplate(id: string) {
       }),
     }
     loadDraft(draft)
+    refreshAllPlaceholders(dateValues)
     currentTemplateId.value = id
     currentTemplateName.value = tpl.name || ''
     currentTemplateCategory.value = tpl.category || 'wedding'
@@ -1864,12 +1960,13 @@ function getCategoryName(catId: string): string {
 function vipLevelLabel(level?: string): string {
   if (level === 'pro') return '专业版'
   if (level === 'personal') return 'VIP'
+  if (level === 'limited') return '限数'
   return '免费'
 }
 
 async function onChangeTemplateVip(tpl: any, e: Event) {
   const target = e.target as HTMLSelectElement
-  const vipLevel = target.value as 'free' | 'personal' | 'pro'
+  const vipLevel = target.value as 'free' | 'limited' | 'personal' | 'pro'
   try {
     await updateTemplate(tpl.id, { vipLevel })
     tpl.vipLevel = vipLevel
@@ -1906,6 +2003,7 @@ function loadPreset(preset: TemplatePreset) {
   flipPages.value = []
   if (pageMode.value !== 'single') pageMode.value = 'single'
   loadDraft(preset.draft)
+  refreshAllPlaceholders(dateValues)
   historyVersions.value = []
   pushHistory('load preset: ' + preset.name)
   showToast(`已加载「${preset.name}」模板 ✅`)
@@ -2176,6 +2274,7 @@ function restoreDraftFromLocal() {
     const draft = JSON.parse(raw)
     if (draft && Array.isArray(draft.elements)) {
       loadDraft(draft)
+      refreshAllPlaceholders(dateValues)
       return true
     }
   } catch (_) {}
@@ -2419,6 +2518,7 @@ watch(pageMode, async (mode, prevMode) => {
   dispose()
   init()
   loadDraft(draft)
+  refreshAllPlaceholders(dateValues)
 })
 
 function onManualSize(e: Event, side: 'width' | 'height') {
@@ -2515,13 +2615,53 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
-// 滚轮缩放
+// 滚轮缩放（Ctrl/Cmd+滚轮）：以鼠标位置为锚点，缩放时锚点下的内容保持不动
 function onWheel(e: WheelEvent) {
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? -0.08 : 0.08
-    zoom.value = Math.max(0.3, Math.min(3, zoom.value + delta))
+  if (!(e.ctrlKey || e.metaKey)) return
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.08 : 0.08
+  applyZoom(zoom.value + delta, { x: e.clientX, y: e.clientY })
+}
+
+// 锚点缩放：先记录锚点在帧内内容坐标系中的位置，尺寸变化后再调整滚动偏移，防止模板上下漂移
+function applyZoom(next: number, anchor?: { x: number; y: number }) {
+  const scrollEl = canvasScrollRef.value
+  // 自适应最小缩放：长模板放不下时允许继续缩小到完整放进面板
+  let minZoom = 0.3
+  if (scrollEl) {
+    const fitX = (scrollEl.clientWidth - 2) / canvasSize.value.width
+    const fitY = (scrollEl.clientHeight - 2) / canvasSize.value.height
+    minZoom = Math.max(0.15, Math.min(0.3, Math.min(fitX, fitY)))
   }
+  const clamped = Math.max(minZoom, Math.min(3, next))
+  if (clamped === zoom.value) return
+  if (!scrollEl) {
+    zoom.value = clamped
+    return
+  }
+  const frameEl = (scrollEl.querySelector('.card-frame, .fabric-canvas') || scrollEl.firstElementChild) as HTMLElement | null
+  const rect = scrollEl.getBoundingClientRect()
+  const frameRect = frameEl ? frameEl.getBoundingClientRect() : rect
+  const ax = anchor ? anchor.x : rect.left + rect.width / 2
+  const ay = anchor ? anchor.y : rect.top + rect.height / 2
+  // 锚点在帧内内容坐标系中的位置（除以旧 zoom 得到未缩放坐标）
+  const contentX = (scrollEl.scrollLeft + ax - frameRect.left) / zoom.value
+  const contentY = (scrollEl.scrollTop + ay - frameRect.top) / zoom.value
+  zoom.value = clamped
+  requestAnimationFrame(() => {
+    // 内容放得下时强制回 0，让 margin:auto 确定性居中（否则帧会顶到容器顶部）
+    const fr = frameEl ? frameEl.getBoundingClientRect() : scrollEl.getBoundingClientRect()
+    if (scrollEl.scrollHeight <= scrollEl.clientHeight + 1) {
+      scrollEl.scrollTop = 0
+    } else {
+      scrollEl.scrollTop = contentY * clamped - (ay - fr.top)
+    }
+    if (scrollEl.scrollWidth <= scrollEl.clientWidth + 1) {
+      scrollEl.scrollLeft = 0
+    } else {
+      scrollEl.scrollLeft = contentX * clamped - (ax - fr.left)
+    }
+  })
 }
 
 // ============ 聚焦根元素以接收键盘事件 ============
@@ -2913,8 +3053,6 @@ onMounted(() => {
   flex: 1;
   overflow: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 24px;
   position: relative;
   /* 棋盘格背景，便于看到透明元素 */
@@ -2928,47 +3066,15 @@ onMounted(() => {
   background-color: #eef1f6;
 }
 
-.phone-frame {
-  position: relative;
-  background: #000;
-  border-radius: 40px;
-  padding: 24px 12px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-  transition: width 0.2s, height 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.phone-notch {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #000;
-  border-radius: 0 0 8px 8px;
-  z-index: 10;
-}
-
-.phone-home {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #333;
-  border-radius: 3px;
-  z-index: 10;
-}
-
 /* 长页面视口模式 */
 .viewport-wrap {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: 24px;
   position: relative;
+  overflow-y: auto;
   background-image:
     linear-gradient(45deg, #e0e4ea 25%, transparent 25%),
     linear-gradient(-45deg, #e0e4ea 25%, transparent 25%),
@@ -2992,6 +3098,8 @@ onMounted(() => {
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   background: #fff;
+  margin: auto;
+  flex-shrink: 0;
 }
 
 .viewport-scroll::-webkit-scrollbar { width: 6px; }
@@ -3010,7 +3118,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: 24px;
   position: relative;
   background-image:
@@ -3031,9 +3138,11 @@ onMounted(() => {
 }
 
 .card-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 100%;
 }
 
 .card-frame {
@@ -3041,7 +3150,8 @@ onMounted(() => {
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.18);
   overflow: hidden;
-  transition: width 0.2s, height 0.2s;
+  margin: auto;
+  flex-shrink: 0;
 }
 
 .card-footer {
@@ -3053,10 +3163,23 @@ onMounted(() => {
 .fabric-canvas {
   background: #fff;
   display: block;
+  flex-shrink: 0;
+  margin: auto;
   /* 由外层容器设置实际尺寸 */
 }
 
+/* 单页/翻页模式：页面卡片样式 */
+.page-canvas {
+  border: 1px solid #dfe3e9;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+}
+
 /* 翻页模式 UI */
+.flip-scroll {
+  flex-direction: column;
+}
+
 .flip-toolbar {
   display: flex;
   align-items: center;
@@ -3367,8 +3490,8 @@ label {
 
 .template-item {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
@@ -3377,6 +3500,13 @@ label {
 
 .template-item:hover { background: #f5f7fa; }
 .template-item.active { background: #e3f2fd; }
+
+.tpl-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 
 .tpl-thumb {
   width: 44px;
@@ -3391,7 +3521,7 @@ label {
   cursor: pointer;
 }
 
-.tpl-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+.tpl-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tpl-thumb-placeholder { font-size: 24px; }
 
 .tpl-info { flex: 1; min-width: 0; cursor: pointer; }
@@ -3428,7 +3558,15 @@ label {
   cursor: pointer;
 }
 
-.tpl-actions { display: flex; gap: 2px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.tpl-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px dashed #f0f0f0;
+}
 
 .tpl-btn {
   padding: 4px 6px;
@@ -3473,6 +3611,21 @@ label {
 }
 .check-sync-btn:hover { background: #bbdefb; }
 .check-sync-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.pull-cloud-btn {
+  margin-right: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.pull-cloud-btn:hover { background: #c8e6c9; }
+.pull-cloud-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* 历史版本 */
 .history-item {

@@ -17,19 +17,53 @@
       <text class="vip-subtitle">选择适合您的套餐，让请柬更专业</text>
     </view>
 
-    <view class="vip-tabs">
-      <view
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="vip-tab"
-        :class="{ active: activeTab === tab.key, recommended: tab.recommended }"
-        @click="activeTab = tab.key"
-      >
-        <view v-if="tab.recommended" class="tab-badge">推荐</view>
-        <text class="tab-name">{{ tab.name }}</text>
-        <text class="tab-price">{{ tab.price }}</text>
+    <view v-if="purchaseMode" class="unlock-card">
+      <view class="unlock-header">
+        <view class="unlock-title-wrap">
+          <text class="unlock-title">🔓 单次解锁模板</text>
+          <text class="unlock-sub">解锁后该模板永久可用，可随时编辑与导出</text>
+        </view>
+        <view class="unlock-price-box">
+          <text class="unlock-currency">¥</text>
+          <text class="unlock-price">{{ purchasePrice }}</text>
+        </view>
+      </view>
+      <view class="unlock-features">
+        <view class="unlock-feature-item">
+          <text class="uf-icon">✅</text>
+          <text class="uf-text">该模板永久解锁</text>
+        </view>
+        <view class="unlock-feature-item">
+          <text class="uf-icon">✅</text>
+          <text class="uf-text">不限编辑次数与导出次数</text>
+        </view>
+        <view class="unlock-feature-item">
+          <text class="uf-icon">✅</text>
+          <text class="uf-text">无需开通 VIP 即可使用</text>
+        </view>
+      </view>
+      <view class="unlock-btn" :class="{ 'unlock-btn--paying': paying }" @click="handleUnlockPay">
+        <text class="unlock-btn-text">{{ paying ? '支付处理中...' : `立即解锁 ¥${purchasePrice}` }}</text>
+      </view>
+      <view class="unlock-alt">
+        <text class="unlock-alt-text" @click="activeTab = 'personal'">或开通个人VIP，全站模板免费使用 →</text>
       </view>
     </view>
+
+    <template v-else>
+      <view class="vip-tabs">
+        <view
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="vip-tab"
+          :class="{ active: activeTab === tab.key, recommended: tab.recommended }"
+          @click="activeTab = tab.key"
+        >
+          <view v-if="tab.recommended" class="tab-badge">推荐</view>
+          <text class="tab-name">{{ tab.name }}</text>
+          <text class="tab-price">{{ tab.price }}</text>
+        </view>
+      </view>
 
     <view v-if="activeTab === 'free'" class="plan-detail">
       <view class="plan-header">
@@ -165,16 +199,65 @@
     <view class="vip-footer">
       <text class="pay-tip">开通即表示同意<text class="pay-agreement" @click="openAgreement">《会员服务协议》</text></text>
     </view>
+    </template>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { track } from '@/utils/track'
 import { useUserStore } from '@/stores/user'
-import { createVipOrder, payOrder as requestPayOrder } from '@/api'
+import { createVipOrder, payOrder as requestPayOrder, createOrder } from '@/api'
 
 const userStore = useUserStore()
+
+// ========== 单次解锁模式（mode=purchase&templateId&price） ==========
+const purchaseMode = ref(false)
+const purchaseTemplateId = ref('')
+const purchasePrice = ref(9.9)
+
+onLoad((options: any) => {
+  if (options?.mode === 'purchase' && options.templateId) {
+    purchaseMode.value = true
+    purchaseTemplateId.value = options.templateId
+    const p = Number(options.price)
+    purchasePrice.value = p > 0 ? p : 9.9
+  }
+})
+
+// 单次解锁支付：创建 unlock 订单 → 模拟支付（服务端发放永久解锁权益）
+async function handleUnlockPay() {
+  if (paying.value) return
+  if (!userStore.requireLogin()) return
+  if (!purchaseTemplateId.value) return
+  paying.value = true
+  track('unlock_click_pay', { templateId: purchaseTemplateId.value, price: purchasePrice.value })
+  uni.showLoading({ title: '创建订单中...', mask: true })
+  try {
+    const order = await createOrder({
+      items: [{ type: 'unlock', templateId: purchaseTemplateId.value }],
+      totalAmount: String(purchasePrice.value),
+      status: 'pending',
+      contactName: '',
+      contactPhone: '',
+      address: '',
+      note: '',
+    })
+    uni.hideLoading()
+    uni.showLoading({ title: '支付处理中...', mask: true })
+    await requestPayOrder(order.id)
+    uni.hideLoading()
+    track('unlock_pay_success', { templateId: purchaseTemplateId.value, price: purchasePrice.value })
+    uni.showToast({ title: '解锁成功！', icon: 'success' })
+    paying.value = false
+    setTimeout(() => uni.navigateBack(), 1500)
+  } catch (e: any) {
+    uni.hideLoading()
+    uni.showToast({ title: '支付失败，请稍后重试', icon: 'none' })
+    paying.value = false
+  }
+}
 
 const tabs = [
   { key: 'free', name: '免费版', price: '¥0', recommended: false },
@@ -468,6 +551,111 @@ track('vip_page_view')
   display: flex;
   gap: 16rpx;
   padding: 0 30rpx 30rpx;
+}
+
+/* ===== 单次解锁卡片 ===== */
+.unlock-card {
+  margin: 0 30rpx 30rpx;
+  background: rgba(30, 41, 59, 0.7);
+  border: 2rpx solid rgba(148, 163, 184, 0.25);
+  border-radius: 24rpx;
+  padding: 36rpx 32rpx;
+}
+
+.unlock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.unlock-title-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.unlock-title {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.unlock-sub {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.unlock-price-box {
+  display: flex;
+  align-items: baseline;
+  gap: 4rpx;
+}
+
+.unlock-currency {
+  font-size: 28rpx;
+  color: #ffd700;
+  font-weight: 700;
+}
+
+.unlock-price {
+  font-size: 56rpx;
+  color: #ffd700;
+  font-weight: 900;
+}
+
+.unlock-features {
+  margin-top: 28rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.unlock-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.uf-icon {
+  font-size: 26rpx;
+}
+
+.uf-text {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.unlock-btn {
+  margin-top: 32rpx;
+  height: 92rpx;
+  border-radius: 46rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb700 60%, #ff9f00 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 24rpx rgba(255, 183, 0, 0.35);
+}
+
+.unlock-btn--paying {
+  opacity: 0.7;
+}
+
+.unlock-btn-text {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #5a3500;
+}
+
+.unlock-alt {
+  margin-top: 24rpx;
+  text-align: center;
+}
+
+.unlock-alt-text {
+  font-size: 24rpx;
+  color: #7dd3fc;
 }
 
 .vip-tab {

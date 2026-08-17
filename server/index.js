@@ -179,6 +179,38 @@ async function initDatabase() {
     createdAt TEXT NOT NULL
   )`)
 
+  // 限数版配额表：限数模板对每位用户可免费制作次数（每次进入编辑器扣减 1）
+  db.run(`CREATE TABLE IF NOT EXISTS template_quota (
+    phone TEXT NOT NULL,
+    template_id TEXT NOT NULL,
+    remaining INTEGER NOT NULL DEFAULT 1,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
+    PRIMARY KEY (phone, template_id)
+  )`)
+
+  // 分享奖励表：记录接收者(phone)因他人打开其分享页获得的模板次数奖励，
+  // 同人同模板每日限 1 次，每日奖励总数有上限（防刷），按天重置
+  db.run(`CREATE TABLE IF NOT EXISTS share_rewards (
+    phone TEXT NOT NULL,
+    template_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
+    PRIMARY KEY (phone, template_id, date)
+  )`)
+
+  // 单次解锁表：付费解锁（9.9 单买）后的模板对用户永久可用
+  db.run(`CREATE TABLE IF NOT EXISTS template_unlocks (
+    phone TEXT NOT NULL,
+    template_id TEXT NOT NULL,
+    order_id TEXT DEFAULT '',
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
+    PRIMARY KEY (phone, template_id)
+  )`)
+
   // 反馈表
   db.run(`CREATE TABLE IF NOT EXISTS feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,8 +345,16 @@ const defaultJsonParser = express.json({ limit: '5mb' })
 // 大 body 解析器（15mb），用于 base64 图片上传等场景
 const largeJsonParser = express.json({ limit: '15mb' })
 app.use((req, res, next) => {
-  // poster 上传路由使用 15mb 限制（base64 编码的图片），其余路由使用默认 5mb
-  if (req.method === 'POST' && /^\/api\/poster\/works\/[^/]+\/upload$/.test(req.path)) {
+  // 大 body 路由使用 15mb 限制（largeJsonParser）：
+  // - poster 上传路由：base64 编码的图片
+  // - 模板创建/更新路由：elements/pages 可能含 base64 图片素材（发布时已尽量上传为文件，此处兜底）
+  if ((req.method === 'POST' || req.method === 'PUT') && (
+    /^\/api\/poster\/works\/[^/]+\/upload$/.test(req.path) ||
+    /^\/api\/templates$/.test(req.path) ||
+    /^\/api\/templates\/[^/]+$/.test(req.path) ||
+    /^\/api\/poster\/templates$/.test(req.path) ||
+    /^\/api\/poster\/templates\/[^/]+$/.test(req.path)
+  )) {
     return largeJsonParser(req, res, next)
   }
   defaultJsonParser(req, res, next)
@@ -885,6 +925,8 @@ app.get('/api/templates', (req, res) => {
     if (!(req.query.all && isRequestFromAdmin(req))) {
       conditions.push("status = 'published'")
     }
+    // 无论何种模式都排除已软删除的模板（记录保留在数据库，但不再出现在列表）
+    conditions.push("status != 'deleted'")
     // 支持 is_paid=1 只返回付费模板；?includePaid=1 返回全部；默认返回所有模板（含付费）供前端控制显示
     if (req.query.is_paid === '1') {
       conditions.push("is_paid = 1")
@@ -1046,14 +1088,15 @@ app.get('/api/templates/:id', (req, res) => {
 })
 
 // 上传文件
+// 注意：返回相对路径 /uploads/x 而非绝对 URL —— 绝对 URL 依赖请求 Host，
+// 非 localhost 的绝对地址会被 cloudSync 跳过、并在云函数侧映射成不存在的 cloud:// fileID，
+// 导致小程序端图片/背景加载失败。相对路径在管理端同源可用，且能被 cloudSync 正确识别上传云存储。
 app.post('/api/upload', uploadLimiter, requireAuth, upload.array('images', 10), (req, res) => {
   try {
-    const protocol = req.protocol
-    const host = req.get('host')
     const files = req.files.map(f => ({
       filename: f.filename,
       originalName: f.originalname,
-      url: `${protocol}://${host}/uploads/${f.filename}`,
+      url: `/uploads/${f.filename}`,
       size: f.size,
     }))
     res.json({ success: true, data: files })
@@ -1063,15 +1106,14 @@ app.post('/api/upload', uploadLimiter, requireAuth, upload.array('images', 10), 
 })
 
 // 上传单张图片（小程序编辑器专用）
+// 返回相对路径：absolute URL 依赖请求 Host，会破坏 cloudSync 本地识别与云函数映射（见 /api/upload 注释）。
+// 小程序端 normalizeImageUrl 会自动拼接 API_BASE；云函数模式下走 cloudfunctions/upload 返回 cloud:// fileID。
 app.post('/api/upload/image', uploadLimiter, requireAuth, upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: '未收到图片文件' })
     }
-    const protocol = req.protocol
-    const host = req.get('host')
-    const fullUrl = `${protocol}://${host}/uploads/${req.file.filename}`
-    res.json({ success: true, url: fullUrl })
+    res.json({ success: true, url: `/uploads/${req.file.filename}` })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '图片上传失败' })
   }
@@ -1234,6 +1276,28 @@ app.get('/api/music', (req, res) => {
 })
 
 // 创建模板
+/**
+ * 深度归一化模板数据中的绝对 uploads 地址：
+ * http(s)://任意host/uploads/x → /uploads/x
+ * 历史上传接口返回绝对地址（依赖请求 Host），非 localhost 时会被 cloudSync 跳过、
+ * 云函数映射成不存在的 cloud:// fileID，导致小程序端图片/背景加载失败。
+ * 保存模板时统一归一化，让存量脏数据在重新保存后自动治愈。
+ */
+function normalizeUploadHostUrlsDeep(value) {
+  if (typeof value === 'string') {
+    return value.replace(/https?:\/\/[^/]+\/uploads\//g, '/uploads/')
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) value[i] = normalizeUploadHostUrlsDeep(value[i])
+    return value
+  }
+  if (value && typeof value === 'object') {
+    for (const k of Object.keys(value)) value[k] = normalizeUploadHostUrlsDeep(value[k])
+    return value
+  }
+  return value
+}
+
 app.post('/api/templates', requireAdmin, async (req, res) => {
   try {
     const body = req.body
@@ -1248,17 +1312,25 @@ app.post('/api/templates', requireAdmin, async (req, res) => {
     if (body.price !== undefined && body.price !== null && (typeof body.price !== 'number' || body.price < 0)) {
       return res.status(400).json({ success: false, error: '价格必须为非负数' })
     }
-    // 数据校验：JSON 字段序列化后长度上限 5MB，防止恶意超大 payload
-    const MAX_JSON_LENGTH = 5 * 1024 * 1024
+    // 数据校验：JSON 字段序列化后长度上限 15MB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 15 * 1024 * 1024
     const jsonFields = { data: body.data, elements: body.elements, canvasSize: body.canvasSize, background: body.background, tags: body.tags }
     for (const [key, val] of Object.entries(jsonFields)) {
       if (val !== undefined && val !== null) {
         const str = JSON.stringify(val)
         if (str.length > MAX_JSON_LENGTH) {
-          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 5MB 限制` })
+          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 15MB 限制` })
         }
       }
     }
+
+    // 归一化历史绝对 uploads 地址（治愈脏数据，避免云端图片/背景失效）
+    normalizeUploadHostUrlsDeep(body.data)
+    normalizeUploadHostUrlsDeep(body.elements)
+    normalizeUploadHostUrlsDeep(body.pages)
+    normalizeUploadHostUrlsDeep(body.background)
+    if (typeof body.cover === 'string') body.cover = normalizeUploadHostUrlsDeep(body.cover)
+    if (typeof body.renderedImage === 'string') body.renderedImage = normalizeUploadHostUrlsDeep(body.renderedImage)
 
     const id = body.id || uuidv4()
     const existing = db.exec("SELECT id FROM templates WHERE id = ?", [id])
@@ -1341,17 +1413,25 @@ app.put('/api/templates/:id', requireAdmin, async (req, res) => {
     if (body.price !== undefined && body.price !== null && (typeof body.price !== 'number' || body.price < 0)) {
       return res.status(400).json({ success: false, error: '价格必须为非负数' })
     }
-    // 数据校验：JSON 字段序列化后长度上限 5MB，防止恶意超大 payload
-    const MAX_JSON_LENGTH = 5 * 1024 * 1024
+    // 数据校验：JSON 字段序列化后长度上限 15MB，防止恶意超大 payload
+    const MAX_JSON_LENGTH = 15 * 1024 * 1024
     const jsonFields = { data: body.data, elements: body.elements, canvasSize: body.canvasSize, background: body.background, tags: body.tags }
     for (const [key, val] of Object.entries(jsonFields)) {
       if (val !== undefined && val !== null) {
         const str = JSON.stringify(val)
         if (str.length > MAX_JSON_LENGTH) {
-          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 5MB 限制` })
+          return res.status(400).json({ success: false, error: `字段 ${key} 数据过大，超过 15MB 限制` })
         }
       }
     }
+
+    // 归一化历史绝对 uploads 地址（治愈脏数据，避免云端图片/背景失效）
+    normalizeUploadHostUrlsDeep(body.data)
+    normalizeUploadHostUrlsDeep(body.elements)
+    normalizeUploadHostUrlsDeep(body.pages)
+    normalizeUploadHostUrlsDeep(body.background)
+    if (typeof body.cover === 'string') body.cover = normalizeUploadHostUrlsDeep(body.cover)
+    if (typeof body.renderedImage === 'string') body.renderedImage = normalizeUploadHostUrlsDeep(body.renderedImage)
 
     // 移除统计字段（likes、pageCount），管理员编辑不应直接篡改统计数据
     const allowedFields = ['name', 'subtitle', 'category', 'cover', 'primaryColor', 'orientation', 'status', 'renderedImage', 'is_paid', 'price', 'is_premium', 'templateType', 'vipLevel']
@@ -1483,6 +1563,42 @@ app.delete('/api/templates/:id/safe-delete', requireAdmin, async (req, res) => {
   } catch (e) {
     console.error('[safeDelete] 删除失败:', e.message)
     res.status(500).json({ success: false, error: '删除失败' })
+  }
+})
+
+// 彻底删除模板（云端删除 + 本地物理删除，不可恢复）
+app.delete('/api/templates/:id/hard-delete', requireAdmin, async (req, res) => {
+  try {
+    const existing = db.exec("SELECT id, name FROM templates WHERE id = ?", [req.params.id])
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ success: false, error: '模板不存在' })
+    }
+    const templateName = existing[0].values[0][1]
+
+    // 尝试删除云端数据（失败不阻断本地删除，彻底删除语义=强制清除）
+    let cloudDeleted = true
+    try {
+      cloudDeleted = await cloudSync.deleteTemplateFromCloud(req.params.id)
+    } catch (e) {
+      cloudDeleted = false
+      console.error('[hardDelete] 云端删除异常:', e.message)
+    }
+
+    // 本地物理删除
+    db.run("DELETE FROM templates WHERE id = ?", [req.params.id])
+    bumpVersion()
+    saveDatabase()
+
+    console.log(`[hardDelete] ✅ 模板已彻底删除: ${req.params.id} (${templateName}), cloudDeleted=${cloudDeleted}`)
+    res.json({
+      success: true,
+      message: cloudDeleted ? '模板已彻底删除（云端+本地）' : '模板已彻底删除（云端删除失败，仅删除本地）',
+      cloudDeleted,
+      localDeleted: true
+    })
+  } catch (e) {
+    console.error('[hardDelete] 彻底删除失败:', e.message)
+    res.status(500).json({ success: false, error: '彻底删除失败' })
   }
 })
 
@@ -1710,7 +1826,7 @@ app.post('/api/orders', requireAuth, (req, res) => {
       }
     }
 
-    const totalAmount = String(serverTotal.toFixed(2))
+    const totalAmount = String(parseFloat(serverTotal.toFixed(2)))
     const id = uuidv4()
     const now = new Date().toISOString()
     const phone = req.user?.phone || ''
@@ -1988,7 +2104,7 @@ app.post('/api/vip/order', payLimiter, requireAuth, (req, res) => {
     runTransaction(db, () => {
       db.run(`INSERT INTO orders (id, phone, items, totalAmount, status, contactName, contactPhone, address, note, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, 'pending', '', '', '', ?, ?, ?)`, [
-        orderId, phone, JSON.stringify(orderItems), String(price), '', nowStr, nowStr, nowStr,
+        orderId, phone, JSON.stringify(orderItems), String(price), nowStr, nowStr, nowStr,
       ])
     })
     saveDatabaseDebounced()
@@ -2232,9 +2348,134 @@ app.post('/api/orders/:id/pay', payLimiter, requireAuth, (req, res) => {
         [String(newExpireAt), vipItem.plan, now, phone])
     }
 
+    // 支付后 items 含 unlock 类型，发放单次解锁权益（9.9 单买模板永久可用）
+    const unlockItems = items.filter(it => it.type === 'unlock' && it.templateId)
+    for (const unlockItem of unlockItems) {
+      db.run("INSERT OR IGNORE INTO template_unlocks (phone, template_id, order_id, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)",
+        [phone, unlockItem.templateId, req.params.id, now, now])
+    }
+
     saveDatabaseDebounced()
     const prepayId = `prepay_${req.params.id}`
     res.json({ success: true, data: { prepayId, status: 'paid' } })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// ========== 限数版配额 ==========
+// 限数版模板（vipLevel='limited'）对每位非 VIP 用户可免费制作次数（默认 1 次，进入编辑器时扣减）；
+// VIP 用户、已单次解锁用户、免费版模板不受限。remaining=-1 表示不限。
+
+const QUOTA_LIMITLESS = -1
+const SHARE_REWARD_QUOTA_CAP = 5
+
+function getUserVipActive(phone) {
+  const result = db.exec("SELECT vip_status, vip_expire_at FROM users WHERE phone = ?", [phone])
+  if (!result.length || !result[0].values.length) return false
+  const [vipStatus, vipExpireAt] = result[0].values[0]
+  return vipStatus === 1 && (!vipExpireAt || parseInt(vipExpireAt, 10) > Date.now())
+}
+
+function isTemplateUnlocked(phone, templateId) {
+  const result = db.exec("SELECT 1 FROM template_unlocks WHERE phone = ? AND template_id = ?", [phone, templateId])
+  return !!(result.length && result[0].values.length)
+}
+
+function getTemplateLevel(templateId) {
+  const result = db.exec("SELECT vipLevel, is_paid, is_premium, price FROM templates WHERE id = ? AND status != 'deleted'", [templateId])
+  if (!result.length || !result[0].values.length) return null
+  const [vipLevel, isPaid, isPremium, price] = result[0].values[0]
+  return { vipLevel: vipLevel || (isPaid === 1 ? (isPremium === 1 ? 'pro' : 'personal') : 'free'), price: parseFloat(price) || 0 }
+}
+
+function getTemplateQuota(phone, templateId) {
+  const level = getTemplateLevel(templateId)
+  if (!level) return null
+  if (level.vipLevel === 'free') return QUOTA_LIMITLESS
+  if (level.vipLevel !== 'limited') return QUOTA_LIMITLESS
+  if (getUserVipActive(phone) || isTemplateUnlocked(phone, templateId)) return QUOTA_LIMITLESS
+  const result = db.exec("SELECT remaining FROM template_quota WHERE phone = ? AND template_id = ?", [phone, templateId])
+  if (!result.length || !result[0].values.length) return 1
+  return parseInt(result[0].values[0][0], 10) || 0
+}
+
+// 查询限数配额：GET /api/quota?templateId=xxx
+app.get('/api/quota', requireAuth, (req, res) => {
+  try {
+    const phone = req.user.phone
+    const templateId = req.query.templateId
+    if (!templateId) return res.status(400).json({ success: false, error: '缺少 templateId' })
+    const remaining = getTemplateQuota(phone, templateId)
+    if (remaining === null) return res.status(404).json({ success: false, error: '模板不存在' })
+    res.json({ success: true, data: { remaining, limitless: remaining === QUOTA_LIMITLESS } })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 扣减限数配额（进入编辑器时调用）：POST /api/quota/consume { templateId }
+app.post('/api/quota/consume', createLimiter, requireAuth, (req, res) => {
+  try {
+    const phone = req.user.phone
+    const templateId = req.body.templateId
+    if (!templateId) return res.status(400).json({ success: false, error: '缺少 templateId' })
+    const remaining = getTemplateQuota(phone, templateId)
+    if (remaining === null) return res.status(404).json({ success: false, error: '模板不存在' })
+    if (remaining === QUOTA_LIMITLESS) {
+      return res.json({ success: true, data: { remaining: QUOTA_LIMITLESS, limitless: true } })
+    }
+    if (remaining <= 0) {
+      return res.status(403).json({ success: false, error: 'QUOTA_EXHAUSTED', message: '该模板免费制作次数已用完' })
+    }
+    const now = new Date().toISOString()
+    const result = db.exec("SELECT remaining FROM template_quota WHERE phone = ? AND template_id = ?", [phone, templateId])
+    if (result.length && result[0].values.length) {
+      db.run("UPDATE template_quota SET remaining = remaining - 1, updatedAt = ? WHERE phone = ? AND template_id = ?", [now, phone, templateId])
+    } else {
+      db.run("INSERT INTO template_quota (phone, template_id, remaining, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)",
+        [phone, templateId, 0, now, now])
+    }
+    saveDatabaseDebounced()
+    res.json({ success: true, data: { remaining: remaining - 1, limitless: false } })
+  } catch (e) {
+    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+  }
+})
+
+// 分享奖励：POST /api/share/reward { templateId, phone }
+// 任意用户打开分享落地页时触发：给分享者（作品创建者 phone）的限数模板剩余次数 +1。
+// 分享页为公开访问（无登录态），防刷依赖：同人同模板每日 1 次 + 每日奖励总数上限 + IP 限流。
+app.post('/api/share/reward', payLimiter, (req, res) => {
+  try {
+    const { templateId, phone } = req.body
+    if (!templateId) return res.status(400).json({ success: false, error: '缺少 templateId' })
+    if (!phone) return res.status(400).json({ success: false, error: '缺少 phone' })
+    const remaining = getTemplateQuota(phone, templateId)
+    if (remaining === null) return res.status(404).json({ success: false, error: '模板不存在' })
+    if (remaining === QUOTA_LIMITLESS) {
+      return res.json({ success: true, data: { remaining: QUOTA_LIMITLESS, rewarded: false, reason: 'unlimited' } })
+    }
+    const date = new Date().toISOString().slice(0, 10)
+    const now = new Date().toISOString()
+    const cntResult = db.exec("SELECT count FROM share_rewards WHERE phone = ? AND template_id = ? AND date = ?", [phone, templateId, date])
+    const todayCount = cntResult.length && cntResult[0].values.length ? parseInt(cntResult[0].values[0][0], 10) || 0 : 0
+    if (todayCount >= 1) {
+      return res.status(429).json({ success: false, error: 'DAILY_LIMIT', message: '该模板今日分享奖励已达上限' })
+    }
+    if (remaining >= SHARE_REWARD_QUOTA_CAP) {
+      return res.json({ success: true, data: { remaining, rewarded: false, reason: 'capped' } })
+    }
+    if (cntResult.length && cntResult[0].values.length) {
+      db.run("UPDATE share_rewards SET count = count + 1, updatedAt = ? WHERE phone = ? AND template_id = ? AND date = ?", [now, phone, templateId, date])
+    } else {
+      db.run("INSERT INTO share_rewards (phone, template_id, date, count, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)", [phone, templateId, date, now, now])
+    }
+    db.run("UPDATE template_quota SET remaining = remaining + 1, updatedAt = ? WHERE phone = ? AND template_id = ?", [now, phone, templateId])
+    const afterResult = db.exec("SELECT remaining FROM template_quota WHERE phone = ? AND template_id = ?", [phone, templateId])
+    const afterRemaining = afterResult.length && afterResult[0].values.length ? parseInt(afterResult[0].values[0][0], 10) : remaining + 1
+    saveDatabaseDebounced()
+    res.json({ success: true, data: { remaining: afterRemaining, rewarded: true } })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
   }
@@ -2792,9 +3033,10 @@ app.get('/api/cloud-sync/check/:id', requireAdmin, async (req, res) => {
 // ============ 重新同步单个模板到云 ============
 app.post('/api/cloud-sync/resync/:id', requireAdmin, async (req, res) => {
   try {
-    const existing = db.exec("SELECT * FROM templates WHERE id = ?", [req.params.id])
+    // 排除已软删除的模板，防止 🔄 把已删除模板重新写回云端（云端"复活"）
+    const existing = db.exec("SELECT * FROM templates WHERE id = ? AND status != 'deleted'", [req.params.id])
     if (!existing.length || !existing[0].values.length) {
-      return res.status(404).json({ success: false, error: '模板不存在' })
+      return res.status(404).json({ success: false, error: '模板不存在或已被删除' })
     }
     const template = rowToObject(existing)
     const success = await cloudSync.syncTemplateToCloud(req.params.id, template, 'resync')
@@ -2925,6 +3167,179 @@ app.get('/api/cloud-sync/batch-check', requireAdmin, async (req, res) => {
   } catch (e) {
     console.error('[cloudSync] 批量检查失败:', e.message)
     res.status(500).json({ success: false, error: '批量检查失败' })
+  }
+})
+
+// ============ 从云端拉取模板到本地 ============
+// 字段归一化：云端时间戳是数字(ms) → 转 ISO 字符串；缺失字段给默认值兜底
+function normalizeCloudTemplateForLocal(ct) {
+  const toIso = (ts) => {
+    if (!ts) return new Date().toISOString()
+    if (typeof ts === 'number') return new Date(ts).toISOString()
+    const d = new Date(ts)
+    return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
+  }
+  const isPremium = ct.is_premium || ct.isPremium || 0
+  const isPaid = ct.is_paid || ct.isPaid || 0
+  const tryParse = (v, fallback) => {
+    if (v === null || v === undefined) return fallback
+    if (typeof v === 'string') {
+      try { return JSON.parse(v) } catch (_) { return fallback }
+    }
+    return v
+  }
+  return {
+    id: ct.id || ct._id,
+    name: ct.name || '未命名模板',
+    subtitle: ct.subtitle || '',
+    category: ct.category || 'other',
+    cover: ct.cover || '',
+    primaryColor: ct.primaryColor || '#e84a6e',
+    likes: ct.likes || 0,
+    pageCount: ct.pageCount || 10,
+    data: tryParse(ct.data, {}),
+    elements: tryParse(ct.elements, []),
+    canvasSize: tryParse(ct.canvasSize, { width: 375, height: 667 }),
+    orientation: ct.orientation || 'portrait',
+    background: tryParse(ct.background, {}),
+    backgroundImage: ct.backgroundImage || '',
+    tags: tryParse(ct.tags, []),
+    status: ct.status || 'published',
+    renderedImage: ct.renderedImage || '',
+    thumbnail: ct.thumbnail || '',
+    is_paid: isPaid,
+    price: ct.price || 0,
+    is_premium: isPremium,
+    templateType: ct.templateType || 'canvas',
+    pages: tryParse(ct.pages, []),
+    vipLevel: ct.vipLevel || (isPremium ? 'pro' : (isPaid ? 'personal' : 'free')),
+    createdAt: toIso(ct.createdAt),
+    updatedAt: toIso(ct.updatedAt || Date.now()),
+  }
+}
+
+// 将云端模板写入本地（INSERT，cloud_synced=1）
+function insertCloudTemplateToLocal(t) {
+  db.run(`INSERT OR REPLACE INTO templates
+    (id, name, subtitle, category, cover, primaryColor, likes, pageCount, data, elements, canvasSize, orientation, background, tags, status, renderedImage, is_paid, price, is_premium, templateType, pages, vipLevel, createdAt, updatedAt, cloud_synced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [
+      t.id, t.name, t.subtitle, t.category, t.cover, t.primaryColor, t.likes, t.pageCount,
+      JSON.stringify(t.data || {}), JSON.stringify(t.elements || []),
+      t.canvasSize ? JSON.stringify(t.canvasSize) : null,
+      t.orientation, t.background ? JSON.stringify(t.background) : null,
+      t.tags ? JSON.stringify(t.tags) : null,
+      t.status, t.renderedImage, t.is_paid, t.price, t.is_premium, t.templateType,
+      JSON.stringify(t.pages || []), t.vipLevel, t.createdAt, t.updatedAt,
+    ])
+}
+
+// 用云端版本覆盖本地（cloud_synced 保持 1）
+function updateCloudTemplateToLocal(t) {
+  db.run(`UPDATE templates SET
+    name = ?, subtitle = ?, category = ?, cover = ?, primaryColor = ?, likes = ?, pageCount = ?,
+    data = ?, elements = ?, canvasSize = ?, orientation = ?, background = ?, tags = ?, status = ?,
+    renderedImage = ?, is_paid = ?, price = ?, is_premium = ?, templateType = ?, pages = ?, vipLevel = ?,
+    createdAt = ?, updatedAt = ?, cloud_synced = 1
+    WHERE id = ?`,
+    [
+      t.name, t.subtitle, t.category, t.cover, t.primaryColor, t.likes, t.pageCount,
+      JSON.stringify(t.data || {}), JSON.stringify(t.elements || []),
+      t.canvasSize ? JSON.stringify(t.canvasSize) : null,
+      t.orientation, t.background ? JSON.stringify(t.background) : null,
+      t.tags ? JSON.stringify(t.tags) : null,
+      t.status, t.renderedImage, t.is_paid, t.price, t.is_premium, t.templateType,
+      JSON.stringify(t.pages || []), t.vipLevel, t.createdAt, t.updatedAt, t.id,
+    ])
+}
+
+app.post('/api/cloud-sync/pull', requireAdmin, async (req, res) => {
+  const start = Date.now()
+  console.log('[cloud-sync/pull] 开始从云端拉取模板...')
+  try {
+    if (!cloudSync.isEnabled()) {
+      return res.status(400).json({ success: false, error: '云同步未启用（CLOUDBASE_APIKEY 未配置）' })
+    }
+    const cloudResult = await cloudSync.fetchFullCloudTemplates(1000)
+    if (!cloudResult.success) {
+      return res.status(500).json({ success: false, error: cloudResult.error || '拉取云端模板失败' })
+    }
+    const cloudTemplates = cloudResult.data || []
+    let inserted = 0
+    let updated = 0
+    let skipped = 0
+    let failed = 0
+
+    for (const ct of cloudTemplates) {
+      try {
+        const id = ct.id || ct._id
+        if (!id) { failed++; continue }
+
+        // 查询本地是否存在 + 同步状态
+        const existingRows = db.exec("SELECT cloud_synced, updatedAt FROM templates WHERE id = ?", [id])
+        const existing = existingRows.length && existingRows[0].values.length
+          ? { cloud_synced: existingRows[0].values[0][0], updatedAt: existingRows[0].values[0][1] }
+          : null
+
+        // 冲突策略：本地有未发布修改（cloud_synced=0）→ 跳过不覆盖
+        if (existing && existing.cloud_synced === 0) {
+          skipped++
+          console.log(`[cloud-sync/pull] ⏭️  跳过（本地有未发布修改）: ${id}`)
+          continue
+        }
+
+        // 字段归一化 + 图片迁移（cloud:// → 本地 URL）
+        const t = normalizeCloudTemplateForLocal(ct)
+        await Promise.all([
+          cloudSync.migrateCloudUrlsDeep(t.data),
+          cloudSync.migrateCloudUrlsDeep(t.elements),
+          cloudSync.migrateCloudUrlsDeep(t.pages),
+          cloudSync.migrateCloudUrlsDeep(t.background),
+        ])
+        if (t.cover && t.cover.startsWith('cloud://')) t.cover = await cloudSync.downloadCloudFileToLocal(t.cover)
+        if (t.renderedImage && t.renderedImage.startsWith('cloud://')) t.renderedImage = await cloudSync.downloadCloudFileToLocal(t.renderedImage)
+        if (t.thumbnail && t.thumbnail.startsWith('cloud://')) t.thumbnail = await cloudSync.downloadCloudFileToLocal(t.thumbnail)
+        if (t.backgroundImage && t.backgroundImage.startsWith('cloud://')) t.backgroundImage = await cloudSync.downloadCloudFileToLocal(t.backgroundImage)
+        // 云端独立的 backgroundImage 合并进 background 对象（本地表无 backgroundImage 列）
+        if (t.backgroundImage && t.background && typeof t.background === 'object') {
+          t.background.image = t.backgroundImage
+        }
+
+        if (!existing) {
+          // 本地不存在 → 插入
+          insertCloudTemplateToLocal(t)
+          inserted++
+          console.log(`[cloud-sync/pull] ➕ 新增: ${id} (${t.name})`)
+        } else {
+          // 本地存在且 cloud_synced=1 → 云端 updatedAt 更新则覆盖
+          const cloudTs = new Date(t.updatedAt).getTime()
+          const localTs = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0
+          if (cloudTs > localTs) {
+            updateCloudTemplateToLocal(t)
+            updated++
+            console.log(`[cloud-sync/pull] 🔄 更新: ${id} (${t.name})`)
+          } else {
+            skipped++
+            console.log(`[cloud-sync/pull] ⏭️  跳过（云端不比本地新）: ${id}`)
+          }
+        }
+      } catch (e) {
+        failed++
+        console.error(`[cloud-sync/pull] 处理模板失败 ${ct && (ct.id || ct._id)}:`, e.message)
+      }
+    }
+
+    if (inserted > 0 || updated > 0) {
+      bumpVersion()
+      saveDatabaseDebounced()
+    }
+    const elapsed = Date.now() - start
+    const summary = { total: cloudTemplates.length, inserted, updated, skipped, failed, elapsed }
+    console.log(`[cloud-sync/pull] ✅ 拉取完成: ${JSON.stringify(summary)}`)
+    res.json({ success: true, data: summary })
+  } catch (e) {
+    console.error('[cloud-sync/pull] ❌ 拉取失败:', e.message)
+    res.status(500).json({ success: false, error: '从云端拉取模板失败' })
   }
 })
 

@@ -42,7 +42,7 @@
             <input
               v-model="form.subtitle"
               class="field-input"
-              placeholder="如：双向奔赴的爱情"
+              placeholder="将显示在首页模板卡片的小字位置，如：双向奔赴的爱情"
               maxlength="50"
             />
           </div>
@@ -75,6 +75,11 @@
               <span class="vl-name">{{ level.name }}</span>
               <span class="vl-desc">{{ level.desc }}</span>
             </button>
+          </div>
+          <div v-if="form.vipLevel !== 'free'" class="price-input-wrap">
+            <label class="switch-label">价格</label>
+            <input v-model.number="form.price" type="number" class="field-input price-input" min="0" step="0.1" />
+            <span class="price-unit">元 / 次</span>
           </div>
         </div>
         <div class="form-field">
@@ -229,6 +234,7 @@ import { ref, computed, reactive, watch } from 'vue'
 import { CATEGORIES } from '../types/template'
 import { createTemplate, updateTemplate, fetchVersion, API_BASE, uploadImages } from '../composables/useApi'
 import { serializeElement } from '../utils/element-serializer'
+import { uploadPayloadImages } from '../utils/payload-image-upload'
 import { shapeText, containsRtl } from '../utils/bidi'
 
 /**
@@ -317,6 +323,7 @@ const TAG_LIST = [
 
 const VIP_LEVEL_OPTIONS = [
   { value: 'free', name: '免费', icon: '🆓', desc: '免费用户可用，带水印' },
+  { value: 'limited', name: '限数版', icon: '🎫', desc: '非VIP每模板免费用1次，展示带水印' },
   { value: 'personal', name: '个人VIP', icon: '👑', desc: '个人会员可用，无水印' },
   { value: 'pro', name: '专业版', icon: '💎', desc: '专业版可用，最高权益' },
 ]
@@ -329,7 +336,8 @@ const form = reactive({
   tags: [] as string[],
   pageCount: 10,
   likes: 1000,
-  vipLevel: 'free' as 'free' | 'personal' | 'pro',
+  vipLevel: 'free' as 'free' | 'limited' | 'personal' | 'pro',
+  price: 0,
 })
 
 const validationResults = ref<Array<{
@@ -377,6 +385,7 @@ watch(() => props.visible, (val) => {
     form.pageCount = 10
     form.likes = 1000
     form.vipLevel = 'free'
+    form.price = 0
   }
 })
 
@@ -562,7 +571,7 @@ async function doPublish() {
     const isFlipMode = props.pageMode === 'flip'
     const flipPages = props.getFlipPages?.() || []
 
-    const payload: any = {
+    let payload: any = {
       name: form.name,
       subtitle: form.subtitle,
       category: form.category,
@@ -573,6 +582,11 @@ async function doPublish() {
       pageCount: isFlipMode ? flipPages.length : form.pageCount,
       status: 'published',
       vipLevel: form.vipLevel,
+      // 会员等级与付费标识统一：free→免费，limited→付费但VIP不免费(限数)，personal→付费+VIP免费，pro→付费+专业版
+      isPaid: form.vipLevel === 'free' ? 0 : 1,
+      isPremium: form.vipLevel === 'pro' ? 1 : 0,
+      vip_free: form.vipLevel === 'personal' || form.vipLevel === 'pro' ? 1 : 0,
+      price: form.vipLevel === 'free' ? 0 : Math.max(0, form.price || 0),
       renderedImage: renderedImageUrl,
       orientation: props.canvasSize.width > props.canvasSize.height ? 'landscape' : 'portrait',
       templateType: isFlipMode ? 'flip' : 'canvas',
@@ -611,6 +625,24 @@ async function doPublish() {
       ).filter(Boolean)
     }
 
+    // 收集元素 defaults（占位符标记/识别回填的原文默认值）合并进 data：
+    // 用户显式填写的字段优先，未填写的空字段用识别原文兜底（保证发布后渲染与 PSD 原文一致）
+    const defaults: Record<string, string> = {}
+    const collectDefaults = (els: any[]) => (els || []).forEach((el: any) => {
+      if (el && el.type === 'text' && el.defaults && typeof el.defaults === 'object') {
+        Object.entries(el.defaults).forEach(([k, v]) => {
+          if (typeof v === 'string' && v && !defaults[k]) defaults[k] = v
+        })
+      }
+    })
+    collectDefaults(draft?.elements || [])
+    if (isFlipMode) {
+      flipPages.forEach(page => collectDefaults(page.elements || []))
+    }
+    for (const [k, v] of Object.entries(defaults)) {
+      if (!payload.data[k]) payload.data[k] = v
+    }
+
     // Auto-assign dataKey for text elements whose content matches template data values
     // This enables mini-program user edits to propagate back to templateData
     const dataValueToKey: Record<string, string> = {}
@@ -627,6 +659,13 @@ async function doPublish() {
         }
       })
     }
+
+    uploadProgress.value = 45
+    uploadProgressText.value = '上传图片素材...'
+
+    // base64 图片（PSD 导入 / 本地添加 / 背景图）批量上传为文件，payload 只保留 URL，
+    // 避免超大 JSON 触发服务端 body 限制并撑大数据库
+    payload = await uploadPayloadImages(payload, uploadImages)
 
     uploadProgress.value = 50
     uploadProgressText.value = '保存到服务器...'

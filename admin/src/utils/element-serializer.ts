@@ -10,6 +10,8 @@ interface SerializedElement {
   type: string
   text: string
   dataKey?: string
+  /** 占位符标记/识别回填的原文默认值，随模板持久化（发布回填用） */
+  defaults?: Record<string, string>
   label: string
   x: number
   y: number
@@ -44,6 +46,7 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
     type: el.type === 'sticker' ? 'image' : el.type,
     text: el.content || el.text || el.src || '',
     dataKey: el.dataKey,
+    defaults: el.defaults,
     label: el.label || el.name,
     x: Math.round(topLeftX * 100) / 100,
     y: Math.round(topLeftY * 100) / 100,
@@ -72,8 +75,12 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
     const direction = rawDirection === 'auto'
       ? (isRtl ? 'rtl' : 'ltr')
       : rawDirection
-    // RTL 文本（含哈语占位符）强制使用哈萨克字体，避免 fontFamily 为默认中文字体时字符不连写
-    const fontFamily = isRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
+    // RTL 文本默认使用哈萨克字体兜底（避免 fontFamily 为默认中文字体时字符不连写），
+    // 但元素显式选择 RTL 白名单字体（KazakhSoftAsilya/ALKATIPBasma 等）时保留所选字体。
+    // 白名单与小程序端 src/constants/editor.ts RTL_CAPABLE_FONTS 保持一致
+    const RTL_CAPABLE_FONTS = ['KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq', 'ALKATIPBasma']
+    const explicitRtlFont = (el.fontFamily || '').split(',')[0].trim().replace(/['"]/g, '').toLowerCase()
+    const fontFamily = isRtl && !RTL_CAPABLE_FONTS.some((f) => f.toLowerCase() === explicitRtlFont)
       ? 'KazakhSoftAsilya'
       : el.fontFamily
     // RTL 文本默认右对齐（仅当用户未显式设置时）

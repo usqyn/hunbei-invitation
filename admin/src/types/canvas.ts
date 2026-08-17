@@ -46,6 +46,8 @@ export interface TextElement extends BaseElement {
   type: 'text'
   content: string
   dataKey?: string
+  /** 占位符标记/识别回填的原文默认值（如 {kzDate: '2026-جىلى 10-ايدىڭ 01-كۇنى'}） */
+  defaults?: Record<string, string>
   fontFamily: string
   fontSize: number
   fontWeight: 'normal' | 'bold'
