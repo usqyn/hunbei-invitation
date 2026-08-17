@@ -361,6 +361,16 @@
       @reset="onImagePropReset"
     />
 
+    <!-- 图片替换调节浮层：选照片/再次点击后，先手调大小位置再填充 -->
+    <ImageAdjuster
+      :visible="adjusterVisible"
+      :image-url="adjusterImageUrl"
+      :target-ratio="adjusterTargetRatio"
+      :target-border-radius="adjusterTargetRadius"
+      @confirm="onAdjusterConfirm"
+      @cancel="onAdjusterCancel"
+    />
+
     <!-- 文字样式面板 -->
     <TextStylePanel
       :visible="showTextStylePanel"
@@ -423,6 +433,7 @@ import FlipEditor from './components/FlipEditor.vue'
 import TextEditorPopup from './components/TextEditorPopup.vue'
 import UnifiedEditForm from './components/UnifiedEditForm.vue'
 import ImagePropertyPanel from './components/ImagePropertyPanel.vue'
+import ImageAdjuster from './components/ImageAdjuster.vue'
 import TextStylePanel from './components/TextStylePanel.vue'
 import CloudImage from '@/components/CloudImage.vue'
 import type { EditableElement, Work } from '@/types'
@@ -568,6 +579,12 @@ function dismissEditHint() {
 
 // 图片属性面板显示控制
 const showImagePanel = ref(false)
+// 图片替换调节浮层状态
+const adjusterVisible = ref(false)
+const adjusterImageUrl = ref('')
+const adjusterTargetRatio = ref(1)
+const adjusterTargetRadius = ref(0)
+let adjusterElementIndex = -1
 // 文字样式面板显示控制
 const showTextStylePanel = ref(false)
 // 文字样式防抖定时器
@@ -1335,7 +1352,12 @@ function onOpenEditor(idx: number) {
   editorStore.selectedElement = idx
 
   if (el.type === 'image') {
-    chooseLocalImage(idx)
+    // 已有照片：进入调节界面继续调整当前照片（内部提供"重选照片"入口）
+    if (el.text) {
+      openImageAdjuster(idx, el.text)
+    } else {
+      chooseLocalImage(idx)
+    }
   } else if (el.type === 'text') {
     // 哈语日期/星期/时间段字段：禁止直接编辑（含固定哈语单位）
     if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzWeekdayParen' || el.dataKey === 'kzTime') {
@@ -1348,28 +1370,53 @@ function onOpenEditor(idx: number) {
   }
 }
 
+// 打开图片调节浮层（换图或再次点击图片元素时进入）
+function openImageAdjuster(idx: number, imageUrl: string) {
+  const el = editorStore.editableElements[idx]
+  if (!el || el.type !== 'image') return
+  adjusterElementIndex = idx
+  adjusterImageUrl.value = imageUrl || ''
+  const w = el.width || 300
+  const h = el.height || 300
+  adjusterTargetRatio.value = w / h
+  adjusterTargetRadius.value = el.borderRadius || 0
+  adjusterVisible.value = true
+}
+
+// 调节完成：上传裁剪后的图片并填充到元素
+async function onAdjusterConfirm(tempPath: string) {
+  const idx = adjusterElementIndex
+  adjusterVisible.value = false
+  if (idx < 0 || !tempPath) return
+  uni.showLoading({ title: '上传中 0%' })
+  try {
+    const permanentUrl = await uploadImage(tempPath, (progress: number) => {
+      uni.showLoading({ title: `上传中 ${progress}%` })
+    })
+    if (!_isMounted) return
+    editorStore.applyImageToElement(idx, permanentUrl)
+    renderedImageStale.value = true
+    hasUnsavedChanges.value = true
+  } catch (e) {
+    if (!_isMounted) return
+    // 上传失败时回退到临时路径（至少当前会话可用）
+    console.warn('图片上传失败，使用临时路径:', e)
+    editorStore.applyImageToElement(idx, tempPath)
+    renderedImageStale.value = true
+    hasUnsavedChanges.value = true
+    uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
+  } finally {
+    if (_isMounted) uni.hideLoading()
+  }
+}
+
+function onAdjusterCancel() {
+  adjusterVisible.value = false
+}
+
 function chooseLocalImage(idx: number) {
-  const applyImage = async (tempPath: string) => {
-    uni.showLoading({ title: '上传中 0%' })
-    try {
-      const permanentUrl = await uploadImage(tempPath, (progress: number) => {
-        uni.showLoading({ title: `上传中 ${progress}%` })
-      })
-      if (!_isMounted) return
-      editorStore.applyImageToElement(idx, permanentUrl)
-      renderedImageStale.value = true
-      hasUnsavedChanges.value = true
-    } catch (e) {
-      if (!_isMounted) return
-      // 上传失败时回退到临时路径（至少当前会话可用）
-      console.warn('图片上传失败，使用临时路径:', e)
-      editorStore.applyImageToElement(idx, tempPath)
-      renderedImageStale.value = true
-      hasUnsavedChanges.value = true
-      uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
-    } finally {
-      if (_isMounted) uni.hideLoading()
-    }
+  const openAdjuster = (tempPath: string) => {
+    openImageAdjuster(idx, tempPath)
   }
   // #ifdef MP-WEIXIN
   uni.chooseMedia({
@@ -1378,7 +1425,7 @@ function chooseLocalImage(idx: number) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0) {
-        applyImage(res.tempFiles[0].tempFilePath)
+        openAdjuster(res.tempFiles[0].tempFilePath)
       }
     },
     fail: (err) => {
@@ -1396,7 +1443,7 @@ function chooseLocalImage(idx: number) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
-        applyImage(res.tempFilePaths[0])
+        openAdjuster(res.tempFilePaths[0])
       }
     },
     fail: (err) => {

@@ -223,6 +223,16 @@
       @preview="onTextStylePreview"
       @reset="onTextStyleReset"
     />
+
+    <!-- 图片替换调节浮层 -->
+    <ImageAdjuster
+      :visible="adjusterVisible"
+      :image-url="adjusterImageUrl"
+      :target-ratio="adjusterTargetRatio"
+      :target-border-radius="adjusterTargetRadius"
+      @confirm="onAdjusterConfirm"
+      @cancel="onAdjusterCancel"
+    />
   </view>
 </template>
 
@@ -243,6 +253,7 @@ import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
+import ImageAdjuster from './ImageAdjuster.vue'
 import TextStylePanel from './TextStylePanel.vue'
 import CloudImage from '@/components/CloudImage.vue'
 import type { Work } from '@/types'
@@ -290,6 +301,11 @@ const { getTextStyle } = useCanvasRender({
 const activeElementIndex = ref(-1)
 const selectedElement = ref<any>(null)
 const showImagePanel = ref(false)
+// 图片替换调节浮层状态
+const adjusterVisible = ref(false)
+const adjusterImageUrl = ref('')
+const adjusterTargetRatio = ref(1)
+const adjusterTargetRadius = ref(0)
 const showTextStylePanel = ref(false)
 const savingLoading = ref(false)
 const hasUnsavedChanges = ref(false)
@@ -675,7 +691,12 @@ function onElementLongPress(el: any, idx: number) {
 function openEditorForElement(el: any) {
   if (!el || el.editable === false) return
   if (el.type === 'image') {
-    onImageUpload()
+    // 已有照片：进入调节界面继续调整当前照片（内部提供"重选照片"入口）
+    if (el.text) {
+      openImageAdjuster(el)
+    } else {
+      onImageUpload()
+    }
   } else if (el.type === 'text') {
     editorStore.editingText = el.text
     editorStore.showTextEditor = true
@@ -852,13 +873,26 @@ function onTextEditorConfirm() {
   editorStore.closeTextEditor()
 }
 
-async function applySelectedImage(tempFilePath: string) {
-  if (!selectedElement.value) return
-  // 捕获当前选中的元素引用，防止异步上传期间选中元素被切换
+// 打开图片调节浮层（换图或再次点击图片元素时进入）
+function openImageAdjuster(el: any) {
+  if (!el || el.type !== 'image') return
+  selectedElement.value = el
+  adjusterImageUrl.value = el.text || ''
+  const w = el.width || 300
+  const h = el.height || 300
+  adjusterTargetRatio.value = w / h
+  adjusterTargetRadius.value = el.borderRadius || el.style?.borderRadius || 0
+  adjusterVisible.value = true
+}
+
+// 调节完成：上传裁剪后的图片并填充到元素
+async function onAdjusterConfirm(tempPath: string) {
+  adjusterVisible.value = false
   const targetElement = selectedElement.value
+  if (!targetElement || targetElement.type !== 'image' || !tempPath) return
   uni.showLoading({ title: '上传中 0%' })
   try {
-    const permanentUrl = await uploadImage(tempFilePath, (progress: number) => {
+    const permanentUrl = await uploadImage(tempPath, (progress: number) => {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
     if (_isMounted && targetElement) {
@@ -872,9 +906,9 @@ async function applySelectedImage(tempFilePath: string) {
   } catch (e) {
     console.warn('图片上传失败:', e)
     if (_isMounted && targetElement) {
-      targetElement.text = tempFilePath
+      targetElement.text = tempPath
       if (targetElement.dataKey) {
-        editorStore.syncFieldToAllModes(targetElement.dataKey, tempFilePath)
+        editorStore.syncFieldToAllModes(targetElement.dataKey, tempPath)
       }
       editorStore.pushHistory()
       hasUnsavedChanges.value = true
@@ -885,7 +919,21 @@ async function applySelectedImage(tempFilePath: string) {
   }
 }
 
+function onAdjusterCancel() {
+  adjusterVisible.value = false
+}
+
 function onImageUpload() {
+  const openAdjuster = (tempPath: string) => {
+    if (!selectedElement.value) return
+    adjusterImageUrl.value = tempPath
+    const el = selectedElement.value
+    const w = el.width || 300
+    const h = el.height || 300
+    adjusterTargetRatio.value = w / h
+    adjusterTargetRadius.value = el.borderRadius || el.style?.borderRadius || 0
+    adjusterVisible.value = true
+  }
   // #ifdef MP-WEIXIN
   uni.chooseMedia({
     count: 1,
@@ -893,7 +941,7 @@ function onImageUpload() {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0) {
-        applySelectedImage(res.tempFiles[0].tempFilePath)
+        openAdjuster(res.tempFiles[0].tempFilePath)
       }
     },
     fail: (err) => {
@@ -911,7 +959,7 @@ function onImageUpload() {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
-        applySelectedImage(res.tempFilePaths[0])
+        openAdjuster(res.tempFilePaths[0])
       }
     },
     fail: (err) => {

@@ -22,5 +22,7 @@ server/uploads/*.aac
 monetization-funnel/_shared/fonts/
 monetization-funnel/_shared/js/
 .uploads/
+# 云拉取图片缓存（运行时生成）
+server/uploads/cloud-pull/
 # 迁移脚本生成的资源映射清单（运行 migrate-assets.js 后产生）
 cloudfunctions/manifest.json
