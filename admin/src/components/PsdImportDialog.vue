@@ -26,10 +26,24 @@
             </div>
           </div>
 
-          <div v-if="reportWarnings.length > 0" class="psd-report">
-            <div class="psd-report-title">⚠️ 导入提示（{{ reportWarnings.length }}）</div>
+          <div v-if="reportGroups.length > 0" class="psd-report">
+            <div class="psd-report-title">⚠️ 导入提示</div>
             <div class="psd-report-body">
-              <div v-for="(w, i) in reportWarnings" :key="i" class="psd-report-item">{{ w }}</div>
+              <div
+                v-for="(g, i) in reportGroups"
+                :key="i"
+                class="psd-report-group"
+                :class="`psd-report-group--${g.kind}`"
+              >
+                <div class="psd-report-group-title" @click="toggleGroup(i)">
+                  <span class="psd-report-arrow">{{ expandedGroups.has(i) ? '▾' : '▸' }}</span>
+                  {{ g.title }}
+                  <span v-if="g.items.length > 1" class="psd-report-count">{{ g.items.length }} 条</span>
+                </div>
+                <div v-if="expandedGroups.has(i)" class="psd-report-group-items">
+                  <div v-for="(item, j) in g.items" :key="j" class="psd-report-item">{{ item }}</div>
+                </div>
+              </div>
             </div>
           </div>
           <div v-if="result && result.skipped.length > 0" class="psd-report">
@@ -163,6 +177,7 @@ watch(
   () => props.result,
   (result) => {
     editableFlags.value = {}
+    expandedGroups.value = new Set()
     if (!result) return
     for (const layer of result.layers) {
       editableFlags.value[layer.id] = defaultEditable(layer)
@@ -229,12 +244,17 @@ const fontOptions = computed(() => {
 // 倒序展示（最上层在前），导入顺序仍为文档顺序（自底向上）
 const topDownLayers = computed(() => (props.result ? [...props.result.layers].reverse() : []))
 
-// 去重并标注重复次数（同一模板多个图层会产生相同提示，折叠为 ×N）
-const reportWarnings = computed(() => {
-  const counts = new Map<string, number>()
-  for (const w of props.result?.warnings ?? []) counts.set(w, (counts.get(w) || 0) + 1)
-  return [...counts.entries()].map(([text, n]) => (n > 1 ? `${text}（×${n}）` : text))
-})
+// 告警分组展示：按效果名/类别聚合计数，默认折叠明细，点击展开
+const expandedGroups = ref<Set<number>>(new Set())
+
+function toggleGroup(i: number) {
+  const s = new Set(expandedGroups.value)
+  if (s.has(i)) s.delete(i)
+  else s.add(i)
+  expandedGroups.value = s
+}
+
+const reportGroups = computed(() => props.result?.warningGroups ?? [])
 
 // 缺少字体专区：未映射到任何可用字体的 PSD 字体（完整展开，不做折叠）
 const missingFonts = computed(() => {
@@ -352,6 +372,48 @@ function onConfirm() {
 .psd-report-item {
   color: #6d4c41;
   line-height: 1.5;
+}
+.psd-report-group {
+  border-left: 3px solid #d4a017;
+  margin: 2px 0;
+  padding: 2px 0 2px 8px;
+}
+.psd-report-group--line-height {
+  border-left-color: #9aa5b1;
+}
+.psd-report-group--line-height .psd-report-group-title {
+  color: #6b7280;
+}
+.psd-report-group--blend-mode,
+.psd-report-group--font-mapped,
+.psd-report-group--style-approx {
+  border-left-color: #d4a017;
+}
+.psd-report-group--other {
+  border-left-color: #d4a017;
+}
+.psd-report-group-title {
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  color: #8d6e63;
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.psd-report-arrow {
+  font-size: 10px;
+  color: #a1887f;
+}
+.psd-report-count {
+  font-size: 11px;
+  color: #a1887f;
+  font-weight: normal;
+}
+.psd-report-group-items {
+  margin-top: 4px;
+  padding-left: 14px;
 }
 .psd-layers {
   flex: 1;

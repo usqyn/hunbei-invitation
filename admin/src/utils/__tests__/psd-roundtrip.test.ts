@@ -129,8 +129,41 @@ describe('PSD 读写往返 + 图层展平（ag-psd 真实序列化）', () => {
     expect(t!.fontName).toBe('KazakhSoftAsilya')
     expect(t!.mappedFont).toBe('KazakhSoftAsilya')
     expect(t!.color).toBe('#c81e3c')
-    // leading 480 (1/1000 em) / 36 → 13.33，超出可渲染范围 → 钳制到 3，并产生钳制警告
-    expect(t!.lineHeight).toBe(3)
+    // leading 480 (1/1000 em) / 36 → 13.33，超出可渲染范围 → 钳制到 6
+    expect(t!.lineHeight).toBe(6)
+    // 单行文本行高不影响渲染：钳制但不产生告警
+    expect(t!.warnings.some(w => w.includes('行高'))).toBe(false)
+  })
+
+  it('多行文字超范围行高：钳制并产生行高告警', async () => {
+    const multiLine: Psd = {
+      ...source,
+      children: [{
+        name: '多行文字',
+        opacity: 255,
+        left: 50, top: 300, right: 550, bottom: 400,
+        text: {
+          text: '第一行\n第二行',
+          transform: [1, 0, 0, 1, 50, 300],
+          style: {
+            font: { name: 'ArialMT' },
+            fontSize: 24,
+            leading: 240,
+            fillColor: { r: 0, g: 0, b: 0, a: 255 },
+          },
+        },
+      }],
+    }
+    const buffer = writePsd(multiLine)
+    const psdMulti = readPsd(buffer, { useImageData: true, skipThumbnail: true, skipLinkedFilesData: true })
+    const { resolution, unit } = getResolutionInfo(psdMulti.imageResources)
+    const multi = await flattenPsdLayers(psdMulti, {
+      resolution,
+      resolutionUnit: unit,
+      availableFonts: ['KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq', '思源宋体, serif', '思源黑体, sans-serif', 'Arial, sans-serif'],
+    })
+    const t = multi.layers.find(l => l.name === '多行文字')
+    expect(t!.lineHeight).toBe(6)
     expect(t!.warnings.some(w => w.includes('行高'))).toBe(true)
   })
 

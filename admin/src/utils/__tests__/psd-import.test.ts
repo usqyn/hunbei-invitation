@@ -12,6 +12,7 @@ import {
   LINE_HEIGHT_MIN,
   LINE_HEIGHT_MAX,
   parseLayerEffects,
+  groupPsdWarnings,
 } from '../psd-import'
 
 describe('normalizeText', () => {
@@ -200,20 +201,23 @@ describe('resolveLineHeight', () => {
     expect(resolveLineHeight(11.04, 12, false).value).toBe(0.92)
   })
 
-  it('在 [0.8, 3] 范围内不钳制', () => {
+  it('在 [0.5, 6] 范围内不钳制（0.59/0.79/5.5 等设计值均保留）', () => {
     expect(resolveLineHeight(0.92 * 12, 12, false)).toEqual({ value: 0.92, clamped: false })
     expect(resolveLineHeight(3 * 10, 10, false)).toEqual({ value: 3, clamped: false })
+    expect(resolveLineHeight(5.5 * 8, 8, false)).toEqual({ value: 5.5, clamped: false })
+    expect(resolveLineHeight(0.59 * 12, 12, false)).toEqual({ value: 0.59, clamped: false })
+    expect(resolveLineHeight(0.79 * 12, 12, false)).toEqual({ value: 0.79, clamped: false })
   })
 
-  it('超上限钳制到 3 并标记 clamped（用户案例：6.88）', () => {
+  it('超上限钳制到 6 并标记 clamped（用户案例：6.88 → 6）', () => {
     const r = resolveLineHeight(55.04, 8, false)
-    expect(r.value).toBe(3)
+    expect(r.value).toBe(6)
     expect(r.clamped).toBe(true)
   })
 
-  it('低于下限钳制到 0.8 并标记 clamped', () => {
-    const r = resolveLineHeight(0.5 * 20, 20, false)
-    expect(r.value).toBe(0.8)
+  it('低于下限钳制到 0.5 并标记 clamped', () => {
+    const r = resolveLineHeight(0.4 * 20, 20, false)
+    expect(r.value).toBe(0.5)
     expect(r.clamped).toBe(true)
   })
 
@@ -229,8 +233,29 @@ describe('resolveLineHeight', () => {
   })
 
   it('范围常量与钳制区间一致', () => {
-    expect(LINE_HEIGHT_MIN).toBe(0.8)
-    expect(LINE_HEIGHT_MAX).toBe(3)
+    expect(LINE_HEIGHT_MIN).toBe(0.5)
+    expect(LINE_HEIGHT_MAX).toBe(6)
+  })
+})
+
+describe('groupPsdWarnings', () => {
+  it('样式无法还原按效果名拆分计数，其余按类别聚合', () => {
+    const groups = groupPsdWarnings([
+      '图层「A」图层样式「光泽、内阴影」无法还原（建议在 Photoshop 中先栅格化图层样式）',
+      '图层「B」图层样式「光泽」无法还原（建议在 Photoshop 中先栅格化图层样式）',
+      '图层「A」行高 0.3 超出可渲染范围，调整为 0.5',
+      '图层「C」字体「X」映射为「Y」',
+    ])
+    const styleLost = groups.filter(g => g.kind === 'style-lost')
+    expect(styleLost).toHaveLength(2)
+    expect(styleLost.find(g => g.title.startsWith('「光泽」'))?.title).toContain('×2 图层')
+    expect(styleLost.find(g => g.title.startsWith('「内阴影」'))?.title).toContain('×1 图层')
+    expect(groups.find(g => g.kind === 'line-height')?.items).toHaveLength(1)
+    expect(groups.find(g => g.kind === 'font-mapped')?.items).toHaveLength(1)
+  })
+
+  it('空列表 → 无分组', () => {
+    expect(groupPsdWarnings([])).toEqual([])
   })
 })
 

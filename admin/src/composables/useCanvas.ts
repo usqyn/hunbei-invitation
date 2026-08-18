@@ -149,9 +149,10 @@ export function useCanvas(opts: UseCanvasOptions) {
       pushHistory('edit text')
     })
 
-    // 对象变更 → push 到历史栈
-    canvas.on('object:added', pushHistoryIfNeeded)
-    canvas.on('object:removed', pushHistoryIfNeeded)
+    // 对象变更 → push 到历史栈。
+    // 结构变更（add/remove）立即入历史；属性变更（拖拽/缩放）走 300ms 防抖合并
+    canvas.on('object:added', pushHistoryStructural)
+    canvas.on('object:removed', pushHistoryStructural)
     canvas.on('object:modified', pushHistoryIfNeeded)
 
     // 拖拽吸附 + 对齐参考线（节流：20fps 对齐检测，避免每次 mousemove 都计算）
@@ -471,9 +472,10 @@ export function useCanvas(opts: UseCanvasOptions) {
     ;text.id = el.id
     ;text.elementType = 'text'
 
+    // 先同步 model 再 add：保证 object:added 触发历史快照时元素已在 model 中
+    elements.value.push(el)
     canvas.add(text)
     canvas.setActiveObject(text)
-    elements.value.push(el)
     selectedId.value = el.id
     return el
   }
@@ -537,9 +539,9 @@ export function useCanvas(opts: UseCanvasOptions) {
         ;obj.elementType = 'image'
         ;obj.srcUrl = src
 
+        elements.value.push(el)
         canvas.add(obj)
         canvas.setActiveObject(obj)
-        elements.value.push(el)
         selectedId.value = el.id
         return el
       }).catch((err: any) => {
@@ -603,9 +605,9 @@ export function useCanvas(opts: UseCanvasOptions) {
       ;img.elementType = 'image'
       ;img.srcUrl = src
 
+      elements.value.push(el)
       canvas.add(img)
       canvas.setActiveObject(img)
-      elements.value.push(el)
       selectedId.value = el.id
       return el
     }).catch(err => {
@@ -623,6 +625,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return { imported: 0, failed: 0 }
     let imported = 0
     let failed = 0
+    // 批量导入期间抑制中间结构历史，完成后统一压入一条历史
+    suppressHistory = true
     for (const layer of layers) {
       try {
         if (layer.type === 'text' && layer.text && layer.text.length > 0) {
@@ -703,9 +707,10 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.discardActiveObject()
     canvas.renderAll()
     updateZIndexFromFabric()
+    suppressHistory = false
     pushHistory('psd-import')
     return { imported, failed }
-  }
+    }
 
   // 删除选中元素
   function deleteSelected() {
@@ -714,8 +719,9 @@ export function useCanvas(opts: UseCanvasOptions) {
     const active = canvas.getActiveObject()
     if (!active) return
     const id = active.id as string
-    canvas.remove(active)
+    // 先同步 model 再 remove：保证 object:removed 触发历史快照时元素已不在 model 中
     elements.value = elements.value.filter(e => e.id !== id)
+    canvas.remove(active)
     selectedId.value = null
     updateZIndexFromFabric()
   }
@@ -726,8 +732,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     if (!canvas) return
     const obj = canvas.getObjects().find(o => o.id === id)
     if (!obj) return
-    canvas.remove(obj)
     elements.value = elements.value.filter(e => e.id !== id)
+    canvas.remove(obj)
     if (selectedId.value === id) selectedId.value = null
     updateZIndexFromFabric()
   }
@@ -892,9 +898,9 @@ export function useCanvas(opts: UseCanvasOptions) {
       })
       ;t.id = newEl.id
       ;t.elementType = 'text'
+      elements.value.push(newEl)
       canvas.add(t)
       canvas.setActiveObject(t)
-      elements.value.push(newEl)
       selectedId.value = newEl.id
       updateZIndexFromFabric()
     } else if (newEl.type === 'image') {
@@ -912,9 +918,9 @@ export function useCanvas(opts: UseCanvasOptions) {
         ;img.id = ie.id
         ;img.elementType = 'image'
         ;img.srcUrl = ie.src
+        elements.value.push(newEl)
         canvas.add(img)
         canvas.setActiveObject(img)
-        elements.value.push(newEl)
         selectedId.value = newEl.id
         updateZIndexFromFabric()
         canvas.renderAll()
@@ -1531,12 +1537,14 @@ export function useCanvas(opts: UseCanvasOptions) {
     updateZIndexFromFabric()
     canvas.renderAll()
 
-    // 默认清空历史栈并推入初始记录；undo/redo 调用时传入 resetHistory:false 以保留历史
+    // 默认清空历史栈并推入初始记录；undo/redo 调用时传入 resetHistory:false 以保留历史。
+    // pushHistory 在 isLoadDrafting 期间会被拦截，这里手动压入完整草稿作为初始历史
     if (loadOpts?.resetHistory !== false) {
-      history.value = []
-      historyIdx.value = -1
+      const initialDraft = getDraft()
+      history.value = [initialDraft]
+      historyIdx.value = 0
+      updateCanUndoRedo()
       suppressHistory = false
-      pushHistory('load draft')
     } else {
       // undo/redo 场景：保留历史栈，仅恢复 suppressHistory 状态
       suppressHistory = false
@@ -1558,7 +1566,7 @@ export function useCanvas(opts: UseCanvasOptions) {
   }
 
   function pushHistory(description = 'change') {
-    if (suppressHistory) return
+    if (suppressHistory || isLoadDrafting) return
     const draft = getDraft()
 
     // 去重：与当前指针指向的快照完全一致时不压栈。
@@ -1595,8 +1603,23 @@ export function useCanvas(opts: UseCanvasOptions) {
   // 对齐检测节流：限制参考线计算频率（20fps），避免每次 mousemove 都重算
   let alignCheckTimer: ReturnType<typeof setTimeout> | null = null
   let pendingAlignEvent: any = null
-  function pushHistoryIfNeeded() {
+
+  // 结构变更（新增/删除元素）立即入历史，不用 300ms 防抖：
+  // 连续快速添加若被合并成一条历史，一次撤销会回退多步（"撤销时一堆东西消失"）
+  function pushHistoryStructural(e: any) {
+    if (e?.target && (e.target.isGuide || e.target.isGrid)) return
     if (suppressHistory || isLoadDrafting) return
+    if (pushTimer) { clearTimeout(pushTimer); pushTimer = null }
+    pushHistory('structure change')
+  }
+
+  // 属性变更（拖拽/缩放/旋转）用 300ms 防抖合并为一条历史
+  function pushHistoryIfNeeded() {
+    if (suppressHistory || isLoadDrafting) {
+      // 拦截期间清掉挂起的定时器，避免恢复后旧定时器把状态压栈、截断 redo 栈
+      if (pushTimer) { clearTimeout(pushTimer); pushTimer = null }
+      return
+    }
     if (pushTimer) clearTimeout(pushTimer)
     pushTimer = setTimeout(() => {
       pushHistory('modify')
@@ -1674,10 +1697,15 @@ export function useCanvas(opts: UseCanvasOptions) {
   function clearCanvas() {
     const canvas = fabricCanvas.value
     if (!canvas) return
+    if (pushTimer) { clearTimeout(pushTimer); pushTimer = null }
+    // 批量移除只产生一条历史，避免每个对象各触发一条结构历史
+    suppressHistory = true
     canvas.getObjects().forEach(o => canvas.remove(o))
     canvas.discardActiveObject()
     elements.value = []
     selectedId.value = null
+    suppressHistory = false
+    pushHistory('clear canvas')
   }
 
   // ---- 网格与参考线 ----
@@ -1754,10 +1782,8 @@ export function useCanvas(opts: UseCanvasOptions) {
       cloned.set({ left: (cloned.left || 0) + 10, top: (cloned.top || 0) + 10 })
       cloned.id = createId(obj.type === 'i-text' ? 'text' : obj.type === 'image' ? 'image' : 'sticker')
       ;cloned.elementType = obj.elementType || 'sticker'
-      canvas.add(cloned)
-      canvas.setActiveObject(cloned)
 
-      // 同步 model
+      // 先同步 model 再 add：保证 object:added 触发历史快照时元素已在 model 中
       const sourceEl = elements.value.find(e => e.id === selectedId.value)
       if (sourceEl) {
         const newEl = JSON.parse(JSON.stringify(sourceEl))
@@ -1768,6 +1794,9 @@ export function useCanvas(opts: UseCanvasOptions) {
         elements.value.push(newEl)
         selectedId.value = newEl.id
       }
+
+      canvas.add(cloned)
+      canvas.setActiveObject(cloned)
       updateZIndexFromFabric()
       canvas.renderAll()
       pushHistory('duplicate')

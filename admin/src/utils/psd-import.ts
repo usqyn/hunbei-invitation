@@ -65,6 +65,70 @@ export interface PsdImportResult {
   layers: PsdLayerPreview[]
   skipped: { name: string; reason: string }[]
   warnings: string[]
+  /** 告警分组聚合（按效果名/类别计数，供对话框降噪展示） */
+  warningGroups: PsdWarningGroup[]
+}
+
+/** 告警分组类型：style-lost 样式无法还原 / line-height 行高调整 / blend-mode 混合模式 / font-mapped 字体替换 / style-approx 样式近似还原 */
+export type PsdWarningKind = 'style-lost' | 'line-height' | 'blend-mode' | 'font-mapped' | 'style-approx' | 'other'
+
+export interface PsdWarningGroup {
+  kind: PsdWarningKind
+  /** 聚合标题，如「光泽」无法还原 ×8 图层 */
+  title: string
+  /** 逐层明细（完整原始告警文案） */
+  items: string[]
+}
+
+const STYLE_LOST_RE = /图层样式「([^」]+)」无法还原/
+
+/**
+ * 将扁平告警列表按类别聚合：
+ * - 样式无法还原：按效果名拆分计数（「光泽、内阴影」→ 光泽 ×N、内阴影 ×N）
+ * - 其余按类别聚合，逐层明细保留在 items 中
+ */
+export function groupPsdWarnings(warnings: string[]): PsdWarningGroup[] {
+  const groups: PsdWarningGroup[] = []
+  const byKind = new Map<PsdWarningKind, PsdWarningGroup>()
+  const styleLost = new Map<string, string[]>()
+
+  const getGroup = (kind: PsdWarningKind, title: string): PsdWarningGroup => {
+    let g = byKind.get(kind)
+    if (!g) {
+      g = { kind, title, items: [] }
+      byKind.set(kind, g)
+      groups.push(g)
+    }
+    return g
+  }
+
+  for (const w of warnings) {
+    const m = w.match(STYLE_LOST_RE)
+    if (m) {
+      const effects = m[1].split('、')
+      for (const e of effects) {
+        if (!styleLost.has(e)) styleLost.set(e, [])
+        styleLost.get(e)!.push(w)
+      }
+      continue
+    }
+    if (w.includes('行高')) getGroup('line-height', '行高已调整至可渲染范围').items.push(w)
+    else if (w.includes('混合模式')) getGroup('blend-mode', '混合模式无法还原（按普通模式显示）').items.push(w)
+    else if (w.includes('映射为')) getGroup('font-mapped', '字体已映射到系统字体').items.push(w)
+    else if (w.includes('已近似还原')) getGroup('style-approx', '图层样式已近似还原').items.push(w)
+    else getGroup('other', '其他提示').items.push(w)
+  }
+
+  for (const [effect, items] of styleLost) {
+    const suffix = /.*（.*）$/.test(items[0] ?? '') ? '（建议在 Photoshop 中先栅格化图层样式）' : ''
+    groups.push({
+      kind: 'style-lost',
+      title: `「${effect}」无法还原 ×${items.length} 图层${suffix}`,
+      items,
+    })
+  }
+
+  return groups
 }
 
 /** RGBA/RGB/FRGB 颜色 → #rrggbb 或 #rrggbbaa */
@@ -223,9 +287,9 @@ export function mapFontName(psdFont: string | undefined, available: string[]): {
 
 // ============ 行高 ============
 
-/** 行高可渲染范围：过小会裁掉字形，过大撑爆文本框 */
-export const LINE_HEIGHT_MIN = 0.8
-export const LINE_HEIGHT_MAX = 3
+/** 行高可渲染范围：渲染链路（Fabric.js / 小程序 DOM）支持任意行高，仅对极端值兜底防字形严重重叠/间距失控 */
+export const LINE_HEIGHT_MIN = 0.5
+export const LINE_HEIGHT_MAX = 6
 
 /**
  * PSD leading → 行高比值。
@@ -607,9 +671,9 @@ export async function flattenPsdLayers(
         const justification = mapJustification(textData.paragraphStyle?.justification)
         // tracking 单位 1/1000 em，与编辑器 letterSpacing 语义一致（RTL 由现有链路强制 0）
         const tracking = style?.tracking != null ? Math.round(style.tracking) : 0
-        // leading → lineHeight 比值（行高钳制到可渲染范围）
+        // leading → lineHeight 比值（行高钳制到可渲染范围；单行文本行高不影响渲染，钳制但不告警）
         const { value: lineHeight, clamped } = resolveLineHeight(style?.leading, effectiveFontSizePt, style?.autoLeading)
-        if (clamped) {
+        if (clamped && text.includes('\n')) {
           const original = style?.leading && effectiveFontSizePt ? Math.round((style.leading / effectiveFontSizePt) * 100) / 100 : undefined
           layerWarnings.push(`行高 ${original} 超出可渲染范围，调整为 ${lineHeight}`)
           warnings.push(`图层「${name}」行高 ${original} 超出可渲染范围，调整为 ${lineHeight}`)
@@ -715,7 +779,7 @@ export async function flattenPsdLayers(
   }
 
   await walk(psd.children, 0)
-  return { layers, skipped, warnings }
+  return { layers, skipped, warnings, warningGroups: groupPsdWarnings(warnings) }
 }
 
 /**
