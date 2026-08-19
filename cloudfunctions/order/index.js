@@ -1,18 +1,23 @@
 // ============ order 云函数 ============
-// 订单 + VIP 购买 + 商品，共 7 个路由：
+// 订单 + VIP 购买 + 商品 + 限数配额 + 分享奖励，共 10 个路由：
 //   POST /api/orders
 //   GET  /api/orders + GET /api/orders/:id
 //   PUT  /api/orders/:id/status (admin)
-//   POST /api/orders/:id/pay（订单支付，含 VIP 权益发放）
+//   POST /api/orders/:id/pay（订单支付，含 VIP 权益 + 单次解锁权益发放）
 //   POST /api/vip/order（VIP 套餐购买，事务：建订单+升级用户）
+//   GET  /api/quota（限数版配额查询）
+//   POST /api/quota/consume（限数版配额扣减）
+//   POST /api/share/reward（分享奖励 +1 次数）
 //
 // 与原 Express 差异：
 // - runTransaction 改为云数据库 db.runTransaction（原生事务支持）
 // - items 字段在 NoSQL 中直接存数组，无需 JSON.stringify/parse
+// - 限流：本地进程内 rateLimit 在云函数无状态场景不可用，
+//   防刷依赖登录鉴权 + 数据层限制（分享每日每模板 1 次）
 
 const {
   db, collection, _, now, uuid,
-  getUser, requireAuth, requireAdmin,
+  getUser, requireAuth, requireAdmin, isUserVip,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute, createRouter,
 } = require('./_shared')
@@ -174,6 +179,8 @@ const payOrder = async (ctx) => {
     // 非 VIP 订单：仅更新订单状态
     await collection('orders').where({ id }).update({ data: { status: 'paid', paid_at: ts, updatedAt: ts } })
   }
+  // 单次解锁（9.9 单买模板永久可用）无需额外记录：订单本身即权益凭证，
+  // 解锁判断通过查询已付订单中 items 含 unlock 类型实现（见 isTemplateUnlocked）
   return ok({ prepayId: `prepay_${id}`, status: 'paid' })
 }
 
@@ -218,6 +225,110 @@ const createVipOrder = async (ctx) => {
   })
 }
 
+// ============ 限数版配额 / 分享奖励 ============
+// 限数版模板（vipLevel='limited'）对每位非 VIP 用户可免费制作次数（默认 1 次，进入编辑器时扣减）；
+// VIP 用户、已单次解锁用户、免费版模板不受限。remaining=-1 表示不限。
+// 存储设计：全部复用已有集合，避免依赖需手工创建的集合——
+//   配额状态 → users 文档 quotaMap（{templateId: remaining}）
+//   分享计数 → users 文档 shareMap（{templateId_date: count}）
+//   单次解锁 → 查询已付订单（orders 集合 items 含 unlock 类型）
+const QUOTA_LIMITLESS = -1
+const SHARE_REWARD_QUOTA_CAP = 5
+
+async function getTemplateLevel(templateId) {
+  const res = await collection('templates').where({ id: templateId }).limit(1).get()
+  const t = res.data && res.data[0]
+  if (!t) return null
+  const vipLevel = t.vipLevel || (t.is_premium === 1 ? 'pro' : (t.is_paid === 1 ? 'personal' : 'free'))
+  return { vipLevel, price: parseFloat(t.price) || 0 }
+}
+
+async function getUserByPhone(phone) {
+  const res = await collection('users').where({ phone }).limit(1).get()
+  return res.data && res.data[0] ? res.data[0] : null
+}
+
+// 是否已单次解锁该模板：已付订单中 items 含 type='unlock' 且 templateId 匹配
+async function isTemplateUnlocked(phone, templateId) {
+  const res = await collection('orders').where({ phone, status: 'paid' }).limit(100).get()
+  return (res.data || []).some(o => (o.items || []).some(it => it.type === 'unlock' && it.templateId === templateId))
+}
+
+async function getTemplateQuota(phone, templateId) {
+  const level = await getTemplateLevel(templateId)
+  if (!level) return null
+  if (level.vipLevel === 'free' || level.vipLevel !== 'limited') return QUOTA_LIMITLESS
+  if (await isUserVip(phone)) return QUOTA_LIMITLESS
+  if (await isTemplateUnlocked(phone, templateId)) return QUOTA_LIMITLESS
+  const user = await getUserByPhone(phone)
+  const remaining = user && user.quotaMap ? user.quotaMap[templateId] : undefined
+  return remaining === undefined ? 1 : parseInt(remaining, 10) || 0
+}
+
+// GET /api/quota — 查询限数配额
+const getQuota = async (ctx) => {
+  const auth = requireAuth(ctx.event)
+  if (!auth.ok) return auth.body
+  const templateId = ctx.query.templateId
+  if (!templateId) return httpFail('缺少 templateId')
+  const remaining = await getTemplateQuota(auth.user.phone, templateId)
+  if (remaining === null) return httpFail('模板不存在', 404)
+  return ok({ remaining, limitless: remaining === QUOTA_LIMITLESS })
+}
+
+// POST /api/quota/consume — 扣减限数配额（进入编辑器时调用）
+// 注意：云函数无内存限流器（无状态），防刷依赖登录鉴权 + 剩余次数本身
+const consumeQuota = async (ctx) => {
+  const auth = requireAuth(ctx.event)
+  if (!auth.ok) return auth.body
+  const phone = auth.user.phone
+  const { templateId } = ctx.body
+  if (!templateId) return httpFail('缺少 templateId')
+  const remaining = await getTemplateQuota(phone, templateId)
+  if (remaining === null) return httpFail('模板不存在', 404)
+  if (remaining === QUOTA_LIMITLESS) return ok({ remaining: QUOTA_LIMITLESS, limitless: true })
+  if (remaining <= 0) return httpFail('QUOTA_EXHAUSTED', 403)
+  const nowTs = now()
+  // 嵌套字段首次扣减直接写 0（云数据库无 upsert），已有值用原子 inc
+  const key = 'quotaMap.' + templateId
+  const user = await getUserByPhone(phone)
+  if (user && user.quotaMap && user.quotaMap[templateId] !== undefined) {
+    await collection('users').where({ phone }).update({ data: { [key]: _.inc(-1), updatedAt: nowTs } })
+  } else {
+    await collection('users').where({ phone }).update({ data: { [key]: 0, updatedAt: nowTs } })
+  }
+  return ok({ remaining: remaining - 1, limitless: false })
+}
+
+// POST /api/share/reward — 分享奖励
+// 任意用户打开分享落地页时触发：给分享者（作品创建者 phone）的限数模板剩余次数 +1。
+// 公开访问（无登录态），防刷依赖：同人同模板每日 1 次 + 每日奖励总数上限。
+const shareReward = async (ctx) => {
+  const { templateId, phone } = ctx.body
+  if (!templateId) return httpFail('缺少 templateId')
+  if (!phone) return httpFail('缺少 phone')
+  const remaining = await getTemplateQuota(phone, templateId)
+  if (remaining === null) return httpFail('模板不存在', 404)
+  if (remaining === QUOTA_LIMITLESS) return ok({ remaining: QUOTA_LIMITLESS, rewarded: false, reason: 'unlimited' })
+  const date = now().slice(0, 10)
+  const nowTs = now()
+  const user = await getUserByPhone(phone)
+  const shareMapKey = `${templateId}_${date}`
+  const todayCount = user && user.shareMap ? parseInt(user.shareMap[shareMapKey], 10) || 0 : 0
+  if (todayCount >= 1) return httpFail('DAILY_LIMIT', 429)
+  if (remaining >= SHARE_REWARD_QUOTA_CAP) return ok({ remaining, rewarded: false, reason: 'capped' })
+  const shareKey = 'shareMap.' + shareMapKey
+  const quotaKey = 'quotaMap.' + templateId
+  const userUpdate = { [shareKey]: todayCount + 1, updatedAt: nowTs }
+  if (user && user.quotaMap && user.quotaMap[templateId] !== undefined) {
+    userUpdate[quotaKey] = _.inc(1)
+  } else {
+    userUpdate[quotaKey] = remaining + 1
+  }
+  await collection('users').where({ phone }).update({ data: userUpdate })
+  return ok({ remaining: remaining + 1, rewarded: true })
+}
+
 // ============ 路由表 ============
 const routes = [
   ['POST', '/api/orders', createOrder],
@@ -226,6 +337,9 @@ const routes = [
   ['PUT', '/api/orders/:id/status', updateOrderStatus],
   ['POST', '/api/orders/:id/pay', payOrder],
   ['POST', '/api/vip/order', createVipOrder],
+  ['GET', '/api/quota', getQuota],
+  ['POST', '/api/quota/consume', consumeQuota],
+  ['POST', '/api/share/reward', shareReward],
 ]
 
 // ============ 云函数入口 ============
