@@ -93,8 +93,9 @@
                     <label>
                       字体
                       <select class="psd-font-select" :value="getEdit(layer).fontName" @change="setEdit(layer, 'fontName', ($event.target as HTMLSelectElement).value)">
-                        <option v-for="f in fontOptions" :key="f" :value="f">{{ f }}</option>
+                        <option v-for="f in fontOptionsFor(layer)" :key="f" :value="f">{{ f }}</option>
                       </select>
+                      <span v-if="isRtlLayer(layer)" class="psd-rtl-font-hint">（哈语文本建议使用哈萨克字体）</span>
                     </label>
                   </div>
                   <div class="psd-layer-extra">
@@ -195,10 +196,17 @@ function setLayerEditable(layer: PsdLayerPreview, value: boolean) {
 
 // 与 useCanvas.resolveRtlTextOptions 一致：RTL 文本默认哈萨克字体，其余默认思源宋体
 const RTL_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
+// 哈语占位符（ASCII 文本，替换后为哈语）：与 resolveRtlTextOptions 的 KZ_PLACEHOLDER_RE 保持一致
+const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
+
+// 该层最终按 RTL 渲染（direction 由 PSD 提取时按内容判定；占位符文本替换后为哈语）
+function isRtlLayer(layer: PsdLayerPreview): boolean {
+  return layer.direction === 'rtl' || RTL_RE.test(layer.text || '') || KZ_PLACEHOLDER_RE.test(layer.text || '')
+}
 
 function defaultFontFor(layer: PsdLayerPreview): string {
   if (layer.mappedFont) return layer.mappedFont
-  return layer.text && RTL_RE.test(layer.text) ? 'KazakhSoftAsilya' : '思源宋体, serif'
+  return isRtlLayer(layer) ? 'KazakhSoftAsilya' : '思源宋体, serif'
 }
 
 // 校对输入框 RTL 感知：当前编辑文本含 RTL 字符时，输入框按 RTL 渲染（所见即所得，避免"倒着写"错觉）
@@ -229,17 +237,15 @@ watch(
   },
 )
 
-// 字体选项：系统字体表 + PSD 原始字体名（保留供选择）
-const fontOptions = computed(() => {
-  const names = new Set<string>([...(props.availableFonts || [])])
-  if (props.result) {
-    for (const layer of props.result.layers) {
-      if (layer.fontName) names.add(layer.fontName)
-      if (layer.mappedFont) names.add(layer.mappedFont)
-    }
-  }
-  return [...names]
-})
+// 字体选项：仅系统可用字体（PSD 原始字体名不在此列，缺失字体会在「缺少字体」专区引导上传，
+// 避免选中无字体文件的字体导致导入后回退默认字体）
+const fontOptions = computed(() => [...new Set([...(props.availableFonts || [])])])
+
+// RTL 层字体不再限制：导入链路已尊重用户选择（resolveRtlTextOptions 不再强制哈萨克字体）。
+// 仅保留「哈语文本建议使用哈萨克字体」的弱提示，避免误导用户以为限制选择。
+function fontOptionsFor(_layer: PsdLayerPreview): string[] {
+  return fontOptions.value
+}
 
 // 倒序展示（最上层在前），导入顺序仍为文档顺序（自底向上）
 const topDownLayers = computed(() => (props.result ? [...props.result.layers].reverse() : []))
@@ -299,7 +305,8 @@ function onConfirm() {
       text: edit.text.trim(),
       fontSize: edit.fontSize > 0 ? edit.fontSize : layer.fontSize,
       fontName: edit.fontName,
-      mappedFont: edit.fontName && edit.fontName !== layer.fontName ? edit.fontName : layer.mappedFont,
+      // 所见即所得：用户最终选择的字体即为导入字体（修复原实现中「选择 PSD 原始字体名时被静默丢弃」的问题）
+      mappedFont: edit.fontName,
     }
   })
   emit('confirm', { width: props.result.width, height: props.result.height, layers })
@@ -516,6 +523,10 @@ function onConfirm() {
   border-radius: 6px;
   padding: 4px 6px;
   max-width: 240px;
+}
+.psd-rtl-font-hint {
+  color: #b45309;
+  font-size: 12px;
 }
 .psd-layer-extra {
   display: flex;

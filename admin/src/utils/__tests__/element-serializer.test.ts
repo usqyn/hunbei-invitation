@@ -378,7 +378,7 @@ describe('serializeElement', () => {
       expect(ltrResult.style?.textAlign).toBe('center')
     })
 
-    it('RTL 文本应强制使用 KazakhSoftAsilya 字体并设字间距为 0', () => {
+    it('RTL 文本渲染字体栈：用户所选字体 + KazakhSoftAsilya 兜底，字间距为 0', () => {
       const rtlEl = {
         id: 't-rtl-font',
         type: 'text',
@@ -392,7 +392,7 @@ describe('serializeElement', () => {
         letterSpacing: 5,
       }
       const result = serializeElement(rtlEl)!
-      expect(result.style?.font).toBe('KazakhSoftAsilya')
+      expect(result.style?.font).toBe("思源宋体, 'KazakhSoftAsilya'")
       expect(result.style?.spacing).toBe(0)
     })
 
@@ -413,7 +413,7 @@ describe('serializeElement', () => {
       expect(result.style?.font).toBe('KazakhSoftAsilyaQaniq')
     })
 
-    it('RTL 文本显式选择白名单字体 ALKATIPBasma 时应保留所选字体（不做顶替）', () => {
+    it('RTL 文本显式选择 ALKATIPBasma 时应保留所选字体并追加哈萨克兜底', () => {
       const rtlEl = {
         id: 't-rtl-alkatip',
         type: 'text',
@@ -427,7 +427,7 @@ describe('serializeElement', () => {
         letterSpacing: 2,
       }
       const result = serializeElement(rtlEl)!
-      expect(result.style?.font).toBe('ALKATIPBasma')
+      expect(result.style?.font).toBe("ALKATIPBasma, 'KazakhSoftAsilya'")
     })
 
     it('含哈语占位符 {kzGroomName} 的文本应预标记为 RTL（占位符本身是 ASCII，但替换后是哈语）', () => {
@@ -445,8 +445,8 @@ describe('serializeElement', () => {
       const result = serializeElement(kzEl)!
       // 应检测为 RTL
       expect(result.style?.direction).toBe('rtl')
-      // 应强制使用 KazakhSoftAsilya 字体（占位符替换后是哈语）
-      expect(result.style?.font).toBe('KazakhSoftAsilya')
+      // 应使用用户所选字体 + 哈萨克兜底（占位符替换后是哈语）
+      expect(result.style?.font).toBe("思源宋体, 'KazakhSoftAsilya'")
       // 应右对齐
       expect(result.style?.textAlign).toBe('right')
       // 字间距应为 0
@@ -467,7 +467,8 @@ describe('serializeElement', () => {
       const result = serializeElement(kzDateEl)!
       // {kzDate} 占位符 + 已有哈语字符 → RTL
       expect(result.style?.direction).toBe('rtl')
-      expect(result.style?.font).toBe('KazakhSoftAsilya')
+      // 无显式字体 → 哈萨克兜底
+      expect(result.style?.font).toBe("'KazakhSoftAsilya'")
     })
 
     it('纯 ASCII 占位符 {kzAddress} 也应预标记为 RTL', () => {
@@ -486,7 +487,8 @@ describe('serializeElement', () => {
       }
       const result = serializeElement(kzAddrEl)!
       expect(result.style?.direction).toBe('rtl')
-      expect(result.style?.font).toBe('KazakhSoftAsilya')
+      // 用户所选 Arial + 哈萨克兜底
+      expect(result.style?.font).toBe("Arial, 'KazakhSoftAsilya'")
     })
 
     it('坐标与尺寸应四舍五入到两位小数', () => {

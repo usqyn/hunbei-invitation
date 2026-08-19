@@ -75,13 +75,13 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
     const direction = rawDirection === 'auto'
       ? (isRtl ? 'rtl' : 'ltr')
       : rawDirection
-    // RTL 文本默认使用哈萨克字体兜底（避免 fontFamily 为默认中文字体时字符不连写），
-    // 但元素显式选择 RTL 白名单字体（KazakhSoftAsilya/ALKATIPBasma 等）时保留所选字体。
-    // 白名单与小程序端 src/constants/editor.ts RTL_CAPABLE_FONTS 保持一致
-    const RTL_CAPABLE_FONTS = ['KazakhSoftAsilya', 'KazakhSoftAsilyaQaniq', 'ALKATIPBasma']
-    const explicitRtlFont = (el.fontFamily || '').split(',')[0].trim().replace(/['"]/g, '').toLowerCase()
-    const fontFamily = isRtl && !RTL_CAPABLE_FONTS.some((f) => f.toLowerCase() === explicitRtlFont)
-      ? 'KazakhSoftAsilya'
+    // RTL 文本渲染字体栈：用户所选字体在前 + KazakhSoftAsilya 兜底。
+    // 中文/拉丁部分用所选字体渲染，哈萨克字符回退哈萨克字体连写；
+    // 不再强制替换用户选择（与 useCanvas.rtlRenderFontStack 一致）
+    const fontFamily = direction === 'rtl'
+      ? (el.fontFamily
+        ? (el.fontFamily.includes('KazakhSoftAsilya') ? el.fontFamily : `${el.fontFamily}, 'KazakhSoftAsilya'`)
+        : "'KazakhSoftAsilya'")
       : el.fontFamily
     // RTL 文本默认右对齐（仅当用户未显式设置时）
     const textAlign = el.textAlign || (direction === 'rtl' ? 'right' : 'center')

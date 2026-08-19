@@ -299,7 +299,7 @@ import { useEditorStore } from '@/stores/editor'
 import { useUserStore } from '@/stores/user'
 import { useWorksStore } from '@/stores/works'
 import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
-import { RTL_CHAR_REGEX, FONT_FAMILY_BASE, isRtlCapableFont } from '@/constants/editor'
+import { RTL_CHAR_REGEX, FONT_FAMILY_BASE } from '@/constants/editor'
 import { getSceneShareText } from '@/constants/share-text'
 import { track } from '@/utils/track'
 import { resolveTextPlaceholders } from '@/utils/resolveTextPlaceholders'
@@ -1023,12 +1023,9 @@ function getFlipTextStyle(el: any): Record<string, string> {
   const detectedDirection = RTL_CHAR_REGEX.test(el.text) ? 'rtl' : 'ltr'
   const direction = style.direction === 'auto' ? detectedDirection : (style.direction || 'ltr')
   const isRtl = direction === 'rtl'
-  // RTL 文本（含哈语占位符替换后的实际内容）默认强制使用 KazakhSoftAsilya 字体，
-  // 与 useCanvasRender.getTextStyle 对齐，保证占位符替换前后字体格式一致；
-  // 元素显式选择 RTL 白名单字体（如 ALKATIPBasma）时保留所选字体
-  const fontFamily = (isRtl && !isRtlCapableFont(style.font))
-    ? `'KazakhSoftAsilya', ${FONT_FAMILY_BASE}`
-    : (style.font ? `"${style.font}", ${FONT_FAMILY_BASE}` : FONT_FAMILY_BASE)
+  // RTL 文本：用户所选字体渲染 + FONT_FAMILY_BASE 哈萨克兜底（中文用所选字体、
+  // 哈萨克字符回退哈萨克字体连写），不再强制替换用户选择（与 useCanvasRender.getTextStyle 对齐）
+  const fontFamily = style.font ? `"${style.font}", ${FONT_FAMILY_BASE}` : FONT_FAMILY_BASE
   return {
     fontFamily,
     fontSize: (style.fontSize || 28) + 'rpx',

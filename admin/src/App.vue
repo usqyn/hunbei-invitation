@@ -981,7 +981,7 @@
     <PsdImportDialog
       :visible="showPsdDialog"
       :result="psdImportResult"
-      :available-fonts="psdAvailableFonts"
+      :available-fonts="fontList"
       @close="showPsdDialog = false"
       @confirm="onPsdImportConfirm"
     />
@@ -1032,7 +1032,7 @@ import { serializeElement } from './utils/element-serializer'
 import { useFlipPages } from './composables/useFlipPages'
 import { shapeText, containsRtl } from './utils/bidi'
 import { fontListBase } from './constants/config-data'
-import { ensureFontLoaded } from './utils/font-loader'
+import { ensureFontLoaded, preloadBaseFonts } from './utils/font-loader'
 
 /**
  * 等待浏览器 @font-face 加载完成（特别是哈萨克字体 KazakhSoftAsilya）
@@ -1272,6 +1272,12 @@ function initEditorAfterAuth() {
     autoSaveTimer.value = setInterval(saveDraftToLocal, AUTO_SAVE_INTERVAL)
     loadTemplateList()
     loadUploadedFonts()
+    // 预加载本地基础字体（哈萨克等），就绪后重绘画布：避免 canvas 首次渲染
+    // 时字体未下载完成而回退默认字体（@font-face 为懒加载，且字体就绪后 fabric 不会自动重绘）
+    preloadBaseFonts().then(() => fabricCanvas.value?.renderAll())
+    if (typeof document !== 'undefined' && (document as any).fonts) {
+      ;(document as any).fonts.ready.then(() => fabricCanvas.value?.renderAll())
+    }
     setTimeout(() => appRootRef.value?.focus(), 50)
   })
 }
@@ -1823,8 +1829,6 @@ const showPublishWizard = ref(false)
 const showPsdDialog = ref(false)
 const psdImportResult = ref<PsdImportResult | null>(null)
 const psdImporting = ref(false)
-// 导入预览可选的字体（系统内置 + 已上传 + PSD 原始字体）
-const psdAvailableFonts = computed(() => [...new Set([...fontList.value, ...(psdImportResult.value?.layers ?? []).map(l => l.fontName).filter(Boolean) as string[]])])
 const historyVersions = ref<Array<{ description: string; ts: number; draft: any }>>([])
 const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 

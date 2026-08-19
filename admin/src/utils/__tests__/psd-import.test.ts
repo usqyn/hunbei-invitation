@@ -341,13 +341,43 @@ describe('parseLayerEffects', () => {
     expect(r.lost).toContain('渐变/图案描边')
   })
 
-  it('不支持的效果（内阴影/发光/斜面等）→ lost', () => {
+  it('内阴影：提取为字段（图片层 canvas 近似合成），不再记入 lost', () => {
     const r = parseLayerEffects({
       innerShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }],
+    }, DPI, UNIT, 100, 100)
+    expect(r.innerShadow).toEqual({ color: '#000000', opacity: 1, offsetX: 0, offsetY: -2, size: 2 })
+    expect(r.lost).not.toContain('内阴影')
+  })
+
+  it('内阴影：disabled / 透明色 → 忽略', () => {
+    const off = parseLayerEffects({ innerShadow: [{ enabled: false, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }] }, DPI, UNIT, 100, 100)
+    expect(off.innerShadow).toBeUndefined()
+    const transparent = parseLayerEffects({ innerShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0, a: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }] }, DPI, UNIT, 100, 100)
+    expect(transparent.innerShadow).toBeUndefined()
+  })
+
+  it('光泽：提取为字段（角度/混合模式），不再记入 lost', () => {
+    const r = parseLayerEffects({
+      satin: [{ enabled: true, color: { r: 255, g: 215, b: 0 }, opacity: 0.6, angle: 135, distance: { value: 3, units: 'Pixels' }, size: { value: 4, units: 'Pixels' }, blendMode: 'multiply' }],
+    }, DPI, UNIT, 100, 100)
+    expect(r.satin).toEqual({ color: '#ffd700', opacity: 0.6, angle: 135, blendMode: 'multiply' })
+    expect(r.lost).not.toContain('光泽')
+    const normal = parseLayerEffects({ satin: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 0.5, blendMode: 'normal' }] }, DPI, UNIT, 100, 100)
+    expect(normal.satin?.blendMode).toBe('normal')
+  })
+
+  it('不支持的效果（发光/斜面等）→ lost', () => {
+    const r = parseLayerEffects({
+      innerShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }],
+      outerGlow: { enabled: true },
       bevel: { enabled: true, style: 'innerBevel' },
       gradientOverlay: { enabled: true },
+      satin: { enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 0.5 },
     }, DPI, UNIT, 100, 100)
-    expect(r.lost).toEqual(expect.arrayContaining(['内阴影', '斜面浮雕', '渐变叠加']))
+    expect(r.innerShadow).toBeDefined()
+    expect(r.satin).toBeDefined()
+    expect(r.lost).toEqual(expect.arrayContaining(['外发光', '斜面浮雕', '渐变叠加']))
+    expect(r.lost).not.toEqual(expect.arrayContaining(['内阴影', '光泽']))
   })
 
   it('disabled 的效果被忽略；effects.disabled 整体忽略', () => {

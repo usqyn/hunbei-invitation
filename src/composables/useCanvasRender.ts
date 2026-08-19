@@ -8,7 +8,6 @@ import {
   DEFAULT_LETTER_SPACING,
   RTL_CHAR_REGEX,
   FONT_FAMILY_BASE,
-  isRtlCapableFont,
 } from '@/constants/editor'
 import type { EditableElement, ElementStyle } from '@/types'
 import { buildImageCssFilterFromElement } from '@/utils/imageFilter'
@@ -218,13 +217,9 @@ export function useCanvasRender(options: {
     // 限制最小字号，避免 fontSize 为 0 或极小值导致文字不可见
     const fontSize = Math.max(style.fontSize || DEFAULT_FONT_SIZE, 8)
 
-    // RTL 文本（含哈语占位符替换后的实际哈语内容）默认强制使用 KazakhSoftAsilya 字体，
-    // 即使 admin 端 style.font 是中文字体，也能保证字符正确连写。
-    // 但若元素显式选择了 RTL 白名单字体（KazakhSoftAsilya/ALKATIPBasma 等），保留所选字体。
-    // 这是对 admin element-serializer 预标记的兜底：避免旧模板或手动改 DB 的数据未标记 RTL。
-    const fontFamily = (direction === 'rtl' && !isRtlCapableFont(style.font))
-      ? `'KazakhSoftAsilya', ${FONT_FAMILY_BASE}`
-      : getFontFamily(style.font)
+    // RTL 文本：用户所选字体渲染 + FONT_FAMILY_BASE 哈萨克兜底（中文用所选字体、
+    // 哈萨克字符回退哈萨克字体连写），不再强制替换用户选择（与 admin element-serializer 一致）
+    const fontFamily = getFontFamily(style.font)
 
     const result: Record<string, string | number | undefined> = {
       fontSize: `${fontSize}rpx`,

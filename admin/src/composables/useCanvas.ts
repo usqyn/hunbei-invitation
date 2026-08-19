@@ -50,8 +50,9 @@ const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\
  *
  * 解决 admin 画布编辑态与 element-serializer.ts 不一致的死代码：
  * - direction: 'auto' 根据 content 自动判定（原实现仅 el.direction || 'ltr'）
- * - RTL 文本字体强制使用 KazakhSoftAsilya，避免中文字体下阿拉伯字符不连写
  * - RTL 文本 charSpacing 强制为 0（连写要求）
+ * - 字体不再强制替换：尊重用户选择（导入 PSD 时对话框默认哈萨克字体；
+ *   用户显式选择其他字体时按所选渲染，可能不连写/缺字形，由用户权衡）
  */
 function resolveRtlTextOptions(el: {
   direction?: string
@@ -74,11 +75,18 @@ function resolveRtlTextOptions(el: {
   const direction: 'rtl' | 'ltr' = rawDirection === 'auto'
     ? (isRtl ? 'rtl' : 'ltr')
     : (rawDirection as 'rtl' | 'ltr')
-  const fontFamily = isRtl && !(el.fontFamily || '').includes('KazakhSoftAsilya')
-    ? 'KazakhSoftAsilya'
-    : el.fontFamily
+  const fontFamily = el.fontFamily
   const charSpacing = direction === 'rtl' ? 0 : (el.letterSpacing ?? 2) * 10
   return { direction, fontFamily, charSpacing }
+}
+
+// RTL 文本渲染字体栈：用户所选字体在前 + KazakhSoftAsilya 兜底。
+// 中文/拉丁部分用所选字体渲染，哈萨克字符回退哈萨克字体连写；
+// 不再强制替换用户选择（数据层 el.fontFamily 始终保留用户所选值）。
+function rtlRenderFontStack(fontFamily: string | undefined, isRtl: boolean): string | undefined {
+  if (!isRtl) return fontFamily
+  if (!fontFamily) return "'KazakhSoftAsilya'"
+  return fontFamily.includes('KazakhSoftAsilya') ? fontFamily : `${fontFamily}, 'KazakhSoftAsilya'`
 }
 
 export function useCanvas(opts: UseCanvasOptions) {
@@ -442,17 +450,15 @@ export function useCanvas(opts: UseCanvasOptions) {
     }
 
     const { direction: resolvedDirection, fontFamily: resolvedFontFamily, charSpacing: resolvedCharSpacing } = resolveRtlTextOptions(el)
-    // RTL 文本同步回 el.fontFamily，保证属性面板与画布渲染一致
-    if (resolvedDirection === 'rtl') {
-      el.fontFamily = resolvedFontFamily
-    }
+    // el.fontFamily 保留用户所选值（属性面板显示）；画布渲染用哈萨克兜底字体栈
+    const renderFontFamily = rtlRenderFontStack(resolvedFontFamily, resolvedDirection === 'rtl')
 
     const text = new fabric.IText(el.content, {
       left: el.x,
       top: el.y,
       originX: 'center',
       originY: 'center',
-      fontFamily: resolvedFontFamily,
+      fontFamily: renderFontFamily,
       fontSize: el.fontSize,
       fontWeight: el.fontWeight,
       fontStyle: el.fontStyle,
@@ -887,14 +893,12 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     if (newEl.type === 'text') {
       const rtlPaste = resolveRtlTextOptions(newEl)
-      if (rtlPaste.direction === 'rtl') {
-        newEl.fontFamily = rtlPaste.fontFamily
-      }
+      // newEl.fontFamily 保留用户所选值；渲染用哈萨克兜底字体栈
 
       const t = new fabric.IText(newEl.content, {
         left: newEl.x, top: newEl.y,
         originX: 'center', originY: 'center',
-        fontFamily: rtlPaste.fontFamily, fontSize: newEl.fontSize,
+        fontFamily: rtlRenderFontStack(rtlPaste.fontFamily, rtlPaste.direction === 'rtl'), fontSize: newEl.fontSize,
         fontWeight: newEl.fontWeight, fontStyle: newEl.fontStyle,
         fill: newEl.color, textAlign: newEl.textAlign,
         lineHeight: newEl.lineHeight,
@@ -1151,11 +1155,8 @@ export function useCanvas(opts: UseCanvasOptions) {
       // GitHub bidi-shaper 对称实现：updateSelected 时也要解析 RTL 字体
       // 用 patch 应用后的最新 t（已经 Object.assign 过）来判断 direction / fontFamily
       const rtlUpdate = resolveRtlTextOptions(t)
-      if (rtlUpdate.direction === 'rtl' && patch.fontFamily === undefined) {
-        // 用户未显式覆盖字体时，同步强制使用 KazakhSoftAsilya
-        t.fontFamily = rtlUpdate.fontFamily
-      }
-      const effectiveFontFamily = rtlUpdate.direction === 'rtl' ? rtlUpdate.fontFamily : (patch.fontFamily ?? t.fontFamily)
+      // t.fontFamily 保留用户所选值（属性面板显示）；渲染用哈萨克兜底字体栈
+      const effectiveFontFamily = rtlRenderFontStack(patch.fontFamily ?? t.fontFamily, rtlUpdate.direction === 'rtl')
       const effectiveCharSpacing = rtlUpdate.direction === 'rtl' ? 0 : (patch.letterSpacing ?? t.letterSpacing) * 10
 
       textObj.set({
@@ -1372,14 +1373,13 @@ export function useCanvas(opts: UseCanvasOptions) {
       if (obj) {
         const textObj = obj as fabric.IText
         textObj.set('text', resolved)
-        // 替换后重新解析 RTL：如果替换后的文本含哈语字符，强制使用 KazakhSoftAsilya 字体
-        // 这保证 admin 预览时字体格式与最终小程序渲染一致
+        // 替换后重新解析 RTL：哈萨克字符用用户字体渲染、哈萨克字体兜底（不再强制替换所选字体）
         const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
         const containsRtl = RTL_REGEX.test(resolved)
         if (containsRtl) {
           const rtlDraft = resolveRtlTextOptions({ ...t, content: resolved } as TextElement)
           textObj.set({
-            fontFamily: rtlDraft.fontFamily,
+            fontFamily: rtlRenderFontStack(rtlDraft.fontFamily, true),
             charSpacing: rtlDraft.charSpacing,
             direction: rtlDraft.direction,
             textAlign: t.textAlign || 'right',
@@ -1415,13 +1415,13 @@ export function useCanvas(opts: UseCanvasOptions) {
       if (!obj) return
       const textObj = obj as fabric.IText
       textObj.set('text', resolved)
-      // 替换后重新解析 RTL：如果替换后的文本含哈语字符，强制使用 KazakhSoftAsilya 字体
+      // 替换后重新解析 RTL：哈萨克字符用用户字体渲染、哈萨克字体兜底（不再强制替换所选字体）
       const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
       const containsRtl = RTL_REGEX.test(resolved)
       if (containsRtl) {
         const rtlDraft = resolveRtlTextOptions({ ...t, content: resolved } as TextElement)
         textObj.set({
-          fontFamily: rtlDraft.fontFamily,
+          fontFamily: rtlRenderFontStack(rtlDraft.fontFamily, true),
           charSpacing: rtlDraft.charSpacing,
           direction: rtlDraft.direction,
           textAlign: t.textAlign || 'right',
@@ -1467,14 +1467,12 @@ export function useCanvas(opts: UseCanvasOptions) {
       if (el.type === 'text') {
         const et = el as TextElement
         const rtlDraft = resolveRtlTextOptions(et)
-        if (rtlDraft.direction === 'rtl') {
-          et.fontFamily = rtlDraft.fontFamily
-        }
+        // et.fontFamily 保留数据值（属性面板显示用户所选字体）；渲染用哈萨克兜底字体栈
 
         const t = new fabric.IText(el.content, {
           left: el.x, top: el.y,
           originX: 'center', originY: 'center',
-          fontFamily: rtlDraft.fontFamily, fontSize: el.fontSize,
+          fontFamily: rtlRenderFontStack(rtlDraft.fontFamily, rtlDraft.direction === 'rtl'), fontSize: el.fontSize,
           fontWeight: el.fontWeight, fontStyle: el.fontStyle,
           fill: el.color, textAlign: el.textAlign,
           lineHeight: el.lineHeight, charSpacing: rtlDraft.charSpacing,

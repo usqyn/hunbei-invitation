@@ -343,16 +343,18 @@ export interface ParsedLayerEffects {
   stroke?: { color: string; opacity: number; size: number; position: string }
   /** 颜色叠加：文字层可见颜色（Photoshop 文字层启用 solidFill 时 fillColor 可能不是实际显示色） */
   solidFill?: { color: string }
+  /** 内阴影：形状内部边缘暗色（图片层 canvas 近似合成） */
+  innerShadow?: { color: string; opacity: number; offsetX: number; offsetY: number; size: number }
+  /** 光泽：形状内部双向渐变折痕（图片层 canvas 近似合成，忽略 contour 细节） */
+  satin?: { color: string; opacity: number; angle: number; blendMode: string }
   /** 无法还原的效果名（中文） */
   lost: string[]
 }
 
 const UNSUPPORTED_EFFECT_NAMES: Record<string, string> = {
-  innerShadow: '内阴影',
   outerGlow: '外发光',
   innerGlow: '内发光',
   bevel: '斜面浮雕',
-  satin: '光泽',
   gradientOverlay: '渐变叠加',
   patternOverlay: '图案叠加',
 }
@@ -416,6 +418,38 @@ export function parseLayerEffects(
     }
   }
 
+  // 内阴影：形状内部边缘的暗色（角度/距离/模糊），图片层用 canvas 近似合成
+  const inner = Array.isArray(effects.innerShadow) ? effects.innerShadow[0] : effects.innerShadow
+  if (inner && inner.enabled !== false) {
+    const color = colorToHex(inner.color)
+    const distance = effectUnitsToPx(inner.distance, resolution, unit, percentBase)
+    const size = effectUnitsToPx(inner.size, resolution, unit, percentBase)
+    const angle = ((inner.angle ?? 0) * Math.PI) / 180
+    if (color && color !== '#00000000' && inner.opacity != null && inner.opacity > 0) {
+      out.innerShadow = {
+        color,
+        opacity: Math.max(0, Math.min(1, inner.opacity ?? 1)),
+        offsetX: Math.round(distance * Math.cos(angle) * scale * 100) / 100,
+        offsetY: Math.round(-distance * Math.sin(angle) * scale * 100) / 100,
+        size: Math.max(0, Math.round(size * scale * 100) / 100),
+      }
+    }
+  }
+
+  // 光泽：形状内部的双向渐变折痕（角度/距离/尺寸/混合模式），图片层用 canvas 近似合成
+  const satinE = Array.isArray(effects.satin) ? effects.satin[0] : effects.satin
+  if (satinE && satinE.enabled !== false) {
+    const color = colorToHex(satinE.color)
+    if (color && color !== '#00000000' && satinE.opacity != null && satinE.opacity > 0) {
+      out.satin = {
+        color,
+        opacity: Math.max(0, Math.min(1, satinE.opacity ?? 1)),
+        angle: satinE.angle ?? 0,
+        blendMode: (satinE.blendMode || 'multiply').toLowerCase(),
+      }
+    }
+  }
+
   // 颜色叠加：enabled 且有颜色时即为文字层实际显示颜色（PSD 该效果作用于文字/图片层）
   const fills = Array.isArray(effects.solidFill) ? effects.solidFill : effects.solidFill ? [effects.solidFill] : []
   for (const f of fills) {
@@ -440,21 +474,49 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement {
   return c
 }
 
+/** PS 混合模式 → canvas composite 操作（不支持时回退 source-over） */
+function mapBlendMode(mode: string): GlobalCompositeOperation {
+  const map: Record<string, GlobalCompositeOperation> = {
+    multiply: 'multiply',
+    screen: 'screen',
+    overlay: 'overlay',
+    darken: 'darken',
+    lighten: 'lighten',
+    'color-dodge': 'color-dodge',
+    'color-burn': 'color-burn',
+    'hard-light': 'hard-light',
+    'soft-light': 'soft-light',
+    normal: 'source-over',
+    dissolve: 'source-over',
+  }
+  return map[mode] || 'source-over'
+}
+
 /**
- * 把投影/描边/颜色叠加合成进图层栅格（canvas 2D 近似）：
+ * 把投影/描边/颜色叠加/内阴影/光泽合成进图层栅格（canvas 2D 近似）：
  * - 投影：alpha 模糊 + 上色 + 偏移
  * - 描边：8 方向轮廓并集 + 上色（外部描边近似，位置/圆角与 PS 有细微差异）
  * - 颜色叠加（solidFill）：按源形状 alpha 替换为叠加色（source-in），
  *   解决 PSD 中「黑图 + 金色/红色叠加」图标导入后颜色与原稿不一致的问题
+ * - 内阴影：偏移 + 模糊 + 上色的阴影层裁剪进形状内部，主体覆盖后边缘露出暗环
+ * - 光泽：沿角度方向的双向渐变带（色→透明→色），裁剪进形状内部后按混合模式叠加
  * 返回带 padding 的画布与 padding 值（调用方需同步调整元素位置/尺寸）。
  */
 export function compositeLayerEffects(
   src: HTMLCanvasElement,
-  effects: { dropShadow?: ParsedLayerEffects['dropShadow']; stroke?: ParsedLayerEffects['stroke']; solidFill?: ParsedLayerEffects['solidFill'] },
+  effects: {
+    dropShadow?: ParsedLayerEffects['dropShadow']
+    stroke?: ParsedLayerEffects['stroke']
+    solidFill?: ParsedLayerEffects['solidFill']
+    innerShadow?: ParsedLayerEffects['innerShadow']
+    satin?: ParsedLayerEffects['satin']
+  },
 ): { canvas: HTMLCanvasElement; pad: number } {
   const drop = effects.dropShadow
   const stroke = effects.stroke
   const solidFill = effects.solidFill
+  const innerShadow = effects.innerShadow
+  const satin = effects.satin
   const needPad = (drop ? drop.blur + Math.max(Math.abs(drop.offsetX), Math.abs(drop.offsetY)) : 0) + (stroke ? stroke.size : 0)
   const pad = Math.max(2, Math.ceil(needPad + 4))
   const w = src.width
@@ -522,7 +584,63 @@ export function compositeLayerEffects(
     }
   }
 
+  // 内阴影（形状内部边缘暗环：主体之下，主体覆盖后仅边缘露出）
+  if (innerShadow) {
+    const inner = makeCanvas(w, h)
+    const ictx = inner.getContext('2d')
+    if (ictx) {
+      ictx.drawImage(base, innerShadow.offsetX, innerShadow.offsetY)
+      ictx.globalCompositeOperation = 'source-in'
+      ictx.fillStyle = innerShadow.color
+      ictx.fillRect(0, 0, w, h)
+      ictx.globalCompositeOperation = 'source-over'
+      if (innerShadow.size > 0 && 'filter' in ictx) {
+        ictx.filter = `blur(${Math.max(0.1, innerShadow.size)}px)`
+        ictx.drawImage(inner, 0, 0)
+        ictx.filter = 'none'
+      }
+      ictx.globalCompositeOperation = 'destination-in'
+      ictx.drawImage(base, 0, 0)
+      ictx.globalCompositeOperation = 'source-over'
+      octx.globalAlpha = innerShadow.opacity
+      octx.drawImage(inner, pad, pad)
+      octx.globalAlpha = 1
+    }
+  }
+
   octx.drawImage(base, pad, pad)
+
+  // 光泽（形状内部双向渐变带：主体之上按混合模式叠加）
+  if (satin) {
+    const sat = makeCanvas(w, h)
+    const sctx = sat.getContext('2d')
+    if (sctx) {
+      const rad = (satin.angle * Math.PI) / 180
+      const span = Math.max(w, h) * 0.7
+      const cx = w / 2
+      const cy = h / 2
+      const dx = Math.cos(rad)
+      const dy = Math.sin(rad)
+      const g = sctx.createLinearGradient(cx - dx * span, cy - dy * span, cx + dx * span, cy + dy * span)
+      g.addColorStop(0, satin.color)
+      g.addColorStop(0.25, 'rgba(0,0,0,0)')
+      g.addColorStop(0.5, satin.color)
+      g.addColorStop(0.75, 'rgba(0,0,0,0)')
+      g.addColorStop(1, satin.color)
+      sctx.globalAlpha = satin.opacity
+      sctx.fillStyle = g
+      sctx.fillRect(0, 0, w, h)
+      sctx.globalAlpha = 1
+      sctx.globalCompositeOperation = 'destination-in'
+      sctx.drawImage(base, 0, 0)
+      sctx.globalCompositeOperation = 'source-over'
+      octx.save()
+      octx.globalCompositeOperation = mapBlendMode(satin.blendMode)
+      octx.drawImage(sat, pad, pad)
+      octx.restore()
+    }
+  }
+
   return { canvas: out, pad }
 }
 
@@ -598,6 +716,8 @@ export async function flattenPsdLayers(
         const applied: string[] = []
         if (effects.dropShadow) applied.push('投影')
         if (effects.stroke) applied.push('描边')
+        if (effects.innerShadow) applied.push('内阴影')
+        if (effects.satin) applied.push('光泽')
         if (applied.length) {
           layerWarnings.push(`已近似还原图层样式（${applied.join('、')}）`)
           warnings.push(`图层「${name}」图层样式已近似还原（${applied.join('、')}）`)
@@ -638,6 +758,12 @@ export async function flattenPsdLayers(
       const blendMode = layer.blendMode || 'normal'
 
       if (isTextLayer) {
+        // 内阴影/光泽仅图片层近似还原；文字层保留可编辑性，效果不还原（明确提示避免静默丢失）
+        if (effects.innerShadow || effects.satin) {
+          const names = [effects.innerShadow && '内阴影', effects.satin && '光泽'].filter(Boolean).join('、')
+          layerWarnings.push(`文字层「${names}」未还原（保留文字可编辑性，仅图片层近似还原）`)
+          warnings.push(`图层「${name}」文字层「${names}」未还原（保留文字可编辑性，仅图片层近似还原）`)
+        }
         const style: TextStyle | undefined = textData.style
         const rawText = textData.text || ''
         // 1) NFKC 还原预成形字形（视觉序存储的文本字形是已连写形式）
@@ -745,11 +871,13 @@ export async function flattenPsdLayers(
       let dataUrl: string
       let pad = 0
       try {
-        if (effects.dropShadow || effects.stroke || effects.solidFill) {
+        if (effects.dropShadow || effects.stroke || effects.solidFill || effects.innerShadow || effects.satin) {
           const composed = compositeLayerEffects(canvas, {
             dropShadow: effects.dropShadow,
             stroke: effects.stroke,
             solidFill: effects.solidFill,
+            innerShadow: effects.innerShadow,
+            satin: effects.satin,
           })
           canvas = composed.canvas
           pad = composed.pad

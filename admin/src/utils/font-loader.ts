@@ -17,3 +17,15 @@ export async function ensureFontLoaded(family: string, url?: string): Promise<vo
     console.warn(`[AdminFont] 字体「${family}」加载失败，画布将使用本机字体或默认字体`, e)
   }
 }
+
+/** 本地打包的基础字体（public/fonts，已有 @font-face 声明但懒加载）。
+ *  显式注入 FontFace 并等待就绪，保证 fabric 画布首次渲染即使用真实字体（而非系统回退） */
+const BASE_FONTS: Array<{ family: string; url: string }> = [
+  { family: 'KazakhSoftAsilya', url: '/fonts/KazakhSoftAsilya.ttf' },
+  { family: 'KazakhSoftAsilyaQaniq', url: '/fonts/KazakhSoftAsilyaQaniq.ttf' },
+  { family: 'AlimamaFangYuanTiVF', url: '/fonts/AlimamaFangYuanTiVF.ttf' },
+]
+
+export async function preloadBaseFonts(): Promise<void> {
+  await Promise.all(BASE_FONTS.map(f => ensureFontLoaded(f.family, f.url)))
+}
