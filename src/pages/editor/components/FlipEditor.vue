@@ -79,25 +79,6 @@
               class="flip-text"
               :style="getTextStyle(el)"
             >{{ formatBiDi(resolveText(el.text)) }}</text>
-            <!-- 缩放手柄：选中后显示，仅在画布上直接缩放元素尺寸 -->
-            <view
-              v-if="activeElementIndex === eIdx && el.editable !== false"
-              class="resize-handle resize-handle--active"
-              @touchstart.stop="onResizeHandleTouchStart(el, $event)"
-              @touchmove.stop.prevent="onResizeHandleTouchMove"
-              @touchend.stop="onResizeHandleTouchEnd"
-            ></view>
-            <!-- 旋转手柄：选中后显示，单指旋转元素 -->
-            <view
-              v-if="activeElementIndex === eIdx && el.editable !== false"
-              class="rotate-handle rotate-handle--active"
-              @touchstart.stop="onRotateHandleTouchStart(el, $event)"
-              @touchmove.stop.prevent="onRotateHandleTouchMove"
-              @touchend.stop="onRotateHandleTouchEnd"
-            >
-              <view class="rotate-handle-line"></view>
-              <view class="rotate-handle-dot">↻</view>
-            </view>
           </view>
         </view>
       </swiper-item>
@@ -370,22 +351,8 @@ function onElementTouchStart(el: any, idx: number, e: any) {
   activeElementIndex.value = idx
   selectedElement.value = el
   haptic('light')
-  // 双指落下：进入 pinch 模式（缩放 + 旋转）
-  if (e.touches && e.touches.length === 2) {
-    flipPinchState.startImageScale = el.imageScale ?? 1
-    flipPinchState.startRotation = el.rotation ?? 0
-    flipPinch.onTouchStart(e)
-    return
-  }
-  const touch = e.touches ? e.touches[0] : e
-  flipDragState.value = {
-    elementIdx: idx,
-    startTouchX: touch.clientX,
-    startTouchY: touch.clientY,
-    startX: el.x || 0,
-    startY: el.y || 0,
-    moved: false,
-  }
+  // 布局锁定：用户不可移动/缩放/旋转元素（仅可点选编辑内容），故不进入任何手势模式
+  flipDragState.value = null
 }
 
 // 单指拖拽：原始逻辑用 useFrameThrottle 包一层做 16ms 节流（约 60fps）
@@ -425,13 +392,8 @@ const onElementDragMoveThrottled = useFrameThrottle((e: any) => {
 })
 
 function onElementTouchMove(e: any) {
-  // 双指手势优先（不节流）
-  if (flipPinch.isActive() || (e.touches && e.touches.length === 2)) {
-    flipPinch.onTouchMove(e)
-    return
-  }
-  // 单指拖拽走节流
-  onElementDragMoveThrottled(e)
+  // 布局锁定：位置/缩放/旋转全部禁用，忽略一切移动手势
+  return
 }
 
 function onElementTouchEnd(e?: any) {

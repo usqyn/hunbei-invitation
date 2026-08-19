@@ -47,25 +47,6 @@
               <text class="placeholder-icon">📷</text>
               <text class="placeholder-text">{{ sec.placeholder || '点击上传照片' }}</text>
             </view>
-            <!-- 缩放手柄：选中后显示，支持在画布上直接缩放图片 section -->
-            <view
-              v-if="editorStore.activeSectionId === sec.id && sec.editable !== false"
-              class="resize-handle resize-handle--active"
-              @touchstart.stop="onResizeHandleTouchStart(sec, $event)"
-              @touchmove.stop.prevent="onResizeHandleTouchMove"
-              @touchend.stop="onResizeHandleTouchEnd"
-            ></view>
-            <!-- 旋转手柄：选中后显示，单指旋转图片 section -->
-            <view
-              v-if="editorStore.activeSectionId === sec.id && sec.editable !== false"
-              class="rotate-handle rotate-handle--active"
-              @touchstart.stop="onRotateHandleTouchStart(sec, $event)"
-              @touchmove.stop.prevent="onRotateHandleTouchMove"
-              @touchend.stop="onRotateHandleTouchEnd"
-            >
-              <view class="rotate-handle-line"></view>
-              <view class="rotate-handle-dot">↻</view>
-            </view>
           </template>
           <template v-else-if="sec.type === 'text'">
             <text class="section-text" :style="getTextStyle(sec)">{{ formatBiDi(sec.text || sec.placeholder || '请输入正文内容') }}</text>

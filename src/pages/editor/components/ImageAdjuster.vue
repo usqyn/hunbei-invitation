@@ -391,6 +391,8 @@ function renderCrop(): Promise<string> {
             // #ifdef MP-WEIXIN
             uni.canvasToTempFilePath({
               canvas,
+              fileType: 'jpg',
+              quality: 0.9,
               success: (res2: any) => resolve(res2.tempFilePath),
               fail: () => resolve(''),
             } as any)

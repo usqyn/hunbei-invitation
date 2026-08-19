@@ -144,13 +144,73 @@ export function uploadImage(filePath: string, onProgress?: (progress: number) =>
   return uploadImageViaMultipart(filePath, onProgress)
 }
 
+// 压缩阈值与目标参数：超过阈值的图片先压缩再上传，避免大图 base64 传输导致云函数调用超时
+const COMPRESS_SIZE_THRESHOLD = 1.5 * 1024 * 1024
+const COMPRESS_MAX_WIDTH = 1600
+const COMPRESS_QUALITY = 80
+
+// 获取文件大小（字节），失败返回 0（不压缩兜底）
+function getFileSize(filePath: string): Promise<number> {
+  return new Promise((resolve) => {
+    // #ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ
+    try {
+      const fs = uni.getFileSystemManager()
+      fs.getFileInfo({
+        filePath,
+        success: (res: any) => resolve(res.size || 0),
+        fail: () => resolve(0),
+      })
+    } catch {
+      resolve(0)
+    }
+    // #endif
+    // #ifdef APP-PLUS
+    try {
+      // @ts-ignore
+      plus.io.resolveLocalFileSystemURL(filePath, (entry: any) => {
+        entry.getMetadata((meta: any) => resolve(meta.size || 0), () => resolve(0))
+      }, () => resolve(0))
+    } catch {
+      resolve(0)
+    }
+    // #endif
+    // #ifdef H5
+    resolve(0)
+    // #endif
+  })
+}
+
+// 图片过大时压缩（MP 用 uni.compressImage），返回压缩后的临时路径；压缩失败回退原路径
+async function compressIfNeeded(filePath: string): Promise<string> {
+  const size = await getFileSize(filePath)
+  if (!size || size <= COMPRESS_SIZE_THRESHOLD) return filePath
+  try {
+    const res = await new Promise<any>((resolve, reject) => {
+      uni.compressImage({
+        src: filePath,
+        quality: COMPRESS_QUALITY,
+        compressedWidth: COMPRESS_MAX_WIDTH,
+        success: resolve,
+        fail: reject,
+      })
+    })
+    if (res && res.tempFilePath) return res.tempFilePath
+  } catch (e: any) {
+    console.warn('图片压缩失败，使用原图上传:', e)
+  }
+  return filePath
+}
+
 // 云函数模式：base64 JSON
 async function uploadImageViaBase64(filePath: string, onProgress?: (progress: number) => void): Promise<string> {
   // 通知进度：读取阶段 30% → 上传阶段 100%
   if (onProgress) onProgress(10)
-  const base64 = await readFileAsBase64(filePath)
+  // 大图先压缩，避免 base64 JSON 体积过大导致云函数调用超时
+  const finalPath = await compressIfNeeded(filePath)
+  if (finalPath !== filePath && onProgress) onProgress(25)
+  const base64 = await readFileAsBase64(finalPath)
   if (onProgress) onProgress(40)
-  const ext = getExtFromPath(filePath)
+  const ext = getExtFromPath(finalPath)
   const mime = EXT_MIME[ext] || 'image/jpeg'
   const dataUrl = `data:${mime};base64,${base64}`
   if (onProgress) onProgress(60)
@@ -160,6 +220,7 @@ async function uploadImageViaBase64(filePath: string, onProgress?: (progress: nu
       method: 'POST',
       data: { image: dataUrl },
       hideLoading: true,
+      timeout: 60000,
     })
     if (onProgress) onProgress(100)
     if (!res || !res.url) throw new Error('上传响应缺少 url')

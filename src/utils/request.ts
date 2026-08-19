@@ -44,7 +44,7 @@ export interface ApiResponse<T> {
 }
 
 export function request<T = any>(options: string | {
-  url: string; method?: string; data?: any; header?: any; hideLoading?: boolean
+  url: string; method?: string; data?: any; header?: any; hideLoading?: boolean; timeout?: number
 }): Promise<T> {
   if (typeof options === 'string') options = { url: options }
   const token = getToken()
@@ -58,11 +58,13 @@ export function request<T = any>(options: string | {
       const fnName = getFunctionName(options.url)
       const cleanPath = options.url.indexOf('?') === -1 ? options.url : options.url.slice(0, options.url.indexOf('?'))
       const queryObj = parseUrlQuery(options.url)
+      const _method = (options.method || 'GET').toUpperCase()
+      const isGetLike = _method === 'GET' || _method === 'HEAD' || _method === 'DELETE'
       const _t0 = Date.now()
       // 云函数调用偶发 success/fail 均不回调导致 Promise 永久挂起，
       // 必须加超时保护：超时后 reject，页面可重试或回退兜底数据
-      // 20s：与模板广场等页面的统一超时一致，覆盖真机冷启动场景
-      const _cloudTimeout = 20000
+      // 20s：与模板广场等页面的统一超时一致，覆盖真机冷启动场景；上传等重操作可传 timeout 覆盖
+      const _cloudTimeout = options.timeout || 20000
       let _cloudSettled = false
       const _timer = setTimeout(() => {
         if (_cloudSettled) return
@@ -80,9 +82,11 @@ export function request<T = any>(options: string | {
         name: fnName,
         data: {
           path: cleanPath,
-          httpMethod: (options.method || 'GET').toUpperCase(),
-          query: queryObj,
-          body: options.data || {},
+          httpMethod: _method,
+          // GET/HEAD/DELETE：options.data 与本地 uni.request 语义一致（拼入 query），
+          // 否则云函数 handler 从 ctx.query 读取时参数丢失（如 /api/quota 的 templateId）
+          query: { ...queryObj, ...(isGetLike && options.data ? options.data : {}) },
+          body: isGetLike ? undefined : (options.data || {}),
           headers: header,
         },
         success: (res: any) => {
