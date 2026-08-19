@@ -1,15 +1,15 @@
 import { defineLocale } from './index'
 
 defineLocale('zh-CN', {
-  // 九宫格分类副标题
+  // 九宫格分类副标题（对齐真实分类 id）
   'cat.wedding': '婚礼邀请',
-  'cat.engagement': '订婚喜宴',
-  'cat.creative': '订婚茶礼',
-  'cat.birthday': '割礼庆典',
-  'cat.poster': '耳环礼宴',
-  'cat.baby': '宝宝周岁',
-  'cat.study': '升学喜宴',
-  'cat.festival-invitation': '节日祝福',
+  'cat.engagement': '求婚',
+  'cat.consultation-tea': '商量茶',
+  'cat.festival': '割礼',
+  'cat.business': '耳环礼',
+  'cat.baby': '周岁宴',
+  'cat.graduation': '升学宴',
+  'cat.festival-invitation': '节日请柬',
   'cat.house': '乔迁新居',
 
   // 首页双栏入口

@@ -1,14 +1,14 @@
 import { defineLocale } from './index'
 
 defineLocale('kk', {
-  // ============ 九宫格分类副标题（已有，保留） ============
+  // ============ 九宫格分类副标题（对齐真实分类 id） ============
   'cat.wedding': 'توي تاماش',
   'cat.engagement': 'قۇدا تۇسۋ',
-  'cat.creative': 'اقلداسۋ شايى',
-  'cat.birthday': 'سۇننەت توي',
-  'cat.poster': 'سرعا توي',
+  'cat.consultation-tea': 'اقلداسۋ شايى',
+  'cat.festival': 'سۇننەت توي',
+  'cat.business': 'سرعا توي',
   'cat.baby': 'تۇساۋ كەسەر',
-  'cat.study': 'وقۋ توي',
+  'cat.graduation': 'وقۋ توي',
   'cat.festival-invitation': 'مەرەكەلىك شاقىرىۋ',
   'cat.house': 'قونىس اۋدارىۋ ',
 

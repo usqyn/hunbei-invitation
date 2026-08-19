@@ -114,13 +114,16 @@ const buildTemplateQuery = (ctx) => {
   return conditions
 }
 
-// GET /api/templates — 模板列表（支持分页）
+// GET /api/templates — 模板列表（支持分页；sort=likes 按点赞降序，默认按更新时间降序）
 const listTemplates = async (ctx) => {
   const conditions = buildTemplateQuery(ctx)
   const { page, limit, skip, hasPaging } = parsePagination(ctx.query)
   const countRes = await collection('templates').where(conditions).count()
   const total = countRes.total || 0
-  let q = collection('templates').where(conditions).orderBy('updatedAt', 'desc').field(LIST_FIELDS)
+  let q = collection('templates').where(conditions)
+  if (ctx.query.sort === 'likes') q = q.orderBy('likes', 'desc')
+  else q = q.orderBy('updatedAt', 'desc')
+  q = q.field(LIST_FIELDS)
   if (hasPaging) {
     const res = await q.skip(skip).limit(limit).get()
     const list = await sanitizeListCovers(res.data || [])

@@ -225,7 +225,6 @@ import type { TemplateItem, TemplateCategory } from '@/types'
 import { HOME_CATEGORIES } from '@/constants/categories'
 import { TEMPLATE_PAGE_CONFIG } from '@/config'
 import { request } from '@/utils/request'
-import { fetchTemplateQuota } from '@/api'
 import { formatBiDi } from '@/utils/font-loader'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { resolveUrl, isCloudUrl } from '@/utils/url'
@@ -234,11 +233,11 @@ function isRtlText(text: string | undefined | null): boolean {
   return !!text && RTL_CHAR_REGEX.test(text)
 }
 import { useUserStore } from '@/stores/user'
-import { useFeedback } from '@/composables/useFeedback'
+import { useTemplateEntry, resetTemplateEntryNavigation } from '@/composables/useTemplateEntry'
 import CloudImage from '@/components/CloudImage.vue'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
-const { haptic } = useFeedback()
+const { openTemplateEntry, isLimitedTemplate } = useTemplateEntry()
 
 // ============ 安全初始化：iOS 上任何一步崩溃都会导致页面白屏 ============
 let userStore: ReturnType<typeof useUserStore>
@@ -253,12 +252,6 @@ try {
     requireLogin: () => true,
   } as any
 }
-
-const isPurchased = computed(() => {
-  try {
-    return userStore.isVip()
-  } catch { return false }
-})
 
 // 分类列表（静态配置，与 HOME_CATEGORIES 的 categoryId 保持一致）
 // id 与数据库模板的 category 字段一致：割礼=festival、耳环礼=business、
@@ -302,7 +295,6 @@ const sortOptions = [
   { label: '最新', value: 'date' },
 ]
 const activeSort = ref<string>('likes')
-const navigating = ref(false)
 
 // 弹层显隐
 const showSearchPanel = ref(false)
@@ -533,7 +525,7 @@ function enableShareMenu() {
 
 // 用户从编辑器返回时重置导航锁，避免点击无响应
 onShow(() => {
-  navigating.value = false
+  resetTemplateEntryNavigation()
 })
 
 onShareAppMessage(() => {
@@ -735,112 +727,8 @@ function getSortLabel(value: string): string {
   return s ? s.label : '排序'
 }
 
-// 限数版模板判定：vipLevel === 'limited'，或兼容旧数据（is_paid 且非 VIP 免费且非专业版）
-function isLimitedTemplate(t: any): boolean {
-  if (!t) return false
-  if (t.vipLevel === 'limited') return true
-  return Boolean(t.is_paid) && !Boolean(t.is_premium) && !Boolean(t.vip_free)
-}
-
 function onSelectTemplate(template: TemplateItem) {
-  if (navigating.value) return
-  // 本地兜底模板没有真实数据，点击提示稍后重试
-  if (typeof template.id === 'string' && template.id.startsWith('local-')) {
-    uni.showToast({ title: '模板数据加载失败，请稍后重试', icon: 'none' })
-    return
-  }
-  // 登录拦截：未登录时跳转登录页
-  if (!userStore.requireLogin()) return
-
-  // 限数版模板：非 VIP 用户先查免费次数，不足则引导分享/解锁/VIP
-  if (isLimitedTemplate(template) && !userStore.isVip()) {
-    handleLimitedTemplate(template)
-    return
-  }
-
-  if (Boolean(template.is_paid)) {
-    const isVip = userStore.isVip()
-    if (!isVip && !isPurchased.value) {
-      haptic('light')
-      const price = template.price || 0
-      uni.showActionSheet({
-        itemList: [`单买 ${price}元`, '开通VIP免费使用'],
-        success: (res) => {
-          if (res.tapIndex === 0) {
-            // 单买流程：跳转支付页
-            uni.navigateTo({
-              url: `/pages/vip/index?mode=purchase&templateId=${template.id}&price=${price}`,
-            })
-          } else if (res.tapIndex === 1) {
-            // 开通VIP
-            uni.navigateTo({
-              url: '/pages/vip/index',
-            })
-          }
-        },
-      })
-      return
-    }
-  }
-  haptic('light')
-  navigating.value = true
-  uni.navigateTo({
-    url: `/pages/editor/index?templateId=${template.id}`,
-    fail: () => { navigating.value = false },
-  })
-}
-
-// 限数版模板点击：查询剩余免费次数，不足时弹出 分享得次数 / 单次解锁 / 开通VIP 三出口
-async function handleLimitedTemplate(template: TemplateItem) {
-  haptic('light')
-  const price = template.price || 9.9
-  let quota: any = null
-  try {
-    quota = await fetchTemplateQuota(template.id)
-  } catch (e) {
-    uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
-    return
-  }
-  if (!quota || quota.limitless || quota.remaining > 0) {
-    // 有剩余次数（或已解锁/VIP）：直接进入编辑器（次数在编辑器内扣减）
-    navigating.value = true
-    uni.navigateTo({
-      url: `/pages/editor/index?templateId=${template.id}`,
-      fail: () => { navigating.value = false },
-    })
-    return
-  }
-  // 免费次数已用完：三出口
-  uni.showActionSheet({
-    itemList: ['分享好友得免费次数', `¥${price} 解锁模板`, '开通VIP免费使用'],
-    success: (res) => {
-      if (res.tapIndex === 0) {
-        guideShareForQuota(template)
-      } else if (res.tapIndex === 1) {
-        uni.navigateTo({
-          url: `/pages/vip/index?mode=purchase&templateId=${template.id}&price=${price}`,
-        })
-      } else if (res.tapIndex === 2) {
-        uni.navigateTo({ url: '/pages/vip/index' })
-      }
-    },
-  })
-}
-
-// 引导分享：提示用户分享当前模板给好友，好友打开后即获得免费次数
-function guideShareForQuota(template: TemplateItem) {
-  uni.showModal({
-    title: '分享得次数',
-    content: '分享本模板给微信好友，好友打开后您即可获得 1 次免费制作机会（每日限 1 次）',
-    confirmText: '去分享',
-    success: (r) => {
-      if (r.confirm) {
-        uni.navigateTo({
-          url: `/pages/preview/index?templateId=${template.id}&shareGuide=1`,
-        })
-      }
-    },
-  })
+  openTemplateEntry(template, { isPurchased: userStore.isVip() })
 }
 
 // 本地兜底封面：wedding-5.png（533x800 ≈ 1.501，本地素材中与容器 1.779 最接近，裁切最小）

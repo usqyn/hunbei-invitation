@@ -1,7 +1,7 @@
 <template>
   <view class="page animate-page-fade-in">
     <!-- 顶部轮播图 -->
-    <view class="banner-wrap">
+    <view class="banner-wrap" v-if="homeConfig.banners && homeConfig.banners.length">
       <swiper
         class="banner-swiper animate-banner-in"
         :indicator-dots="true"
@@ -157,7 +157,7 @@
     </view>
 
     <!-- 热门付费模板 -->
-    <view class="section animate-section-fade-in" v-if="paidTemplates.length > 0 || loadingPaid" style="animation-delay: 0.1s">
+    <view class="section animate-section-fade-in" v-if="paidTemplates.length > 0 || loadingPaid || loadErrorPaid" style="animation-delay: 0.1s">
       <view class="section-header">
         <view class="section-title-wrap">
           <text class="section-title">热门付费模板</text>
@@ -176,7 +176,7 @@
             class="scroll-card paid-card"
             @click="handlePaidCardClick(card)"
           >
-            <image class="card-image" lazy-load :src="resolveUrl(card.cover || card.image)" mode="aspectFill" />
+            <CloudImage class="card-image" :src="card.cover || card.image" mode="aspectFill" @error="onImageError" />
             <view class="card-overlay"></view>
             <view class="paid-badge">
               <text class="price-symbol">¥</text>
@@ -197,10 +197,14 @@
           </view>
         </view>
       </scroll-view>
+      <!-- 加载失败重试 -->
+      <view v-if="loadErrorPaid" class="load-retry" @click="retryLoadPaid">
+        <text class="load-retry-text">加载失败，点击重试</text>
+      </view>
     </view>
 
     <!-- 海报模板区 -->
-    <view class="section animate-section-fade-in" v-if="posterTemplates.length > 0 || loadingPoster" style="animation-delay: 0.2s">
+    <view class="section animate-section-fade-in" v-if="posterTemplates.length > 0 || loadingPoster || loadErrorPoster" style="animation-delay: 0.2s">
       <view class="section-header">
         <view class="section-title-wrap">
           <text class="section-title">海报模板</text>
@@ -235,6 +239,10 @@
           </view>
         </view>
       </scroll-view>
+      <!-- 加载失败重试 -->
+      <view v-if="loadErrorPoster" class="load-retry" @click="retryLoadPoster">
+        <text class="load-retry-text">加载失败，点击重试</text>
+      </view>
     </view>
 
     <!-- 全部分类区 - 展示所有分类的模板数 -->
@@ -292,6 +300,7 @@ import { resolveUrl } from '@/utils/url'
 import CloudImage from '@/components/CloudImage.vue'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
+import { useTemplateEntry } from '@/composables/useTemplateEntry'
 import { t } from '@/locales'
 import '@/locales/kk'
 import '@/locales/zh-CN'
@@ -311,8 +320,11 @@ const featuredTemplates = ref<any[]>([])
 const isSearchFocused = ref(false)
 const loadingPaid = ref(true)
 const loadingPoster = ref(true)
+const loadErrorPaid = ref(false)
+const loadErrorPoster = ref(false)
 const fontsReady = ref(false)
 const userStore = useUserStore()
+const { openTemplateEntry } = useTemplateEntry()
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
@@ -404,13 +416,12 @@ const handleCategoryClick = (item: any) => {
 }
 
 const handleCardClick = (card: any) => {
-  // 登录拦截：未登录时跳转登录页
-  if (!userStore.requireLogin()) return
-  // 优先使用 API 模板真实 ID；fallback 到旧静态卡片的 type 字段
-  const templateId = card.templateId || card.type
-  if (!templateId) return
-  uni.navigateTo({
-    url: `/pages/editor/index?templateId=${templateId}`,
+  // 与模板列表页行为一致：登录/限数版配额/付费解锁统一在 useTemplateEntry 处理
+  openTemplateEntry({
+    ...card,
+    id: card.templateId || card.id,
+    is_paid: card.isPaid || 0,
+    price: card.price || 0,
   })
 }
 
@@ -440,21 +451,29 @@ async function loadPaidTemplates() {
     const data = await request<any[]>({ url: '/api/templates?is_paid=1', hideLoading: true })
     if (Array.isArray(data)) {
       paidTemplates.value = data
+      loadErrorPaid.value = false
     }
   } catch (e) {
     console.warn('加载付费模板失败:', e)
+    loadErrorPaid.value = true
   } finally {
     loadingPaid.value = false
   }
 }
 
+function retryLoadPaid() {
+  loadingPaid.value = true
+  loadErrorPaid.value = false
+  loadPaidTemplates()
+}
+
 // 精选模板：取已发布的、按 likes 降序的前 8 个
 async function loadFeaturedTemplates() {
   try {
-    // page=1&limit=8 已在服务端按 updatedAt DESC 排序
+    // sort=likes 服务端按 likes DESC 排序（云函数 listTemplates 支持）
     // 这里取 published 模板（默认就过滤 published），转成卡片数据
-    // 字段裁剪：只保留 featuredCards computed 实际使用的字段，避免完整 TemplateItem 进 setData
-    const data = await request<any[]>({ url: '/api/templates?page=1&limit=8', hideLoading: true })
+    // 字段裁剪：保留 featuredCards computed 与 useTemplateEntry 实际使用的字段
+    const data = await request<any[]>({ url: '/api/templates?sort=likes&page=1&limit=8', hideLoading: true })
     if (Array.isArray(data)) {
       featuredTemplates.value = data.map(t => ({
         id: t.id,
@@ -463,6 +482,11 @@ async function loadFeaturedTemplates() {
         cover: t.cover,
         image: t.image,
         likes: t.likes,
+        is_paid: t.is_paid,
+        price: t.price,
+        vipLevel: t.vipLevel,
+        is_premium: t.is_premium,
+        vip_free: t.vip_free,
       }))
     }
   } catch (e) {
@@ -475,12 +499,20 @@ async function loadPosterTemplates() {
     const data = await request<any[]>({ url: '/api/poster/templates/hot', hideLoading: true })
     if (Array.isArray(data)) {
       posterTemplates.value = data.slice(0, 6)
+      loadErrorPoster.value = false
     }
   } catch (e) {
     console.warn('加载海报模板失败:', e)
+    loadErrorPoster.value = true
   } finally {
     loadingPoster.value = false
   }
+}
+
+function retryLoadPoster() {
+  loadingPoster.value = true
+  loadErrorPoster.value = false
+  loadPosterTemplates()
 }
 
 function handlePosterClick(poster: any) {
@@ -498,28 +530,8 @@ function goToPosterPage() {
 }
 
 function handlePaidCardClick(card: any) {
-  // 登录拦截：未登录时跳转登录页
-  if (!userStore.requireLogin()) return
-
-  if (userStore.isVip()) {
-    uni.navigateTo({
-      url: `/pages/editor/index?templateId=${card.id}`,
-    })
-    return
-  }
-  uni.showModal({
-    title: card.name,
-    content: `${card.subtitle || ''}\n价格：${card.price}元`,
-    confirmText: '去开通VIP',
-    cancelText: '关闭',
-    success: (res) => {
-      if (res.confirm) {
-        uni.navigateTo({
-          url: '/pages/vip/index',
-        })
-      }
-    },
-  })
+  // 与模板列表页行为一致：限数版三出口/单买/开通VIP/进编辑器统一在 useTemplateEntry 处理
+  openTemplateEntry(card)
 }
 
 function goToVipPage() {
@@ -543,8 +555,6 @@ onMounted(() => {
     loadPaidTemplates()
     loadPosterTemplates()
   }, 1500)
-
-  enableShareMenu()
 })
 
 onLoad(() => {
@@ -1638,6 +1648,19 @@ onUnmounted(() => {
   background: #f5f5f7;
   border-radius: 28rpx;
   overflow: hidden;
+}
+
+/* 加载失败重试条 */
+.load-retry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28rpx 0 8rpx;
+}
+
+.load-retry-text {
+  font-size: 26rpx;
+  color: #e84a6e;
 }
 
 .skeleton-shimmer {
