@@ -3,11 +3,11 @@ import type { Ref } from 'vue'
 import type {
   CanvasBackground,
   CanvasSize,
+  CanvasDraft,
   AnyCanvasElement,
   TextElement,
   ImageElement,
   PageMode,
-  FlipPage,
 } from '../types/canvas'
 import { createId } from '../types/canvas'
 
@@ -28,6 +28,8 @@ export interface UseFlipPagesOptions {
   clearCanvas: () => void
   addImage: (src: string, partial?: Partial<ImageElement>) => Promise<ImageElement | null>
   addText: (partial?: Partial<TextElement>) => TextElement | undefined
+  /** 画布重建入口：翻页时复用 loadDraft 的完整保护机制（历史抑制 + 异步图片世代检查） */
+  loadDraft: (draft: CanvasDraft, loadOpts?: { resetHistory?: boolean }) => void
 }
 
 export function useFlipPages(options: UseFlipPagesOptions) {
@@ -72,52 +74,9 @@ export function useFlipPages(options: UseFlipPagesOptions) {
     const page = flipPages.value[currentFlipPageIndex.value]
     if (page) {
       page.background = { ...options.background.value }
-      page.elements = options.elements.value.map(el => {
-        const textEl = el as TextElement
-        const imgEl = el as ImageElement
-        return {
-          id: el.id,
-          type: el.type,
-          text: el.type === 'image' ? imgEl.src : textEl.content,
-          dataKey: (el as any).dataKey,
-          label: el.name || '元素',
-          x: el.x,
-          y: el.y,
-          width: el.width,
-          height: el.height,
-          zIndex: el.zIndex,
-          rotation: el.rotation,
-          opacity: el.opacity,
-          editable: el.editable !== false,
-          fontFamily: textEl.fontFamily,
-          fontSize: textEl.fontSize,
-          fontWeight: textEl.fontWeight,
-          fontStyle: textEl.fontStyle,
-          color: textEl.color,
-          textAlign: textEl.textAlign,
-          lineHeight: textEl.lineHeight,
-          letterSpacing: textEl.letterSpacing,
-          strokeColor: textEl.strokeColor,
-          strokeWidth: textEl.strokeWidth,
-          shadowColor: textEl.shadowColor,
-          shadowOffsetX: textEl.shadowOffsetX,
-          shadowOffsetY: textEl.shadowOffsetY,
-          shadowBlur: textEl.shadowBlur,
-          textDecoration: textEl.textDecoration,
-          direction: textEl.direction,
-          src: imgEl.src,
-          scale: imgEl.scale,
-          mask: imgEl.mask,
-          borderRadius: imgEl.borderRadius,
-          borderColor: imgEl.borderColor,
-          borderWidth: imgEl.borderWidth,
-          brightness: imgEl.brightness,
-          contrast: imgEl.contrast,
-          blur: imgEl.blur,
-          grayscale: imgEl.grayscale,
-          saturate: imgEl.saturate,
-        }
-      })
+      // 完整深拷贝元素，保留 visible/locked/strokeColor 等全部字段，
+      // 翻页重建后元素显示/锁定状态与保存前保持一致（此前瘦身序列化会丢字段）
+      page.elements = JSON.parse(JSON.stringify(options.elements.value))
     }
   }
 
@@ -125,65 +84,18 @@ export function useFlipPages(options: UseFlipPagesOptions) {
     if (options.pageMode.value !== 'flip') return
     const page = flipPages.value[currentFlipPageIndex.value]
     if (page) {
-      options.setBackground(page.background)
-      options.clearCanvas()
-      page.elements.forEach(el => {
-        if (el.type === 'image') {
-          options.addImage(el.text || el.src, {
-            id: el.id,
-            x: el.x,
-            y: el.y,
-            width: el.width,
-            height: el.height,
-            rotation: el.rotation ?? 0,
-            opacity: el.opacity ?? 1,
-            zIndex: el.zIndex ?? 0,
-            src: el.text || el.src || '',
-            scale: el.scale || 'cover',
-            mask: el.mask || 'rect',
-            borderRadius: el.borderRadius || 0,
-            borderColor: el.borderColor || 'transparent',
-            borderWidth: el.borderWidth || 0,
-            brightness: el.brightness ?? 100,
-            contrast: el.contrast ?? 0,
-            blur: el.blur ?? 0,
-            grayscale: el.grayscale ?? 0,
-            saturate: el.saturate ?? 100,
-            dataKey: el.dataKey,
-            editable: el.editable !== false,
-          } as any)
-        } else {
-          options.addText({
-            id: el.id,
-            x: el.x,
-            y: el.y,
-            width: el.width,
-            height: el.height,
-            rotation: el.rotation ?? 0,
-            opacity: el.opacity ?? 1,
-            zIndex: el.zIndex ?? 0,
-            content: el.text || '',
-            fontFamily: el.fontFamily || '思源宋体, serif',
-            fontSize: el.fontSize ?? 24,
-            fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
-            fontStyle: el.fontStyle || 'normal',
-            color: el.color || '#333333',
-            textAlign: el.textAlign || 'center',
-            lineHeight: el.lineHeight || 1.5,
-            letterSpacing: el.letterSpacing ?? 2,
-            strokeColor: el.strokeColor || 'transparent',
-            strokeWidth: el.strokeWidth ?? 0,
-            shadowColor: el.shadowColor || 'transparent',
-            shadowOffsetX: el.shadowOffsetX ?? 0,
-            shadowOffsetY: el.shadowOffsetY ?? 0,
-            shadowBlur: el.shadowBlur ?? 0,
-            textDecoration: el.textDecoration || 'none',
-            direction: el.direction || 'auto',
-            dataKey: el.dataKey,
-            editable: el.editable !== false,
-          } as any)
-        }
-      })
+      // 复用 loadDraft 的完整保护机制（suppressHistory + isLoadDrafting + 异步图片世代检查），
+      // 此前用 clearCanvas + 逐元素 addText/addImage 重建会产生大量历史记录，
+      // 且图片异步加载完成时对象迟到 push 进 elements.value / add 到画布，导致 model 与画布失步，
+      // 表现为翻页后元素无法选中、图层列表点击无效。
+      options.loadDraft(
+        {
+          canvasSize: { ...options.canvasSize.value },
+          background: { ...(page.background || options.background.value) },
+          elements: JSON.parse(JSON.stringify(page.elements || [])),
+        },
+        { resetHistory: false },
+      )
     }
   }
 

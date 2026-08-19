@@ -271,30 +271,13 @@ import { showToast } from '@/composables/useFeedback'
 import { useRtl } from '@/composables/useRtl'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { toKazakhDate, getKzWeekdayOptions, getTimePeriodOptions } from '@/utils/kz-date'
+import { PLACEHOLDER_DEFS } from '@/constants/placeholder-defs'
 
-const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholder: string }> = {
-  inviter: { label: '邀请者', icon: '👤', placeholder: '请输入邀请者姓名' },
-  invitee: { label: '受邀者', icon: '👥', placeholder: '请输入受邀者姓名' },
-  date: { label: '日期', icon: '📅', placeholder: '请选择日期' },
-  time: { label: '时间', icon: '⏰', placeholder: '请填写时间' },
-  location: { label: '地点', icon: '📍', placeholder: '请填写地点' },
-  address: { label: '详细地址', icon: '🏠', placeholder: '请填写详细地址' },
-  phone: { label: '联系电话', icon: '📞', placeholder: '请填写联系电话' },
-  year: { label: '年份', icon: '📅', placeholder: '例如: 2025' },
-  month: { label: '月份', icon: '📅', placeholder: '例如: 6' },
-  day: { label: '日', icon: '📅', placeholder: '例如: 15' },
-  // 哈萨克语阿拉伯文日期字段（admin 端发布对应 dataKey 占位符后由此识别）
-  // kzDate：选日期后输出表达式 "2026 جىلعى 1 ايدىڭ 22 كۇنى"（从属格形式）
-  kzDate: { label: '哈语日期', icon: '📆', placeholder: '2026 جىلعى 1 ايدىڭ 22 كۇنى' },
-  // kzWeekday：星期滚轮选择，输出哈语星期名
-  kzWeekday: { label: '哈语星期', icon: '📆', placeholder: 'سەيسەنبى' },
-  // kzTime：时间段滚轮，输出哈语时间段
-  kzTime: { label: '哈语时间段', icon: '⏰', placeholder: 'تۇستەن كەيىن' },
-  // 哈语新人姓名/地址：文本输入，自动 RTL 渲染（出现在"其他信息"区）
-  kzGroomName: { label: '哈语新郎名', icon: '👨', placeholder: 'نۇرلان' },
-  kzBrideName: { label: '哈语新娘名', icon: '👩', placeholder: 'اينۇر' },
-  kzAddress: { label: '哈语地址', icon: '🏠', placeholder: 'قىزىلوردا قالاسى, توي سارايى' },
-}
+// 字段元数据由占位符注册表派生（单一事实来源）：
+// 注册表新增占位符后表单输入项自动可用，无需手动同步（曾因漏写 kzWeekdayParen 导致无法编辑）
+const SMART_FIELD_META: Record<string, { label: string; icon: string; placeholder: string }> = Object.fromEntries(
+  PLACEHOLDER_DEFS.map(d => [d.key, { label: d.label, icon: d.icon, placeholder: d.placeholder }])
+)
 
 // 基础字段 key（值从 basicInfo 读取，但仅在模板中存在对应 dataKey 时显示）
 const BASIC_FIELD_KEYS = ['groomName', 'brideName', 'date', 'location', 'address']

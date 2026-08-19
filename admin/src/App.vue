@@ -529,9 +529,12 @@
             <textarea
               id="text-content-editor"
               class="form-textarea"
-              :value="(selectedElement as any).content"
-              @change="e => updateSelected({ content: (e.target as HTMLTextAreaElement).value })"
+              :value="textContentDraft"
+              @input="onTextContentInput"
             ></textarea>
+            <div class="confirm-text-row">
+              <button class="confirm-text-btn" @click="confirmTextContent">确认应用</button>
+            </div>
 
             <PlaceholderMarkPanel
               :content="(selectedElement as any).content || ''"
@@ -1580,7 +1583,6 @@ const {
   initialSize: { ...DEFAULT_CANVAS_SIZE },
   onSelectionChange: (el) => {
     // 选中元素时，同步 UI 状态到画布
-    console.log('selected:', el?.id)
   },
   onBackgroundChange: (bg) => {
     // 同步 App.vue 本地背景状态
@@ -1620,6 +1622,7 @@ const {
   clearCanvas,
   addImage: canvasAddImage,
   addText: canvasAddText,
+  loadDraft,
 })
 
 // 图层：按 zIndex 降序显示（最上层排第一）
@@ -1694,6 +1697,27 @@ function toggleFormatPainter() {
   showToast('格式刷已激活，点击目标元素应用样式')
 }
 
+// 文字内容草稿：输入时先写草稿，点「确认应用」才写入模型（避免误触改坏画布文本）
+const textContentDraft = ref('')
+watch(selectedId, (newId) => {
+  if (!newId) return
+  const el = elements.value.find(e => e.id === newId)
+  textContentDraft.value = (el as any)?.content ?? ''
+}, { immediate: true })
+
+function onTextContentInput(e: Event) {
+  textContentDraft.value = (e.target as HTMLTextAreaElement).value
+}
+
+function confirmTextContent() {
+  const el = elements.value.find(e => e.id === selectedId.value)
+  if (!el) return
+  if ((el as any).content === textContentDraft.value) return
+  updateSelected({ content: textContentDraft.value })
+  refreshAllPlaceholders(dateValues)
+  showToast('已应用')
+}
+
 // 选中元素变化时，若格式刷激活且选中的不是源元素，则应用样式并退出
 watch(selectedId, (newId) => {
   const state = painterState.value
@@ -1757,9 +1781,11 @@ function onRestoreVersion(idx: number) {
   refreshAllPlaceholders(dateValues)
 }
 
-// 占位符手动标记：更新元素后立即刷新画布预览（token 显示为回填值/示例值）
+// 占位符手动标记：更新元素后立即刷新画布预览（token 显示为回填值/示例值）；
+// 标记占位符即声明"该文字用户可改"，同时置 editable=true（PSD 导入文字层可能为 false）
 function onPlaceholderMark(patch: { content: string; defaults: Record<string, string> }) {
-  updateSelected(patch)
+  updateSelected({ ...patch, editable: true })
+  textContentDraft.value = patch.content
   refreshAllPlaceholders(dateValues)
 }
 
@@ -1871,8 +1897,9 @@ async function onLoadTemplate(id: string) {
         zIndex: el.zIndex ?? idx,
         content: el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '',
         dataKey: el.dataKey,
+        defaults: el.defaults || undefined,
         fontFamily: el.style?.font || '思源宋体, serif',
-        fontSize: el.style?.fontSize ? Math.round(el.style.fontSize * (tpl.canvasSize?.width || 375) / 750) : 24,
+        fontSize: el.style?.fontSize ?? 24,
         fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
         fontStyle: el.style?.fontStyle || 'normal',
         color: el.style?.color || '#333333',
@@ -1929,9 +1956,27 @@ async function onLoadTemplate(id: string) {
     } else {
       flipPages.value = []
     }
+    // 加载模板后自动适配缩放，避免大画布（如 1728×2304）超出视口显示不全
+    await nextTick()
+    fitCanvasToViewport()
   } catch (e) {
     alert('加载模板失败：' + (e as Error).message)
   }
+}
+
+// 按容器视口计算适配缩放，一次性 fit（不触发 applyZoom 的锚点补偿，直接居中）
+function fitCanvasToViewport() {
+  const scrollEl = canvasScrollRef.value
+  if (!scrollEl) return
+  const fitX = (scrollEl.clientWidth - 2) / canvasSize.value.width
+  const fitY = (scrollEl.clientHeight - 2) / canvasSize.value.height
+  const fitZoom = Math.max(0.15, Math.min(3, Math.min(fitX, fitY)))
+  if (Math.abs(fitZoom - zoom.value) < 0.001) return
+  zoom.value = fitZoom
+  requestAnimationFrame(() => {
+    scrollEl.scrollTop = 0
+    scrollEl.scrollLeft = 0
+  })
 }
 
 function onCloneTemplate(tpl: any) {
@@ -2506,18 +2551,27 @@ function onPageModeChange(mode: PageMode) {
 }
 
 // 页面模式切换时，画布 DOM 会重建（v-if），需销毁旧 Fabric 实例并在新 canvas 上重建
-watch(pageMode, async (mode, prevMode) => {
+// 注意：getDraft 必须在 dispose() 之前调用（此时旧 canvas 仍有效）
+watch(pageMode, async (mode) => {
   await nextTick()
-  // 进入 flip 模式时初始化翻页数据（若无数据）
-  if (mode === 'flip' && flipPages.value.length === 0) {
-    initFlipPages()
-    currentFlipPageIndex.value = 0
-    loadCurrentFlipPage()
-  }
   const draft = getDraft()
   dispose()
   init()
-  loadDraft(draft)
+  if (mode === 'flip') {
+    // 进入翻页模式：从 flipPages 加载当前页（复用 loadDraft 的完整保护机制，
+    // 避免此前在旧 canvas 上 clearCanvas + 逐元素重建导致的异步竞态与数据覆盖）
+    if (flipPages.value.length === 0) {
+      initFlipPages()
+      currentFlipPageIndex.value = 0
+      // 首次进入翻页模式：把当前画布内容作为封面页，避免切换模式清空已编辑内容
+      flipPages.value[0].elements = JSON.parse(JSON.stringify(elements.value))
+      flipPages.value[0].background = { ...background.value }
+    }
+    loadCurrentFlipPage()
+  } else {
+    // 进入其他模式：保留离开 flip 前的画布内容（saveCurrentFlipPage 已在 onPageModeChange 中保存翻页数据）
+    loadDraft(draft)
+  }
   refreshAllPlaceholders(dateValues)
 })
 
@@ -3313,6 +3367,24 @@ label {
 }
 
 .form-textarea:focus { outline: none; border-color: #1976d2; }
+
+.confirm-text-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.confirm-text-btn {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 4px;
+  background: #3478f6;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirm-text-btn:hover { background: #2563eb; }
 
 .btn-group {
   display: flex;

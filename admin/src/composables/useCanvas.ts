@@ -103,6 +103,9 @@ export function useCanvas(opts: UseCanvasOptions) {
   // loadDraft 嵌套计数：快速连续 undo/redo 时，前一次 loadDraft 的图片加载完成
   // 不能提前关闭后一次 loadDraft 的保护标志（否则 object:added 会把撤销后的状态压回历史栈）
   let loadDraftCount = 0
+  // 画布世代计数：每次清空/重建画布时自增，用于丢弃跨世代迟到的异步图片加载结果
+  // （防止上一页/上一状态的图片加载完成后把对象 push 进当前 model、add 到当前 canvas 造成失步）
+  let canvasEpoch = 0
 
   // 复制缓冲区
   const clipboard = ref<AnyCanvasElement | null>(null)
@@ -484,12 +487,15 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return Promise.resolve<ImageElement | null>(null)
 
+    // 记录发起加载时的画布世代：若加载完成前画布已被清空/重建，丢弃迟到结果
+    const epoch = canvasEpoch
     const isSvgDataUrl = src.startsWith('data:image/svg+xml')
 
     if (isSvgDataUrl) {
       // SVG data URL: 使用 loadSVGFromString 加载
       const svgString = atob(src.split(',')[1])
       return loadSVGFromString(svgString).then((result: any) => {
+        if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) return null
         const obj = fabricUtil.groupSVGElements(result.objects, result.options)
         if (!obj) return null
 
@@ -554,6 +560,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     const loadOpts = isDataUrl ? {} : { crossOrigin: 'anonymous' }
 
     return fabric.FabricImage.fromURL(src, loadOpts).then(img => {
+      // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果，避免 model 与画布失步
+      if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) return null
       if (!img) {
         console.warn('addImage: FabricImage.fromURL returned null for', src.slice(0, 64))
         return null
@@ -1295,7 +1303,14 @@ export function useCanvas(opts: UseCanvasOptions) {
       el.width = (obj.width || el.width) * scaleX
       el.height = (obj.height || el.height) * scaleY
       if (el.type === 'text') {
-        el.content = o.text ?? el.content
+        // 占位符元素（defaults 非空 或 content 含注册表 token）保持模型 token 态：
+        // Fabric 对象上的文本已被 refreshAllPlaceholders 替换为预览值，若回写会固化
+        // 预览文本、丢失 {key} token，导致小程序端无法识别该字段
+        const TOKEN_RE = new RegExp(`\\{(${PLACEHOLDER_DEFS.map(d => d.key).join('|')})\\}`)
+        const isPlaceholderElement = (el.defaults && typeof el.defaults === 'object' && Object.keys(el.defaults).length > 0) || TOKEN_RE.test(el.content || '')
+        if (!isPlaceholderElement) {
+          el.content = o.text ?? el.content
+        }
         // 字号归一化：把对象缩放折算进 fontSize 并重置 scale，
         // 保证模型 fontSize = 视觉字号（格式刷/属性面板/序列化取到的都是正确值）
         const displayFontSize = (o.fontSize || el.fontSize || 24) * scaleX
@@ -1427,7 +1442,9 @@ export function useCanvas(opts: UseCanvasOptions) {
     // 收集所有异步图片加载 Promise，待全部完成后再恢复历史记录
     const imagePromises: Promise<void>[] = []
 
-    // 清空
+    // 清空：进入新画布世代，丢弃跨世代迟到的异步图片/贴纸加载结果
+    canvasEpoch++
+    const epoch = canvasEpoch
     canvas.getObjects().forEach(o => canvas.remove(o))
     canvas.discardActiveObject()
 
@@ -1464,6 +1481,7 @@ export function useCanvas(opts: UseCanvasOptions) {
           stroke: el.strokeColor, strokeWidth: el.strokeWidth,
           opacity: el.opacity, angle: el.rotation,
           direction: rtlDraft.direction,
+          visible: el.visible !== false,
           lockRotation: el.locked, selectable: !el.locked,
         })
         // 恢复文字特效（渐变/阴影/长阴影/霓虹/下划线），撤销/重做/加载草稿时不丢失
@@ -1476,7 +1494,8 @@ export function useCanvas(opts: UseCanvasOptions) {
         const ie = el as ImageElement
         addTasks.push(() => {
           const p = fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
-            if (!fabricCanvas.value) return
+            // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果，避免污染当前 model 与画布
+            if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) return
             const sx = ie.width / (img.width || 1)
             const sy = ie.height / (img.height || 1)
             img.set({
@@ -1484,6 +1503,7 @@ export function useCanvas(opts: UseCanvasOptions) {
               originX: 'center', originY: 'center',
               scaleX: sx, scaleY: sy,
               opacity: ie.opacity, angle: ie.rotation,
+              visible: ie.visible !== false,
               lockRotation: ie.locked, selectable: !ie.locked,
             })
             // 恢复图片特效（CSS filter / 圆角 clipPath / 边框）
@@ -1507,7 +1527,8 @@ export function useCanvas(opts: UseCanvasOptions) {
         if (se.svgContent) {
           addTasks.push(() => {
             loadSVGFromString(se.svgContent).then((result: any) => {
-              if (!fabricCanvas.value) return
+              // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果
+              if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) return
               const svgObj = fabricUtil.groupSVGElements(result.objects, result.options)
               if (!svgObj) return
               const sx = se.width / (svgObj.width || 1)
@@ -1517,6 +1538,7 @@ export function useCanvas(opts: UseCanvasOptions) {
                 originX: 'center', originY: 'center',
                 scaleX: sx, scaleY: sy,
                 opacity: se.opacity, angle: se.rotation,
+                visible: se.visible !== false,
                 lockRotation: se.locked, selectable: !se.locked,
               })
               ;(svgObj as any).id = se.id
@@ -1698,6 +1720,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     const canvas = fabricCanvas.value
     if (!canvas) return
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = null }
+    // 清空画布 = 进入新世代，丢弃此前所有未完成的异步图片加载结果
+    canvasEpoch++
     // 批量移除只产生一条历史，避免每个对象各触发一条结构历史
     suppressHistory = true
     canvas.getObjects().forEach(o => canvas.remove(o))
