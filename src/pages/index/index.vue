@@ -62,7 +62,7 @@
         </view>
         <view class="entry-text-wrap">
           <text class="entry-title">开通VIP</text>
-          <text class="entry-desc">全站免费</text>
+          <text class="entry-desc">专属模板免费</text>
         </view>
         <view class="deco-star deco-star-1">✦</view>
         <view class="deco-star deco-star-2">✧</view>
@@ -141,7 +141,7 @@
               <view class="card-hot-tag" v-if="card.isHot">HOT</view>
             </view>
             <view class="card-info">
-              <text class="card-title">{{ card.title }}</text>
+              <text class="card-title" :class="{ 'rtl-text': isRtlText(card.title) }">{{ formatBiDi(card.title) }}</text>
               <view class="card-meta">
                 <text class="card-date" :class="{ 'rtl-text': isRtlText(card.date) }">{{ formatBiDi(card.date) }}</text>
                 <view class="card-views" v-if="card.views">
@@ -178,15 +178,15 @@
             <CloudImage class="card-image" :src="card.cover || card.image" mode="aspectFill" @error="onImageError" />
             <view class="card-overlay"></view>
             <view class="paid-badge">
-              <text class="price-symbol">¥</text>
-              <text class="price-num">{{ card.price }}</text>
+              <text class="price-symbol">♛</text>
+              <text class="price-num">{{ cardTierLabel(card) }}</text>
             </view>
             <view class="paid-sold" v-if="card.sales_count || card.sales">
               <text class="sold-icon">🔥</text>
               <text class="sold-text">已售{{ card.sales_count || card.sales || '100+' }}</text>
             </view>
             <view class="card-info">
-              <text class="card-title">{{ card.name }}</text>
+              <text class="card-title" :class="{ 'rtl-text': isRtlText(card.name) }">{{ formatBiDi(card.name) }}</text>
               <text class="card-sub" :class="{ 'rtl-text': isRtlText(card.subtitle) }">{{ formatBiDi(card.subtitle) }}</text>
             </view>
           </view>
@@ -202,50 +202,8 @@
       </view>
     </view>
 
-    <!-- 海报模板区 -->
-    <view class="section animate-section-fade-in" v-if="posterTemplates.length > 0 || loadingPoster || loadErrorPoster" style="animation-delay: 0.2s">
-      <view class="section-header">
-        <view class="section-title-wrap">
-          <text class="section-title">海报模板</text>
-          <view class="title-decoration"></view>
-        </view>
-        <view class="section-more" @click="goToPosterPage">
-          <text class="more-text">查看全部</text>
-          <text class="more-arrow">›</text>
-        </view>
-      </view>
-      <scroll-view class="card-scroll" scroll-x>
-        <view class="card-list stagger-list-horizontal">
-          <view
-            v-for="poster in posterTemplates"
-            :key="poster.id"
-            class="scroll-card poster-card"
-            @click="handlePosterClick(poster)"
-          >
-            <CloudImage class="card-image poster-card-image" :src="poster.cover_url" mode="aspectFill" @error="onImageError" />
-            <view class="card-overlay"></view>
-            <view class="poster-category-tag">{{ poster.category_name }}</view>
-            <view class="card-info">
-              <text class="card-title">{{ poster.name }}</text>
-              <view class="card-meta">
-                <text class="card-sub">{{ poster.category_name }}</text>
-              </view>
-            </view>
-          </view>
-          <!-- 加载骨架 -->
-          <view v-if="loadingPoster" class="scroll-card skeleton-card-item">
-            <view class="card-image poster-card-image skeleton-shimmer"></view>
-          </view>
-        </view>
-      </scroll-view>
-      <!-- 加载失败重试 -->
-      <view v-if="loadErrorPoster" class="load-retry" @click="retryLoadPoster">
-        <text class="load-retry-text">加载失败，点击重试</text>
-      </view>
-    </view>
-
     <!-- 全部分类区 - 展示所有分类的模板数 -->
-    <view class="section animate-section-fade-in" style="animation-delay: 0.3s">
+    <view class="section animate-section-fade-in" style="animation-delay: 0.2s">
       <view class="section-header section-header-column">
         <view class="section-title-wrap">
           <text class="section-title">{{ homeConfig.sections.allCategories.title }}</text>
@@ -292,13 +250,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
-import { HOME_CATEGORIES, HOME_TABS, HOME_FEATURED_CARDS } from '@/constants/categories'
+import { HOME_CATEGORIES, HOME_TABS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
 import { resolveUrl } from '@/utils/url'
 import CloudImage from '@/components/CloudImage.vue'
 import { request } from '@/utils/request'
-import { useUserStore } from '@/stores/user'
 import { useTemplateEntry, TIER_DEFAULT_PRICE } from '@/composables/useTemplateEntry'
 import { t } from '@/locales'
 import '@/locales/kk'
@@ -313,23 +270,18 @@ function isRtlText(text: string | undefined | null): boolean {
 const searchText = ref('')
 const activeTab = ref(HOME_CONFIG.defaultTab)
 const paidTemplates = ref<any[]>([])
-const posterTemplates = ref<any[]>([])
-// 精选卡片：优先用 API 已发布模板；接口失败或不足时回退到本地静态卡片
+// 精选卡片：用 API 已发布的按热度排序模板
 const featuredTemplates = ref<any[]>([])
 const isSearchFocused = ref(false)
 const loadingPaid = ref(true)
-const loadingPoster = ref(true)
 const loadErrorPaid = ref(false)
-const loadErrorPoster = ref(false)
 const fontsReady = ref(false)
-const userStore = useUserStore()
 const { openTemplateEntry } = useTemplateEntry()
 
 const categories = HOME_CATEGORIES
 const tabs = HOME_TABS
 const homeConfig = HOME_CONFIG
-const featuredCards = computed(() => {
-  const apiCards = featuredTemplates.value.map(t => ({
+const featuredCards = computed(() => featuredTemplates.value.slice(0, 8).map(t => ({
     id: t.id,
     title: t.name || '未命名',
     templateId: t.id,
@@ -342,20 +294,7 @@ const featuredCards = computed(() => {
     vipLevel: t.vipLevel,
     is_premium: t.is_premium,
     vip_free: t.vip_free,
-  }))
-  if (apiCards.length >= 8) return apiCards.slice(0, 8)
-  // 不足 8 个，用本地静态卡片补齐（保留旧数据兼容性）
-  const staticCards = HOME_FEATURED_CARDS.map(c => ({
-    id: c.id,
-    title: c.title,
-    templateId: c.type,
-    date: c.date,
-    image: c.image,
-    isHot: (c as any).likes > 1000,
-    views: (c as any).likes || 0,
-  }))
-  return [...apiCards, ...staticCards].slice(0, 8)
-})
+  })))
 
 function formatCount(count: number): string {
   if (count >= 10000) {
@@ -369,7 +308,8 @@ function formatCount(count: number): string {
 
 // 卡片档位标签（限免/VIP版/SVIP版/专业版）
 function cardTierLabel(card: any): string {
-  const tier: string = card.vipLevel || (card.isPaid ? (card.is_premium ? 'pro' : (card.vip_free ? 'personal' : 'limited')) : 'free')
+  const isPaid = Boolean(card.isPaid || card.is_paid)
+  const tier: string = card.vipLevel || (isPaid ? (card.is_premium ? 'pro' : (card.vip_free ? 'personal' : 'limited')) : 'free')
   const price = Number(card.price) > 0 ? Number(card.price) : (TIER_DEFAULT_PRICE[tier as keyof typeof TIER_DEFAULT_PRICE] || 0)
   if (tier === 'limited') return `限免 ¥${price}`
   if (tier === 'svip') return `SVIP ¥${price}`
@@ -506,41 +446,6 @@ async function loadFeaturedTemplates() {
   }
 }
 
-async function loadPosterTemplates() {
-  try {
-    const data = await request<any[]>({ url: '/api/poster/templates/hot', hideLoading: true })
-    if (Array.isArray(data)) {
-      posterTemplates.value = data.slice(0, 6)
-      loadErrorPoster.value = false
-    }
-  } catch (e) {
-    console.warn('加载海报模板失败:', e)
-    loadErrorPoster.value = true
-  } finally {
-    loadingPoster.value = false
-  }
-}
-
-function retryLoadPoster() {
-  loadingPoster.value = true
-  loadErrorPoster.value = false
-  loadPosterTemplates()
-}
-
-function handlePosterClick(poster: any) {
-  // 登录拦截：未登录时跳转登录页
-  if (!userStore.requireLogin()) return
-  uni.navigateTo({
-    url: `/pages/poster/editor/index?id=${poster.id}`,
-  })
-}
-
-function goToPosterPage() {
-  uni.navigateTo({
-    url: '/pages/poster/index/index',
-  })
-}
-
 function handlePaidCardClick(card: any) {
   // 与模板列表页行为一致：限数版三出口/单买/开通VIP/进编辑器统一在 useTemplateEntry 处理
   openTemplateEntry(card)
@@ -561,11 +466,10 @@ function goToMall() {
 let _delayedLoadTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => {
-  // 首屏可见的精选模板优先加载，付费模板和海报模板延迟 1.5 秒避免竞争网络
+  // 首屏可见的精选模板优先加载，付费模板延迟 1.5 秒避免竞争网络
   loadFeaturedTemplates()
   _delayedLoadTimer = setTimeout(() => {
     loadPaidTemplates()
-    loadPosterTemplates()
   }, 1500)
 })
 
@@ -1609,26 +1513,6 @@ onUnmounted(() => {
 .card-sub {
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.85);
-}
-
-/* 海报模板卡片 */
-.poster-card-image {
-  height: 420rpx;
-}
-
-.poster-category-tag {
-  position: absolute;
-  top: 16rpx;
-  left: 16rpx;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12rpx);
-  color: #ffffff;
-  font-size: 20rpx;
-  font-weight: 500;
-  padding: 8rpx 18rpx;
-  border-radius: 20rpx;
-  z-index: 3;
-  border: 1rpx solid rgba(255, 255, 255, 0.2);
 }
 
 /* 错峰入场 */
