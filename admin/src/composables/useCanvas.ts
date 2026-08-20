@@ -45,6 +45,10 @@ const MAX_HISTORY = 50
 // RTL 字符检测正则
 const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 
+// 占位符注册表驱动的模块级常量（避免每次刷新/保存重复编译正则、重建映射）
+const PLACEHOLDER_TOKEN_RE = new RegExp(`\\{(${PLACEHOLDER_DEFS.map(d => d.key).join('|')})\\}`)
+const PLACEHOLDER_PREVIEW_VALUES: Record<string, string> = Object.fromEntries(PLACEHOLDER_DEFS.map(d => [d.key, d.preview]))
+
 /**
  * 统一解析文本元素的 RTL 属性（GitHub bidi-shaper 方案在 Fabric.js IText 场景的对称实现）。
  *
@@ -1307,8 +1311,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         // 占位符元素（defaults 非空 或 content 含注册表 token）保持模型 token 态：
         // Fabric 对象上的文本已被 refreshAllPlaceholders 替换为预览值，若回写会固化
         // 预览文本、丢失 {key} token，导致小程序端无法识别该字段
-        const TOKEN_RE = new RegExp(`\\{(${PLACEHOLDER_DEFS.map(d => d.key).join('|')})\\}`)
-        const isPlaceholderElement = (el.defaults && typeof el.defaults === 'object' && Object.keys(el.defaults).length > 0) || TOKEN_RE.test(el.content || '')
+        const isPlaceholderElement = (el.defaults && typeof el.defaults === 'object' && Object.keys(el.defaults).length > 0) || PLACEHOLDER_TOKEN_RE.test(el.content || '')
         if (!isPlaceholderElement) {
           el.content = o.text ?? el.content
         }
@@ -1337,59 +1340,6 @@ export function useCanvas(opts: UseCanvasOptions) {
   }
 
   // ---- 日期占位符实时预览 ----
-  // 哈语占位符预览值：与 App.vue SMART_FIELDS 的 placeholder 对齐
-  // 用于 admin 编辑态预览 {kzDate} 等字面占位符替换后的哈语效果
-  const KZ_PLACEHOLDER_PREVIEW: Record<string, string> = {
-    kzDate: '2026 جىلعى 1 ايدىڭ 22 كۇنى',
-    kzWeekday: 'سەنبى',
-    kzWeekdayParen: '(سەنبى)',
-    kzTime: 'تۇستەن كەيىن',
-    kzGroomName: 'نۇرلان',
-    kzBrideName: 'اينۇر',
-    kzAddress: 'قىزىلوردا قالاسى, توي سارايى',
-  }
-  const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
-
-  function refreshDatePlaceholders(dateValues: Record<string, string | undefined>) {
-    const canvas = fabricCanvas.value
-    if (!canvas) return
-    const placeholderRe = /\{year\}|\{month\}|\{day\}|\{kzDate\}|\{kzWeekday\}|\{kzWeekdayParen\}|\{kzTime\}|\{kzGroomName\}|\{kzBrideName\}|\{kzAddress\}/
-    elements.value.forEach(el => {
-      if (el.type !== 'text') return
-      const t = el as TextElement
-      if (!placeholderRe.test(t.content)) return
-      // 替换中文日期占位符
-      let resolved = t.content
-        .replace(/\{year\}/g, dateValues.year ?? '')
-        .replace(/\{month\}/g, dateValues.month ?? '')
-        .replace(/\{day\}/g, dateValues.day ?? '')
-      // 替换哈语占位符为预览值（让 admin 编辑态能看到哈语替换后的效果）
-      if (KZ_PLACEHOLDER_RE.test(resolved)) {
-        for (const [k, v] of Object.entries(KZ_PLACEHOLDER_PREVIEW)) {
-          resolved = resolved.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
-        }
-      }
-      const obj = canvas.getObjects().find(o => o.id === el.id)
-      if (obj) {
-        const textObj = obj as fabric.IText
-        textObj.set('text', resolved)
-        // 替换后重新解析 RTL：哈萨克字符用用户字体渲染、哈萨克字体兜底（不再强制替换所选字体）
-        const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
-        const containsRtl = RTL_REGEX.test(resolved)
-        if (containsRtl) {
-          const rtlDraft = resolveRtlTextOptions({ ...t, content: resolved } as TextElement)
-          textObj.set({
-            fontFamily: rtlRenderFontStack(rtlDraft.fontFamily, true),
-            charSpacing: rtlDraft.charSpacing,
-            direction: rtlDraft.direction,
-            textAlign: t.textAlign || 'right',
-          })
-        }
-      }
-    })
-    canvas.renderAll()
-  }
-
   /**
    * 全量占位符实时预览（注册表驱动）：
    * 覆盖全部 17 个中文/哈语 token，预览值优先级：元素 defaults（标记/识别回填的原文）> dateValues > 注册表示例值。
@@ -1398,25 +1348,23 @@ export function useCanvas(opts: UseCanvasOptions) {
   function refreshAllPlaceholders(dateValues: Record<string, string | undefined>) {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const tokenRe = new RegExp(`\\{(${PLACEHOLDER_DEFS.map(d => d.key).join('|')})\\}`)
-    const previewValues: Record<string, string> = Object.fromEntries(PLACEHOLDER_DEFS.map(d => [d.key, d.preview]))
+    const objMap = new Map(canvas.getObjects().map(o => [o.id, o]))
     elements.value.forEach(el => {
       if (el.type !== 'text') return
       const t = el as TextElement
-      if (!tokenRe.test(t.content)) return
+      if (!PLACEHOLDER_TOKEN_RE.test(t.content)) return
       let resolved = t.content
       for (const def of PLACEHOLDER_DEFS) {
         const token = `{${def.key}}`
         if (!resolved.includes(token)) continue
-        const value = (t.defaults && t.defaults[def.key]) || dateValues[def.key] || previewValues[def.key]
+        const value = (t.defaults && t.defaults[def.key]) || dateValues[def.key] || PLACEHOLDER_PREVIEW_VALUES[def.key]
         if (value) resolved = resolved.split(token).join(value)
       }
-      const obj = canvas.getObjects().find(o => o.id === el.id)
+      const obj = objMap.get(el.id)
       if (!obj) return
       const textObj = obj as fabric.IText
       textObj.set('text', resolved)
       // 替换后重新解析 RTL：哈萨克字符用用户字体渲染、哈萨克字体兜底（不再强制替换所选字体）
-      const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
       const containsRtl = RTL_REGEX.test(resolved)
       if (containsRtl) {
         const rtlDraft = resolveRtlTextOptions({ ...t, content: resolved } as TextElement)
@@ -1455,12 +1403,13 @@ export function useCanvas(opts: UseCanvasOptions) {
     applyBackground(draft.background)
     opts?.onBackgroundChange?.(draft.background)
 
-    elements.value = []
     selectedId.value = null
 
     // 按 zIndex 排序
     const sorted = [...draft.elements].sort((a, b) => a.zIndex - b.zIndex)
 
+    // 先收集到本地数组，循环结束后一次性赋值，减少响应式触发次数
+    const loadedElements: AnyCanvasElement[] = []
     const addTasks: Array<() => void> = []
     sorted.forEach(el => {
       // loadDraft 期望的坐标系与 Fabric 一致（中心原点）
@@ -1487,7 +1436,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         ;t.id = el.id
         ;t.elementType = 'text'
         addTasks.push(() => canvas.add(t))
-        elements.value.push(el)
+        loadedElements.push(el)
       } else if (el.type === 'image') {
         const ie = el as ImageElement
         addTasks.push(() => {
@@ -1517,7 +1466,7 @@ export function useCanvas(opts: UseCanvasOptions) {
           })
           imagePromises.push(p)
         })
-        elements.value.push(el)
+        loadedElements.push(el)
       } else if (el.type === 'sticker') {
         const se = el as StickerElement
         // 防御性：PSD 导入等场景可能产生 sticker 类型，尝试以 SVG 形式渲染上画布，
@@ -1549,9 +1498,12 @@ export function useCanvas(opts: UseCanvasOptions) {
             })
           })
         }
-        elements.value.push(el)
+        loadedElements.push(el)
       }
     })
+
+    // 循环结束后一次性赋值模型元素列表
+    elements.value = loadedElements
 
     addTasks.forEach(fn => fn())
     updateZIndexFromFabric()
@@ -1895,7 +1847,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     toggleGrid,
     nudgeElement,
     duplicateSelected,
-    refreshDatePlaceholders,
     refreshAllPlaceholders,
   }
 }

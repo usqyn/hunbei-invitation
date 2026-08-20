@@ -1592,7 +1592,6 @@ const {
   loadDraft,
   clearCanvas,
   dispose,
-  refreshDatePlaceholders,
   refreshAllPlaceholders,
   fabricCanvas,
 } = useCanvas({
