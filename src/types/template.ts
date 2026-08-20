@@ -27,6 +27,7 @@ export interface TemplateData {
   location?: string
   address?: string
   phone?: string
+  personName?: string
   // 日期占位符字段
   year?: string
   month?: string

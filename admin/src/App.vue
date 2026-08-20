@@ -20,6 +20,7 @@
 
         <!-- 顶部页面切换 -->
         <button class="tb-btn" :class="{ active: currentView === 'editor' }" @click="currentView = 'editor'">✏️ 模板编辑</button>
+        <button class="tb-btn" :class="{ active: currentView === 'templates' }" @click="currentView = 'templates'">📁 模板管理</button>
         <button class="tb-btn" :class="{ active: currentView === 'poster' }" @click="currentView = 'poster'">🖼 海报模板</button>
 
         <span class="toolbar-divider"></span>
@@ -957,6 +958,14 @@
       </aside>
     </main>
 
+    <!-- ============ 模板管理（云端模板全页面浏览） ============ -->
+    <main v-else-if="currentView === 'templates'" class="template-view-wrap">
+      <TemplateManager
+        @load-template="onOpenTemplateFromManager"
+        @create-new="onCreateNewFromManager"
+      />
+    </main>
+
     <!-- ============ 海报模板管理 ============ -->
     <main v-else class="poster-view-wrap">
       <PosterManager />
@@ -1017,6 +1026,7 @@ import {
 import PublishWizard from './components/PublishWizard.vue'
 import AdminLogin from './components/AdminLogin.vue'
 import PosterManager from './views/PosterManager.vue'
+import TemplateManager from './views/TemplateManager.vue'
 import PsdImportDialog from './components/PsdImportDialog.vue'
 import PlaceholderMarkPanel from './components/PlaceholderMarkPanel.vue'
 import { parsePsdFile, type PsdImportResult, type PsdLayerPreview } from './utils/psd-import'
@@ -1525,7 +1535,7 @@ const psdInput = ref<HTMLInputElement | null>(null)
 
 // ============ 本地状态 ============
 const leftTab = ref<'material' | 'layers' | 'templates'>('material')
-const currentView = ref<'editor' | 'poster'>('editor')
+const currentView = ref<'editor' | 'templates' | 'poster'>('editor')
 const sizeLabel = ref('375 × 667')
 const pageMode = ref<PageMode>('single')
 
@@ -2043,6 +2053,21 @@ function createNewFromCanvas() {
   clearCanvas()
   historyVersions.value = []
   pushHistory('new')
+}
+
+// ============ 模板管理视图回调 ============
+// 先切回编辑器视图再加载，避免画布尚未挂载时执行加载逻辑
+function onOpenTemplateFromManager(id: string) {
+  currentView.value = 'editor'
+  setTimeout(() => onLoadTemplate(id), 50)
+}
+
+function onCreateNewFromManager() {
+  currentView.value = 'editor'
+  setTimeout(() => {
+    createNewFromCanvas()
+    loadTemplateList()
+  }, 50)
 }
 
 function loadPreset(preset: TemplatePreset) {
@@ -2826,6 +2851,13 @@ onMounted(() => {
 }
 
 .poster-view-wrap {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.template-view-wrap {
   flex: 1;
   display: flex;
   min-height: 0;

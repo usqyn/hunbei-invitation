@@ -42,6 +42,7 @@ export const PLACEHOLDER_DEFS: PlaceholderDef[] = [
   { key: 'year', label: '年份', icon: '📅', group: 'cn', placeholder: '2025', preview: '2026', resolve: d => d.year ?? '' },
   { key: 'month', label: '月份', icon: '📅', group: 'cn', placeholder: '6', preview: '10', resolve: d => d.month ?? '' },
   { key: 'day', label: '日', icon: '📅', group: 'cn', placeholder: '15', preview: '1', resolve: d => d.day ?? '' },
+  { key: 'personName', label: '人名', icon: '👤', group: 'cn', placeholder: '请输入人名', preview: '张伟', resolve: d => d.personName ?? '' },
   // ===== 哈萨克语（阿拉伯文）=====
   // kzDate：优先使用标记/识别回填的原文格式（如 "2026-جىلى 10-ايدىڭ 01-كۇنى"），
   // 无回填值时按中文 date 字段生成标准哈语表达式

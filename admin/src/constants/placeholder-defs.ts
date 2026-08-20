@@ -31,6 +31,7 @@ export const PLACEHOLDER_DEFS: PlaceholderDef[] = [
   { key: 'year', label: '年份', icon: '📅', group: 'cn', placeholder: '2025', preview: '2026', contentDetect: /(?:19|20)\d{2}/ },
   { key: 'month', label: '月份', icon: '📅', group: 'cn', placeholder: '6', preview: '10', contentDetect: /^(0?[1-9]|1[0-2])$/ },
   { key: 'day', label: '日', icon: '📅', group: 'cn', placeholder: '15', preview: '1', contentDetect: /^(0?[1-9]|[12]\d|3[01])$/ },
+  { key: 'personName', label: '人名', icon: '👤', group: 'cn', placeholder: '请输入人名', preview: '张伟' },
   // ===== 哈萨克语（阿拉伯文）=====
   // kzDate：选日期后自动填入哈语表达式，支持 "2026 جىلعى 1 ايدىڭ 22 كۇنى" 与 "2026-جىلى 10-ايدىڭ 01-كۇنى" 两种形态
   { key: 'kzDate', label: '哈语日期', icon: '📆', group: 'kz', placeholder: '2026 جىلعى 1 ايدىڭ 22 كۇنى', preview: '2026 جىلعى 1 ايدىڭ 22 كۇنى', contentDetect: /(\d{4})[- ](جىلعى|جىلى)[- ](\d{1,2})([- ]ايدىڭ[- ])(\d{1,2})([- ]كۇنى)/ },
