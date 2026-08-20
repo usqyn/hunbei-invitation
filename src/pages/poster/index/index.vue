@@ -170,14 +170,10 @@ function onSelectTemplate(template: PosterTemplate) {
   if (!template.is_free) {
     if (template.is_vip && !userStore.isVip()) {
       uni.showModal({
-        title: 'VIP 专属',
-        content: '该模板为 VIP 专属模板，开通 VIP 即可使用',
-        confirmText: '去开通',
-        success: (res) => {
-          if (res.confirm) {
-            uni.navigateTo({ url: '/pages/vip/index' })
-          }
-        },
+        title: '会员专属',
+        content: '该模板为会员专属，当前暂未开放',
+        confirmText: '知道了',
+        showCancel: false,
       })
       return
     }

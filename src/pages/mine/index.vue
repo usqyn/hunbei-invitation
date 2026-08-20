@@ -33,16 +33,15 @@
     </view>
 
     <view class="vip-card animate-fade-in-up delay-100" @click="handleVip">
-      <view class="vip-watermark">VIP</view>
-      <view class="vip-save-badge">立省¥99</view>
+      <view v-if="userStore.isVip()" class="vip-watermark">{{ userStore.isPro() ? 'PRO' : 'VIP' }}</view>
       <view class="vip-content">
-        <view class="vip-icon">👑</view>
+        <view class="vip-icon">{{ userStore.isVip() ? '👑' : '🎫' }}</view>
         <view class="vip-info">
-          <text class="vip-title">{{ userStore.isVip() ? 'VIP会员' : 'TOYtamaxia VIP' }}</text>
-          <text class="vip-desc">{{ userStore.isVip() ? vipExpireText : '开通会员享6大权益' }}</text>
+          <text class="vip-title">{{ userStore.isPro() ? '专业版会员' : (userStore.isVip() ? 'VIP会员' : '按次制作') }}</text>
+          <text class="vip-desc">{{ userStore.isVip() ? vipExpireText : '用一次付一次，已制作作品随时可编辑' }}</text>
         </view>
       </view>
-      <view class="vip-btn">{{ userStore.isVip() ? '查看权益 >' : '立即开通 >' }}</view>
+      <view class="vip-btn">{{ userStore.isVip() ? '查看权益 >' : '了解详情 >' }}</view>
     </view>
 
     <view class="quick-actions stagger-list animate-fade-in-up delay-200">
@@ -189,11 +188,8 @@ const handleBell = () => {
 }
 
 const handleVip = () => {
-  if (userStore.isVip()) {
-    uni.showToast({ title: '您已是VIP会员', icon: 'none' })
-  } else {
-    uni.navigateTo({ url: '/pages/vip/index' })
-  }
+  // 会员套餐暂未开放：统一跳转按次制作说明页（VIP 用户可查看当前权益）
+  uni.navigateTo({ url: '/pages/vip/index' })
 }
 
 const handleQuickAction = (item: any) => {

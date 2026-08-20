@@ -24,7 +24,7 @@ const getUserInfo = async (ctx) => {
   const user = getUser(ctx.event)
   const phone = user ? user.phone : ''
   if (!phone) {
-    return ok({ nickname: '用户', phone: '', avatar: '', vip_status: 0, vip_expire_at: null, vip_plan: null })
+    return ok({ nickname: '用户', phone: '', avatar: '', vip_status: 0, vip_expire_at: null, vip_plan: null, vip_level: 0 })
   }
   const u = await refreshVipStatus(phone)
   if (u) {
@@ -33,10 +33,11 @@ const getUserInfo = async (ctx) => {
       id: u.id, phone: u.phone, nickname: u.nickname || '',
       avatar: u.avatar || '', vip_status: u.vip_status || 0,
       vip_expire_at: u.vip_expire_at || null, vip_plan: u.vip_plan || null,
+      vip_level: u.vip_level || 0,
       createdAt: u.createdAt, updatedAt: u.updatedAt,
     })
   }
-  return ok({ nickname: '用户', phone, avatar: '', vip_status: 0, vip_expire_at: null, vip_plan: null })
+  return ok({ nickname: '用户', phone, avatar: '', vip_status: 0, vip_expire_at: null, vip_plan: null, vip_level: 0 })
 }
 
 // PUT /api/user/profile — 更新昵称/头像
@@ -56,6 +57,7 @@ const updateProfile = async (ctx) => {
     id: u.id, phone: u.phone, nickname: u.nickname || '',
     avatar: u.avatar || '', vip_status: u.vip_status || 0,
     vip_expire_at: u.vip_expire_at || null, vip_plan: u.vip_plan || null,
+    vip_level: u.vip_level || 0,
   })
 }
 
@@ -69,7 +71,7 @@ const getVipStatus = async (ctx) => {
   const u = await refreshVipStatus(phone)
   if (!u) return ok({ isVip: false, expireAt: null, plan: null })
   const isVip = !!(u.vip_status === 1 && u.vip_expire_at && nowMs() < parseInt(u.vip_expire_at, 10))
-  return ok({ isVip, expireAt: u.vip_expire_at || null, plan: u.vip_plan || null })
+  return ok({ isVip, level: u.vip_level || 0, expireAt: u.vip_expire_at || null, plan: u.vip_plan || null })
 }
 
 // ============ 收藏系统 ============

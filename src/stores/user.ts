@@ -13,39 +13,6 @@ export const VIP_LEVELS = {
   PRO: 2 as const,
 }
 
-export const VIP_LIMITS = {
-  [VIP_LEVELS.FREE]: {
-    freeTemplates: 3,
-    monthlyCreateCount: 3,
-    watermarkOnPremium: true,
-    hdExport: false,
-    videoInvitation: false,
-    guestManagement: false,
-    customLogo: false,
-    prioritySupport: false,
-  },
-  [VIP_LEVELS.PERSONAL]: {
-    freeTemplates: Infinity,
-    monthlyCreateCount: 10,
-    watermarkOnPremium: false,
-    hdExport: true,
-    videoInvitation: false,
-    guestManagement: false,
-    customLogo: false,
-    prioritySupport: false,
-  },
-  [VIP_LEVELS.PRO]: {
-    freeTemplates: Infinity,
-    monthlyCreateCount: 100,
-    watermarkOnPremium: false,
-    hdExport: true,
-    videoInvitation: true,
-    guestManagement: true,
-    customLogo: true,
-    prioritySupport: true,
-  },
-} as const
-
 export const useUserStore = defineStore('user', () => {
   const isLoggedIn = ref(false)
   const nickname = ref('')
@@ -56,8 +23,6 @@ export const useUserStore = defineStore('user', () => {
   const vipExpireAt = ref(0)
   const vipPlan = ref('')
   const vipLevel = ref<VipLevel>(0)
-  const monthlyCreateCount = ref(0)
-  const monthlyCountMonth = ref('')
 
   function getVipLevel(): VipLevel {
     if (vipStatus.value !== 1) return VIP_LEVELS.FREE
@@ -73,35 +38,6 @@ export const useUserStore = defineStore('user', () => {
 
   function isPro(): boolean {
     return getVipLevel() >= VIP_LEVELS.PRO
-  }
-
-  function getMonthlyCreateCount(): number {
-    const now = new Date()
-    const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    if (monthlyCountMonth.value !== curMonth) {
-      monthlyCreateCount.value = 0
-      monthlyCountMonth.value = curMonth
-      persist()
-    }
-    return monthlyCreateCount.value
-  }
-
-  function getRemainingCreateCount(): number {
-    const level = getVipLevel()
-    const limit = VIP_LIMITS[level].monthlyCreateCount
-    if (limit === Infinity) return Infinity
-    const used = getMonthlyCreateCount()
-    return Math.max(0, limit - used)
-  }
-
-  function canCreateWork(): boolean {
-    return getRemainingCreateCount() > 0
-  }
-
-  function incrementCreateCount() {
-    getMonthlyCreateCount()
-    monthlyCreateCount.value++
-    persist()
   }
 
   /** 清理已过期的 VIP 状态（应在 fetchUserInfo 等显式时机调用） */
@@ -124,8 +60,6 @@ export const useUserStore = defineStore('user', () => {
         vipExpireAt: vipExpireAt.value,
         vipPlan: vipPlan.value,
         vipLevel: vipLevel.value,
-        monthlyCreateCount: monthlyCreateCount.value,
-        monthlyCountMonth: monthlyCountMonth.value,
       })
       if (token.value) uni.setStorageSync('token', token.value)
     } catch (e) { console.error('user persist failed', e) }
@@ -144,8 +78,6 @@ export const useUserStore = defineStore('user', () => {
         vipExpireAt.value = saved.vipExpireAt || 0
         vipPlan.value = saved.vipPlan || ''
         vipLevel.value = (saved.vipLevel ?? 0) as VipLevel
-        monthlyCreateCount.value = saved.monthlyCreateCount || 0
-        monthlyCountMonth.value = saved.monthlyCountMonth || ''
         if (token.value) uni.setStorageSync('token', token.value)
       }
     } catch (e) { console.error('user restore failed', e) }
@@ -175,8 +107,6 @@ export const useUserStore = defineStore('user', () => {
     vipExpireAt.value = 0
     vipPlan.value = ''
     vipLevel.value = 0
-    monthlyCreateCount.value = 0
-    monthlyCountMonth.value = ''
     try { uni.removeStorageSync(STORAGE_KEY); uni.removeStorageSync('token') } catch {}
     // 清除作品数据，防止下个用户看到上个用户的作品
     try {
@@ -199,8 +129,6 @@ export const useUserStore = defineStore('user', () => {
         vip_expire_at?: number
         vip_plan?: string
         vip_level?: number
-        monthly_create_count?: number
-        monthly_count_month?: string
       }>({ url: '/api/user/login', method: 'POST', data: loginData })
       setLogin(res.phone, res.nickname, res.token, {
         status: res.vip_status,
@@ -208,10 +136,6 @@ export const useUserStore = defineStore('user', () => {
         plan: res.vip_plan,
         level: res.vip_level,
       })
-      if (res.monthly_create_count !== undefined) {
-        monthlyCreateCount.value = res.monthly_create_count
-        monthlyCountMonth.value = res.monthly_count_month || ''
-      }
       persist()
       return true
     } catch (e: any) {
@@ -231,8 +155,6 @@ export const useUserStore = defineStore('user', () => {
         vip_expire_at?: number
         vip_plan?: string
         vip_level?: number
-        monthly_create_count?: number
-        monthly_count_month?: string
       }>({ url: '/api/user/info', method: 'GET' })
       nickname.value = res.nickname
       avatar.value = resolveUrl(res.avatar || '')
@@ -241,10 +163,6 @@ export const useUserStore = defineStore('user', () => {
       if (res.vip_expire_at !== undefined) vipExpireAt.value = res.vip_expire_at
       if (res.vip_plan !== undefined) vipPlan.value = res.vip_plan
       if (res.vip_level !== undefined) vipLevel.value = res.vip_level as VipLevel
-      if (res.monthly_create_count !== undefined) {
-        monthlyCreateCount.value = res.monthly_create_count
-        monthlyCountMonth.value = res.monthly_count_month || ''
-      }
       clearExpiredVip()
       persist()
     } catch (e) { console.error('fetchUserInfo failed', e) }
@@ -261,9 +179,7 @@ export const useUserStore = defineStore('user', () => {
   return {
     isLoggedIn, nickname, avatar, phone, token,
     vipStatus, vipExpireAt, vipPlan, vipLevel,
-    monthlyCreateCount, monthlyCountMonth,
     isVip, isPro, getVipLevel,
-    getMonthlyCreateCount, getRemainingCreateCount, canCreateWork, incrementCreateCount,
     setLogin, logout, doLogin, fetchUserInfo, requireLogin,
   }
 })

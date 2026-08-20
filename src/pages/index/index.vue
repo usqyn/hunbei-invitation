@@ -58,11 +58,11 @@
       <view class="entry-card vip-entry vip-pulse" @click="goToVipPage">
         <view class="vip-badge">HOT</view>
         <view class="entry-icon-wrap animate-float-slow" style="animation-delay: 0.5s">
-          <text class="entry-icon">&#9733;</text>
+          <text class="entry-icon">&#127987;</text>
         </view>
         <view class="entry-text-wrap">
-          <text class="entry-title">开通VIP</text>
-          <text class="entry-desc">专属模板免费</text>
+          <text class="entry-title">按次制作</text>
+          <text class="entry-desc">用一次付一次</text>
         </view>
         <view class="deco-star deco-star-1">✦</view>
         <view class="deco-star deco-star-2">✧</view>
@@ -368,7 +368,7 @@ const handleCategoryClick = (item: any) => {
 }
 
 const handleCardClick = (card: any) => {
-  // 与模板列表页行为一致：登录/限数版配额/付费解锁统一在 useTemplateEntry 处理
+  // 与模板列表页行为一致：登录/限免版配额/付费解锁统一在 useTemplateEntry 处理
   openTemplateEntry({
     ...card,
     id: card.templateId || card.id,
@@ -447,7 +447,7 @@ async function loadFeaturedTemplates() {
 }
 
 function handlePaidCardClick(card: any) {
-  // 与模板列表页行为一致：限数版三出口/单买/开通VIP/进编辑器统一在 useTemplateEntry 处理
+  // 与模板列表页行为一致：限免版三出口/单买/按次付费/进编辑器统一在 useTemplateEntry 处理
   openTemplateEntry(card)
 }
 

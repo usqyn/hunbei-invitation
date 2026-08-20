@@ -377,7 +377,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
-import { useUserStore, VIP_LIMITS } from '@/stores/user'
+import { useUserStore } from '@/stores/user'
 import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
@@ -1031,29 +1031,18 @@ function handleReset() {
 
 function handleRemoveWatermark() {
   if (isExporting) return
-  if (userStore.isVip()) {
-    isExporting = true
-    doExport({ watermark: false, quality: 'high' }).finally(() => {
-      isExporting = false
-    })
-  } else {
-    uni.showModal({
-      title: '高清无水印导出',
-      content: '开通VIP即可享受高清无水印导出，还能解锁更多高级模板和专属权益',
-      confirmText: '开通VIP',
-      confirmColor: '#e84a6e',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          uni.navigateTo({ url: '/pages/vip/index' })
-        }
-      },
-    })
+  if (!userStore.isVip()) {
+    // 会员套餐暂未开放：无水印导出为会员专属，暂无开通入口
+    uni.showToast({ title: '无水印导出为会员专属，暂未开放', icon: 'none' })
+    return
   }
+  isExporting = true
+  doExport({ watermark: false, quality: 'high' }).finally(() => {
+    isExporting = false
+  })
 }
 
 const editProgress = ref(0)
-const hasShownProgressPopup = ref(false)
 const editStartTime = ref(Date.now())
 // 标记模板是否已加载完成（用于 onShow 检测登录返回后是否需要重新加载）
 const templateLoaded = ref(false)
@@ -1244,29 +1233,6 @@ function calculateProgress(): number {
   return Math.min(100, Math.round((completed / total) * 100))
 }
 
-watch(editProgress, (val) => {
-  if (val >= 30 && val < 40 && !hasShownProgressPopup.value && !userStore.isVip()) {
-    hasShownProgressPopup.value = true
-    showProgressPopup()
-  }
-})
-
-function showProgressPopup() {
-  track('edit_progress_30', { elapsed_time: Date.now() - editStartTime.value })
-  uni.showModal({
-    title: '🎉 您的请柬已初具雏形',
-    content: '解锁高级模板、去水印导出、高清大图，让请柬更完美',
-    confirmText: '解锁全部 9.9元/月',
-    cancelText: '继续免费编辑',
-    success: (res) => {
-      if (res.confirm) {
-        track('click_unlock_vip', { trigger_point: 'edit_progress_30' })
-        uni.navigateTo({ url: '/pages/vip/index' })
-      }
-    }
-  })
-}
-
 // 打开编辑器
 function onOpenEditor(idx: number) {
   const el = editorStore.editableElements[idx]
@@ -1276,14 +1242,9 @@ function onOpenEditor(idx: number) {
     track('click_premium_element', { element_type: el.type })
     uni.showModal({
       title: '🔒 高级素材',
-      content: '该素材为 VIP 专属，开通 VIP 立即可用',
-      confirmText: '开通VIP',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          uni.navigateTo({ url: '/pages/vip/index' })
-        }
-      }
+      content: '该素材为会员专属，当前暂未开放',
+      confirmText: '知道了',
+      showCancel: false,
     })
     return
   }
@@ -1580,29 +1541,11 @@ async function handleSave() {
   track('edit_save', { progress: editProgress.value })
 
   const existing = findExistingWork()
-  if (!existing && !userStore.canCreateWork()) {
-    uni.showModal({
-      title: '制作次数已用完',
-      content: `您本月的免费制作次数（${VIP_LIMITS[userStore.getVipLevel()].monthlyCreateCount}次）已用完，升级会员可获得更多次数。`,
-      confirmText: '去开通',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          uni.navigateTo({ url: '/pages/vip/index' })
-        }
-      },
-    })
-    return
-  }
-
   const isNewWork = !existing
   await runSave(async () => {
     const work = buildWorkFromEditor(existing)
     // await 服务端同步，确保后续 export 接口能读到最新数据
     await worksStore.saveAsWork(work)
-    if (isNewWork) {
-      userStore.incrementCreateCount()
-    }
     hasUnsavedChanges.value = false
   }, { successMessage: '已保存', minLoadingDuration: 400 })
   autoSaveToast.value = true
@@ -1617,13 +1560,8 @@ async function autoSaveWork() {
   if (savingLoading.value) return // 避免与手动保存并发
   try {
     const existing = findExistingWork()
-    if (!existing && !userStore.canCreateWork()) return
-    const isNewWork = !existing
     const work = buildWorkFromEditor(existing)
     await worksStore.saveAsWork(work)
-    if (isNewWork) {
-      userStore.incrementCreateCount()
-    }
     hasUnsavedChanges.value = false
     autoSaveToast.value = true
     setTimeout(() => {
@@ -1690,35 +1628,11 @@ function handleExport() {
   if (userStore.isVip()) {
     doExport({ watermark: false, quality: 'high' }).finally(() => { isExporting = false })
   } else {
-    uni.showActionSheet({
-      title: '选择导出方式',
-      itemList: ['📦 高清无水印导出', '📦 免费导出（带水印）'],
-      success: (res: any) => {
-        if (res.tapIndex === 0) {
-          track('click_export', { export_type: 'paid' })
-          uni.showModal({
-            title: '高清导出',
-            content: '开通VIP即可高清无水印导出，还能享受更多权益',
-            confirmText: '去开通VIP',
-            success: (r) => {
-              if (r.confirm) {
-                uni.navigateTo({ url: '/pages/vip/index' })
-              }
-              isExporting = false
-            },
-          })
-        } else {
-          track('click_export', { export_type: 'free' })
-          // C4：免费导出前播放激励视频（看完获得下载资格；广告未配置/失败时放行）
-          showRewardedAd().then(() => {
-            return doExport({ watermark: true, quality: 'normal' })
-          }).finally(() => { isExporting = false })
-        }
-      },
-      fail: () => {
-        isExporting = false
-      },
-    })
+    track('click_export', { export_type: 'free' })
+    // 免费导出：播放激励视频（看完获得下载资格；广告未配置/失败时放行）
+    showRewardedAd().then(() => {
+      return doExport({ watermark: true, quality: 'normal' })
+    }).finally(() => { isExporting = false })
   }
 }
 
@@ -1882,7 +1796,7 @@ async function loadEditorData(options: any) {
       const templateId = options.templateId || options.id
       if (templateId) {
         await editorStore.loadTemplateById(templateId)
-        // 限数版模板：非 VIP 用户从模板新建时扣减 1 次免费额度（仅新建场景扣，编辑已有作品不扣）
+        // 限免版模板：非 VIP 用户从模板新建时扣减 1 次免费额度（仅新建场景扣，编辑已有作品不扣）
         const quotaOk = await consumeLimitedQuotaIfNeeded(templateId)
         if (!quotaOk) return
         track('edit_start', { template_id: templateId })
@@ -1906,7 +1820,7 @@ async function loadEditorData(options: any) {
 
 // 制作额度扣减：限免版/付费档（VIP版/SVIP版）从模板新建作品时扣减 1 次额度；
 // 免费版、会员特权用户（VIP版→VIP，SVIP版→专业版）、专业版模板直接放行；
-// 额度用尽时按档位弹 分享/按次付费/开通会员 出口
+// 额度用尽时按档位弹 分享/按次付费 出口（会员套餐暂未开放）
 async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean> {
   try {
     const level = editorStore.currentTemplateVipLevel
@@ -1933,16 +1847,14 @@ async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean>
 }
 
 // 额度用尽出口：
-//   限免版：used<2（第2次）→ 汉哈双语分享说明页；used>=2（第3次起）→ ¥6.6 按次付费 / 开通VIP
-//   VIP版：¥9.9 按次付费 / 开通VIP
-//   SVIP版：¥18.8 按次付费 / 开通专业版
+//   限免版：used<2（第2次）→ 汉哈双语分享说明页；used>=2（第3次起）→ ¥6.6 按次付费
+//   VIP版：¥9.9 按次付费；SVIP版：¥18.8 按次付费（会员套餐暂未开放，无开通入口）
 function showQuotaExhausted(templateId: string, level: string) {
   const tpl = (editorStore as any).currentTemplate || { id: templateId }
   const price = getTierPrice(tpl)
   const goPay = () => {
-    uni.redirectTo({ url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&redirect=editor` })
+    uni.redirectTo({ url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&tier=${level}&redirect=editor` })
   }
-  const goVip = () => uni.redirectTo({ url: '/pages/vip/index' })
 
   if (level === 'limited') {
     fetchTemplateQuota(templateId)
@@ -1952,52 +1864,14 @@ function showQuotaExhausted(templateId: string, level: string) {
           uni.redirectTo({ url: `/pages/share-guide/index?templateId=${templateId}&price=${price}` })
           return
         }
-        // 第3次起：按次付费 / 开通VIP
-        uni.showActionSheet({
-          itemList: [`¥${price} 制作一次`, '开通VIP免费制作'],
-          success: (res: any) => {
-            if (res.tapIndex === 0) goPay()
-            else if (res.tapIndex === 1) goVip()
-            else uni.navigateBack()
-          },
-          fail: () => uni.navigateBack(),
-        })
+        // 第3次起：直接按次付费
+        goPay()
       })
-      .catch(() => {
-        uni.showActionSheet({
-          itemList: [`¥${price} 制作一次`, '开通VIP免费制作'],
-          success: (res: any) => {
-            if (res.tapIndex === 0) goPay()
-            else if (res.tapIndex === 1) goVip()
-            else uni.navigateBack()
-          },
-          fail: () => uni.navigateBack(),
-        })
-      })
+      .catch(() => goPay())
     return
   }
-  if (level === 'personal') {
-    uni.showActionSheet({
-      itemList: [`¥${price} 制作一次`, '开通VIP免费制作'],
-      success: (res: any) => {
-        if (res.tapIndex === 0) goPay()
-        else if (res.tapIndex === 1) goVip()
-        else uni.navigateBack()
-      },
-      fail: () => uni.navigateBack(),
-    })
-    return
-  }
-  if (level === 'svip') {
-    uni.showActionSheet({
-      itemList: [`¥${price} 制作一次`, '开通专业版免费制作'],
-      success: (res: any) => {
-        if (res.tapIndex === 0) goPay()
-        else if (res.tapIndex === 1) goVip()
-        else uni.navigateBack()
-      },
-      fail: () => uni.navigateBack(),
-    })
+  if (level === 'personal' || level === 'svip') {
+    goPay()
     return
   }
   uni.navigateBack()

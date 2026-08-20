@@ -202,8 +202,8 @@
         </view>
       </view>
 
-      <!-- 导出效果对比 -->
-      <view class="watermark-compare animate-fade-up glass-card" v-if="!userStore.isVip()">
+      <!-- 导出效果对比（仅付费档模板且用户无对应特权时展示，按次付费制作） -->
+      <view class="watermark-compare animate-fade-up glass-card" v-if="showVipBar">
         <view class="compare-title">&#128064; 导出效果对比</view>
         <view class="compare-row">
           <view class="compare-col">
@@ -217,7 +217,7 @@
             <view class="compare-desc">带水印 · 720px</view>
           </view>
           <view class="compare-col compare-highlight">
-            <view class="compare-vip-badge">VIP</view>
+            <view class="compare-vip-badge">¥{{ currentTierPrice }}</view>
             <view class="compare-label">高清导出</view>
             <view class="compare-img-wrap">
               <CloudImage class="compare-img compare-img--hd" :src="hdPreview" mode="aspectFill" custom-class="compare-img compare-img--hd" />
@@ -227,7 +227,7 @@
           </view>
         </view>
         <view class="compare-action">
-          <button class="btn-primary" @click="goToVip">高清导出</button>
+          <button class="btn-primary" @click="goPayCurrent">¥{{ currentTierPrice }} 制作一次</button>
           <button
             class="btn-secondary"
             :class="{ 'btn--loading': exportingLoading }"
@@ -275,7 +275,7 @@
       </view>
     </view>
 
-    <view class="vip-bar animate-slide-up" v-if="showVipBar" @click="goToVip">
+    <view class="vip-bar animate-slide-up" v-if="showVipBar" @click="goPayCurrent">
       <text class="vip-icon">👑</text>
       <text class="vip-text">{{ vipBarText }}</text>
       <text class="vip-btn">{{ vipBarBtnText }} →</text>
@@ -380,40 +380,26 @@ const shouldShowWatermark = computed(() => {
 const showVipBar = computed(() => {
   const vipLevel = userStore.getVipLevel()
   const templateLevel = editorStore.currentTemplateVipLevel
-  if (templateLevel === 'free') return vipLevel < 1
+  if (templateLevel === 'free') return false
   if (templateLevel === 'limited') return vipLevel < 1
   if (templateLevel === 'personal') return vipLevel < 1
   if (templateLevel === 'svip') return vipLevel < 2
   if (templateLevel === 'pro') return vipLevel < 2
-  return true
+  return false
 })
 
 const vipBarText = computed(() => {
-  const vipLevel = userStore.getVipLevel()
   const templateLevel = editorStore.currentTemplateVipLevel
-  if (templateLevel === 'pro' && vipLevel < 2) {
-    return '此模板为专业版专属，升级解锁全部权益'
-  }
-  if (templateLevel === 'svip' && vipLevel < 2) {
-    return '此模板为SVIP版，开通专业版免费制作'
-  }
-  if (templateLevel === 'limited' && vipLevel < 1) {
-    return '此模板为限免版，开通VIP免费无限次制作'
-  }
-  if (vipLevel === 0) {
-    return '开通VIP，高清无水印导出 + 全模板解锁 + 更多次数'
-  }
-  if (vipLevel === 1) {
-    return '升级专业版，解锁全部模板 + 最高制作次数'
-  }
-  return ''
+  const tpl = (editorStore as any).currentTemplate || null
+  const price = getTierPrice(tpl)
+  if (templateLevel === 'pro') return '此模板为专业版专属'
+  if (templateLevel === 'svip') return `此模板为SVIP版，按次付费 ¥${price} 制作`
+  if (templateLevel === 'personal') return `此模板为VIP版，按次付费 ¥${price} 制作`
+  if (templateLevel === 'limited') return `此模板为限免版，按次付费 ¥${price} 制作`
+  return '按次付费，用一次付一次'
 })
 
-const vipBarBtnText = computed(() => {
-  const vipLevel = userStore.getVipLevel()
-  if (vipLevel === 0) return '去开通'
-  return '去升级'
-})
+const vipBarBtnText = computed(() => '去制作')
 
 // 免费导出预览图（通过 CSS 类 compare-img--watermarked 降低不透明度并加模糊）
 const watermarkedPreview = computed(() => editorStore.renderedImage || '')
@@ -561,7 +547,7 @@ async function loadData() {
     }
   }
   track('preview_view', { template_id: templateId.value })
-  // 分享奖励：好友打开分享卡片（携带 inviterPhone）→ 给分享者限数模板 +1 次
+  // 分享奖励：好友打开分享卡片（携带 inviterPhone）→ 给分享者限免模板 +1 次
   if (shareInviterPhone.value && templateId.value && shareInviterPhone.value !== userStore.phone) {
     shareReward({ templateId: templateId.value, phone: shareInviterPhone.value }).catch(() => {})
   }
@@ -599,7 +585,7 @@ onLoad((options) => {
   }
 })
 
-// 分享引导提示（限数版次数用完，从广场跳转而来）
+// 分享引导提示（限免版次数用完，从广场跳转而来）
 let _shareGuideShown = false
 function shareGuideToast() {
   if (_shareGuideShown) return
@@ -704,7 +690,7 @@ onShareAppMessage(() => {
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
   if (workId) params.push(`workId=${workId}`)
-  // 携带分享者手机号：好友打开后触发分享奖励（限数模板得次数）
+  // 携带分享者手机号：好友打开后触发分享奖励（限免模板得次数）
   const myPhone = userStore.phone
   if (myPhone) params.push(`inviterPhone=${myPhone}`)
   if (params.length) path += '?' + params.join('&')
@@ -894,23 +880,13 @@ const handleCreate = async () => {
   }
 }
 
-// 额度用尽出口：限免版（第2次分享/第3次付费）、VIP版、SVIP版
+// 额度用尽出口：限免版（第2次分享/第3次付费）、VIP版、SVIP版（会员套餐暂未开放，直接按次付费）
 function showLimitExhausted(templateId: string, level: string) {
   const tpl = (editorStore as any).currentTemplate || { id: templateId }
   const price = getTierPrice(tpl)
   const goPay = () => uni.navigateTo({
-    url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&redirect=editor`,
+    url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&tier=${level}&redirect=editor`,
   })
-  const goVip = () => uni.navigateTo({ url: '/pages/vip/index' })
-  const showSheet = (vipLabel: string) => {
-    uni.showActionSheet({
-      itemList: [`¥${price} 制作一次`, vipLabel],
-      success: (res: any) => {
-        if (res.tapIndex === 0) goPay()
-        else if (res.tapIndex === 1) goVip()
-      },
-    })
-  }
   if (level === 'limited') {
     fetchTemplateQuota(templateId)
       .then((quota: any) => {
@@ -919,18 +895,30 @@ function showLimitExhausted(templateId: string, level: string) {
           uni.navigateTo({ url: `/pages/share-guide/index?templateId=${templateId}&price=${price}` })
           return
         }
-        showSheet('开通VIP免费制作')
+        goPay()
       })
-      .catch(() => showSheet('开通VIP免费制作'))
+      .catch(() => goPay())
     return
   }
-  if (level === 'personal') { showSheet('开通VIP免费制作'); return }
-  if (level === 'svip') { showSheet('开通专业版免费制作'); return }
+  if (level === 'personal' || level === 'svip') { goPay(); return }
 }
 
-const goToVip = () => {
+// 按次付费入口（当前模板）：会员套餐暂未开放，付费档统一走按次制作
+const currentTierPrice = computed(() => {
+  const tpl = (editorStore as any).currentTemplate || null
+  return getTierPrice(tpl)
+})
+
+const goPayCurrent = () => {
   haptic('light')
-  uni.navigateTo({ url: '/pages/vip/index' })
+  const tpl = (editorStore as any).currentTemplate || { id: editorStore.currentTemplateId }
+  if (!tpl || !tpl.id) {
+    uni.navigateTo({ url: '/pages/vip/index' })
+    return
+  }
+  uni.navigateTo({
+    url: `/pages/vip/index?mode=purchase&templateId=${tpl.id}&price=${getTierPrice(tpl)}&tier=${tpl.vipLevel || ''}&redirect=editor`,
+  })
 }
 
 async function exportFree() {

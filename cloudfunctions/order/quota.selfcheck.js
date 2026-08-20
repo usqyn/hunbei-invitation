@@ -49,6 +49,7 @@ function matches(doc, cond) {
       cur = cur[p]
     }
     if (v && typeof v === 'object' && v.__op === 'in') return v.arr.includes(cur)
+    if (v && typeof v === 'object' && v.__op === 'gt') return (typeof cur === 'number' ? cur : 0) > v.n
     return cur === v
   })
 }
@@ -97,8 +98,10 @@ function makeCollection(name) {
 
 // ---------- mock _shared ----------
 // 注意：真实 _shared 的 requireAuth/requireAdmin 是同步函数（handler 内无 await），mock 必须同步
+// 可变登录态：shareReward 鉴权用例通过改 MOCK_AUTH_PHONE 模拟"他人账号"
+let MOCK_AUTH_PHONE = '13800138000'
 const getUser = (event) => {
-  const phone = '13800138000'
+  const phone = MOCK_AUTH_PHONE
   return { ok: true, user: { phone, openid: 'mock_openid' }, body: null }
 }
 const requireAuth = (event) => getUser(event)
@@ -166,6 +169,7 @@ const db = {
   command: {
     inc: (n) => ({ __op: 'inc', n }),
     in: (arr) => ({ __op: 'in', arr }),
+    gt: (n) => ({ __op: 'gt', n }),
   },
   // 简化事务：直接复用同一内存数据（同步内存库，顺序执行等价）
   runTransaction: async (fn) => {
@@ -335,6 +339,82 @@ async function run() {
   console.log('=== 18. 缺 templateId → 缺少 templateId ===')
   r = await call('/api/quota', 'GET', {})
   check('返回 缺少 templateId', !r.success && r.error === '缺少 templateId', r)
+
+  console.log('=== 19. shareReward 鉴权：他人账号 → 403 ===')
+  resetUsers()
+  MOCK_AUTH_PHONE = '13900139000'
+  r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-limited', phone: PHONE })
+  check('他人 phone 返回 无权操作他人账号', !r.success && r.error === '无权操作他人账号', r)
+  MOCK_AUTH_PHONE = PHONE
+
+  console.log('=== 20. SVIP版 shareReward → not_limited ===')
+  resetUsers()
+  r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-svip', phone: PHONE })
+  check('SVIP版分享不奖励', r.success && r.data.rewarded === false && r.data.reason === 'not_limited', r)
+
+  console.log('=== 21. 专业版用户 → personal/svip 均 limitless ===')
+  resetUsers()
+  setVip(2)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-personal' })
+  check('专业版用户 personal 模板 limitless', r.success && r.data.limitless === true, r)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-svip' })
+  check('专业版用户 svip 模板 limitless', r.success && r.data.limitless === true, r)
+
+  console.log('=== 22. 会员创建 usage 订单 → 拒绝（防接口层误收费） ===')
+  resetUsers()
+  setVip(1)
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-personal' }] })
+  check('VIP 用户买 personal 被拒', !r.success && r.error === '您是会员，无需按次购买', r)
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-limited' }] })
+  check('VIP 用户买 limited 被拒', !r.success && r.error === '您是会员，无需按次购买', r)
+  resetUsers()
+  setVip(2)
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-svip' }] })
+  check('专业版买 svip 被拒', !r.success && r.error === '您是专业版会员，无需按次购买', r)
+
+  console.log('=== 23. personal/svip usage 订单支付 → quota+1；quantity=2 → +2 ===')
+  resetUsers()
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-personal' }] })
+  const orderP = r.data.id
+  r = await call(`/api/orders/${orderP}/pay`, 'POST', {}, {})
+  check('personal 支付成功', r.success && r.data.status === 'paid', r)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-personal' })
+  check('personal 支付后 remaining=1', r.success && r.data.remaining === 1, r)
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-svip', quantity: 2 }] })
+  check('svip quantity=2 订单金额 37.6', r.success && r.data.totalAmount === '37.60', r)
+  const orderS = r.data.id
+  r = await call(`/api/orders/${orderS}/pay`, 'POST', {}, {})
+  check('svip 支付成功', r.success && r.data.status === 'paid', r)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-svip' })
+  check('svip quantity=2 支付后 remaining=2', r.success && r.data.remaining === 2, r)
+
+  console.log('=== 24. 已解锁（unlock 订单）→ personal/svip 也 limitless ===')
+  resetUsers()
+  data.orders.push({ id: 'o2', phone: PHONE, status: 'paid', items: [{ type: 'unlock', templateId: 'tpl-personal' }] })
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-personal' })
+  check('personal 解锁后 limitless', r.success && r.data.limitless === true, r)
+  data.orders.push({ id: 'o3', phone: PHONE, status: 'paid', items: [{ type: 'unlock', templateId: 'tpl-svip' }] })
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-svip' })
+  check('svip 解锁后 limitless', r.success && r.data.limitless === true, r)
+
+  console.log('=== 25. VIP 订单支付 → 写入 vip_level（1=个人/2=专业版） ===')
+  resetUsers()
+  r = await call('/api/vip/order', 'POST', {}, { plan: 'personal_yearly' })
+  check('创建个人VIP年卡订单', r.success && !!r.data.orderId, r)
+  r = await call(`/api/orders/${r.data.orderId}/pay`, 'POST', {}, {})
+  check('支付成功', r.success && r.data.status === 'paid', r)
+  check('user.vip_level=1', data.users[0].vip_level === 1 && data.users[0].vip_plan === 'personal_yearly', data.users[0])
+  r = await call('/api/vip/order', 'POST', {}, { plan: 'pro_monthly' })
+  const proOrder = r.data.orderId
+  r = await call(`/api/orders/${proOrder}/pay`, 'POST', {}, {})
+  check('专业版月卡支付成功', r.success && r.data.status === 'paid', r)
+  check('user.vip_level=2', data.users[0].vip_level === 2 && data.users[0].vip_plan === 'pro_monthly', data.users[0])
+
+  console.log('=== 26. 脏数据 vipLevel → 回退旧字段推断 ===')
+  resetUsers()
+  data.templates.push({ id: 'tpl-dirty', vipLevel: 'vip', is_paid: 1, is_premium: 0, vip_free: 0, status: 'published' })
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-dirty' })
+  check('脏档位回退为 limited（按次收费）', r.success && r.data.tier === 'limited' && r.data.remaining === 1 && !r.data.limitless, r)
 
   console.log(`\n结果: ${passed} passed, ${failed} failed`)
   process.exit(failed ? 1 : 0)

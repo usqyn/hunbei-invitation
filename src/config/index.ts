@@ -99,7 +99,7 @@ export function getFunctionName(path: string): string {
   if (path.startsWith('/api/music')) return FN.upload
   if (path.startsWith('/api/orders')) return FN.order
   if (path === '/api/vip/order' || path.startsWith('/api/vip/order')) return FN.order
-  // 限数配额 / 分享奖励（服务端 orders/权益体系内）
+  // 限免配额 / 分享奖励（服务端 orders/权益体系内）
   if (path.startsWith('/api/quota') || path.startsWith('/api/share/reward')) return FN.order
   if (path.startsWith('/api/works')) return FN.work
   if (path.startsWith('/api/categories') || path.startsWith('/api/templates') || path.startsWith('/api/products')) return FN.template

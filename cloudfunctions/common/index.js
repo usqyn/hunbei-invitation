@@ -84,14 +84,14 @@ const userLogin = async (ctx) => {
     if (existing.data && existing.data.length) {
       const u = existing.data[0]
       const token = signToken({ phone: wechatId, role: 'user' })
-      return ok({ token, nickname: u.nickname || '微信用户', phone: wechatId, vip_status: u.vip_status || 0, vip_expire_at: u.vip_expire_at || null })
+      return ok({ token, nickname: u.nickname || '微信用户', phone: wechatId, vip_status: u.vip_status || 0, vip_expire_at: u.vip_expire_at || null, vip_level: u.vip_level || 0 })
     }
     // 新用户：创建 + 发欢迎通知
     const token = signToken({ phone: wechatId, role: 'user' })
     const ts = now()
     await collection('users').add({ data: { id: uuid(), phone: wechatId, nickname: '微信用户', avatar: '', vip_status: 0, createdAt: ts, updatedAt: ts } })
     await collection('notifications').add({ data: { phone: wechatId, title: '欢迎使用TOYtamaxia', content: '感谢您的注册，快来制作您的第一张请柬吧！', type: 'system', read: 0, createdAt: ts } })
-    return ok({ token, nickname: '微信用户', phone: wechatId, vip_status: 0, vip_expire_at: null })
+    return ok({ token, nickname: '微信用户', phone: wechatId, vip_status: 0, vip_expire_at: null, vip_level: 0 })
   }
 
   // 手机号+验证码登录
@@ -115,7 +115,7 @@ const userLogin = async (ctx) => {
     }
     // 返回用户 VIP 状态
     const u = (await collection('users').where({ phone }).limit(1).get()).data[0] || {}
-    return ok({ token, nickname: phone.substring(0, 3) + '****' + phone.substring(7), phone, vip_status: u.vip_status || 0, vip_expire_at: u.vip_expire_at || null })
+    return ok({ token, nickname: phone.substring(0, 3) + '****' + phone.substring(7), phone, vip_status: u.vip_status || 0, vip_expire_at: u.vip_expire_at || null, vip_level: u.vip_level || 0 })
   }
 
   return httpFail('缺少登录参数')

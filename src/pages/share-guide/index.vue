@@ -36,8 +36,7 @@
     </view>
 
     <view class="sg-alt">
-      <text class="sg-alt-item" @click="goPay">或 ¥6.6 直接制作一次 / نەمەسە ¥6.6 تولەپ جاساۋ</text>
-      <text class="sg-alt-item" @click="goVip">开通VIP免费制作 / VIP اشىپ تەگىن جاساۋ</text>
+      <text class="sg-alt-item" @click="goPay">或 ¥{{ price }} 直接制作一次 / نەمەسە ¥{{ price }} تولەپ جاساۋ</text>
     </view>
 
     <view class="sg-tip">
@@ -129,14 +128,13 @@ async function onDoneShare() {
         title: '提示',
         content: '您已使用 2 次免费机会，之后每次制作需付费。',
         confirmText: `¥${price.value} 制作一次`,
-        cancelText: '开通VIP',
+        showCancel: false,
         success: (r: any) => {
           if (r.confirm) goPay()
-          else goVip()
         },
       })
     } else {
-      uni.showToast({ title: '今日已分享过，请直接付费或开通VIP', icon: 'none' })
+      uni.showToast({ title: '今日已分享过，请直接付费制作', icon: 'none' })
     }
   } catch (e) {
     uni.showToast({ title: '分享奖励领取失败，请稍后重试', icon: 'none' })
@@ -149,10 +147,6 @@ function goPay() {
   uni.redirectTo({
     url: `/pages/vip/index?mode=purchase&templateId=${templateId.value}&price=${price.value}&redirect=editor`,
   })
-}
-
-function goVip() {
-  uni.redirectTo({ url: '/pages/vip/index' })
 }
 </script>
 

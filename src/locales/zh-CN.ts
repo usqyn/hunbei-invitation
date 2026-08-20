@@ -15,8 +15,6 @@ defineLocale('zh-CN', {
   // 首页双栏入口
   'home.mall_title': '婚礼商城',
   'home.mall_desc': '精选好物',
-  'home.vip_title': '开通VIP',
-  'home.vip_desc': '全站免费',
 
   // 首页通用按钮
   'home.cta_make': '立即制作',
@@ -34,10 +32,6 @@ defineLocale('zh-CN', {
 
   // 首页分类模板数后缀
   'home.count_suffix': '个模板',
-
-  // 首页 VIP 弹窗
-  'home.vip_modal_confirm': '去开通VIP',
-  'home.vip_modal_cancel': '关闭',
 
   // 首页 tabs
   'tab.hot': '网红爆款',
@@ -104,8 +98,6 @@ defineLocale('zh-CN', {
   'vip.compare_export_format': '导出格式',
   'vip.compare_free': '免费版',
   'vip.compare_vip': 'VIP 版',
-  'vip.btn_pay': '立即支付',
-  'vip.btn_paying': '支付中...',
   'vip.already_vip': '您已是VIP会员',
   'vip.pay_success': '开通成功',
   'vip.agreement_title': 'VIP服务协议',
@@ -191,18 +183,4 @@ defineLocale('zh-CN', {
   'mall.note': '备注',
   'mall.submit_order': '提交订单',
   'mall.order_success': '下单成功',
-
-  // 分享说明页（限免版第2次使用：分享朋友圈得免费次数）
-  'shareGuide.title': '分享到朋友圈',
-  'shareGuide.desc': '这是您第 2 次使用本模板，分享到朋友圈即可免费获得 1 次制作机会！',
-  'shareGuide.step1': '① 点击下方「分享到朋友圈」，将请柬分享到您的朋友圈',
-  'shareGuide.step2': '② 分享完成后，点击「我已分享，继续制作」',
-  'shareGuide.btn_share': '分享到朋友圈',
-  'shareGuide.btn_done': '我已分享，继续制作',
-  'shareGuide.btn_pay': '直接付费制作 ¥6.6',
-  'shareGuide.btn_vip': '开通VIP免费制作',
-  'shareGuide.sharing': '分享中...',
-  'shareGuide.reward_ok': '分享成功，已获得 1 次免费制作机会',
-  'shareGuide.reward_fail': '今日已分享过，请直接付费或开通VIP',
-  'shareGuide.need_moments': '请先分享到朋友圈，再点击「我已分享」',
 })

@@ -35,11 +35,6 @@
       </view>
     </view>
 
-    <view class="vip-discount-tip" v-if="!userStore.isVip() && cartItems.length > 0">
-      <text class="tip-text">&#9733; 开通VIP享全场9折，可省 {{ discountAmount }} 元</text>
-      <text class="vip-link" @click="goToVip">去开通 ></text>
-    </view>
-
     <view class="cart-footer" v-if="cartItems.length > 0">
       <view class="footer-left">
         <view class="all-check" @click="toggleAllSelect">
@@ -83,7 +78,6 @@ const allSelected = ref(false)
 const selectedCount = ref(0)
 const totalPrice = ref('0.00')
 const rawTotal = ref(0)
-const discountAmount = computed(() => (rawTotal.value * 0.1).toFixed(2))
 
 const loadCart = () => {
   try {
@@ -182,10 +176,6 @@ const removeItem = (id: number) => {
 
 const goShop = () => {
   uni.switchTab({ url: '/pages/mall/index' })
-}
-
-const goToVip = () => {
-  uni.navigateTo({ url: '/pages/vip/index' })
 }
 
 const goCheckout = () => {
@@ -430,30 +420,4 @@ onShow(() => {
 }
 
 .checkout-btn.disabled { background: #ccc; }
-
-.vip-discount-tip {
-  position: fixed;
-  bottom: calc(120rpx + env(safe-area-inset-bottom));
-  left: 0;
-  right: 0;
-  background: #fff8e1;
-  padding: 16rpx 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 24rpx;
-  color: #e84a6e;
-  z-index: 99;
-  border-top: 1rpx solid #ffe0b2;
-}
-
-.vip-discount-tip .tip-text {
-  flex: 1;
-}
-
-.vip-link {
-  color: #e84a6e;
-  font-weight: 600;
-  margin-left: 12rpx;
-}
 </style>

@@ -290,7 +290,7 @@ let cloudUrlBroken = false
 const filters = [
   { label: '全部', value: 'all' },
   { label: '免费', value: 'free' },
-  { label: '限数', value: 'limited' },
+  { label: '限免', value: 'limited' },
   { label: '付费', value: 'paid' },
   { label: 'VIP免费', value: 'vip' },
 ]

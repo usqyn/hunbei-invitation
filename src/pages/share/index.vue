@@ -162,7 +162,7 @@ const userStore = useUserStore()
 const { goBack } = useGoBack()
 const { haptic } = useFeedback()
 
-// 水印策略：免费版无水印，限数版/VIP版/付费版对非对应会员展示水印（防截图）
+// 水印策略：免费版无水印，限免版/VIP版/SVIP版对非对应会员展示水印（防截图）
 const shouldShowWatermark = computed(() => {
   const vipLevel = userStore.getVipLevel()
   const templateLevel = editorStore.currentTemplateVipLevel
@@ -267,6 +267,7 @@ onShareAppMessage(() => {
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
   if (workId) params.push(`workId=${workId}`)
+  if (userStore.phone) params.push(`inviterPhone=${userStore.phone}`)
   if (params.length) path += '?' + params.join('&')
   return {
     title: shareTitle.value,
@@ -282,6 +283,7 @@ onShareTimeline(() => {
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
   if (workId) params.push(`workId=${workId}`)
+  if (userStore.phone) params.push(`inviterPhone=${userStore.phone}`)
   return {
     title: shareTitle.value,
     query: params.join('&'),

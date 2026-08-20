@@ -28,10 +28,11 @@ export const TIER_DEFAULT_PRICE: Record<TemplateTier, number> = {
   pro: 0,
 }
 
-// 模板档位判定：vipLevel 优先，兼容旧数据（is_paid / is_premium / vip_free）
+// 模板档位判定：vipLevel 白名单优先，脏数据回退旧字段（与后端 getTemplateTier 一致）
+const TIER_WHITELIST: TemplateTier[] = ['free', 'limited', 'personal', 'svip', 'pro']
 export function getTemplateTier(t: any): TemplateTier {
   if (!t) return 'free'
-  if (t.vipLevel) return t.vipLevel as TemplateTier
+  if (TIER_WHITELIST.includes(t.vipLevel)) return t.vipLevel as TemplateTier
   if (t.is_premium) return 'pro'
   if (t.is_paid && t.vip_free) return 'personal'
   if (t.is_paid) return 'limited'
@@ -82,30 +83,20 @@ export function useTemplateEntry() {
   function goPayForTemplate(template: any) {
     const price = getTierPrice(template)
     uni.navigateTo({
-      url: `/pages/vip/index?mode=purchase&templateId=${template.id}&price=${price}&redirect=editor`,
+      url: `/pages/vip/index?mode=purchase&templateId=${template.id}&price=${price}&tier=${getTemplateTier(template)}&redirect=editor`,
     })
   }
 
-  // 付费档（VIP版/SVIP版）入口：非特权用户弹 按次付费 / 开通会员
-  function handlePaidTier(template: any, vipLabel: string) {
+  // 付费档（VIP版/SVIP版）入口：非特权用户直接按次付费（会员套餐暂未开放）
+  function handlePaidTier(template: any) {
     haptic('light')
-    const price = getTierPrice(template)
-    uni.showActionSheet({
-      itemList: [`¥${price} 制作一次`, vipLabel],
-      success: (res: any) => {
-        if (res.tapIndex === 0) {
-          goPayForTemplate(template)
-        } else if (res.tapIndex === 1) {
-          uni.navigateTo({ url: '/pages/vip/index' })
-        }
-      },
-    })
+    goPayForTemplate(template)
   }
 
   // 限免版模板点击：查剩余免费次数
   //   remaining>0 → 直接进编辑器（次数在编辑器内扣减）
   //   用尽且 used<2（第2次）→ 跳汉哈双语分享说明页（分享朋友圈得次数）
-  //   用尽且 used>=2（第3次起）→ 弹 按次付费6.6 / 开通VIP
+  //   用尽且 used>=2（第3次起）→ 直接跳按次付费页（¥6.6）
   async function handleLimitedTemplate(template: any) {
     haptic('light')
     const price = getTierPrice(template)
@@ -128,15 +119,11 @@ export function useTemplateEntry() {
       })
       return
     }
-    // 第3次起：按次付费 / 开通VIP
+    // 第3次起：按次付费（会员套餐暂未开放）
     uni.showActionSheet({
-      itemList: [`¥${price} 制作一次`, '开通VIP免费制作'],
+      itemList: [`¥${price} 制作一次`],
       success: (res: any) => {
-        if (res.tapIndex === 0) {
-          goPayForTemplate(template)
-        } else if (res.tapIndex === 1) {
-          uni.navigateTo({ url: '/pages/vip/index' })
-        }
+        if (res.tapIndex === 0) goPayForTemplate(template)
       },
     })
   }
@@ -160,34 +147,24 @@ export function useTemplateEntry() {
       return
     }
 
-    // VIP版：非 VIP 会员每次付费 9.9
+    // VIP版：非 VIP 会员直接按次付费 9.9（会员套餐暂未开放）
     if (tier === 'personal' && !userStore.isVip()) {
-      handlePaidTier(template, '开通VIP免费制作')
+      handlePaidTier(template)
       return
     }
 
-    // SVIP版：非专业版每次付费 18.8（个人VIP不免费）
+    // SVIP版：非专业版直接按次付费 18.8（个人VIP不免费，会员套餐暂未开放）
     if (tier === 'svip' && !userStore.isPro()) {
-      handlePaidTier(template, '开通专业版免费制作')
+      handlePaidTier(template)
       return
     }
 
-    // 兼容旧数据：is_paid 但无 vipLevel 的付费模板，非 VIP 且未购买时弹 单买 / 开通VIP
+    // 兼容旧数据：is_paid 但无 vipLevel 的付费模板，非 VIP 且未购买时直接按次付费
     if (Boolean(template.is_paid)) {
       const isVip = userStore.isVip()
       if (!isVip && !(options?.isPurchased ?? false)) {
         haptic('light')
-        const price = getTierPrice(template)
-        uni.showActionSheet({
-          itemList: [`单买 ${price}元`, '开通VIP免费使用'],
-          success: (res: any) => {
-            if (res.tapIndex === 0) {
-              goPayForTemplate(template)
-            } else if (res.tapIndex === 1) {
-              uni.navigateTo({ url: '/pages/vip/index' })
-            }
-          },
-        })
+        goPayForTemplate(template)
         return
       }
     }
