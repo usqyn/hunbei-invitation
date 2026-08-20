@@ -169,6 +169,7 @@ const shouldShowWatermark = computed(() => {
   if (templateLevel === 'free') return false
   if (templateLevel === 'limited') return vipLevel < 1
   if (templateLevel === 'personal') return vipLevel < 1
+  if (templateLevel === 'svip') return vipLevel < 2
   if (templateLevel === 'pro') return vipLevel < 2
   return false
 })

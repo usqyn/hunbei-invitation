@@ -136,8 +136,7 @@
             <view class="card-badge-wrap">
               <view class="card-vip-tag" v-if="card.isPaid">
                 <text class="vip-icon">♛</text>
-                <text v-if="card.price > 0">VIP ¥{{ card.price }}</text>
-                <text v-else>VIP</text>
+                <text>{{ cardTierLabel(card) }}</text>
               </view>
               <view class="card-hot-tag" v-if="card.isHot">HOT</view>
             </view>
@@ -300,7 +299,7 @@ import { resolveUrl } from '@/utils/url'
 import CloudImage from '@/components/CloudImage.vue'
 import { request } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
-import { useTemplateEntry } from '@/composables/useTemplateEntry'
+import { useTemplateEntry, TIER_DEFAULT_PRICE } from '@/composables/useTemplateEntry'
 import { t } from '@/locales'
 import '@/locales/kk'
 import '@/locales/zh-CN'
@@ -340,6 +339,9 @@ const featuredCards = computed(() => {
     views: t.likes || 0,
     isPaid: t.is_paid ? 1 : 0,
     price: t.price || 0,
+    vipLevel: t.vipLevel,
+    is_premium: t.is_premium,
+    vip_free: t.vip_free,
   }))
   if (apiCards.length >= 8) return apiCards.slice(0, 8)
   // 不足 8 个，用本地静态卡片补齐（保留旧数据兼容性）
@@ -363,6 +365,16 @@ function formatCount(count: number): string {
     return (count / 1000).toFixed(1) + 'k'
   }
   return count.toString()
+}
+
+// 卡片档位标签（限免/VIP版/SVIP版/专业版）
+function cardTierLabel(card: any): string {
+  const tier: string = card.vipLevel || (card.isPaid ? (card.is_premium ? 'pro' : (card.vip_free ? 'personal' : 'limited')) : 'free')
+  const price = Number(card.price) > 0 ? Number(card.price) : (TIER_DEFAULT_PRICE[tier as keyof typeof TIER_DEFAULT_PRICE] || 0)
+  if (tier === 'limited') return `限免 ¥${price}`
+  if (tier === 'svip') return `SVIP ¥${price}`
+  if (tier === 'personal') return `VIP ¥${price}`
+  return 'VIP'
 }
 
 function getCategoryBg(id: string): string {

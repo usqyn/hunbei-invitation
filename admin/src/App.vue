@@ -287,8 +287,9 @@
             <div class="tpl-actions">
               <select class="tpl-vip-select" :value="tpl.vipLevel || 'free'" @change="onChangeTemplateVip(tpl, $event)">
                 <option value="free">免费</option>
-                <option value="limited">限数版</option>
-                <option value="personal">个人VIP</option>
+                <option value="limited">限免版</option>
+                <option value="personal">VIP版</option>
+                <option value="svip">SVIP版</option>
                 <option value="pro">专业版</option>
               </select>
               <button v-if="!tpl.cloud_synced && tpl.status !== 'deleted'" class="tpl-btn sync-btn" @click="onResyncTemplate(tpl)" title="重新同步到云">🔄</button>
@@ -2008,14 +2009,15 @@ function getCategoryName(catId: string): string {
 
 function vipLevelLabel(level?: string): string {
   if (level === 'pro') return '专业版'
-  if (level === 'personal') return 'VIP'
-  if (level === 'limited') return '限数'
+  if (level === 'personal') return 'VIP版'
+  if (level === 'svip') return 'SVIP版'
+  if (level === 'limited') return '限免'
   return '免费'
 }
 
 async function onChangeTemplateVip(tpl: any, e: Event) {
   const target = e.target as HTMLSelectElement
-  const vipLevel = target.value as 'free' | 'limited' | 'personal' | 'pro'
+  const vipLevel = target.value as 'free' | 'limited' | 'personal' | 'svip' | 'pro'
   try {
     await updateTemplate(tpl.id, { vipLevel })
     tpl.vipLevel = vipLevel

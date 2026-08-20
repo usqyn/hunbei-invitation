@@ -86,8 +86,14 @@
             <view class="cover-gradient"></view>
             <!-- 右上角价格/VIP标签 -->
             <view class="price-badge">
-              <view v-if="isLimitedTemplate(template)" class="limit-badge">
-                <text class="limit-badge-text">限数</text>
+              <view v-if="getTemplateTier(template) === 'limited'" class="limit-badge">
+                <text class="limit-badge-text">限免</text>
+              </view>
+              <view v-else-if="getTemplateTier(template) === 'svip'" class="svip-badge">
+                <text class="svip-badge-text">SVIP ¥{{ getTierPrice(template) }}</text>
+              </view>
+              <view v-else-if="getTemplateTier(template) === 'personal'" class="vip-badge">
+                <text class="vip-badge-text">¥{{ getTierPrice(template) }} /次</text>
               </view>
               <view v-else-if="template.is_paid && template.is_premium" class="vip-badge">
                 <text class="vip-badge-text">VIP</text>
@@ -237,7 +243,7 @@ import { useTemplateEntry, resetTemplateEntryNavigation } from '@/composables/us
 import CloudImage from '@/components/CloudImage.vue'
 
 const pageConfig = TEMPLATE_PAGE_CONFIG
-const { openTemplateEntry, isLimitedTemplate } = useTemplateEntry()
+const { openTemplateEntry, isLimitedTemplate, getTemplateTier, getTierPrice } = useTemplateEntry()
 
 // ============ 安全初始化：iOS 上任何一步崩溃都会导致页面白屏 ============
 let userStore: ReturnType<typeof useUserStore>
@@ -671,6 +677,7 @@ function pickCardFields(t: TemplateItem): TemplateItem {
     is_premium: t.is_premium,
     price: t.price,
     vip_free: t.vip_free,
+    vipLevel: t.vipLevel,
     orientation: t.orientation,
     canvasSize: t.canvasSize,
     tags: t.tags,
@@ -1274,6 +1281,21 @@ function onBack() {
   color: #ffffff;
   font-weight: 700;
   letter-spacing: 2rpx;
+}
+
+.svip-badge {
+  background: linear-gradient(135deg, #ff2d55 0%, #d81b60 55%, #a50035 100%);
+  padding: 6rpx 16rpx;
+  border-radius: 100rpx;
+  box-shadow: 0 4rpx 14rpx rgba(216, 27, 96, 0.45);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.svip-badge-text {
+  font-size: 18rpx;
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 1rpx;
 }
 
 /* 底部信息浮层 */

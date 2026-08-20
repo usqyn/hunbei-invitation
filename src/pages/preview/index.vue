@@ -308,6 +308,7 @@ import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchSharedWorkApi, fetchTemplateQuota, shareReward } from '@/api'
+import { getTierPrice } from '@/composables/useTemplateEntry'
 import type { EditableElement, Work } from '@/types'
 import Watermark from '@/components/Watermark.vue'
 import CloudImage from '@/components/CloudImage.vue'
@@ -371,6 +372,7 @@ const shouldShowWatermark = computed(() => {
   if (templateLevel === 'free') return false
   if (templateLevel === 'limited') return vipLevel < 1
   if (templateLevel === 'personal') return vipLevel < 1
+  if (templateLevel === 'svip') return vipLevel < 2
   if (templateLevel === 'pro') return vipLevel < 2
   return false
 })
@@ -379,7 +381,9 @@ const showVipBar = computed(() => {
   const vipLevel = userStore.getVipLevel()
   const templateLevel = editorStore.currentTemplateVipLevel
   if (templateLevel === 'free') return vipLevel < 1
+  if (templateLevel === 'limited') return vipLevel < 1
   if (templateLevel === 'personal') return vipLevel < 1
+  if (templateLevel === 'svip') return vipLevel < 2
   if (templateLevel === 'pro') return vipLevel < 2
   return true
 })
@@ -389,6 +393,12 @@ const vipBarText = computed(() => {
   const templateLevel = editorStore.currentTemplateVipLevel
   if (templateLevel === 'pro' && vipLevel < 2) {
     return '此模板为专业版专属，升级解锁全部权益'
+  }
+  if (templateLevel === 'svip' && vipLevel < 2) {
+    return '此模板为SVIP版，开通专业版免费制作'
+  }
+  if (templateLevel === 'limited' && vipLevel < 1) {
+    return '此模板为限免版，开通VIP免费无限次制作'
   }
   if (vipLevel === 0) {
     return '开通VIP，高清无水印导出 + 全模板解锁 + 更多次数'
@@ -861,12 +871,16 @@ const handleCreate = async () => {
   haptic('medium')
   const templateId = editorStore.currentTemplateId
   const templateLevel = editorStore.currentTemplateVipLevel
-  // 限数版模板：非 VIP 用户进入前校验剩余免费次数，不足则引导 分享得次数/单次解锁/开通VIP
-  if (templateLevel === 'limited' && templateId && !userStore.isVip()) {
+  // 限免版：非VIP校验免费次数；VIP版/SVIP版：非会员校验是否已付费（额度）
+  const needCheck =
+    (templateLevel === 'limited' && !userStore.isVip()) ||
+    (templateLevel === 'personal' && !userStore.isVip()) ||
+    (templateLevel === 'svip' && !userStore.isPro())
+  if (needCheck && templateId) {
     try {
       const quota = await fetchTemplateQuota(templateId)
       if (!quota.limitless && quota.remaining <= 0) {
-        showLimitExhausted(templateId)
+        showLimitExhausted(templateId, templateLevel)
         return
       }
     } catch (e) {
@@ -880,31 +894,38 @@ const handleCreate = async () => {
   }
 }
 
-// 限数版次数用完：弹出 分享得次数 / 单次解锁 / 开通VIP 三出口
-function showLimitExhausted(templateId: string) {
-  const tpl = (editorStore as any).currentTemplate
-  const price = tpl?.price || 9.9
-  uni.showActionSheet({
-    itemList: ['分享好友得免费次数', `¥${price} 解锁模板`, '开通VIP免费使用'],
-    success: (res: any) => {
-      if (res.tapIndex === 0) {
-        uni.showModal({
-          title: '分享得次数',
-          content: '分享本模板给微信好友，好友打开后您即可获得 1 次免费制作机会（每日限 1 次）',
-          confirmText: '去分享',
-          success: (r: any) => {
-            if (r.confirm) uni.showShareMenu({})
-          },
-        })
-      } else if (res.tapIndex === 1) {
-        uni.navigateTo({
-          url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}`,
-        })
-      } else if (res.tapIndex === 2) {
-        uni.navigateTo({ url: '/pages/vip/index' })
-      }
-    },
+// 额度用尽出口：限免版（第2次分享/第3次付费）、VIP版、SVIP版
+function showLimitExhausted(templateId: string, level: string) {
+  const tpl = (editorStore as any).currentTemplate || { id: templateId }
+  const price = getTierPrice(tpl)
+  const goPay = () => uni.navigateTo({
+    url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&redirect=editor`,
   })
+  const goVip = () => uni.navigateTo({ url: '/pages/vip/index' })
+  const showSheet = (vipLabel: string) => {
+    uni.showActionSheet({
+      itemList: [`¥${price} 制作一次`, vipLabel],
+      success: (res: any) => {
+        if (res.tapIndex === 0) goPay()
+        else if (res.tapIndex === 1) goVip()
+      },
+    })
+  }
+  if (level === 'limited') {
+    fetchTemplateQuota(templateId)
+      .then((quota: any) => {
+        if (quota && !quota.limitless && (quota.used ?? 1) < 2) {
+          // 第2次使用：跳汉哈双语分享说明页
+          uni.navigateTo({ url: `/pages/share-guide/index?templateId=${templateId}&price=${price}` })
+          return
+        }
+        showSheet('开通VIP免费制作')
+      })
+      .catch(() => showSheet('开通VIP免费制作'))
+    return
+  }
+  if (level === 'personal') { showSheet('开通VIP免费制作'); return }
+  if (level === 'svip') { showSheet('开通专业版免费制作'); return }
 }
 
 const goToVip = () => {

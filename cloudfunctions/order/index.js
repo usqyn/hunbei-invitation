@@ -16,7 +16,7 @@
 //   防刷依赖登录鉴权 + 数据层限制（分享每日每模板 1 次）
 
 const {
-  db, collection, _, now, uuid,
+  db, collection, _, now, nowMs, uuid,
   getUser, requireAuth, requireAdmin, isUserVip,
   ok, okMsg, fail, httpOK, httpFail, httpOptions,
   parsePagination, paginateResponse, parseBody, matchRoute, createRouter,
@@ -28,6 +28,18 @@ const VIP_PLANS = {
   monthly: { days: 30, price: 29 },
   quarterly: { days: 90, price: 69 },
   yearly: { days: 365, price: 199 },
+}
+
+// 模板档位默认单次价格（服务端定价，不信任客户端价格）：
+//   限免版(limited)：第1次免费/第2次分享朋友圈/第3次起每次 6.6
+//   VIP版(personal)：非VIP会员每次 9.9
+//   SVIP版(svip)：非专业版每次 18.8
+const TIER_DEFAULT_PRICE = {
+  free: 0,
+  limited: 6.6,
+  personal: 9.9,
+  svip: 18.8,
+  pro: 0,
 }
 
 // ============ 订单 CRUD ============
@@ -43,7 +55,7 @@ const createOrder = async (ctx) => {
   const templateIds = items.map(it => it.templateId).filter(Boolean)
   const productIds = items.map(it => it.productId).filter(Boolean)
 
-  // 1. 付费模板
+  // 1. 付费模板（按档位定价；type='usage' 为按次制作订单，用档位默认价）
   const tplPriceMap = {}
   if (templateIds.length > 0) {
     const tplRes = await collection('templates').where({ id: _.in(templateIds), status: 'published' }).limit(100).get()
@@ -52,7 +64,12 @@ const createOrder = async (ctx) => {
       if (item.templateId) {
         const tpl = tplPriceMap[item.templateId]
         if (!tpl) return httpFail(`模板 ${item.templateId} 不存在`)
-        if (tpl.is_paid === 1) serverTotal += (parseFloat(tpl.price) || 0) * (item.quantity || 1)
+        if (item.type === 'usage') {
+          const tier = getTemplateTier(tpl)
+          serverTotal += (TIER_DEFAULT_PRICE[tier] || 0) * (item.quantity || 1)
+        } else if (tpl.is_paid === 1) {
+          serverTotal += (parseFloat(tpl.price) || 0) * (item.quantity || 1)
+        }
       }
     }
   }
@@ -149,6 +166,8 @@ const payOrder = async (ctx) => {
   const ts = now()
   // 若含 VIP 类型商品，发放 VIP 权益（事务保证）
   const vipItem = (order.items || []).find(it => it.type === 'vip')
+  // 若含 usage 类型商品（限免版6.6/VIP版9.9/SVIP版18.8 按次制作），发放 1 次制作额度（事务保证）
+  const usageItem = (order.items || []).find(it => it.type === 'usage')
   if (vipItem) {
     const plan = VIP_PLANS[vipItem.plan]
     const days = plan ? plan.days : 30
@@ -173,6 +192,24 @@ const payOrder = async (ctx) => {
       })
     } catch (e) {
       console.error('payOrder transaction failed:', e)
+      return httpFail('支付失败', 500)
+    }
+  } else if (usageItem) {
+    const templateId = usageItem.templateId
+    const quotaKey = 'quotaMap.' + templateId
+    try {
+      await db.runTransaction(async (transaction) => {
+        await transaction.collection('orders').where({ id }).update({ data: { status: 'paid', paid_at: ts, updatedAt: ts } })
+        const userRes = await transaction.collection('users').where({ phone }).limit(1).get()
+        const u = userRes.data && userRes.data[0]
+        if (u && u.quotaMap && u.quotaMap[templateId] !== undefined) {
+          await transaction.collection('users').where({ phone }).update({ data: { [quotaKey]: _.inc(1), updatedAt: ts } })
+        } else {
+          await transaction.collection('users').where({ phone }).update({ data: { [quotaKey]: 1, updatedAt: ts } })
+        }
+      })
+    } catch (e) {
+      console.error('payOrder usage transaction failed:', e)
       return httpFail('支付失败', 500)
     }
   } else {
@@ -225,27 +262,51 @@ const createVipOrder = async (ctx) => {
   })
 }
 
-// ============ 限数版配额 / 分享奖励 ============
-// 限数版模板（vipLevel='limited'）对每位非 VIP 用户可免费制作次数（默认 1 次，进入编辑器时扣减）；
-// VIP 用户、已单次解锁用户、免费版模板不受限。remaining=-1 表示不限。
+// ============ 限数版配额 / 按次付费 / 分享奖励 ============
+// 模板档位（vipLevel）：
+//   free=免费版（无限次） / limited=限免版（第1次免费→第2次分享朋友圈→第3次起每次6.6）
+//   personal=VIP版（非VIP会员每次9.9） / svip=SVIP版（非专业版每次18.8） / pro=专业版（Pro专属）
+// 付费档每次新建作品在进入编辑器时扣减 1 次额度（quotaMap），额度来源：支付（+1）/ 分享（+1）。
+// VIP会员免费用 VIP版，专业版免费用 SVIP版；旧"永久解锁"订单（type='unlock'）保持兼容。
 // 存储设计：全部复用已有集合，避免依赖需手工创建的集合——
 //   配额状态 → users 文档 quotaMap（{templateId: remaining}）
+//   限免版已使用次数 → users 文档 limitedUseMap（{templateId: count}）
 //   分享计数 → users 文档 shareMap（{templateId_date: count}）
-//   单次解锁 → 查询已付订单（orders 集合 items 含 unlock 类型）
+//   按次购买 → 已付订单 items 含 usage 类型（支付时 quotaMap+1）
 const QUOTA_LIMITLESS = -1
 const SHARE_REWARD_QUOTA_CAP = 5
+
+// 从模板记录解析档位（兼容旧字段：is_premium / is_paid / vip_free）
+function getTemplateTier(t) {
+  if (!t) return 'free'
+  if (t.vipLevel) return t.vipLevel
+  if (t.is_premium === 1) return 'pro'
+  if (t.is_paid === 1 && t.vip_free === 1) return 'personal'
+  if (t.is_paid === 1) return 'limited'
+  return 'free'
+}
 
 async function getTemplateLevel(templateId) {
   const res = await collection('templates').where({ id: templateId }).limit(1).get()
   const t = res.data && res.data[0]
   if (!t) return null
-  const vipLevel = t.vipLevel || (t.is_premium === 1 ? 'pro' : (t.is_paid === 1 ? 'personal' : 'free'))
-  return { vipLevel, price: parseFloat(t.price) || 0 }
+  const vipLevel = getTemplateTier(t)
+  const price = parseFloat(t.price) > 0 ? parseFloat(t.price) : (TIER_DEFAULT_PRICE[vipLevel] || 0)
+  return { vipLevel, price }
 }
 
 async function getUserByPhone(phone) {
   const res = await collection('users').where({ phone }).limit(1).get()
   return res.data && res.data[0] ? res.data[0] : null
+}
+
+// 判断用户是否为专业版会员（vip_level===2 且未过期）
+async function isUserPro(phone) {
+  if (!phone) return false
+  const user = await getUserByPhone(phone)
+  if (!user || user.vip_status !== 1) return false
+  if (user.vip_expire_at && nowMs() > parseInt(user.vip_expire_at, 10)) return false
+  return parseInt(user.vip_level, 10) === 2
 }
 
 // 是否已单次解锁该模板：已付订单中 items 含 type='unlock' 且 templateId 匹配
@@ -254,29 +315,57 @@ async function isTemplateUnlocked(phone, templateId) {
   return (res.data || []).some(o => (o.items || []).some(it => it.type === 'unlock' && it.templateId === templateId))
 }
 
+// 查询模板配额：返回 { remaining, limitless, tier, price, used, shareEligible }
+//   remaining=-1 表示无限；used=限免版已免费使用次数；shareEligible=是否仍可分享得次数
 async function getTemplateQuota(phone, templateId) {
   const level = await getTemplateLevel(templateId)
   if (!level) return null
-  if (level.vipLevel === 'free' || level.vipLevel !== 'limited') return QUOTA_LIMITLESS
-  if (await isUserVip(phone)) return QUOTA_LIMITLESS
-  if (await isTemplateUnlocked(phone, templateId)) return QUOTA_LIMITLESS
   const user = await getUserByPhone(phone)
-  const remaining = user && user.quotaMap ? user.quotaMap[templateId] : undefined
-  return remaining === undefined ? 1 : parseInt(remaining, 10) || 0
+  const used = user && user.limitedUseMap ? parseInt(user.limitedUseMap[templateId], 10) || 0 : 0
+  const base = { tier: level.vipLevel, price: level.price, used, shareEligible: false }
+  // 免费版 / 专业版：无限
+  if (level.vipLevel === 'free' || level.vipLevel === 'pro') {
+    return Object.assign(base, { remaining: QUOTA_LIMITLESS, limitless: true })
+  }
+  // 限免版：VIP 或已永久解锁 → 无限；否则 quotaMap（默认 1，分享 +1）
+  if (level.vipLevel === 'limited') {
+    if (await isUserVip(phone)) return Object.assign(base, { remaining: QUOTA_LIMITLESS, limitless: true })
+    if (await isTemplateUnlocked(phone, templateId)) return Object.assign(base, { remaining: QUOTA_LIMITLESS, limitless: true })
+    const remaining = user && user.quotaMap ? user.quotaMap[templateId] : undefined
+    return Object.assign(base, {
+      remaining: remaining === undefined ? 1 : parseInt(remaining, 10) || 0,
+      limitless: false,
+      // 第2次使用（used=1）才允许分享得次数；第3次起（used>=2）只能按次付费
+      shareEligible: used < 2,
+    })
+  }
+  // VIP版：VIP 会员免费；否则按次付费（额度来自已付 usage 订单）
+  if (level.vipLevel === 'personal') {
+    if (await isUserVip(phone)) return Object.assign(base, { remaining: QUOTA_LIMITLESS, limitless: true })
+    const remaining = user && user.quotaMap ? parseInt(user.quotaMap[templateId], 10) || 0 : 0
+    return Object.assign(base, { remaining, limitless: false })
+  }
+  // SVIP版：专业版免费；否则按次付费
+  if (level.vipLevel === 'svip') {
+    if (await isUserPro(phone)) return Object.assign(base, { remaining: QUOTA_LIMITLESS, limitless: true })
+    const remaining = user && user.quotaMap ? parseInt(user.quotaMap[templateId], 10) || 0 : 0
+    return Object.assign(base, { remaining, limitless: false })
+  }
+  return Object.assign(base, { remaining: QUOTA_LIMITLESS, limitless: true })
 }
 
-// GET /api/quota — 查询限数配额
+// GET /api/quota — 查询模板配额
 const getQuota = async (ctx) => {
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
   const templateId = ctx.query.templateId
   if (!templateId) return httpFail('缺少 templateId')
-  const remaining = await getTemplateQuota(auth.user.phone, templateId)
-  if (remaining === null) return httpFail('模板不存在', 404)
-  return ok({ remaining, limitless: remaining === QUOTA_LIMITLESS })
+  const quota = await getTemplateQuota(auth.user.phone, templateId)
+  if (!quota) return httpFail('模板不存在', 404)
+  return ok(quota)
 }
 
-// POST /api/quota/consume — 扣减限数配额（进入编辑器时调用）
+// POST /api/quota/consume — 扣减制作额度（新建作品进入编辑器时调用）
 // 注意：云函数无内存限流器（无状态），防刷依赖登录鉴权 + 剩余次数本身
 const consumeQuota = async (ctx) => {
   const auth = requireAuth(ctx.event)
@@ -284,10 +373,10 @@ const consumeQuota = async (ctx) => {
   const phone = auth.user.phone
   const { templateId } = ctx.body
   if (!templateId) return httpFail('缺少 templateId')
-  const remaining = await getTemplateQuota(phone, templateId)
-  if (remaining === null) return httpFail('模板不存在', 404)
-  if (remaining === QUOTA_LIMITLESS) return ok({ remaining: QUOTA_LIMITLESS, limitless: true })
-  if (remaining <= 0) return httpFail('QUOTA_EXHAUSTED', 403)
+  const quota = await getTemplateQuota(phone, templateId)
+  if (!quota) return httpFail('模板不存在', 404)
+  if (quota.limitless) return ok({ remaining: QUOTA_LIMITLESS, limitless: true, tier: quota.tier })
+  if (quota.remaining <= 0) return httpFail('QUOTA_EXHAUSTED', 403)
   const nowTs = now()
   // 嵌套字段首次扣减直接写 0（云数据库无 upsert），已有值用原子 inc
   const key = 'quotaMap.' + templateId
@@ -297,36 +386,48 @@ const consumeQuota = async (ctx) => {
   } else {
     await collection('users').where({ phone }).update({ data: { [key]: 0, updatedAt: nowTs } })
   }
-  return ok({ remaining: remaining - 1, limitless: false })
+  // 限免版额外累计已使用次数（第2次→分享、第3次起→付费 的漏斗判断依据）
+  if (quota.tier === 'limited') {
+    const useKey = 'limitedUseMap.' + templateId
+    const useUpdate = user && user.limitedUseMap && user.limitedUseMap[templateId] !== undefined
+      ? { [useKey]: _.inc(1), updatedAt: nowTs }
+      : { [useKey]: quota.used + 1, updatedAt: nowTs }
+    await collection('users').where({ phone }).update({ data: useUpdate })
+  }
+  return ok({ remaining: quota.remaining - 1, limitless: false, tier: quota.tier })
 }
 
-// POST /api/share/reward — 分享奖励
-// 任意用户打开分享落地页时触发：给分享者（作品创建者 phone）的限数模板剩余次数 +1。
+// POST /api/share/reward — 分享奖励（限免版第2次使用：分享朋友圈后点击"我已分享"）
+// 给分享者的限免模板剩余次数 +1；仅限免版且已使用次数 < 2 时可获得。
 // 公开访问（无登录态），防刷依赖：同人同模板每日 1 次 + 每日奖励总数上限。
 const shareReward = async (ctx) => {
   const { templateId, phone } = ctx.body
   if (!templateId) return httpFail('缺少 templateId')
   if (!phone) return httpFail('缺少 phone')
-  const remaining = await getTemplateQuota(phone, templateId)
-  if (remaining === null) return httpFail('模板不存在', 404)
-  if (remaining === QUOTA_LIMITLESS) return ok({ remaining: QUOTA_LIMITLESS, rewarded: false, reason: 'unlimited' })
+  const quota = await getTemplateQuota(phone, templateId)
+  if (!quota) return httpFail('模板不存在', 404)
+  if (quota.limitless) return ok({ remaining: QUOTA_LIMITLESS, rewarded: false, reason: 'unlimited' })
+  // 仅限免版可分享得次数
+  if (quota.tier !== 'limited') return ok({ remaining: quota.remaining, rewarded: false, reason: 'not_limited' })
+  // 已使用 >= 2 次（已过分享阶段），不再发放
+  if (quota.used >= 2) return ok({ remaining: quota.remaining, rewarded: false, reason: 'share_done' })
   const date = now().slice(0, 10)
   const nowTs = now()
   const user = await getUserByPhone(phone)
   const shareMapKey = `${templateId}_${date}`
   const todayCount = user && user.shareMap ? parseInt(user.shareMap[shareMapKey], 10) || 0 : 0
   if (todayCount >= 1) return httpFail('DAILY_LIMIT', 429)
-  if (remaining >= SHARE_REWARD_QUOTA_CAP) return ok({ remaining, rewarded: false, reason: 'capped' })
+  if (quota.remaining >= SHARE_REWARD_QUOTA_CAP) return ok({ remaining: quota.remaining, rewarded: false, reason: 'capped' })
   const shareKey = 'shareMap.' + shareMapKey
   const quotaKey = 'quotaMap.' + templateId
   const userUpdate = { [shareKey]: todayCount + 1, updatedAt: nowTs }
   if (user && user.quotaMap && user.quotaMap[templateId] !== undefined) {
     userUpdate[quotaKey] = _.inc(1)
   } else {
-    userUpdate[quotaKey] = remaining + 1
+    userUpdate[quotaKey] = quota.remaining + 1
   }
   await collection('users').where({ phone }).update({ data: userUpdate })
-  return ok({ remaining: remaining + 1, rewarded: true })
+  return ok({ remaining: quota.remaining + 1, rewarded: true })
 }
 
 // ============ 路由表 ============

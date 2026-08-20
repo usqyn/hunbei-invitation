@@ -224,10 +224,11 @@ export interface TemplateItem {
   is_premium?: boolean
   price?: number
   vip_free?: boolean
-  // 会员等级：free=免费版 / limited=限数版(VIP版，非VIP每模板免费用1次) / personal=个人VIP / pro=专业版
+  // 会员等级：free=免费版 / limited=限免版 / personal=VIP版 / svip=SVIP版 / pro=专业版
   // free: 免费无限次使用，无水印
-  // limited: 展示带水印，非VIP每模板限1次（分享得次数/9.9解锁/开通VIP可突破）
-  // personal: 个人VIP，无水印
+  // limited: 限免版，第1次免费、第2次分享朋友圈得次数、第3次起每次 6.6
+  // personal: VIP版，VIP会员免费，非会员每次 9.9
+  // svip: SVIP版，专业版免费，其余每次 18.8
   // pro: 专业版，全部权益
-  vipLevel?: 'free' | 'limited' | 'personal' | 'pro'
+  vipLevel?: 'free' | 'limited' | 'personal' | 'svip' | 'pro'
 }

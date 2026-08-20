@@ -54,7 +54,7 @@ export const useEditorStore = defineStore('editor', () => {
   const currentTemplateId = ref<string>(DEFAULT_TEMPLATE_ID)
   const currentWorkId = ref<string | null>(null)
   const templateLoading = ref(false)
-  const currentTemplateVipLevel = ref<'free' | 'personal' | 'pro'>('free')
+  const currentTemplateVipLevel = ref<'free' | 'limited' | 'personal' | 'svip' | 'pro'>('free')
   const currentTemplateCategory = ref<string>('wedding')
 
   const canvasSize = ref<{ width: number; height: number }>({ width: 375, height: 667 })

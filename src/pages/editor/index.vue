@@ -388,6 +388,7 @@ import { useFrameThrottle } from './composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
+import { getTierPrice } from '@/composables/useTemplateEntry'
 import { exportInvitation, uploadImage, consumeTemplateQuota, fetchTemplateQuota, fetchRecommendProducts } from '@/api'
 import { showRewardedAd } from '@/utils/rewarded-ad'
 import PageEditor from './components/PageEditor.vue'
@@ -1903,43 +1904,22 @@ async function loadEditorData(options: any) {
   }
 }
 
-// 限数版模板扣减：非 VIP 从模板新建时消耗 1 次免费额度；次数用完时弹窗引导并退出
+// 制作额度扣减：限免版/付费档（VIP版/SVIP版）从模板新建作品时扣减 1 次额度；
+// 免费版、会员特权用户（VIP版→VIP，SVIP版→专业版）、专业版模板直接放行；
+// 额度用尽时按档位弹 分享/按次付费/开通会员 出口
 async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean> {
   try {
     const level = editorStore.currentTemplateVipLevel
-    if (level !== 'limited' || userStore.isVip()) return true
+    if (level === 'free' || level === 'pro') return true
+    if (level === 'limited' && userStore.isVip()) return true
+    if (level === 'personal' && userStore.isVip()) return true
+    if (level === 'svip' && userStore.isPro()) return true
     try {
       await consumeTemplateQuota(templateId)
       return true
     } catch (err: any) {
       if (err?.message === 'QUOTA_EXHAUSTED') {
-        const price = (editorStore as any).currentTemplate?.price || 9.9
-        uni.showActionSheet({
-          itemList: ['分享好友得免费次数', `¥${price} 解锁模板`, '开通VIP免费使用'],
-          success: (res: any) => {
-            if (res.tapIndex === 0) {
-              uni.showModal({
-                title: '分享得次数',
-                content: '分享本模板给微信好友，好友打开后您即可获得 1 次免费制作机会（每日限 1 次）',
-                confirmText: '去分享',
-                success: (r: any) => {
-                  if (r.confirm) {
-                    uni.reLaunch({ url: `/pages/preview/index?templateId=${templateId}&shareGuide=1` })
-                  } else {
-                    uni.navigateBack()
-                  }
-                },
-              })
-            } else if (res.tapIndex === 1) {
-              uni.redirectTo({ url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}` })
-            } else if (res.tapIndex === 2) {
-              uni.redirectTo({ url: '/pages/vip/index' })
-            } else {
-              uni.navigateBack()
-            }
-          },
-          fail: () => { uni.navigateBack() },
-        })
+        showQuotaExhausted(templateId, level)
         return false
       }
       // 其他错误（网络等）：放行，不阻断编辑（下次保存导出时会再次受限）
@@ -1950,6 +1930,77 @@ async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean>
     console.warn('[editor] quota check failed:', e)
     return true
   }
+}
+
+// 额度用尽出口：
+//   限免版：used<2（第2次）→ 汉哈双语分享说明页；used>=2（第3次起）→ ¥6.6 按次付费 / 开通VIP
+//   VIP版：¥9.9 按次付费 / 开通VIP
+//   SVIP版：¥18.8 按次付费 / 开通专业版
+function showQuotaExhausted(templateId: string, level: string) {
+  const tpl = (editorStore as any).currentTemplate || { id: templateId }
+  const price = getTierPrice(tpl)
+  const goPay = () => {
+    uni.redirectTo({ url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&redirect=editor` })
+  }
+  const goVip = () => uni.redirectTo({ url: '/pages/vip/index' })
+
+  if (level === 'limited') {
+    fetchTemplateQuota(templateId)
+      .then((quota: any) => {
+        if (quota && !quota.limitless && (quota.used ?? 1) < 2) {
+          // 第2次使用：跳分享说明页
+          uni.redirectTo({ url: `/pages/share-guide/index?templateId=${templateId}&price=${price}` })
+          return
+        }
+        // 第3次起：按次付费 / 开通VIP
+        uni.showActionSheet({
+          itemList: [`¥${price} 制作一次`, '开通VIP免费制作'],
+          success: (res: any) => {
+            if (res.tapIndex === 0) goPay()
+            else if (res.tapIndex === 1) goVip()
+            else uni.navigateBack()
+          },
+          fail: () => uni.navigateBack(),
+        })
+      })
+      .catch(() => {
+        uni.showActionSheet({
+          itemList: [`¥${price} 制作一次`, '开通VIP免费制作'],
+          success: (res: any) => {
+            if (res.tapIndex === 0) goPay()
+            else if (res.tapIndex === 1) goVip()
+            else uni.navigateBack()
+          },
+          fail: () => uni.navigateBack(),
+        })
+      })
+    return
+  }
+  if (level === 'personal') {
+    uni.showActionSheet({
+      itemList: [`¥${price} 制作一次`, '开通VIP免费制作'],
+      success: (res: any) => {
+        if (res.tapIndex === 0) goPay()
+        else if (res.tapIndex === 1) goVip()
+        else uni.navigateBack()
+      },
+      fail: () => uni.navigateBack(),
+    })
+    return
+  }
+  if (level === 'svip') {
+    uni.showActionSheet({
+      itemList: [`¥${price} 制作一次`, '开通专业版免费制作'],
+      success: (res: any) => {
+        if (res.tapIndex === 0) goPay()
+        else if (res.tapIndex === 1) goVip()
+        else uni.navigateBack()
+      },
+      fail: () => uni.navigateBack(),
+    })
+    return
+  }
+  uni.navigateBack()
 }
 
 // 重试加载

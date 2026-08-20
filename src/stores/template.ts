@@ -91,10 +91,11 @@ export const useTemplateStore = defineStore('template', () => {
     finally { loading.value = false }
   }
 
-  function inferVipLevel(t: Template): 'free' | 'personal' | 'pro' {
+  function inferVipLevel(t: Template): 'free' | 'limited' | 'personal' | 'svip' | 'pro' {
     if (t.vipLevel) return t.vipLevel
     if (t.is_premium) return 'pro'
-    if (t.is_paid) return 'personal'
+    if (t.is_paid && t.vip_free) return 'personal'
+    if (t.is_paid) return 'limited'
     return 'free'
   }
 

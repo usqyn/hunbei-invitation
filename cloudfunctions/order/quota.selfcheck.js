@@ -1,18 +1,21 @@
 // ============ quota 链路本地自测 ============
 // 用法：node cloudfunctions/order/quota.selfcheck.js
-// 用内存 mock 替换 _shared（模拟云数据库 collection/where/limit/get/add/update + db.command.inc），
-// 直接调 index.js 的 main（createRouter）走完整路由，验证 quota 查询/扣减/分享奖励/解锁/VIP 判定。
+// 用内存 mock 替换 _shared（模拟云数据库 collection/where/limit/get/add/update + db.command.inc + runTransaction），
+// 直接调 index.js 的 main（createRouter）走完整路由，验证：
+//   限免版漏斗（免费1次→分享朋友圈→按次付费6.6）、VIP版(9.9)、SVIP版(18.8)、按次付费发额度、VIP/Pro 免费用。
 const Module = require('module')
 const path = require('path')
 
 // ---------- 内存数据库 ----------
 const data = {
   templates: [
-    { id: 'tpl-free', vipLevel: 'free' },
-    { id: 'tpl-limited', vipLevel: 'limited' },
-    { id: 'tpl-pro', vipLevel: 'pro' },
+    { id: 'tpl-free', vipLevel: 'free', status: 'published' },
+    { id: 'tpl-limited', vipLevel: 'limited', status: 'published' },
+    { id: 'tpl-personal', vipLevel: 'personal', status: 'published' },
+    { id: 'tpl-svip', vipLevel: 'svip', status: 'published' },
+    { id: 'tpl-pro', vipLevel: 'pro', status: 'published' },
   ],
-  users: [{ phone: '13800138000', vip_status: 0, vip_expire_at: null }],
+  users: [{ phone: '13800138000', vip_status: 0, vip_expire_at: null, vip_level: 0 }],
   orders: [],
   products: [],
   notifications: [],
@@ -45,6 +48,7 @@ function matches(doc, cond) {
       if (cur === undefined || cur === null) return false
       cur = cur[p]
     }
+    if (v && typeof v === 'object' && v.__op === 'in') return v.arr.includes(cur)
     return cur === v
   })
 }
@@ -101,7 +105,7 @@ const requireAuth = (event) => getUser(event)
 const requireAdmin = (event) => getUser(event)
 const isUserVip = async (phone) => {
   const u = (data.users || []).find(x => x.phone === phone)
-  return !!(u && u.vip_status === 1 && u.vip_expire_at && parseInt(u.vip_expire_at, 10) > Date.now())
+  return !!(u && u.vip_status === 1 && u.vip_expire_at && parseInt(u.vip_expire_at, 10) > Date.parse(FIXED_NOW))
 }
 const ok = (payload, extra) => Object.assign({ success: true, data: payload }, extra || {})
 const okMsg = (msg) => ({ success: true, message: msg })
@@ -161,6 +165,12 @@ const createRouter = (routes) => async (event) => {
 const db = {
   command: {
     inc: (n) => ({ __op: 'inc', n }),
+    in: (arr) => ({ __op: 'in', arr }),
+  },
+  // 简化事务：直接复用同一内存数据（同步内存库，顺序执行等价）
+  runTransaction: async (fn) => {
+    const tx = { collection: (name) => makeCollection(name) }
+    return fn(tx)
   },
 }
 const collection = (name) => makeCollection(name)
@@ -197,61 +207,132 @@ async function call(path, httpMethod, query, body) {
 }
 const PHONE = '13800138000'
 
+function resetUsers() {
+  data.users = [{ phone: PHONE, vip_status: 0, vip_expire_at: null, vip_level: 0 }]
+  data.orders = []
+}
+function setVip(level = 1, days = 30) {
+  data.users[0].vip_status = 1
+  data.users[0].vip_expire_at = String(Date.parse(FIXED_NOW) + days * 86400000)
+  data.users[0].vip_level = level
+}
+
 // ---------- 用例 ----------
 async function run() {
   console.log('=== 1. 免费模板 → limitless ===')
   let r = await call('/api/quota', 'GET', { templateId: 'tpl-free' })
   check('free 模板 remaining=-1', r.success && r.data.remaining === -1 && r.data.limitless === true, r)
 
-  console.log('=== 2. 限数模板新用户 → 默认 1 次 ===')
+  console.log('=== 2. 限免版新用户 → 默认 1 次（第1次免费） ===')
   r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
-  check('新用户 remaining=1', r.success && r.data.remaining === 1 && !r.data.limitless, r)
+  check('新用户 remaining=1, used=0', r.success && r.data.remaining === 1 && r.data.used === 0 && !r.data.limitless, r)
+  check('tier=limited price=6.6', r.data.tier === 'limited' && r.data.price === 6.6, r)
+  check('used<2 → shareEligible=true', r.data.shareEligible === true, r)
 
-  console.log('=== 3. consume 扣减 → 0 ===')
+  console.log('=== 3. 第1次 consume → remaining=0, used=1 ===')
   r = await call('/api/quota/consume', 'POST', {}, { templateId: 'tpl-limited' })
   check('扣减后 remaining=0', r.success && r.data.remaining === 0, r)
   check('users.quotaMap 已写 0', (data.users[0].quotaMap || {})['tpl-limited'] === 0, data.users[0])
+  check('users.limitedUseMap 已记 1 次', (data.users[0].limitedUseMap || {})['tpl-limited'] === 1, data.users[0])
 
-  console.log('=== 4. 再次 consume → QUOTA_EXHAUSTED ===')
+  console.log('=== 4. 第2次使用（quota 用尽）→ 需分享/付费 ===')
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
+  check('remaining=0 used=1', r.success && r.data.remaining === 0 && r.data.used === 1, r)
+  check('shareEligible=true（第2次可分享）', r.data.shareEligible === true, r)
   r = await call('/api/quota/consume', 'POST', {}, { templateId: 'tpl-limited' })
-  check('返回 QUOTA_EXHAUSTED', !r.success && r.error === 'QUOTA_EXHAUSTED', r)
+  check('consume 返回 QUOTA_EXHAUSTED', !r.success && r.error === 'QUOTA_EXHAUSTED', r)
 
-  console.log('=== 5. VIP 用户 → limitless ===')
-  data.users[0].vip_status = 1
-  data.users[0].vip_expire_at = String(Date.now() + 86400000)
-  r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
-  check('VIP 用户 limitless', r.success && r.data.limitless === true, r)
-
-  console.log('=== 6. 已单次解锁（已付订单含 unlock）→ limitless ===')
-  data.users[0].vip_status = 0
-  data.users[0].vip_expire_at = null
-  data.orders.push({ id: 'o1', phone: PHONE, status: 'paid', items: [{ type: 'unlock', templateId: 'tpl-limited' }] })
-  r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
-  check('解锁后 limitless', r.success && r.data.limitless === true, r)
-  data.orders = []
-  data.users[0].quotaMap = {}
-
-  console.log('=== 7. 分享奖励 → +1 ===')
+  console.log('=== 5. 第2次分享朋友圈（"我已分享"）→ +1 ===')
   r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-limited', phone: PHONE })
-  check('奖励后 remaining=2', r.success && r.data.remaining === 2 && r.data.rewarded === true, r)
+  check('奖励后 remaining=1（用尽1次后 +1）', r.success && r.data.remaining === 1 && r.data.rewarded === true, r)
   check('shareMap 已记 1 次', (data.users[0].shareMap || {})[`tpl-limited_${TODAY}`] === 1, data.users[0])
-  check('quotaMap=2', data.users[0].quotaMap['tpl-limited'] === 2, data.users[0])
 
-  console.log('=== 8. 同人同模板当日再次分享 → DAILY_LIMIT ===')
+  console.log('=== 6. 同人同模板当日再次分享 → DAILY_LIMIT ===')
   r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-limited', phone: PHONE })
   check('返回 DAILY_LIMIT', !r.success && r.error === 'DAILY_LIMIT', r)
 
-  console.log('=== 9. 达到上限 5 → capped ===')
-  data.users[0].shareMap = {}
+  console.log('=== 7. 第3次使用（used=2）→ 分享不再奖励，只能付费 ===')
+  r = await call('/api/quota/consume', 'POST', {}, { templateId: 'tpl-limited' })
+  check('consume 扣 1（分享所得）', r.success && r.data.remaining === 0, r)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
+  check('used=2, shareEligible=false', r.data.used === 2 && r.data.shareEligible === false, r)
+  r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-limited', phone: PHONE })
+  check('分享返回 share_done 不 +1', r.success && r.data.rewarded === false && r.data.reason === 'share_done', r)
+
+  console.log('=== 8. 达到上限 5 → capped ===')
+  resetUsers()
+  r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-limited', phone: PHONE })
+  check('奖励 +1 → remaining=2', r.success && r.data.remaining === 2, r)
   data.users[0].quotaMap['tpl-limited'] = 5
+  data.users[0].shareMap = {}
   r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-limited', phone: PHONE })
   check('reason=capped 且不 +1', r.success && r.data.rewarded === false && r.data.reason === 'capped' && r.data.remaining === 5, r)
 
-  console.log('=== 10. 模板不存在 → 404 ===')
+  console.log('=== 9. VIP 用户限免版 → limitless ===')
+  resetUsers()
+  setVip(1)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
+  check('VIP 用户 limitless', r.success && r.data.limitless === true, r)
+
+  console.log('=== 10. 已单次解锁（已付订单含 unlock）→ limitless ===')
+  resetUsers()
+  data.orders.push({ id: 'o1', phone: PHONE, status: 'paid', items: [{ type: 'unlock', templateId: 'tpl-limited' }] })
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
+  check('解锁后 limitless', r.success && r.data.limitless === true, r)
+
+  console.log('=== 11. VIP版(personal)：非VIP 需按次付费 9.9 ===')
+  resetUsers()
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-personal' })
+  check('remaining=0 tier=personal price=9.9', r.success && r.data.remaining === 0 && r.data.tier === 'personal' && r.data.price === 9.9 && !r.data.limitless, r)
+  r = await call('/api/quota/consume', 'POST', {}, { templateId: 'tpl-personal' })
+  check('未付费 consume → QUOTA_EXHAUSTED', !r.success && r.error === 'QUOTA_EXHAUSTED', r)
+  r = await call('/api/share/reward', 'POST', {}, { templateId: 'tpl-personal', phone: PHONE })
+  check('VIP版分享不奖励（not_limited）', r.success && r.data.rewarded === false && r.data.reason === 'not_limited', r)
+
+  console.log('=== 12. VIP版(personal)：VIP 会员 → limitless ===')
+  setVip(1)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-personal' })
+  check('VIP 会员 limitless', r.success && r.data.limitless === true, r)
+
+  console.log('=== 13. SVIP版(svip)：非专业版 需按次付费 18.8 ===')
+  resetUsers()
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-svip' })
+  check('remaining=0 tier=svip price=18.8', r.success && r.data.remaining === 0 && r.data.tier === 'svip' && r.data.price === 18.8 && !r.data.limitless, r)
+  setVip(1)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-svip' })
+  check('个人VIP 对 SVIP版 仍付费', r.success && !r.data.limitless && r.data.remaining === 0, r)
+
+  console.log('=== 14. SVIP版(svip)：专业版 → limitless ===')
+  setVip(2)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-svip' })
+  check('专业版 limitless', r.success && r.data.limitless === true, r)
+
+  console.log('=== 15. 按次付费：创建 usage 订单（服务端按档位计价）→ 支付 → quota+1 → 可 consume ===')
+  resetUsers()
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-limited' }], contactName: '', contactPhone: '', address: '', note: '' })
+  check('限免版 usage 订单金额 6.6', r.success && r.data.totalAmount === '6.60', r)
+  const orderId1 = r.data.id
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-personal' }], contactName: '', contactPhone: '', address: '', note: '' })
+  check('VIP版 usage 订单金额 9.9', r.success && r.data.totalAmount === '9.90', r)
+  r = await call('/api/orders', 'POST', {}, { items: [{ type: 'usage', templateId: 'tpl-svip' }], contactName: '', contactPhone: '', address: '', note: '' })
+  check('SVIP版 usage 订单金额 18.8', r.success && r.data.totalAmount === '18.80', r)
+  r = await call(`/api/orders/${orderId1}/pay`, 'POST', {}, {})
+  check('支付成功', r.success && r.data.status === 'paid', r)
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-limited' })
+  check('支付后 remaining=1', r.success && r.data.remaining === 1, r)
+  r = await call('/api/quota/consume', 'POST', {}, { templateId: 'tpl-limited' })
+  check('可正常 consume 制作 1 次', r.success && r.data.remaining === 0, r)
+
+  console.log('=== 16. 专业版模板(pro) → limitless（Pro 专属） ===')
+  resetUsers()
+  r = await call('/api/quota', 'GET', { templateId: 'tpl-pro' })
+  check('pro 模板 limitless', r.success && r.data.limitless === true, r)
+
+  console.log('=== 17. 模板不存在 → 404 ===')
   r = await call('/api/quota', 'GET', { templateId: 'tpl-ghost' })
   check('返回 模板不存在', !r.success && r.error === '模板不存在', r)
 
-  console.log('=== 11. 缺 templateId → 缺少 templateId ===')
+  console.log('=== 18. 缺 templateId → 缺少 templateId ===')
   r = await call('/api/quota', 'GET', {})
   check('返回 缺少 templateId', !r.success && r.error === '缺少 templateId', r)
 

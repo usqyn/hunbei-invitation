@@ -191,4 +191,18 @@ defineLocale('zh-CN', {
   'mall.note': '备注',
   'mall.submit_order': '提交订单',
   'mall.order_success': '下单成功',
+
+  // 分享说明页（限免版第2次使用：分享朋友圈得免费次数）
+  'shareGuide.title': '分享到朋友圈',
+  'shareGuide.desc': '这是您第 2 次使用本模板，分享到朋友圈即可免费获得 1 次制作机会！',
+  'shareGuide.step1': '① 点击下方「分享到朋友圈」，将请柬分享到您的朋友圈',
+  'shareGuide.step2': '② 分享完成后，点击「我已分享，继续制作」',
+  'shareGuide.btn_share': '分享到朋友圈',
+  'shareGuide.btn_done': '我已分享，继续制作',
+  'shareGuide.btn_pay': '直接付费制作 ¥6.6',
+  'shareGuide.btn_vip': '开通VIP免费制作',
+  'shareGuide.sharing': '分享中...',
+  'shareGuide.reward_ok': '分享成功，已获得 1 次免费制作机会',
+  'shareGuide.reward_fail': '今日已分享过，请直接付费或开通VIP',
+  'shareGuide.need_moments': '请先分享到朋友圈，再点击「我已分享」',
 })

@@ -20,8 +20,8 @@
     <view v-if="purchaseMode" class="unlock-card">
       <view class="unlock-header">
         <view class="unlock-title-wrap">
-          <text class="unlock-title">🔓 单次解锁模板</text>
-          <text class="unlock-sub">解锁后该模板永久可用，可随时编辑与导出</text>
+          <text class="unlock-title">🎫 按次制作</text>
+          <text class="unlock-sub">支付后即可制作 1 份作品，制作完成后可随时编辑与导出</text>
         </view>
         <view class="unlock-price-box">
           <text class="unlock-currency">¥</text>
@@ -31,19 +31,19 @@
       <view class="unlock-features">
         <view class="unlock-feature-item">
           <text class="uf-icon">✅</text>
-          <text class="uf-text">该模板永久解锁</text>
+          <text class="uf-text">支付后获得 1 次制作机会</text>
         </view>
         <view class="unlock-feature-item">
           <text class="uf-icon">✅</text>
-          <text class="uf-text">不限编辑次数与导出次数</text>
+          <text class="uf-text">已制作作品可随时编辑与导出</text>
         </view>
         <view class="unlock-feature-item">
           <text class="uf-icon">✅</text>
-          <text class="uf-text">无需开通 VIP 即可使用</text>
+          <text class="uf-text">从该模板新建下一份作品需再次付费</text>
         </view>
       </view>
       <view class="unlock-btn" :class="{ 'unlock-btn--paying': paying }" @click="handleUnlockPay">
-        <text class="unlock-btn-text">{{ paying ? '支付处理中...' : `立即解锁 ¥${purchasePrice}` }}</text>
+        <text class="unlock-btn-text">{{ paying ? '支付处理中...' : `立即制作 ¥${purchasePrice}` }}</text>
       </view>
       <view class="unlock-alt">
         <text class="unlock-alt-text" @click="activeTab = 'personal'">或开通个人VIP，全站模板免费使用 →</text>
@@ -212,10 +212,11 @@ import { createVipOrder, payOrder as requestPayOrder, createOrder } from '@/api'
 
 const userStore = useUserStore()
 
-// ========== 单次解锁模式（mode=purchase&templateId&price） ==========
+// ========== 单次制作模式（mode=purchase&templateId&price[&redirect=editor]） ==========
 const purchaseMode = ref(false)
 const purchaseTemplateId = ref('')
 const purchasePrice = ref(9.9)
+const purchaseRedirect = ref('')
 
 onLoad((options: any) => {
   if (options?.mode === 'purchase' && options.templateId) {
@@ -223,10 +224,11 @@ onLoad((options: any) => {
     purchaseTemplateId.value = options.templateId
     const p = Number(options.price)
     purchasePrice.value = p > 0 ? p : 9.9
+    purchaseRedirect.value = options.redirect || ''
   }
 })
 
-// 单次解锁支付：创建 unlock 订单 → 模拟支付（服务端发放永久解锁权益）
+// 单次制作支付：创建 usage 订单 → 模拟支付（服务端发放 1 次制作额度）→ 跳编辑器/返回
 async function handleUnlockPay() {
   if (paying.value) return
   if (!userStore.requireLogin()) return
@@ -236,7 +238,7 @@ async function handleUnlockPay() {
   uni.showLoading({ title: '创建订单中...', mask: true })
   try {
     const order = await createOrder({
-      items: [{ type: 'unlock', templateId: purchaseTemplateId.value }],
+      items: [{ type: 'usage', templateId: purchaseTemplateId.value }],
       totalAmount: String(purchasePrice.value),
       status: 'pending',
       contactName: '',
@@ -249,9 +251,16 @@ async function handleUnlockPay() {
     await requestPayOrder(order.id)
     uni.hideLoading()
     track('unlock_pay_success', { templateId: purchaseTemplateId.value, price: purchasePrice.value })
-    uni.showToast({ title: '解锁成功！', icon: 'success' })
+    uni.showToast({ title: '支付成功！', icon: 'success' })
     paying.value = false
-    setTimeout(() => uni.navigateBack(), 1500)
+    // 入口漏斗要求支付后直接进编辑器
+    if (purchaseRedirect.value === 'editor') {
+      setTimeout(() => {
+        uni.redirectTo({ url: `/pages/editor/index?templateId=${purchaseTemplateId.value}` })
+      }, 1000)
+    } else {
+      setTimeout(() => uni.navigateBack(), 1000)
+    }
   } catch (e: any) {
     uni.hideLoading()
     uni.showToast({ title: '支付失败，请稍后重试', icon: 'none' })

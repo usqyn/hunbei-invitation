@@ -355,17 +355,28 @@ export function payOrder(orderId: string) {
   return request<{ prepayId: string }>({ url: `/api/orders/${orderId}/pay`, method: 'POST' })
 }
 
-// ========== 限数版配额 / 分享奖励 / 单次解锁 ==========
+// ========== 模板配额 / 按次付费 / 分享奖励 ==========
+export interface TemplateQuota {
+  remaining: number
+  limitless: boolean
+  tier?: 'free' | 'limited' | 'personal' | 'svip' | 'pro'
+  price?: number
+  /** 限免版已免费使用次数（第1次=0，第2次=1，第3次起>=2） */
+  used?: number
+  /** 限免版是否仍可分享得次数（used < 2 时 true） */
+  shareEligible?: boolean
+}
+
 export function fetchTemplateQuota(templateId: string) {
-  return request<{ remaining: number; limitless: boolean }>({ url: '/api/quota', data: { templateId } })
+  return request<TemplateQuota>({ url: '/api/quota', data: { templateId } })
 }
 
 export function consumeTemplateQuota(templateId: string) {
-  return request<{ remaining: number; limitless: boolean }>({ url: '/api/quota/consume', method: 'POST', data: { templateId } })
+  return request<TemplateQuota>({ url: '/api/quota/consume', method: 'POST', data: { templateId } })
 }
 
 export function shareReward(data: { templateId: string; phone: string }) {
-  return request<{ remaining: number; rewarded: boolean }>({ url: '/api/share/reward', method: 'POST', data })
+  return request<{ remaining: number; rewarded: boolean; reason?: string }>({ url: '/api/share/reward', method: 'POST', data })
 }
 
 // ========== 足迹/通知/反馈 ==========

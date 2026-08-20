@@ -323,8 +323,9 @@ const TAG_LIST = [
 
 const VIP_LEVEL_OPTIONS = [
   { value: 'free', name: '免费', icon: '🆓', desc: '免费用户可用，带水印' },
-  { value: 'limited', name: '限数版', icon: '🎫', desc: '非VIP每模板免费用1次，展示带水印' },
-  { value: 'personal', name: '个人VIP', icon: '👑', desc: '个人会员可用，无水印' },
+  { value: 'limited', name: '限免版', icon: '🎫', desc: '第1次免费/第2次分享/第3次起每次6.6' },
+  { value: 'personal', name: 'VIP版', icon: '👑', desc: 'VIP会员免费，非会员每次9.9' },
+  { value: 'svip', name: 'SVIP版', icon: '💠', desc: '专业版免费，其余每次18.8' },
   { value: 'pro', name: '专业版', icon: '💎', desc: '专业版可用，最高权益' },
 ]
 
@@ -336,7 +337,7 @@ const form = reactive({
   tags: [] as string[],
   pageCount: 10,
   likes: 1000,
-  vipLevel: 'free' as 'free' | 'limited' | 'personal' | 'pro',
+  vipLevel: 'free' as 'free' | 'limited' | 'personal' | 'svip' | 'pro',
   price: 0,
 })
 
@@ -582,7 +583,7 @@ async function doPublish() {
       pageCount: isFlipMode ? flipPages.length : form.pageCount,
       status: 'published',
       vipLevel: form.vipLevel,
-      // 会员等级与付费标识统一：free→免费，limited→付费但VIP不免费(限数)，personal→付费+VIP免费，pro→付费+专业版
+      // 会员等级与付费标识统一：free→免费，limited→限免(付费但VIP不免费)，personal→VIP版(付费+VIP免费)，svip→SVIP版(付费但VIP不免费)，pro→专业版
       isPaid: form.vipLevel === 'free' ? 0 : 1,
       isPremium: form.vipLevel === 'pro' ? 1 : 0,
       vip_free: form.vipLevel === 'personal' || form.vipLevel === 'pro' ? 1 : 0,
