@@ -1,4 +1,4 @@
-import { API_BASE, APP_VERSION } from '@/config'
+import { APP_VERSION, getRequestUrl } from '@/config'
 
 let sessionId = ''
 
@@ -72,7 +72,7 @@ export function track(event: string, params?: Record<string, any>, immediate = t
   if (immediate) {
     // 立即上报
     uni.request({
-      url: API_BASE + '/api/track',
+      url: getRequestUrl('/api/track'),
       method: 'POST',
       data: payload,
       header: { 'Content-Type': 'application/json' },
@@ -114,7 +114,7 @@ export function flushTrackQueue() {
 
     // 批量上报
     uni.request({
-      url: API_BASE + '/api/track/batch',
+      url: getRequestUrl('/api/track/batch'),
       method: 'POST',
       data: { events: queue },
       header: { 'Content-Type': 'application/json' },

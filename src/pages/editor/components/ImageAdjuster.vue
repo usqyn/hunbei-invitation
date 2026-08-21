@@ -73,7 +73,7 @@ const emit = defineEmits<{
 const instance = getCurrentInstance()
 
 // ===== 布局（px）=====
-const sysInfo: any = uni.getSystemInfoSync()
+const sysInfo: any = uni.getWindowInfo()
 const WIN_W: number = sysInfo.windowWidth || 375
 const WIN_H: number = sysInfo.windowHeight || 667
 const HEADER_H = 48

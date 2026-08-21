@@ -32,7 +32,7 @@ const app = tcb.init({
 const db = app.database()
 
 const FONTS_DIR = path.join(__dirname, '../admin/public/fonts')
-const FONT_FILES = ['KazakhSoftAsilya.ttf', 'KazakhSoftAsilyaQaniq.ttf']
+const FONT_FILES = ['KazakhSoftAsilya.ttf', 'KazakhSoftAsilyaQaniq.ttf', 'AlimamaFangYuanTiVF.ttf']
 
 async function main() {
   console.log('📤 开始上传字体到云存储...\n')

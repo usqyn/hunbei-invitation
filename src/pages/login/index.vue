@@ -207,9 +207,9 @@ try {
     // @ts-ignore
     uniPlatform = uni.getAppBaseInfo().uniPlatform || ''
   }
-  if (!uniPlatform) {
-    const info = uni.getSystemInfoSync()
-    uniPlatform = info.uniPlatform as string || ''
+  if (!uniPlatform && typeof uni.getDeviceInfo === 'function') {
+    // @ts-ignore
+    uniPlatform = uni.getDeviceInfo().uniPlatform || ''
   }
   isMpWeixin.value = uniPlatform === 'mp-weixin'
 } catch (_) {}

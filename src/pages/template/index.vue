@@ -364,8 +364,13 @@ const filteredTemplates = computed<TemplateItem[]>(() => {
 function getPlatformInfo(): string {
   try {
     // @ts-ignore
-    const sys = uni.getSystemInfoSync()
-    return `${sys.platform}|${sys.system}|${sys.brand||''}|${sys.model||''}`
+    const device = typeof uni.getDeviceInfo === 'function' ? uni.getDeviceInfo() : {}
+    const sysSetting = typeof uni.getSystemSetting === 'function' ? uni.getSystemSetting() : {}
+    const platform = device.platform || (sysSetting as any).platform || 'unknown'
+    const system = (sysSetting as any).system || (device as any).system || 'unknown'
+    const brand = device.brand || ''
+    const model = device.model || ''
+    return `${platform}|${system}|${brand}|${model}`
   } catch { return 'unknown' }
 }
 
