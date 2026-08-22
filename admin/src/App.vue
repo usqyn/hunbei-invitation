@@ -534,6 +534,9 @@
               :value="textContentDraft"
               @input="onTextContentInput"
             ></textarea>
+            <div class="confirm-text-row">
+              <button class="confirm-text-btn" @click="confirmTextContent">确认应用</button>
+            </div>
 
             <PlaceholderMarkPanel
               :content="(selectedElement as any).content || ''"
@@ -1106,11 +1109,7 @@ const TEMPLATE_DATA_KEYS = [
   // kzWeekdayParen：星期滚轮，选后填入带括号的哈语星期名 (سەيسەنبى)
   // kzTime：时间段滚轮，选后填入哈语时间段
   'kzDate', 'kzWeekday', 'kzWeekdayParen', 'kzTime',
-  'kzGroomName', 'kzBrideName', 'kzGroomFullName', 'kzBrideFullName',
-  'kzFatherName', 'kzMotherName', 'kzWitnessName', 'kzGroomsmanName', 'kzBridesmaidName',
-  'childName', 'kzChildName',
-  'kzInviter', 'kzInvitee', 'kzClockTime', 'kzLocation', 'kzPhone',
-  'kzAddress',
+  'kzGroomName', 'kzBrideName', 'kzAddress',
 ]
 
 // 快捷字段配置
@@ -1144,20 +1143,6 @@ const SMART_FIELDS: SmartFieldConfig[] = [
   // 哈语新人姓名/地址：与普通姓名/地址中哈对照，文本输入，自动 RTL 渲染
   { key: 'kzGroomName', label: '哈语新郎名', icon: '👨', placeholder: 'نۇرلان', fontSize: 16, fontWeight: 'bold', color: '#d4a574' },
   { key: 'kzBrideName', label: '哈语新娘名', icon: '👩', placeholder: 'اينۇر', fontSize: 16, fontWeight: 'bold', color: '#d4a574' },
-  { key: 'kzGroomFullName', label: '哈语新郎全名', icon: '👨', placeholder: 'نۇرلان احمەتۇلى', fontSize: 16, fontWeight: 'bold', color: '#d4a574' },
-  { key: 'kzBrideFullName', label: '哈语新娘全名', icon: '👩', placeholder: 'اينۇر نۇرلانقىزى', fontSize: 16, fontWeight: 'bold', color: '#d4a574' },
-  { key: 'kzFatherName', label: '哈语父亲名', icon: '👴', placeholder: 'احمەت', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzMotherName', label: '哈语母亲名', icon: '👵', placeholder: 'گۇلزار', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzWitnessName', label: '哈语证婚人', icon: '🎎', placeholder: 'قاسىم', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzGroomsmanName', label: '哈语伴郎', icon: '🤵', placeholder: 'داۋلەت', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzBridesmaidName', label: '哈语伴娘', icon: '👰', placeholder: 'مەدينا', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzChildName', label: '哈语小孩名', icon: '👶', placeholder: 'ازاماتتىڭ', fontSize: 16, fontWeight: 'bold', color: '#d4a574' },
-  { key: 'kzInviter', label: '哈语邀请者', icon: '👤', placeholder: 'شاكىرت', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzInvitee', label: '哈语受邀者', icon: '👥', placeholder: 'قوناق', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzClockTime', label: '哈语时间', icon: '⏰', placeholder: '18:00', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzLocation', label: '哈语地点', icon: '📍', placeholder: 'توي سارايى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'kzPhone', label: '哈语电话', icon: '📞', placeholder: '87001234567', fontSize: 16, fontWeight: 'normal', color: '#666666' },
-  { key: 'childName', label: '小孩名', icon: '👶', placeholder: '请输入小孩名', fontSize: 14, fontWeight: 'bold', color: '#d4a574' },
   { key: 'kzAddress', label: '哈语地址', icon: '🏠', placeholder: 'قىزىلوردا قالاسى, توي سارايى', fontSize: 16, fontWeight: 'normal', color: '#666666' },
 ]
 
@@ -1728,9 +1713,8 @@ function toggleFormatPainter() {
   showToast('格式刷已激活，点击目标元素应用样式')
 }
 
-// 文字内容草稿：实时同步到画布（带 300ms 防抖，避免频繁刷新）
+// 文字内容草稿：输入时先写草稿，点「确认应用」才写入模型（避免误触改坏画布文本）
 const textContentDraft = ref('')
-let textContentDebounceTimer: ReturnType<typeof setTimeout> | null = null
 watch(selectedId, (newId) => {
   if (!newId) return
   const el = elements.value.find(e => e.id === newId)
@@ -1739,14 +1723,6 @@ watch(selectedId, (newId) => {
 
 function onTextContentInput(e: Event) {
   textContentDraft.value = (e.target as HTMLTextAreaElement).value
-  if (textContentDebounceTimer) clearTimeout(textContentDebounceTimer)
-  textContentDebounceTimer = setTimeout(() => {
-    const el = elements.value.find(e => e.id === selectedId.value)
-    if (el && (el as any).content !== textContentDraft.value) {
-      updateSelected({ content: textContentDraft.value })
-      refreshAllPlaceholders(dateValues)
-    }
-  }, 300)
 }
 
 function confirmTextContent() {
@@ -2703,8 +2679,8 @@ function onKeyDown(e: KeyboardEvent) {
     return
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    e.preventDefault()
     if (selectedId.value) {
+      e.preventDefault()
       deleteSelected()
     }
     return
@@ -3429,6 +3405,23 @@ label {
 
 .form-textarea:focus { outline: none; border-color: #1976d2; }
 
+.confirm-text-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.confirm-text-btn {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 4px;
+  background: #3478f6;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirm-text-btn:hover { background: #2563eb; }
 
 .btn-group {
   display: flex;
