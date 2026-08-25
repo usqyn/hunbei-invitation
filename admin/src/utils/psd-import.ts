@@ -9,6 +9,34 @@
 import { readPsd } from 'ag-psd'
 import type { Psd, Layer, LayerTextData, TextStyle, Color, Justification, ImageResources } from 'ag-psd'
 import { containsRtl, visualToLogicalRtl } from './bidi'
+import { PLACEHOLDER_DEFS, type PlaceholderDef } from '../constants/placeholder-defs'
+
+/**
+ * 占位符自动识别：遍历注册表里的 contentDetect 正则，命中文本则返回 token 形态。
+ * - 命中片段替换为 {key}（保留其它无关文字，如「婚礼时间：2026...」→「婚礼时间：{kzDate}」）
+ * - defaults 保留原文，供画布预览 / 小程序回填使用
+ * - registry 驱动：新增占位符只需在 placeholder-defs.ts 追加一行，此处零改动
+ */
+export interface DetectedPlaceholder {
+  key: string
+  token: string
+  defaults: Record<string, string>
+  displayText: string
+}
+
+export function detectPlaceholder(raw: string): DetectedPlaceholder | null {
+  if (!raw) return null
+  for (const def of PLACEHOLDER_DEFS as PlaceholderDef[]) {
+    const re = def.contentDetect
+    if (!re) continue
+    if (re.test(raw)) {
+      const token = `{${def.key}}`
+      const displayText = raw.replace(re, token)
+      return { key: def.key, token, defaults: { [def.key]: raw }, displayText }
+    }
+  }
+  return null
+}
 
 // 安全上限：超过该尺寸的 PSD 直接拒绝（ag-psd 官方安全指南建议）
 export const MAX_PSD_DIMENSION = 10000
@@ -54,6 +82,12 @@ export interface PsdLayerPreview {
   direction?: 'ltr' | 'rtl'
   /** 用户是否可编辑（导入对话框按 defaultEditable 规则勾选，提交时写入） */
   editable?: boolean
+  /** 自动识别出的占位符 key（如 kzDate）；未识别为 undefined */
+  dataKey?: string
+  /** 占位符 token（如 {date}）；与 dataKey 配对，供导入对话框展示 */
+  detectedToken?: string
+  /** 占位符默认值（保留 PSD 原文，供画布预览 / 小程序回填） */
+  defaults?: Record<string, string>
 }
 
 export interface PsdImportResult {
@@ -676,7 +710,7 @@ export async function decodeLinkedFileToCanvas(data: Uint8Array | undefined): Pr
   }
 }
 
-/** 展平图层树（跳过隐藏层），保留文档顺序（自底向上）。返回预处理后的图层列表 */
+/** 展平图层树（跳过隐藏层），ag-psd children 为 top-to-bottom，反转后返回 bottom-to-top（z-index 顺序） */
 export async function flattenPsdLayers(
   psd: Psd,
   options: {
@@ -810,6 +844,15 @@ export async function flattenPsdLayers(
         const effStrokeWidth = effectStroke ? effectStroke.size : undefined
         const drop = effects.dropShadow
 
+        // 文字方向需按识别前的原始文本判定（哈语原文含 RTL 字符；识别后的 {key} token 已无 RTL 特征）
+        const direction: 'ltr' | 'rtl' = containsRtl(text) ? 'rtl' : 'ltr'
+        // 占位符自动识别（中文 + 哈萨克语，registry 驱动）：命中后存入检测结果，
+        // text 保持原始文本不变，由导入对话框展示给用户确认后再决定是否替换为 token
+        const detected = detectPlaceholder(text)
+        const dataKey = detected?.key
+        const detectedToken = detected?.token
+        const defaults = detected?.defaults
+
         layers.push({
           id: `psd_${layers.length}`,
           name,
@@ -839,7 +882,10 @@ export async function flattenPsdLayers(
           shadowBlur: drop?.blur ?? 0,
           hasEffects,
           warnings: layerWarnings,
-          direction: containsRtl(text) ? 'rtl' : 'ltr',
+          direction,
+          dataKey,
+          detectedToken,
+          defaults,
         })
         continue
       }
@@ -907,6 +953,8 @@ export async function flattenPsdLayers(
   }
 
   await walk(psd.children, 0)
+  // ag-psd children 为 top-to-bottom（Photoshop 最上层在前），反转为 bottom-to-top 以匹配 z-index 顺序
+  layers.reverse()
   return { layers, skipped, warnings, warningGroups: groupPsdWarnings(warnings) }
 }
 

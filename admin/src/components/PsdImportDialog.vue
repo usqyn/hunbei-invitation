@@ -64,10 +64,31 @@
                 <div class="psd-layer-name">
                   <b>{{ layer.name }}</b>
                   <span class="psd-layer-badge" :class="`badge--${layer.type}`">{{ layer.type === 'text' ? '文字' : '图片' }}</span>
+                  <span v-if="layer.dataKey" class="psd-layer-ph" title="已自动识别为占位符，导入后用户填写信息将自动回填">🔖 {{ layer.dataKey }}</span>
                 </div>
 
                 <!-- 文字层校对区：栅格缩略图 ↔ 提取文本 -->
                 <template v-if="layer.type === 'text'">
+                  <!-- 占位符自动识别确认：仅在检测到占位符时展示，用户逐条确认是否替换 -->
+                  <div v-if="layer.detectedKey && layer.detectedToken" class="psd-ph-detect">
+                    <div class="psd-ph-detect-row">
+                      <span class="psd-ph-detect-label">🤖 识别为占位符</span>
+                      <span class="psd-ph-detect-arrow">「{{ layer.text }}」→ <code>{{ layer.detectedToken }}</code></span>
+                    </div>
+                    <div class="psd-ph-detect-actions">
+                      <button
+                        class="psd-ph-btn accept"
+                        :class="{ chosen: phConfirmFlags[layer.id] === true }"
+                        @click="phConfirmFlags[layer.id] = true; setEdit(layer, 'text', layer.detectedToken!)"
+                      >✓ 应用</button>
+                      <button
+                        class="psd-ph-btn reject"
+                        :class="{ chosen: phConfirmFlags[layer.id] === false }"
+                        @click="phConfirmFlags[layer.id] = false; setEdit(layer, 'text', layer.text!)"
+                      >✗ 忽略</button>
+                    </div>
+                  </div>
+
                   <div class="psd-layer-proof">
                     <textarea
                       class="psd-text-input"
@@ -111,11 +132,11 @@
                   <span>不透明度 {{ Math.round(layer.opacity * 100) }}%</span>
                 </div>
 
-                <!-- 用户可编辑开关：占位符/照片默认可编辑，其余默认锁定 -->
+                <!-- 用户可编辑开关：占位符文本默认可编辑，其余默认锁定 -->
                 <label class="psd-layer-editable">
                   <input type="checkbox" :checked="isLayerEditable(layer)" @change="setLayerEditable(layer, ($event.target as HTMLInputElement).checked)" />
-                  用户可编辑
-                  <span v-if="!isLayerEditable(layer)" class="psd-layer-lock-hint">（导入后锁定，用户不可拖动/修改）</span>
+                  解锁（导入后可拖动/修改）
+                  <span v-if="!isLayerEditable(layer)" class="psd-layer-lock-hint">（默认锁定，用户不可拖动/修改）</span>
                 </label>
 
                 <div v-if="layer.warnings.length > 0" class="psd-layer-warnings">
@@ -160,15 +181,21 @@ interface TextEdit {
   fontName: string
 }
 
-// 默认可编辑规则：占位符文本（如 {year}、{kzGroomName}）与照片类图片（头像/新郎/新娘/合影等）默认可编辑，其余锁定
+// 导入默认可编辑规则（折中版）：
+// 占位符文本（如 {year}、{kzGroomName}）默认可编辑（方便改文案），其余全部锁定（不可拖动/修改）。
+// 用户可在导入对话框逐图层勾选解锁，导入后也能在图层面板 🔒 按钮改锁定状态。
 const PLACEHOLDER_RE = /\{[^}]{1,40}\}/
-const PHOTO_NAME_RE = /照片|photo|头像|新郎|新娘|合影|婚纱|pic|avatar/i
+// 哈语占位符清单（与 KZ_PLACEHOLDER_RE 保持一致，用于默认解锁哈语占位符文本）
+const KZ_PH_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzGroomFullName|kzBrideFullName|kzFatherName|kzMotherName|kzWitnessName|kzGroomsmanName|kzBridesmaidName|kzChildName|kzInviter|kzInvitee|kzClockTime|kzLocation|kzPhone|kzAddress)\}/
 
 function defaultEditable(layer: PsdLayerPreview): boolean {
   if (layer.type === 'text') {
-    return PLACEHOLDER_RE.test(layer.text || '')
+    // 自动识别出的占位符层（dataKey 非空）默认解锁，方便设计师微调
+    if (layer.dataKey) return true
+    return PLACEHOLDER_RE.test(layer.text || '') || KZ_PH_RE.test(layer.text || '')
   }
-  return PHOTO_NAME_RE.test(layer.name || '')
+  // 图片层默认锁定，避免 PSD 装饰/底图被误改
+  return false
 }
 
 // 用户可编辑标记：layerId → boolean（未标记时回退到 defaultEditable）
@@ -197,7 +224,7 @@ function setLayerEditable(layer: PsdLayerPreview, value: boolean) {
 // 与 useCanvas.resolveRtlTextOptions 一致：RTL 文本默认哈萨克字体，其余默认思源宋体
 const RTL_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 // 哈语占位符（ASCII 文本，替换后为哈语）：与 resolveRtlTextOptions 的 KZ_PLACEHOLDER_RE 保持一致
-const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
+const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzGroomFullName|kzBrideFullName|kzFatherName|kzMotherName|kzWitnessName|kzGroomsmanName|kzBridesmaidName|kzChildName|kzInviter|kzInvitee|kzClockTime|kzLocation|kzPhone|kzAddress)\}/
 
 // 该层最终按 RTL 渲染（direction 由 PSD 提取时按内容判定；占位符文本替换后为哈语）
 function isRtlLayer(layer: PsdLayerPreview): boolean {
@@ -224,10 +251,15 @@ function makeEdit(layer: PsdLayerPreview): TextEdit {
 
 const edits = ref<Record<string, TextEdit>>({})
 
+// 占位符自动识别确认状态：layerId → true(应用) / false(忽略) / undefined(未操作)
+// 未操作时默认应用（保持与旧行为一致）
+const phConfirmFlags = ref<Record<string, boolean | undefined>>({})
+
 watch(
   () => props.result,
   (result) => {
     edits.value = {}
+    phConfirmFlags.value = {}
     if (!result) return
     for (const layer of result.layers) {
       if (layer.type === 'text') {
@@ -247,7 +279,7 @@ function fontOptionsFor(_layer: PsdLayerPreview): string[] {
   return fontOptions.value
 }
 
-// 倒序展示（最上层在前），导入顺序仍为文档顺序（自底向上）
+// 倒序展示（最上层在前），导入顺序为 z-index 顺序（bottom-to-top），反转用于界面展示
 const topDownLayers = computed(() => (props.result ? [...props.result.layers].reverse() : []))
 
 // 告警分组展示：按效果名/类别聚合计数，默认折叠明细，点击展开
@@ -299,14 +331,18 @@ function onConfirm() {
     if (layer.type !== 'text') return { ...layer, editable }
     const edit = edits.value[layer.id]
     if (!edit) return { ...layer, editable }
+    const rejected = phConfirmFlags.value[layer.id] === false
     return {
       ...layer,
       editable,
       text: edit.text.trim(),
       fontSize: edit.fontSize > 0 ? edit.fontSize : layer.fontSize,
       fontName: edit.fontName,
-      // 所见即所得：用户最终选择的字体即为导入字体（修复原实现中「选择 PSD 原始字体名时被静默丢弃」的问题）
       mappedFont: edit.fontName,
+      // 用户忽略识别时，清除占位符元数据，避免画布/小程序端错误回填
+      dataKey: rejected ? undefined : layer.dataKey,
+      detectedToken: rejected ? undefined : layer.detectedToken,
+      defaults: rejected ? undefined : layer.defaults,
     }
   })
   emit('confirm', { width: props.result.width, height: props.result.height, layers })
@@ -482,6 +518,64 @@ function onConfirm() {
 .badge--image {
   background: #2196f3;
 }
+.psd-layer-ph {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: #7a4b00;
+  background: #fff3cd;
+  border: 1px solid #ffe69c;
+  white-space: nowrap;
+}
+/* 占位符自动识别确认区 */
+.psd-ph-detect {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: #f0f7ff;
+  border: 1px solid #b3d8ff;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.psd-ph-detect-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.psd-ph-detect-label {
+  font-weight: 600;
+  color: #1565c0;
+  white-space: nowrap;
+}
+.psd-ph-detect-arrow {
+  color: #555;
+}
+.psd-ph-detect-arrow code {
+  background: #e3f2fd;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: monospace;
+  color: #1565c0;
+  font-weight: 600;
+}
+.psd-ph-detect-actions {
+  display: flex;
+  gap: 6px;
+}
+.psd-ph-btn {
+  padding: 3px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+  transition: all 0.15s;
+}
+.psd-ph-btn.accept:hover { border-color: #4caf50; color: #4caf50; }
+.psd-ph-btn.reject:hover { border-color: #e57373; color: #e57373; }
+.psd-ph-btn.chosen.accept { background: #4caf50; border-color: #4caf50; color: #fff; }
+.psd-ph-btn.chosen.reject { background: #e57373; border-color: #e57373; color: #fff; }
 .psd-layer-proof {
   display: flex;
   gap: 10px;

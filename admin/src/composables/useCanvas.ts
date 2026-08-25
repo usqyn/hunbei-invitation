@@ -12,11 +12,8 @@ import type {
 } from '../types/canvas'
 import type { PsdLayerPreview } from '../utils/psd-import'
 import { PLACEHOLDER_DEFS } from '../constants/placeholder-defs'
-import {
-  createId,
-  DEFAULT_CANVAS_SIZE,
-  DEFAULT_BACKGROUND,
-} from '../types/canvas'
+import { createId, DEFAULT_CANVAS_SIZE, DEFAULT_BACKGROUND } from '../types/canvas'
+import { uploadImages } from './useApi'
 
 /**
  * 画布核心 composable
@@ -72,7 +69,7 @@ function resolveRtlTextOptions(el: {
   const containsRtl = RTL_REGEX.test(content)
   // 检测哈语占位符：占位符本身是 ASCII，但替换后会变成哈语文本（RTL）
   // 预标记为 RTL，保证 admin 编辑态字体格式与最终小程序渲染一致
-  const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
+  const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzGroomFullName|kzBrideFullName|kzFatherName|kzMotherName|kzWitnessName|kzGroomsmanName|kzBridesmaidName|kzChildName|kzInviter|kzInvitee|kzClockTime|kzLocation|kzPhone|kzAddress)\}/
   const containsKzPlaceholder = KZ_PLACEHOLDER_RE.test(content)
   const isRtl = containsRtl || containsKzPlaceholder
   const rawDirection = el.direction || 'auto'
@@ -634,20 +631,67 @@ export function useCanvas(opts: UseCanvasOptions) {
     })
   }
 
-  // 批量导入 PSD 图层（自底向上顺序 = z-index 顺序）
+  // 批量导入 PSD 图层（bottom-to-top 顺序 = z-index 顺序，由 flattenPsdLayers 保证）
   // 文字层复用 addText 标准链路（direction 由 PSD 提取时按内容判定并显式传入，
   // 哈萨克阿拉伯文 RTL 文本已在导入时转为逻辑序 + rtl），
+  // data URL → File 转换（用于 PSD 图片上传）
+  function dataURLtoFile(dataUrl: string, name: string): File | null {
+    try {
+      const arr = dataUrl.split(',')
+      const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png'
+      const bstr = atob(arr[1])
+      let n = bstr.length
+      const u8arr = new Uint8Array(n)
+      while (n--) u8arr[n] = bstr.charCodeAt(n)
+      return new File([u8arr], name, { type: mime })
+    } catch {
+      return null
+    }
+  }
+
   // 图片层按图层原始坐标/尺寸精确定位（不做 80% 收缩），支持透明 PNG。
+  // PSD 图片先批量上传到服务器换远程 URL，避免 base64 data URL 塞进 elements 超 15MB 保存上限。
   async function importPsdLayers(layers: PsdLayerPreview[]) {
     const canvas = fabricCanvas.value
     if (!canvas) return { imported: 0, failed: 0 }
     let imported = 0
     let failed = 0
+
+    // 批量上传图片：收集所有 data URL → File → uploadImages → Map<dataUrl, remoteUrl>
+    const imageLayers = layers.filter(l => l.type === 'image' && l.dataUrl)
+    const dataUrlToRemote = new Map<string, string>()
+    if (imageLayers.length > 0) {
+      const files: File[] = []
+      const fileDataUrls: string[] = []
+      for (const layer of imageLayers) {
+        const file = dataURLtoFile(layer.dataUrl!, `psd-${layer.name || Date.now()}.png`)
+        if (file) {
+          files.push(file)
+          fileDataUrls.push(layer.dataUrl!)
+        }
+      }
+      if (files.length > 0) {
+        try {
+          const urls = await uploadImages(files)
+          for (let i = 0; i < fileDataUrls.length; i++) {
+            if (urls[i]) dataUrlToRemote.set(fileDataUrls[i], urls[i])
+          }
+        } catch (err) {
+          console.warn('[PSD] 批量上传图片失败，降级使用本地 data URL:', err)
+        }
+      }
+    }
+
     // 批量导入期间抑制中间结构历史，完成后统一压入一条历史
     suppressHistory = true
     for (const layer of layers) {
       try {
         if (layer.type === 'text' && layer.text && layer.text.length > 0) {
+          // editable 决定导入后是否锁定：默认 false（锁定，用户不可拖动/修改），勾选才解锁。
+          // 自动识别出的占位符层（dataKey 非空）默认解锁，方便设计师微调，且 dataKey 已绑定，
+          // 用户在小程序端填信息后仍会正确回填。
+          const autoDetected = !!layer.dataKey
+          const editable = layer.editable ?? autoDetected
           addText({
             id: createId('text'),
             type: 'text',
@@ -658,11 +702,12 @@ export function useCanvas(opts: UseCanvasOptions) {
             height: layer.height,
             rotation: layer.rotation || 0,
             opacity: layer.opacity ?? 1,
-            locked: false,
+            locked: !editable,
             visible: true,
             zIndex: elements.value.length,
-            editable: layer.editable ?? true,
-            dataKey: undefined,
+            editable,
+            dataKey: layer.dataKey,
+            defaults: layer.defaults,
             content: layer.text,
             fontFamily: layer.mappedFont || '思源宋体, serif',
             fontSize: layer.fontSize && layer.fontSize > 0 ? layer.fontSize : 24,
@@ -685,7 +730,11 @@ export function useCanvas(opts: UseCanvasOptions) {
           continue
         }
         if (layer.type === 'image' && layer.dataUrl) {
-          const el = await addImage(layer.dataUrl, {
+          // 优先用远程 URL，上传失败降级 data URL
+          const src = dataUrlToRemote.get(layer.dataUrl) || layer.dataUrl
+          // editable 决定导入后是否锁定：默认 false（锁定），勾选才解锁
+          const editable = layer.editable ?? false
+          const el = await addImage(src, {
             id: createId('image'),
             type: 'image',
             name: layer.name || '图片',
@@ -695,10 +744,10 @@ export function useCanvas(opts: UseCanvasOptions) {
             height: layer.height,
             rotation: layer.rotation || 0,
             opacity: layer.opacity ?? 1,
-            locked: false,
+            locked: !editable,
             visible: true,
             zIndex: elements.value.length,
-            editable: layer.editable ?? true,
+            editable,
           })
           if (!el) {
             failed++

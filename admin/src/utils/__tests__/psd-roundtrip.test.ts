@@ -174,9 +174,9 @@ describe('PSD 读写往返 + 图层展平（ag-psd 真实序列化）', () => {
     expect(t!.textAlign).toBe('left')
   })
 
-  it('图层顺序保持文档顺序（自底向上）', () => {
+  it('图层顺序为 bottom-to-top（z-index 顺序）', () => {
     const names = layers.layers.map(l => l.name)
-    expect(names).toEqual(['哈萨克文标题', '旋转文字', '组内文字'])
+    expect(names).toEqual(['组内文字', '旋转文字', '哈萨克文标题'])
   })
 })
 
