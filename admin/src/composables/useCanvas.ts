@@ -1439,7 +1439,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.renderAll()
   }
 
-  function loadDraft(draft: CanvasDraft, loadOpts?: { resetHistory?: boolean }) {
+  async function loadDraft(draft: CanvasDraft, loadOpts?: { resetHistory?: boolean }) {
     const canvas = fabricCanvas.value
     if (!canvas) return
 
@@ -1447,8 +1447,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     // loadDraft 期间阻止异步图片加载触发多余历史记录
     loadDraftCount++
     isLoadDrafting = true
-    // 收集所有异步图片加载 Promise，待全部完成后再恢复历史记录
-    const imagePromises: Promise<void>[] = []
 
     // 清空：进入新画布世代，丢弃跨世代迟到的异步图片/贴纸加载结果
     canvasEpoch++
@@ -1470,9 +1468,9 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     // 先收集到本地数组，循环结束后一次性赋值，减少响应式触发次数
     const loadedElements: AnyCanvasElement[] = []
-    const addTasks: Array<() => void> = []
-    sorted.forEach(el => {
-      // loadDraft 期望的坐标系与 Fabric 一致（中心原点）
+
+    // Step 1: 文字层同步添加（按 zIndex 顺序 insertAt 精确落位）
+    for (const el of sorted) {
       if (el.type === 'text') {
         const et = el as TextElement
         const rtlDraft = resolveRtlTextOptions(et)
@@ -1495,77 +1493,75 @@ export function useCanvas(opts: UseCanvasOptions) {
         applyTextFxToObject(t, et)
         ;t.id = el.id
         ;t.elementType = 'text'
-        addTasks.push(() => canvas.add(t))
+        canvas.insertAt(el.zIndex, t)
         loadedElements.push(el)
-      } else if (el.type === 'image') {
+      }
+    }
+
+    // Step 2: 图片/贴纸层串行加载（await 逐个完成，insertAt 精确落位，避免并发位置偏移）
+    for (const el of sorted) {
+      if (el.type === 'image') {
         const ie = el as ImageElement
-        addTasks.push(() => {
-          const p = fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
-            // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果，避免污染当前 model 与画布
-            if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) return
-            const sx = ie.width / (img.width || 1)
-            const sy = ie.height / (img.height || 1)
-            img.set({
-              left: el.x, top: el.y,
-              originX: 'center', originY: 'center',
-              scaleX: sx, scaleY: sy,
-              opacity: ie.opacity, angle: ie.rotation,
-              visible: ie.visible !== false,
-              lockRotation: ie.locked, selectable: !ie.locked,
-            })
-            // 恢复图片特效（CSS filter / 圆角 clipPath / 边框）
-            applyImageFxToObject(img, ie)
-            ;img.id = ie.id
-            ;img.elementType = 'image'
-            ;img.srcUrl = ie.src
-            canvas.add(img)
-            updateZIndexFromFabric()
-            canvas.renderAll()
-          }).catch(() => {
-            // loadDraft 时图片加载失败不中断其他元素
+        try {
+          const img = await fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' })
+          // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果，避免污染当前 model 与画布
+          if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) continue
+          const sx = ie.width / (img.width || 1)
+          const sy = ie.height / (img.height || 1)
+          img.set({
+            left: el.x, top: el.y,
+            originX: 'center', originY: 'center',
+            scaleX: sx, scaleY: sy,
+            opacity: ie.opacity, angle: ie.rotation,
+            visible: ie.visible !== false,
+            lockRotation: ie.locked, selectable: !ie.locked,
           })
-          imagePromises.push(p)
-        })
-        loadedElements.push(el)
+          // 恢复图片特效（CSS filter / 圆角 clipPath / 边框）
+          applyImageFxToObject(img, ie)
+          ;img.id = ie.id
+          ;img.elementType = 'image'
+          ;img.srcUrl = ie.src
+          canvas.insertAt(ie.zIndex, img)
+          loadedElements.push(el)
+        } catch {
+          // loadDraft 时图片加载失败不中断其他元素
+        }
       } else if (el.type === 'sticker') {
         const se = el as StickerElement
         // 防御性：PSD 导入等场景可能产生 sticker 类型，尝试以 SVG 形式渲染上画布，
         // 避免撤销/重做后贴纸元素只存在于 model、画布上消失
         if (se.svgContent) {
-          addTasks.push(() => {
-            loadSVGFromString(se.svgContent).then((result: any) => {
-              // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果
-              if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) return
-              const svgObj = fabricUtil.groupSVGElements(result.objects, result.options)
-              if (!svgObj) return
-              const sx = se.width / (svgObj.width || 1)
-              const sy = se.height / (svgObj.height || 1)
-              svgObj.set({
-                left: se.x, top: se.y,
-                originX: 'center', originY: 'center',
-                scaleX: sx, scaleY: sy,
-                opacity: se.opacity, angle: se.rotation,
-                visible: se.visible !== false,
-                lockRotation: se.locked, selectable: !se.locked,
-              })
-              ;(svgObj as any).id = se.id
-              ;(svgObj as any).elementType = 'sticker'
-              canvas.add(svgObj)
-              updateZIndexFromFabric()
-              canvas.renderAll()
-            }).catch(() => {
-              // 贴纸 SVG 加载失败不中断其他元素
+          try {
+            const result: any = await loadSVGFromString(se.svgContent)
+            // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果
+            if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) continue
+            const svgObj = fabricUtil.groupSVGElements(result.objects, result.options)
+            if (!svgObj) continue
+            const sx = se.width / (svgObj.width || 1)
+            const sy = se.height / (svgObj.height || 1)
+            svgObj.set({
+              left: se.x, top: se.y,
+              originX: 'center', originY: 'center',
+              scaleX: sx, scaleY: sy,
+              opacity: se.opacity, angle: se.rotation,
+              visible: se.visible !== false,
+              lockRotation: se.locked, selectable: !se.locked,
             })
-          })
+            ;(svgObj as any).id = se.id
+            ;(svgObj as any).elementType = 'sticker'
+            canvas.insertAt(se.zIndex, svgObj)
+            loadedElements.push(el)
+          } catch {
+            // 贴纸 SVG 加载失败不中断其他元素
+          }
         }
-        loadedElements.push(el)
       }
-    })
+    }
 
     // 循环结束后一次性赋值模型元素列表
     elements.value = loadedElements
 
-    addTasks.forEach(fn => fn())
+    // 所有对象已就位（文字同步插入 + 图片/贴纸串行加载完成），此时同步 zIndex
     updateZIndexFromFabric()
     canvas.renderAll()
 

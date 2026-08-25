@@ -977,9 +977,8 @@ export async function flattenPsdLayers(
   }
 
   await walk(psd.children, 0)
-  // ag-psd 的 children 已是 top-to-bottom（Photoshop 最上层在前）。不再反转：
-  // 保持与 PS 面板一致的顺序，由 importPsdLayers 按数组位置倒序映射 zIndex，
-  // 使 PSD 顶层图层渲染在画布最上层（修复"背景/装饰图盖住文字"的问题）。
+  // ag-psd children 为 top-to-bottom（Photoshop 最上层在前），反转为 bottom-to-top 以匹配 z-index 顺序
+  layers.reverse()
   return { layers, skipped, warnings, warningGroups: groupPsdWarnings(warnings) }
 }
 
