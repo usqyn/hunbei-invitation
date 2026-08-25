@@ -151,6 +151,24 @@ const listSimilarTemplates = async (ctx) => {
   return ok(list)
 }
 
+// 递归把内嵌的 data:image base64 字符串置空，避免单模板响应体撑爆云函数 6MB 上限
+// （前端对 base64 封面/渲染图有兜底图逻辑；元素里的 base64 由小程序端 editor 重新生成）
+const stripBase64Deep = (obj) => {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'string') {
+    return obj.startsWith('data:image') ? '' : obj
+  }
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) obj[i] = stripBase64Deep(obj[i])
+    return obj
+  }
+  if (typeof obj === 'object') {
+    for (const k of Object.keys(obj)) obj[k] = stripBase64Deep(obj[k])
+    return obj
+  }
+  return obj
+}
+
 // GET /api/templates/:id — 模板详情（普通用户仅看 published；管理员可看任意状态）
 const getTemplate = async (ctx) => {
   const id = ctx.params.id
@@ -159,19 +177,17 @@ const getTemplate = async (ctx) => {
   const res = await collection('templates').where(conditions).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('模板不存在', 404)
   const template = res.data[0]
-  // 解析顶层 cloud:// URL + 嵌套 JSON 中的 cloud:// URL（data/elements/pages/background）
-  await resolveCloudFields(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  // 关键修复（6MB 超限 -504002）：
+  // 不再调用 resolveCloudUrlsDeep 把 cloud:// 换成超长临时 URL（每个图片 URL 带长 sign 串，
+  // 模板含大量图片元素时响应体极易超过 6MB）。改为只做路径归一化，保留短小的 cloud:// fileID，
+  // 由小程序端 resolveCloudUrl / CloudImage 按需换临时 URL（已有缓存，无兼容问题）。
   normalizeUploadPaths(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
-  await resolveCloudUrlsDeep(template.data)
-  await resolveCloudUrlsDeep(template.elements)
-  await resolveCloudUrlsDeep(template.pages)
-  // 顶层 background 也需递归解析 cloud://（小程序 CSS url() 不能加载 cloud:// 协议）
-  await resolveCloudUrlsDeep(template.background)
-  // 兜底：嵌套对象中的 /uploads/ 相对路径转为完整 HTTPS URL
   normalizeUploadPathsDeep(template.background)
   normalizeUploadPathsDeep(template.data)
   normalizeUploadPathsDeep(template.elements)
   normalizeUploadPathsDeep(template.pages)
+  // 递归清空内嵌 data:image base64（单图可达数百 KB），避免响应体爆 6MB；前端用兜底图
+  stripBase64Deep(template)
   // 自动记录足迹
   const user = getUser(ctx.event)
   if (user && user.phone) {
@@ -289,8 +305,13 @@ const getProduct = async (ctx) => {
   const res = await collection('templates').where({ id: ctx.params.id, status: _.neq('deleted') }).limit(1).get()
   if (!res.data || !res.data.length) return httpFail('商品不存在', 404)
   const template = res.data[0]
-  await resolveCloudFields(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  // 同 getTemplate：保留 cloud:// 短字符串，前端按需换临时 URL；清空 base64 避免超 6MB
   normalizeUploadPaths(template, ['cover', 'backgroundImage', 'renderedImage', 'thumbnail'])
+  normalizeUploadPathsDeep(template.background)
+  normalizeUploadPathsDeep(template.data)
+  normalizeUploadPathsDeep(template.elements)
+  normalizeUploadPathsDeep(template.pages)
+  stripBase64Deep(template)
   return ok(template)
 }
 
