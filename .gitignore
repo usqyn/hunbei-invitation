@@ -26,3 +26,5 @@ monetization-funnel/_shared/js/
 server/uploads/cloud-pull/
 # 迁移脚本生成的资源映射清单（运行 migrate-assets.js 后产生）
 cloudfunctions/manifest.json
+# 本地临时目录（PSD 实测样本等，不入库）
+temp/

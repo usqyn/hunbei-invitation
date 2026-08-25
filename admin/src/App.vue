@@ -1713,8 +1713,9 @@ function toggleFormatPainter() {
   showToast('格式刷已激活，点击目标元素应用样式')
 }
 
-// 文字内容草稿：输入时先写草稿，点「确认应用」才写入模型（避免误触改坏画布文本）
+// 文字内容草稿：输入时自动防抖应用到画布，保留手动确认按钮作为备用
 const textContentDraft = ref('')
+let textContentAutoTimer: ReturnType<typeof setTimeout> | null = null
 watch(selectedId, (newId) => {
   if (!newId) return
   const el = elements.value.find(e => e.id === newId)
@@ -1723,15 +1724,23 @@ watch(selectedId, (newId) => {
 
 function onTextContentInput(e: Event) {
   textContentDraft.value = (e.target as HTMLTextAreaElement).value
+  if (textContentAutoTimer) clearTimeout(textContentAutoTimer)
+  textContentAutoTimer = setTimeout(() => {
+    confirmTextContent()
+    textContentAutoTimer = null
+  }, 500)
 }
 
 function confirmTextContent() {
+  if (textContentAutoTimer) {
+    clearTimeout(textContentAutoTimer)
+    textContentAutoTimer = null
+  }
   const el = elements.value.find(e => e.id === selectedId.value)
   if (!el) return
   if ((el as any).content === textContentDraft.value) return
   updateSelected({ content: textContentDraft.value })
   refreshAllPlaceholders(dateValues)
-  showToast('已应用')
 }
 
 // 选中元素变化时，若格式刷激活且选中的不是源元素，则应用样式并退出

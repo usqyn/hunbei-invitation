@@ -484,7 +484,9 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     // 先同步 model 再 add：保证 object:added 触发历史快照时元素已在 model 中
     elements.value.push(el)
-    canvas.add(text)
+    // 用 insertAt 按 zIndex 精确落位（而非 canvas.add 默认堆到顶层），
+    // 修复 PSD 导入时异步图片层被加在文字之上导致“图片盖住文字”
+    canvas.insertAt(el.zIndex, text)
     canvas.setActiveObject(text)
     selectedId.value = el.id
     return el
@@ -553,7 +555,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         ;obj.srcUrl = src
 
         elements.value.push(el)
-        canvas.add(obj)
+        canvas.insertAt(el.zIndex, obj)
         canvas.setActiveObject(obj)
         selectedId.value = el.id
         return el
@@ -621,7 +623,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       ;img.srcUrl = src
 
       elements.value.push(el)
-      canvas.add(img)
+      canvas.insertAt(el.zIndex, img)
       canvas.setActiveObject(img)
       selectedId.value = el.id
       return el
@@ -684,7 +686,16 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     // 批量导入期间抑制中间结构历史，完成后统一压入一条历史
     suppressHistory = true
-    for (const layer of layers) {
+    // 关键修复：forEach 不会 await async 回调，图片层 addImage 是异步的，
+    // 若用 canvas.add 默认堆到顶层，所有图片会在文字之后加入画布，导致图片盖住文字。
+    // 因此这里只负责分配正确的 zIndex，真正的画布插入交给 addText/addImage 用
+    // canvas.insertAt(zIndex, obj) 精确落位，无论异步与否都在正确层级。
+    // layers 保持 ag-psd 原始 children 顺序（实测 bottom→top：最底层「背景」在前）。
+    // 先过滤掉组容器条目再编号，保证 zIndex 连续且不含组的占位偏移。
+    const realLayers = layers.filter((l) => l.type !== 'group')
+    let idx = 0
+    for (const layer of realLayers) {
+      const zIndex = idx++
       try {
         if (layer.type === 'text' && layer.text && layer.text.length > 0) {
           // editable 决定导入后是否锁定：默认 false（锁定，用户不可拖动/修改），勾选才解锁。
@@ -704,7 +715,7 @@ export function useCanvas(opts: UseCanvasOptions) {
             opacity: layer.opacity ?? 1,
             locked: !editable,
             visible: true,
-            zIndex: elements.value.length,
+            zIndex,
             editable,
             dataKey: layer.dataKey,
             defaults: layer.defaults,
@@ -746,7 +757,7 @@ export function useCanvas(opts: UseCanvasOptions) {
             opacity: layer.opacity ?? 1,
             locked: !editable,
             visible: true,
-            zIndex: elements.value.length,
+            zIndex,
             editable,
           })
           if (!el) {

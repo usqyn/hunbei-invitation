@@ -1,35 +1,41 @@
 <template>
   <div class="ph-panel">
-    <div class="ph-hint">在「文本内容」中选中文字后点击下方按钮，将其标记为可编辑占位符（无选区则在光标处插入 token）</div>
-    <div class="ph-group">
-      <div class="ph-group-label">中文</div>
-      <div class="ph-btns">
+    <div class="ph-header">
+      <div class="ph-tabs">
         <button
-          v-for="d in cnDefs"
-          :key="d.key"
-          class="ph-btn"
-          :title="`{${d.key}}`"
-          @click="mark(d.key)"
-        >{{ d.label }}</button>
+          class="ph-tab"
+          :class="{ active: activeTab === 'cn' }"
+          @click="activeTab = 'cn'"
+        >中文</button>
+        <button
+          class="ph-tab"
+          :class="{ active: activeTab === 'kz' }"
+          @click="activeTab = 'kz'"
+        >哈语</button>
       </div>
+      <input
+        class="ph-search"
+        v-model="searchQuery"
+        placeholder="搜索占位符…"
+      />
     </div>
-    <div class="ph-group">
-      <div class="ph-group-label">哈萨克语</div>
-      <div class="ph-btns">
-        <button
-          v-for="d in kzDefs"
-          :key="d.key"
-          class="ph-btn kz"
-          :title="`{${d.key}}`"
-          @click="mark(d.key)"
-        >{{ d.label }}</button>
-      </div>
+    <div class="ph-hint">选中文字后点击按钮插入 token，无选区则在光标处插入</div>
+    <div class="ph-btns">
+      <button
+        v-for="d in filteredDefs"
+        :key="d.key"
+        class="ph-btn"
+        :class="{ kz: d.group === 'kz' }"
+        :title="`{${d.key}}`"
+        @click="mark(d.key)"
+      >{{ d.label }}</button>
+      <div v-if="filteredDefs.length === 0" class="ph-empty">无匹配占位符</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { PLACEHOLDER_DEFS } from '../constants/placeholder-defs'
 
 const props = defineProps<{
@@ -41,8 +47,18 @@ const emit = defineEmits<{
   update: [patch: { content: string; defaults: Record<string, string> }]
 }>()
 
-const cnDefs = computed(() => PLACEHOLDER_DEFS.filter(d => d.group === 'cn'))
-const kzDefs = computed(() => PLACEHOLDER_DEFS.filter(d => d.group === 'kz'))
+const activeTab = ref<'cn' | 'kz'>('cn')
+const searchQuery = ref('')
+
+const filteredDefs = computed(() => {
+  const list = PLACEHOLDER_DEFS.filter(d => d.group === activeTab.value)
+  if (!searchQuery.value.trim()) return list
+  const q = searchQuery.value.trim().toLowerCase()
+  return list.filter(d =>
+    d.label.toLowerCase().includes(q) ||
+    d.key.toLowerCase().includes(q)
+  )
+})
 
 // 与小程序端 kz-date.ts 的 7 个星期词对齐（识别哈语星期/星期(括号)用）
 const KZ_WEEKDAY_RE = /^(جەكسەنبى|دۇيسەنبى|سەيسەنبى|سارسەنبى|بەيسەنبى|جۇما|سەنبى)$/
@@ -121,34 +137,61 @@ function mark(requestedKey: string) {
 
 <style scoped>
 .ph-panel {
-  margin: 8px 0 4px;
-  padding: 10px;
-  border: 1px dashed #d0d7de;
+  margin: 6px 0;
+  padding: 8px;
+  border: 1px solid #e1e4e8;
   border-radius: 6px;
-  background: #fafbfc;
+  background: #f6f8fa;
 }
-.ph-hint {
-  font-size: 12px;
-  color: #8b949e;
-  margin-bottom: 8px;
-  line-height: 1.5;
-}
-.ph-group {
+.ph-header {
+  display: flex;
+  gap: 8px;
   margin-bottom: 6px;
 }
-.ph-group-label {
+.ph-tabs {
+  display: flex;
+  gap: 0;
+  flex-shrink: 0;
+}
+.ph-tab {
+  padding: 3px 10px;
   font-size: 12px;
+  border: 1px solid #d0d7de;
+  background: #fff;
   color: #57606a;
-  font-weight: 600;
-  margin-bottom: 4px;
+  cursor: pointer;
+}
+.ph-tab:first-child { border-radius: 4px 0 0 4px; }
+.ph-tab:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+.ph-tab.active {
+  background: #1976d2;
+  border-color: #1976d2;
+  color: #fff;
+}
+.ph-search {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  outline: none;
+  background: #fff;
+}
+.ph-search:focus { border-color: #1976d2; }
+.ph-hint {
+  font-size: 11px;
+  color: #8b949e;
+  margin-bottom: 6px;
+  line-height: 1.4;
 }
 .ph-btns {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 .ph-btn {
-  padding: 3px 10px;
+  padding: 3px 8px;
   font-size: 12px;
   border: 1px solid #d0d7de;
   border-radius: 4px;
@@ -156,6 +199,7 @@ function mark(requestedKey: string) {
   color: #24292f;
   cursor: pointer;
   white-space: nowrap;
+  transition: border-color 0.15s;
 }
 .ph-btn:hover {
   border-color: #1976d2;
@@ -163,5 +207,10 @@ function mark(requestedKey: string) {
 }
 .ph-btn.kz {
   font-family: 'KazakhSoftAsilya', serif;
+}
+.ph-empty {
+  font-size: 12px;
+  color: #8b949e;
+  padding: 4px 0;
 }
 </style>

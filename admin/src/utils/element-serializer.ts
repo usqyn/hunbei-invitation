@@ -66,7 +66,7 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
     // 检测 content 是否含哈语占位符：占位符本身是 ASCII，不会触发 RTL 检测，
     // 但替换后会变成哈语文本（RTL），需要预先标记为 RTL，保证小程序端替换后字体格式一致。
     // 哈语占位符清单与 src/utils/placeholders.ts resolveDatePlaceholders 对齐
-    const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzAddress)\}/
+    const KZ_PLACEHOLDER_RE = /\{(kzDate|kzWeekday|kzWeekdayParen|kzTime|kzGroomName|kzBrideName|kzGroomFullName|kzBrideFullName|kzFatherName|kzMotherName|kzWitnessName|kzGroomsmanName|kzBridesmaidName|kzChildName|kzInviter|kzInvitee|kzClockTime|kzLocation|kzPhone|kzAddress)\}/
     const containsKzPlaceholder = KZ_PLACEHOLDER_RE.test(content)
     const isRtl = containsRtl || containsKzPlaceholder
     // 解析 direction: 'auto'，根据内容自动判定
@@ -130,6 +130,7 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
       })
     }
   } else if (el.type === 'image') {
+    base.src = el.src
     base.style = {
       font: '',
       color: '',

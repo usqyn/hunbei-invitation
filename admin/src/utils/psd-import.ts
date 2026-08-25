@@ -44,7 +44,7 @@ export const MAX_PSD_DIMENSION = 10000
 export interface PsdLayerPreview {
   id: string
   name: string
-  type: 'image' | 'text'
+  type: 'image' | 'text' | 'group'
   left: number
   top: number
   width: number
@@ -88,6 +88,10 @@ export interface PsdLayerPreview {
   detectedToken?: string
   /** 占位符默认值（保留 PSD 原文，供画布预览 / 小程序回填） */
   defaults?: Record<string, string>
+  /** 所属组 id（由 importPsdLayers 生成），用于画布端按组整体锁定/拖动 */
+  groupId?: string
+  /** 是否为组容器占位条目（组本身不入画布，仅作分组信息） */
+  isGroupContainer?: boolean
 }
 
 export interface PsdImportResult {
@@ -724,12 +728,30 @@ export async function flattenPsdLayers(
   const skipped: { name: string; reason: string }[] = []
   const warnings: string[] = []
 
-  const walk = async (children: Layer[] | undefined, depth: number) => {
+  // 记录每次递归的组 id，使子层继承所属组，便于画布端按组整体锁定/拖动
+  const walk = async (children: Layer[] | undefined, depth: number, groupId?: string) => {
     if (!children || depth > 50) return
     for (const layer of children) {
-      // 组节点：递归子层，组本身不入画布
+      // 组节点：生成一个组 id，递归子层时传入；组本身也作为占位条目保留（type: 'group'）
       if (layer.children && layer.children.length > 0) {
-        await walk(layer.children, depth + 1)
+        const gid = `grp_${layer.name || 'group'}_${depth}_${layers.length}`
+        layers.push({
+          type: 'group',
+          name: layer.name || '组',
+          groupId: gid,
+          isGroupContainer: true,
+          left: (layer.left ?? 0),
+          top: (layer.top ?? 0),
+          width: (layer.right ?? 0) - (layer.left ?? 0),
+          height: (layer.bottom ?? 0) - (layer.top ?? 0),
+          rotation: 0,
+          opacity: (layer.opacity ?? 255) / 255,
+          blendMode: layer.blendMode || 'normal',
+          dataUrl: '',
+          hasEffects: false,
+          warnings: [],
+        } as any)
+        await walk(layer.children, depth + 1, gid)
         continue
       }
       const name = (containsRtl(layer.name) && SHAPED_RTL_RE.test(layer.name)) ? visualToLogicalRtl(layer.name) : (layer.name || '未命名图层')
@@ -886,6 +908,7 @@ export async function flattenPsdLayers(
           dataKey,
           detectedToken,
           defaults,
+          groupId,
         })
         continue
       }
@@ -948,13 +971,15 @@ export async function flattenPsdLayers(
         dataUrl,
         hasEffects,
         warnings: layerWarnings,
+        groupId,
       })
     }
   }
 
   await walk(psd.children, 0)
-  // ag-psd children 为 top-to-bottom（Photoshop 最上层在前），反转为 bottom-to-top 以匹配 z-index 顺序
-  layers.reverse()
+  // ag-psd 的 children 已是 top-to-bottom（Photoshop 最上层在前）。不再反转：
+  // 保持与 PS 面板一致的顺序，由 importPsdLayers 按数组位置倒序映射 zIndex，
+  // 使 PSD 顶层图层渲染在画布最上层（修复"背景/装饰图盖住文字"的问题）。
   return { layers, skipped, warnings, warningGroups: groupPsdWarnings(warnings) }
 }
 
