@@ -782,6 +782,16 @@ export function useCanvas(opts: UseCanvasOptions) {
         failed++
       }
     }
+    // 导入完成后统一按 zIndex 重排，消除异步图片加载导致的层序错位：
+    // 文字层同步 insertAt 时数组尚短，大 index 被 Fabric clamp 到末尾；
+    // 后完成的图片层插中间会把文字层挤乱。此处先全部移出，再按 zIndex 升序重排，
+    // 此时数组为空，insertAt(i) 即第 i 层，不会有 clamp 错位。
+    const orderedObjs = [...elements.value]
+      .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
+      .map(el => canvas.getObjects().find(o => o.id === el.id))
+      .filter(Boolean)
+    orderedObjs.forEach(obj => canvas.remove(obj))
+    orderedObjs.forEach((obj, i) => canvas.insertAt(i, obj))
     canvas.discardActiveObject()
     canvas.renderAll()
     updateZIndexFromFabric()
