@@ -1,12 +1,22 @@
 <template>
-  <view v-if="showWatermark" class="watermark-layer" :style="watermarkStyle">
-    <view class="watermark-row" v-for="(_, rowIndex) in rowCount" :key="rowIndex">
-      <text
-        class="watermark-text"
-        v-for="(_, colIndex) in colCount"
-        :key="colIndex"
-        :style="getTextStyle(rowIndex)"
-      >{{ text }}</text>
+  <view v-if="showWatermark" class="watermark-layer" :style="{ zIndex: String(zIndex) }">
+    <view class="watermark-grid">
+      <view
+        class="watermark-row"
+        v-for="(_, rowIndex) in rowCount"
+        :key="rowIndex"
+        :style="{ paddingTop: rowGap + 'rpx' }"
+      >
+        <view
+          class="watermark-cell"
+          v-for="(_, colIndex) in colCount"
+          :key="colIndex"
+          :style="getCellStyle(rowIndex, colIndex)"
+        >
+          <text class="watermark-text" :style="textStyle">{{ lines[0] }}</text>
+          <text v-if="lines[1]" class="watermark-text watermark-text--sub" :style="subTextStyle">{{ lines[1] }}</text>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -16,39 +26,67 @@ import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
   show?: boolean
-  text?: string
+  text?: string | string[]
+  logo?: string
   opacity?: number
   rotate?: number
   fontSize?: number
   gapX?: number
   gapY?: number
   color?: string
+  density?: 'low' | 'medium' | 'high'
+  zIndex?: number
+  protect?: boolean
 }>(), {
   show: false,
   text: 'TOYtamaxia',
-  opacity: 0.15,
-  rotate: -25,
-  fontSize: 28,
-  gapX: 200,
-  gapY: 160,
-  color: '#ffffff',
+  logo: '',
+  opacity: 0.18,
+  rotate: -22,
+  fontSize: 14,
+  gapX: 0,
+  gapY: 0,
+  color: '#000000',
+  density: 'medium',
+  zIndex: 999,
+  protect: true,
 })
 
 const showWatermark = computed(() => props.show)
 
-const rowCount = 10
-const colCount = 5
+const lines = computed(() => Array.isArray(props.text) ? props.text : [props.text])
 
-const watermarkStyle = computed(() => ({
-  opacity: props.opacity,
+const densityMap = { low: 180, medium: 110, high: 65 }
+const rowGap = computed(() => props.gapY || densityMap[props.density])
+const colGap = computed(() => props.gapX || densityMap[props.density])
+
+const rowCount = 12
+const colCount = 6
+
+const textStyle = computed(() => ({
+  fontSize: props.fontSize + 'px',
+  color: props.color,
+  transform: `rotate(${props.rotate}deg)`,
+  fontWeight: '700',
+  letterSpacing: '2px',
+  whiteSpace: 'nowrap' as const,
 }))
 
-function getTextStyle(rowIndex: number) {
+const subTextStyle = computed(() => ({
+  fontSize: Math.max(10, props.fontSize - 2) + 'px',
+  color: props.color,
+  transform: `rotate(${props.rotate}deg)`,
+  fontWeight: '500',
+  letterSpacing: '1px',
+  whiteSpace: 'nowrap' as const,
+  marginTop: '2px',
+}))
+
+function getCellStyle(rowIndex: number, colIndex: number) {
+  const isOdd = rowIndex % 2 === 1
   return {
-    fontSize: `${props.fontSize}rpx`,
-    color: props.color,
-    transform: `rotate(${props.rotate}deg)`,
-    paddingLeft: rowIndex % 2 === 0 ? '0' : `${props.gapX / 2}rpx`,
+    paddingLeft: isOdd ? colGap.value / 2 + 'rpx' : '0',
+    opacity: props.opacity,
   }
 }
 </script>
@@ -60,22 +98,34 @@ function getTextStyle(rowIndex: number) {
   left: 0;
   right: 0;
   bottom: 0;
-  pointer-events: none;
   overflow: hidden;
-  z-index: 999;
+  pointer-events: none;
+}
+
+.watermark-grid {
+  display: flex;
+  flex-direction: column;
 }
 
 .watermark-row {
   display: flex;
   justify-content: space-around;
-  padding-top: 160rpx;
+}
+
+.watermark-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .watermark-text {
-  font-weight: 600;
-  letter-spacing: 4rpx;
-  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.watermark-text--sub {
+  opacity: 0.7;
 }
 </style>

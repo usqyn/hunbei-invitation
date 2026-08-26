@@ -27,7 +27,15 @@ export function hasTextPlaceholders(text: string): boolean {
   return PLACEHOLDER_DEFS.some(def => text.includes(`{${def.key}}`))
 }
 
-/** 扫描文本，返回其中出现的所有占位符字段 key（供「编辑信息」表单字段收集） */
+/** 扫描文本，返回其中出现的所有占位符字段 key（供「编辑信息」表单字段收集）
+ *  含衍生占位符声明的 requires 依赖（如 dateTimeBJ → date, time），
+ *  确保组合占位符依赖的字段在无独立占位符时也能在信息面板暴露填写 */
 export function extractTokenKeys(text: string): string[] {
-  return PLACEHOLDER_DEFS.filter(def => text.includes(`{${def.key}}`)).map(def => def.key)
+  const keys: string[] = []
+  for (const def of PLACEHOLDER_DEFS) {
+    if (!text.includes(`{${def.key}}`)) continue
+    keys.push(def.key)
+    if (def.requires) keys.push(...def.requires)
+  }
+  return keys
 }

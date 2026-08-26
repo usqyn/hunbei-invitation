@@ -375,10 +375,6 @@ export function consumeTemplateQuota(templateId: string) {
   return request<TemplateQuota>({ url: '/api/quota/consume', method: 'POST', data: { templateId } })
 }
 
-export function shareReward(data: { templateId: string; phone: string }) {
-  return request<{ remaining: number; rewarded: boolean; reason?: string }>({ url: '/api/share/reward', method: 'POST', data })
-}
-
 // ========== 足迹/通知/反馈 ==========
 export function fetchFootprints() {
   return request<any[]>({ url: '/api/footprints' })

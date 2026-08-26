@@ -1,6 +1,6 @@
 // 模板入口统一逻辑：登录拦截 → 档位判定（限免版漏斗/付费档按次收费） → 进入编辑器
 // 计费模型：
-//   限免版(limited)：第1次免费 → 第2次分享朋友圈（汉哈双语说明页） → 第3次起每次 ¥6.6
+//   限免版(limited)：第1次免费 → 之后每次 ¥6.6（编辑器加水印防截图，分享时提示付费去水印）
 //   VIP版(personal)：个人VIP会员免费，非会员每次新建作品 ¥9.9
 //   SVIP版(svip)：专业版免费，其余每次新建作品 ¥18.8
 // 首页精选/付费卡片与模板列表页共用，保证各入口行为一致
@@ -95,11 +95,9 @@ export function useTemplateEntry() {
 
   // 限免版模板点击：查剩余免费次数
   //   remaining>0 → 直接进编辑器（次数在编辑器内扣减）
-  //   用尽且 used<2（第2次）→ 跳汉哈双语分享说明页（分享朋友圈得次数）
-  //   用尽且 used>=2（第3次起）→ 直接跳按次付费页（¥6.6）
+  //   用尽 → 直接进编辑器（编辑器内加水印防截图，分享时提示付费去水印）
   async function handleLimitedTemplate(template: any) {
     haptic('light')
-    const price = getTierPrice(template)
     let quota: any = null
     try {
       quota = await fetchTemplateQuota(template.id)
@@ -107,25 +105,13 @@ export function useTemplateEntry() {
       uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
       return
     }
+    // 有剩余次数或无限次，直接进编辑器
     if (!quota || quota.limitless || quota.remaining > 0) {
       enterEditor(template)
       return
     }
-    const used = quota.used ?? 1
-    // 第2次使用：分享朋友圈（汉哈双语说明页）
-    if (used < 2) {
-      uni.navigateTo({
-        url: `/pages/share-guide/index?templateId=${template.id}&price=${price}`,
-      })
-      return
-    }
-    // 第3次起：按次付费（会员套餐暂未开放）
-    uni.showActionSheet({
-      itemList: [`¥${price} 制作一次`],
-      success: (res: any) => {
-        if (res.tapIndex === 0) goPayForTemplate(template)
-      },
-    })
+    // 次数用尽：直接进编辑器，编辑器内加水印防截图，分享时提示付费
+    enterEditor(template)
   }
 
   // 统一入口：local- 兜底拦截 → 登录拦截 → 档位判定（限免版漏斗/付费档） → 进编辑器
@@ -141,7 +127,7 @@ export function useTemplateEntry() {
 
     const tier = getTemplateTier(template)
 
-    // 限免版：非 VIP 用户查免费次数，走 免费→分享→付费 漏斗
+    // 限免版：非 VIP 用户查免费次数，次数用尽直接进编辑器（编辑器加水印，分享时付费去水印）
     if (tier === 'limited' && !userStore.isVip()) {
       await handleLimitedTemplate(template)
       return

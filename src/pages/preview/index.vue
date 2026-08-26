@@ -287,7 +287,7 @@
       </view>
     </view>
 
-    <Watermark v-if="shouldShowWatermark" :show="true" text="TOYtamaxia" class="preview-watermark" />
+    <Watermark v-if="shouldShowWatermark" :show="true" :text="['TOYtamaxia', '仅供预览']" density="high" class="preview-watermark" />
   </view>
 </template>
 
@@ -307,7 +307,7 @@ import { useCanvasRender } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchSharedWorkApi, fetchTemplateQuota, shareReward } from '@/api'
+import { exportInvitation, fetchSimilarTemplates, fetchRecommendProducts, fetchSharedWorkApi, fetchTemplateQuota } from '@/api'
 import { getTierPrice } from '@/composables/useTemplateEntry'
 import type { EditableElement, Work } from '@/types'
 import Watermark from '@/components/Watermark.vue'
@@ -547,10 +547,6 @@ async function loadData() {
     }
   }
   track('preview_view', { template_id: templateId.value })
-  // 分享奖励：好友打开分享卡片（携带 inviterPhone）→ 给分享者限免模板 +1 次
-  if (shareInviterPhone.value && templateId.value && shareInviterPhone.value !== userStore.phone) {
-    shareReward({ templateId: templateId.value, phone: shareInviterPhone.value }).catch(() => {})
-  }
   nextTick(() => {
     trackTimer(() => updateCardSize(), 100)
     trackTimer(() => measureZoomHeight(), 150)
@@ -576,26 +572,7 @@ onMounted(() => {
 
 onLoad((options) => {
   enableShareMenu()
-  // 分享奖励链路：好友通过分享卡片打开本页时携带分享者手机号，打开后给分享者发放模板次数
-  if (options) {
-    shareInviterPhone.value = (options as any).inviterPhone || ''
-    if ((options as any).shareGuide === '1') {
-      shareGuideToast()
-    }
-  }
 })
-
-// 分享引导提示（限免版次数用完，从广场跳转而来）
-let _shareGuideShown = false
-function shareGuideToast() {
-  if (_shareGuideShown) return
-  _shareGuideShown = true
-  setTimeout(() => {
-    uni.showToast({ title: '点击右上角分享给好友，获得免费次数', icon: 'none', duration: 2500 })
-  }, 600)
-}
-
-const shareInviterPhone = ref('')
 
 function enableShareMenu() {
   uni.showShareMenu({
@@ -880,27 +857,17 @@ const handleCreate = async () => {
   }
 }
 
-// 额度用尽出口：限免版（第2次分享/第3次付费）、VIP版、SVIP版（会员套餐暂未开放，直接按次付费）
+// 额度用尽出口：限免版/VIP版/SVIP版直接按次付费（会员套餐暂未开放）
 function showLimitExhausted(templateId: string, level: string) {
   const tpl = (editorStore as any).currentTemplate || { id: templateId }
   const price = getTierPrice(tpl)
   const goPay = () => uni.navigateTo({
     url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&tier=${level}&redirect=editor`,
   })
-  if (level === 'limited') {
-    fetchTemplateQuota(templateId)
-      .then((quota: any) => {
-        if (quota && !quota.limitless && (quota.used ?? 1) < 2) {
-          // 第2次使用：跳汉哈双语分享说明页
-          uni.navigateTo({ url: `/pages/share-guide/index?templateId=${templateId}&price=${price}` })
-          return
-        }
-        goPay()
-      })
-      .catch(() => goPay())
+  if (level === 'limited' || level === 'personal' || level === 'svip') {
+    goPay()
     return
   }
-  if (level === 'personal' || level === 'svip') { goPay(); return }
 }
 
 // 按次付费入口（当前模板）：会员套餐暂未开放，付费档统一走按次制作

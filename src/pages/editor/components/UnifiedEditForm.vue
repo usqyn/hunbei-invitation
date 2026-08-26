@@ -447,13 +447,24 @@ function findTimeIndex(kzText: string): number {
   return idx >= 0 ? idx : 0
 }
 
-/** 选择日期后自动转换为哈语日期表达式，写入 kzDate 占位符 */
+/** 选择日期后自动转换为哈语日期表达式，写入 kzDate 占位符，并自动填充星期 */
 function onKzDateChange(e: any) {
   const dateStr = e.detail.value
   kzDateValue.value = dateStr
   const parts = toKazakhDate(dateStr)
-  // 输出 "2026 جىل 1 اي 22 كۇن" 表达式
+  // 输出 "2026 جىلعى 1 ايدىڭ 22 كۇنى" 表达式
   if (hasField('kzDate')) emit('update', 'kzDate', parts.fullDate)
+  // 自动填充星期（如果模板有对应占位符）
+  if (parts.weekday) {
+    if (hasField('kzWeekday')) {
+      emit('update', 'kzWeekday', parts.weekday)
+      kzWeekdayIndex.value = findWeekdayIndex(parts.weekday)
+    }
+    if (hasField('kzWeekdayParen')) {
+      emit('update', 'kzWeekdayParen', `(${parts.weekday})`)
+      kzWeekdayParenIndex.value = findWeekdayIndex(parts.weekday)
+    }
+  }
 }
 
 /** 滚动选择星期（周一-周日），写入哈语星期名到 kzWeekday 占位符 */

@@ -28,6 +28,7 @@ export interface TemplateData {
   address?: string
   phone?: string
   personName?: string
+  childName?: string
   // 日期占位符字段
   year?: string
   month?: string
@@ -44,6 +45,19 @@ export interface TemplateData {
   // 哈语新人姓名/地址：与中文姓名/地址对照，文本输入，自动 RTL 渲染
   kzGroomName?: string
   kzBrideName?: string
+  kzGroomFullName?: string
+  kzBrideFullName?: string
+  kzFatherName?: string
+  kzMotherName?: string
+  kzWitnessName?: string
+  kzGroomsmanName?: string
+  kzBridesmaidName?: string
+  kzChildName?: string
+  kzInviter?: string
+  kzInvitee?: string
+  kzClockTime?: string
+  kzLocation?: string
+  kzPhone?: string
   kzAddress?: string
 }
 
@@ -227,7 +241,7 @@ export interface TemplateItem {
   vip_free?: boolean
   // 会员等级：free=免费版 / limited=限免版 / personal=VIP版 / svip=SVIP版 / pro=专业版
   // free: 免费无限次使用，无水印
-  // limited: 限免版，第1次免费、第2次分享朋友圈得次数、第3次起每次 6.6
+  // limited: 限免版，第1次免费、之后每次 6.6（编辑器加水印，分享时付费去水印）
   // personal: VIP版，VIP会员免费，非会员每次 9.9
   // svip: SVIP版，专业版免费，其余每次 18.8
   // pro: 专业版，全部权益

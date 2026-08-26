@@ -138,17 +138,6 @@
       ]
     },
     {
-      "root": "pages/share-guide",
-      "pages": [
-        {
-          "path": "index",
-          "style": {
-            "navigationBarTitleText": "分享说明"
-          }
-        }
-      ]
-    },
-    {
       "root": "pages/settings",
       "pages": [
         {
