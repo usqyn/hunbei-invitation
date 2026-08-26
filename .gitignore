@@ -28,3 +28,10 @@ server/uploads/cloud-pull/
 cloudfunctions/manifest.json
 # 本地临时目录（PSD 实测样本等，不入库）
 temp/
+# 自动化/测试运行时临时目录
+.playwright-cli/
+.workbuddy/
+# 本地登录凭据，切勿入库
+login.yaml
+# 数据库备份文件（data.db.bak-*）
+*.db.bak-*
