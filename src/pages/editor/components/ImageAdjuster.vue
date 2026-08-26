@@ -428,7 +428,7 @@ async function onConfirm() {
       uni.showToast({ title: '生成失败，请重试', icon: 'none' })
     }
   } finally {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
   }
 }
 </script>

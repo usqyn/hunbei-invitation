@@ -171,10 +171,10 @@ async function handleUnlockPay() {
       address: '',
       note: '',
     })
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     uni.showLoading({ title: '支付处理中...', mask: true })
     await requestPayOrder(order.id)
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     track('unlock_pay_success', { templateId: purchaseTemplateId.value, price: purchasePrice.value })
     uni.showToast({ title: '支付成功！', icon: 'success' })
     paying.value = false
@@ -187,7 +187,7 @@ async function handleUnlockPay() {
       setTimeout(() => uni.navigateBack(), 1000)
     }
   } catch (e: any) {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     uni.showToast({ title: '支付失败，请稍后重试', icon: 'none' })
     paying.value = false
   }

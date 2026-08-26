@@ -54,12 +54,15 @@
       </view>
     </view>
     <view v-else-if="editorStore.templateType === 'page'" class="editor-body editor-body--page">
+      <Watermark v-if="shouldShowWatermark" :show="true" :text="['TOYtamaxia', '仅供预览']" density="high" class="editor-watermark" />
       <PageEditor />
     </view>
     <view v-else-if="editorStore.templateType === 'flip'" class="editor-body editor-body--flip">
+      <Watermark v-if="shouldShowWatermark" :show="true" :text="['TOYtamaxia', '仅供预览']" density="high" class="editor-watermark" />
       <FlipEditor />
     </view>
     <view v-else class="editor-body" :class="{ 'editor-body--landscape': isLandscape }">
+      <Watermark v-if="shouldShowWatermark" :show="true" :text="['TOYtamaxia', '仅供预览']" density="high" class="editor-watermark" />
       <!-- 首次编辑引导提示 -->
       <view v-if="showEditHint" class="edit-hint-bubble animate-fade-in" @click="dismissEditHint">
         <text class="edit-hint-icon">👆</text>
@@ -388,7 +391,7 @@ import { useFrameThrottle } from './composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { getTierPrice } from '@/composables/useTemplateEntry'
+import { getTierPrice, getTemplateTier } from '@/composables/useTemplateEntry'
 import { exportInvitation, uploadImage, consumeTemplateQuota, fetchTemplateQuota, fetchRecommendProducts } from '@/api'
 import { showRewardedAd } from '@/utils/rewarded-ad'
 import PageEditor from './components/PageEditor.vue'
@@ -399,6 +402,7 @@ import ImagePropertyPanel from './components/ImagePropertyPanel.vue'
 import ImageAdjuster from './components/ImageAdjuster.vue'
 import TextStylePanel from './components/TextStylePanel.vue'
 import CloudImage from '@/components/CloudImage.vue'
+import Watermark from '@/components/Watermark.vue'
 import type { EditableElement, Work } from '@/types'
 
 const templateStore = useTemplateStore()
@@ -407,6 +411,18 @@ const worksStore = useWorksStore()
 const userStore = useUserStore()
 
 const { haptic, feedbackSuccess, feedbackError, feedbackWarning } = useFeedback()
+
+// 水印策略：限免版/VIP版/SVIP版对非对应会员显示水印（防截图）
+const shouldShowWatermark = computed(() => {
+  const vipLevel = userStore.getVipLevel()
+  const templateLevel = editorStore.currentTemplateVipLevel
+  if (templateLevel === 'free') return false
+  if (templateLevel === 'limited') return vipLevel < 1
+  if (templateLevel === 'personal') return vipLevel < 1
+  if (templateLevel === 'svip') return vipLevel < 2
+  if (templateLevel === 'pro') return vipLevel < 2
+  return false
+})
 const { loading: savingLoading, run: runSave } = useAsyncAction()
 const { loading: sharingLoading, run: runShare } = useAsyncAction()
 
@@ -685,18 +701,25 @@ function onElementTap(idx: number) {
     lastDragMoved = false
     return
   }
+  const el = editorStore.editableElements[idx]
+  if (!el || el.editable === false) return
   const now = Date.now()
-  // 如果点击的是已选中的元素，且在双击间隔内，则打开编辑器
+
+  // 图片元素：单击直接打开换图/图片调节
+  if (el.type === 'image') {
+    onOpenEditor(idx)
+    return
+  }
+
+  // 文字等其他元素：双击打开编辑器
   if (editorStore.selectedElement === idx && lastTapIdx === idx && (now - lastTapTime) < DOUBLE_TAP_INTERVAL) {
     lastTapIdx = null
     lastTapTime = 0
     onOpenEditor(idx)
     return
   }
-  // 第一次点击：仅选中元素，不打开编辑器
   editorStore.selectedElement = idx
   haptic('light')
-  // 用户首次点击元素时关闭引导提示
   if (showEditHint.value) dismissEditHint()
   lastTapIdx = idx
   lastTapTime = now
@@ -1031,14 +1054,30 @@ function handleReset() {
 
 function handleRemoveWatermark() {
   if (isExporting) return
-  if (!userStore.isVip()) {
-    // 会员套餐暂未开放：无水印导出为会员专属，暂无开通入口
-    uni.showToast({ title: '无水印导出为会员专属，暂未开放', icon: 'none' })
+  if (userStore.isVip()) {
+    // VIP 用户直接导出无水印
+    isExporting = true
+    doExport({ watermark: false, quality: 'high' }).finally(() => {
+      isExporting = false
+    })
     return
   }
-  isExporting = true
-  doExport({ watermark: false, quality: 'high' }).finally(() => {
-    isExporting = false
+  // 非 VIP：弹付费 Modal → 跳购买页
+  const tpl = (editorStore as any).currentTemplate || null
+  const price = getTierPrice(tpl)
+  const tier = tpl ? getTemplateTier(tpl) : 'limited'
+  uni.showModal({
+    title: '去水印',
+    content: `支付 ¥${price} 即可去除水印，高清导出无水印图片。`,
+    confirmText: `¥${price} 去水印`,
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm) {
+        uni.navigateTo({
+          url: `/pages/vip/index?mode=purchase&templateId=${editorStore.currentTemplateId}&price=${price}&tier=${tier}&redirect=editor`,
+        })
+      }
+    },
   })
 }
 
@@ -1708,13 +1747,38 @@ async function doExport(options: { watermark: boolean; quality: string }) {
       uni.showToast({ title: msg, icon: 'none' })
     }
   } finally {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
   }
 }
 
 async function handleShare() {
   if (sharingLoading.value) return
   haptic('medium')
+
+  // 限免版模板：非VIP用户分享时提示付费去水印
+  const tpl = (editorStore as any).currentTemplate || null
+  const tier = tpl ? getTemplateTier(tpl) : 'free'
+  if (tier === 'limited' && !userStore.isVip()) {
+    const price = getTierPrice(tpl)
+    const confirmed = await new Promise<boolean>((resolve) => {
+      uni.showModal({
+        title: '去水印分享',
+        content: `支付 ¥${price} 即可去除水印，高清分享给好友。不付费也可分享，但会带有水印。`,
+        confirmText: `¥${price} 去水印`,
+        cancelText: '带水印分享',
+        success: (res: any) => resolve(res.confirm || false),
+      })
+    })
+    if (confirmed) {
+      // 用户选择付费：跳转购买页，购买成功后回来分享
+      uni.navigateTo({
+        url: `/pages/vip/index?mode=purchase&templateId=${editorStore.currentTemplateId}&price=${price}&tier=${tier}&redirect=editor`,
+      })
+      return
+    }
+    // 用户选择带水印分享：继续保存并跳分享页
+  }
+
   await runShare(async () => {
     // 统一保存逻辑：无论新建还是更新都走 buildWorkFromEditor
     const existing = findExistingWork()
@@ -1833,6 +1897,8 @@ async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean>
       return true
     } catch (err: any) {
       if (err?.message === 'QUOTA_EXHAUSTED') {
+        // 限免版：quota 用尽直接放行进编辑器（编辑器加水印，分享时才提示付费）
+        if (level === 'limited') return true
         showQuotaExhausted(templateId, level)
         return false
       }
@@ -1847,8 +1913,7 @@ async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean>
 }
 
 // 额度用尽出口：
-//   限免版：used<2（第2次）→ 汉哈双语分享说明页；used>=2（第3次起）→ ¥6.6 按次付费
-//   VIP版：¥9.9 按次付费；SVIP版：¥18.8 按次付费（会员套餐暂未开放，无开通入口）
+//   限免版/VIP版/SVIP版：直接按次付费（会员套餐暂未开放，无开通入口）
 function showQuotaExhausted(templateId: string, level: string) {
   const tpl = (editorStore as any).currentTemplate || { id: templateId }
   const price = getTierPrice(tpl)
@@ -1856,21 +1921,7 @@ function showQuotaExhausted(templateId: string, level: string) {
     uni.redirectTo({ url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&tier=${level}&redirect=editor` })
   }
 
-  if (level === 'limited') {
-    fetchTemplateQuota(templateId)
-      .then((quota: any) => {
-        if (quota && !quota.limitless && (quota.used ?? 1) < 2) {
-          // 第2次使用：跳分享说明页
-          uni.redirectTo({ url: `/pages/share-guide/index?templateId=${templateId}&price=${price}` })
-          return
-        }
-        // 第3次起：直接按次付费
-        goPay()
-      })
-      .catch(() => goPay())
-    return
-  }
-  if (level === 'personal' || level === 'svip') {
+  if (level === 'limited' || level === 'personal' || level === 'svip') {
     goPay()
     return
   }
@@ -2000,6 +2051,14 @@ onUnmounted(() => {
   height: 100vh;
   background: linear-gradient(135deg, #fdf6f8 0%, #fef9fa 100%);
   overflow: hidden;
+}
+
+/* ===== 编辑器水印覆盖层 ===== */
+.editor-watermark {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 50;
 }
 
 /* ===== 首次编辑引导提示 ===== */

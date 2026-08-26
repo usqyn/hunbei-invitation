@@ -876,7 +876,7 @@ async function onExport() {
   try {
     const canvas = await getCanvasNode()
     if (!canvas) {
-      uni.hideLoading()
+      uni.hideLoading({ fail: () => {} })
       showToast('导出失败')
       return
     }
@@ -886,11 +886,11 @@ async function onExport() {
       uni.saveImageToPhotosAlbum({
         filePath: tempPath,
         success: () => {
-          uni.hideLoading()
+          uni.hideLoading({ fail: () => {} })
           showToast('已保存到相册')
         },
         fail: (err: any) => {
-          uni.hideLoading()
+          uni.hideLoading({ fail: () => {} })
           if (err.errMsg.includes('auth')) {
             uni.showModal({
               title: '提示',
@@ -907,15 +907,15 @@ async function onExport() {
       })
       // #endif
       // #ifndef MP-WEIXIN
-      uni.hideLoading()
+      uni.hideLoading({ fail: () => {} })
       showToast('导出成功')
       // #endif
     } else {
-      uni.hideLoading()
+      uni.hideLoading({ fail: () => {} })
       showToast('导出失败')
     }
   } catch (e) {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     showToast('导出失败')
     console.warn('export failed:', e)
   }

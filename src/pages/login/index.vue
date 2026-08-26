@@ -255,7 +255,7 @@ const loginSuccess = async () => {
   } catch (e) {
     console.warn('load works after login failed', e)
   }
-  uni.hideLoading()
+  uni.hideLoading({ fail: () => {} })
   feedbackSuccess('登录成功')
   loginSuccessTimer = setTimeout(() => goBack(), 800)
 }
@@ -283,11 +283,11 @@ const onGetPhoneNumber = (e: any) => {
         code: loginRes.code,
       })
       if (ok) loginSuccess()
-      else { logging.value = false; uni.hideLoading(); feedbackError('登录失败，请重试') }
+      else { logging.value = false; uni.hideLoading({ fail: () => {} }); feedbackError('登录失败，请重试') }
     },
     fail: () => {
       logging.value = false
-      uni.hideLoading()
+      uni.hideLoading({ fail: () => {} })
       feedbackError('授权失败，请重试')
     },
   })
@@ -321,11 +321,11 @@ const handleH5Login = async () => {
       loginSuccess()
     } else {
       logging.value = false
-      uni.hideLoading()
+      uni.hideLoading({ fail: () => {} })
     }
   } catch (e) {
     logging.value = false
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
   }
 }
 
@@ -377,7 +377,7 @@ const handleSmsLogin = async () => {
     loginSuccess()
   } else {
     logging.value = false
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     feedbackError('登录失败，请检查验证码')
   }
 }

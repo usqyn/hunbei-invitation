@@ -15,7 +15,7 @@
       <view class="wechat-card">
         <view class="wechat-card-thumb">
           <CloudImage class="wechat-card-img" :src="coverImage" mode="aspectFill" custom-class="wechat-card-img" />
-          <Watermark v-if="shouldShowWatermark" :show="true" text="TOYtamaxia" :font-size="20" :opacity="0.2" :gap-x="140" :gap-y="100" class="share-card-watermark" />
+          <Watermark v-if="shouldShowWatermark" :show="true" :text="['TOYtamaxia', '仅供预览']" density="high" :font-size="18" :opacity="0.25" class="share-card-watermark" />
         </view>
         <view class="wechat-card-body">
           <text class="wechat-card-title">{{ shareTitle || '分享标题' }}</text>
@@ -354,7 +354,7 @@ async function onShareMoments() {
   try {
     const res = await generatePoster(workId)
     if (!res || !res.url) {
-      uni.hideLoading()
+      uni.hideLoading({ fail: () => {} })
       uni.showToast({ title: '生成海报失败', icon: 'none' })
       isGenerating.value = false
       return
@@ -362,7 +362,7 @@ async function onShareMoments() {
     uni.downloadFile({
       url: res.url,
       success: (r) => {
-        uni.hideLoading()
+        uni.hideLoading({ fail: () => {} })
         // 校验下载状态码，非 200 视为下载失败
         if (r.statusCode !== 200) {
           uni.showToast({ title: '下载失败', icon: 'none' })
@@ -393,13 +393,13 @@ async function onShareMoments() {
         })
       },
       fail: () => {
-        uni.hideLoading()
+        uni.hideLoading({ fail: () => {} })
         uni.showToast({ title: '下载失败', icon: 'none' })
         isGenerating.value = false
       },
     })
   } catch (e) {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     uni.showToast({ title: '生成海报失败', icon: 'none' })
     isGenerating.value = false
   }
@@ -415,7 +415,7 @@ async function onSharePoster() {
   try {
     const res = await generatePoster(workId)
     if (!res || !res.url) {
-      uni.hideLoading()
+      uni.hideLoading({ fail: () => {} })
       uni.showToast({ title: '生成海报失败', icon: 'none' })
       isGenerating.value = false
       return
@@ -429,7 +429,7 @@ async function onSharePoster() {
           uni.downloadFile({
             url: res.url,
             success: (r) => {
-              uni.hideLoading()
+              uni.hideLoading({ fail: () => {} })
               uni.saveImageToPhotosAlbum({
                 filePath: r.tempFilePath,
                 success: () => {
@@ -454,19 +454,19 @@ async function onSharePoster() {
               })
             },
             fail: () => {
-              uni.hideLoading()
+              uni.hideLoading({ fail: () => {} })
               uni.showToast({ title: '下载失败', icon: 'none' })
               isGenerating.value = false
             },
           })
         } else {
-          uni.hideLoading()
+          uni.hideLoading({ fail: () => {} })
           isGenerating.value = false
         }
       },
     })
   } catch (e) {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     uni.showToast({ title: '生成海报失败', icon: 'none' })
     isGenerating.value = false
   }

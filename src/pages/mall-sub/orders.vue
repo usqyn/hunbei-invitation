@@ -174,7 +174,7 @@ const payOrder = async (order: Order) => {
     const orderId = order.id || order.orderNo
     await requestPayOrder(orderId)
 
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
 
     // 更新本地订单状态
     try {
@@ -192,7 +192,7 @@ const payOrder = async (order: Order) => {
       uni.redirectTo({ url: `/pages/mall-sub/pay-result?orderNo=${order.orderNo}&amount=${order.totalAmount}&status=success` })
     }, 500)
   } catch (e) {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     uni.showToast({ title: '支付失败，请稍后重试', icon: 'none' })
   } finally {
     paying.value = null

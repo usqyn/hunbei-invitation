@@ -121,7 +121,8 @@ export function showLoading(title: string = '加载中...') {
 }
 
 export function hideLoading() {
-  uni.hideLoading()
+  // 当 showToast 顶替了 loading 时，hideLoading 会报 "toast can't be found"
+  uni.hideLoading({ fail: () => {} })
 }
 
 /**

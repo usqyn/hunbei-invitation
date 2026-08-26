@@ -266,7 +266,7 @@ const submitOrder = async () => {
       uni.redirectTo({ url: '/pages/mall-sub/orders' })
     }, 2000)
   } finally {
-    uni.hideLoading()
+    uni.hideLoading({ fail: () => {} })
     submitting.value = false
   }
 }
