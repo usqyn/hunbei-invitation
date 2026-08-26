@@ -15,10 +15,13 @@
             <span v-if="result.resolutionUnit === 'PPI'">（{{ result.resolution }} DPI）</span>
           </div>
 
-          <!-- 缺少字体专区：完整列出缺失字体（不折叠），引导上传真实字体 -->
-          <div v-if="missingFonts.length > 0" class="psd-report psd-report--fonts">
-            <div class="psd-report-title">🔤 缺少字体（{{ missingFonts.length }}）</div>
-            <div class="psd-report-body">
+          <!-- 缺少字体专区：可折叠面板，默认收起，点击标题展开 -->
+          <div v-if="missingFonts.length > 0" class="psd-report psd-report--fonts" :class="{ collapsed: !sectionOpen.fonts }">
+            <div class="psd-report-title" @click="toggleSection('fonts')">
+              <span class="psd-report-arrow">{{ sectionOpen.fonts ? '▾' : '▸' }}</span>
+              🔤 缺少字体（{{ missingFonts.length }}）
+            </div>
+            <div v-if="sectionOpen.fonts" class="psd-report-body">
               <div v-for="(m, i) in missingFonts" :key="i" class="psd-report-item">
                 字体「{{ m.name }}」缺少 · {{ m.count }} 个图层使用 —— 请登录管理后台 → 字体上传 上传该字体文件后重新导入；
                 未上传前导入的文字将以 KazakhSoftAsilya / 默认字体渲染（与设计稿有差异）
@@ -26,9 +29,13 @@
             </div>
           </div>
 
-          <div v-if="reportGroups.length > 0" class="psd-report">
-            <div class="psd-report-title">⚠️ 导入提示</div>
-            <div class="psd-report-body">
+          <!-- 导入提示：可折叠面板，默认收起，点击标题展开 -->
+          <div v-if="reportGroups.length > 0" class="psd-report" :class="{ collapsed: !sectionOpen.tips }">
+            <div class="psd-report-title" @click="toggleSection('tips')">
+              <span class="psd-report-arrow">{{ sectionOpen.tips ? '▾' : '▸' }}</span>
+              ⚠️ 导入提示（{{ totalTips }}）
+            </div>
+            <div v-if="sectionOpen.tips" class="psd-report-body">
               <div
                 v-for="(g, i) in reportGroups"
                 :key="i"
@@ -46,9 +53,14 @@
               </div>
             </div>
           </div>
-          <div v-if="result && result.skipped.length > 0" class="psd-report">
-            <div class="psd-report-title">⏭ 已跳过（{{ result.skipped.length }}）</div>
-            <div class="psd-report-body">
+
+          <!-- 已跳过：可折叠面板，默认收起，点击标题展开 -->
+          <div v-if="result && result.skipped.length > 0" class="psd-report" :class="{ collapsed: !sectionOpen.skipped }">
+            <div class="psd-report-title" @click="toggleSection('skipped')">
+              <span class="psd-report-arrow">{{ sectionOpen.skipped ? '▾' : '▸' }}</span>
+              ⏭ 已跳过（{{ result.skipped.length }}）
+            </div>
+            <div v-if="sectionOpen.skipped" class="psd-report-body">
               <div v-for="(s, i) in result.skipped" :key="i" class="psd-report-item">{{ s.name }}：{{ s.reason }}</div>
             </div>
           </div>
@@ -294,6 +306,20 @@ function toggleGroup(i: number) {
 
 const reportGroups = computed(() => props.result?.warningGroups ?? [])
 
+// 顶部报告区折叠状态（默认全部收起，点击标题展开；避免长内容挤压图层列表）
+const sectionOpen = ref<Record<'fonts' | 'tips' | 'skipped', boolean>>({
+  fonts: false,
+  tips: false,
+  skipped: false,
+})
+function toggleSection(key: 'fonts' | 'tips' | 'skipped') {
+  sectionOpen.value[key] = !sectionOpen.value[key]
+}
+// 导入提示总条数（用于标题显示）
+const totalTips = computed(() =>
+  (reportGroups.value || []).reduce((n, g) => n + (g.items?.length || 0), 0),
+)
+
 // 缺少字体专区：未映射到任何可用字体的 PSD 字体（完整展开，不做折叠）
 const missingFonts = computed(() => {
   const counts = new Map<string, number>()
@@ -401,13 +427,24 @@ function onConfirm() {
   border: 1px solid #ffe0b2;
   border-radius: 8px;
   font-size: 12px;
-  max-height: 120px;
-  overflow: auto;
 }
 .psd-report-title {
   padding: 6px 10px;
   font-weight: 600;
   color: #8d6e63;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.psd-report-title:hover {
+  background: #fff3e0;
+}
+.psd-report-body {
+  padding: 0 10px 8px;
+  max-height: 220px;
+  overflow: auto;
 }
 .psd-report-body {
   padding: 0 10px 8px;
