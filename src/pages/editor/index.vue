@@ -1346,7 +1346,7 @@ async function onAdjusterConfirm(tempPath: string) {
     hasUnsavedChanges.value = true
     uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
   } finally {
-    if (_isMounted) uni.hideLoading()
+    if (_isMounted) uni.hideLoading({ fail: () => {} })
   }
 }
 

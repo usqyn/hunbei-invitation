@@ -694,15 +694,22 @@ function onElementClick(el: any, idx: number) {
     lastFlipDragMoved = false
     return
   }
+  if (!el || el.editable === false) return
+
+  // 图片元素：单击直接打开换图/图片调节
+  if (el.type === 'image') {
+    openEditorForElement(el)
+    return
+  }
+
+  // 文字等其他元素：双击打开编辑器
   const now = Date.now()
-  // 双击检测：已选中且在间隔内再次点击则打开编辑器
   if (activeElementIndex.value === idx && lastFlipTapIdx === idx && (now - lastFlipTapTime) < FLIP_DOUBLE_TAP_INTERVAL) {
     lastFlipTapIdx = null
     lastFlipTapTime = 0
     openEditorForElement(el)
     return
   }
-  // 第一次点击：仅选中
   activeElementIndex.value = idx
   selectedElement.value = el
   haptic('light')
@@ -877,7 +884,7 @@ async function onAdjusterConfirm(tempPath: string) {
       uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     }
   } finally {
-    if (_isMounted) uni.hideLoading()
+    if (_isMounted) uni.hideLoading({ fail: () => {} })
   }
 }
 

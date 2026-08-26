@@ -329,15 +329,21 @@ const SECTION_DOUBLE_TAP_INTERVAL = 350
 
 function onSectionClick(sec: PageSection) {
   if (sec.editable === false) return
+
+  // 图片元素：单击直接打开换图
+  if (sec.type === 'image') {
+    openSectionEditor(sec)
+    return
+  }
+
+  // 文字等其他元素：双击打开编辑器
   const now = Date.now()
-  // 双击检测：已选中且在间隔内再次点击则触发编辑
   if (editorStore.activeSectionId === sec.id && lastSectionTapId === sec.id && (now - lastSectionTapTime) < SECTION_DOUBLE_TAP_INTERVAL) {
     lastSectionTapId = null
     lastSectionTapTime = 0
     openSectionEditor(sec)
     return
   }
-  // 第一次点击：仅选中
   editorStore.activeSectionId = sec.id
   haptic('light')
   lastSectionTapId = sec.id
@@ -682,7 +688,7 @@ function chooseImage(sectionId: string) {
       hasUnsavedChanges.value = true
       if (_isMounted) uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
     } finally {
-      if (_isMounted) uni.hideLoading()
+      if (_isMounted) uni.hideLoading({ fail: () => {} })
     }
   }
 
