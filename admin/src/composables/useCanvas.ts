@@ -1578,19 +1578,10 @@ export function useCanvas(opts: UseCanvasOptions) {
       suppressHistory = false
     }
 
-    // 等待所有异步图片加载完成后，关闭 isLoadDrafting 标志
-    // 避免图片加载完成时 object:added 事件触发多余的历史记录
-    // 用嵌套计数：只有所有 loadDraft 都结束时才真正关闭标志
-    if (imagePromises.length > 0) {
-      Promise.all(imagePromises).finally(() => {
-        loadDraftCount--
-        isLoadDrafting = loadDraftCount > 0
-      })
-    } else {
-      // 无异步图片任务，立即关闭标志
-      loadDraftCount--
-      isLoadDrafting = loadDraftCount > 0
-    }
+    // Step 2 图片/贴纸为串行 await 加载，执行到此处时所有图片均已加载完成（或失败），
+    // 直接递减 loadDraftCount 并关闭 isLoadDrafting 标志，避免 object:added 触发多余历史记录
+    loadDraftCount--
+    isLoadDrafting = loadDraftCount > 0
   }
 
   function pushHistory(description = 'change') {
