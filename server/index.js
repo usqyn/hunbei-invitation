@@ -921,8 +921,9 @@ app.get('/api/templates', (req, res) => {
     const params = []
     const conditions = []
 
-    // 默认只返回已发布的模板；admin 传 ?all=true 且通过管理员鉴权时返回全部
-    if (!(req.query.all && isRequestFromAdmin(req))) {
+    // admin 列表（all=1）无条件返回全部（含 draft），不再以 status 判断显隐
+    // 普通用户不传 all=1 时仍只返回已发布模板
+    if (req.query.all != '1') {
       conditions.push("status = 'published'")
     }
     // 无论何种模式都排除已软删除的模板（记录保留在数据库，但不再出现在列表）
