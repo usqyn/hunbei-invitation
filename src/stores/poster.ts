@@ -375,6 +375,7 @@ export const usePosterStore = defineStore('poster', () => {
     w: number,
     h: number,
     borderRadius?: number,
+    alphaMask?: boolean,
   ): Promise<void> {
     return new Promise((resolve) => {
       if (!src) { resolve(); return }
@@ -395,6 +396,13 @@ export const usePosterStore = defineStore('poster', () => {
             ctx.closePath()
             ctx.clip()
             ctx.drawImage(img, x, y, w, h)
+            ctx.restore()
+          } else if (alphaMask) {
+            ctx.save()
+            ctx.drawImage(img, x, y, w, h)
+            ctx.globalCompositeOperation = 'destination-in'
+            ctx.drawImage(img, x, y, w, h)
+            ctx.globalCompositeOperation = 'source-over'
             ctx.restore()
           } else {
             ctx.drawImage(img, x, y, w, h)

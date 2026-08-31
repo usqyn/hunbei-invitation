@@ -9,6 +9,10 @@ import { flattenPsdLayers, getResolutionInfo, dominantRunFontSize, transformScal
     createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
   }
 }
+// 图片层走 flattenPsdLayers 时会调用 canvas.toDataURL 生成预览 dataUrl，jsdom 默认抛 not implemented
+;(HTMLCanvasElement.prototype as any).toDataURL = function () {
+  return 'data:image/png;base64,'
+}
 
 // 端到端往返验证：writePsd 生成 → readPsd（useImageData，与浏览器端一致）→ flattenPsdLayers
 const kazakhText = '\u0642\u0649\u0632 \u062a\u0648\u064a' // قىز توي（哈萨克阿拉伯文）
@@ -375,5 +379,87 @@ describe('字号/颜色解析修复（真实升学宴 PSD 场景）', () => {
       },
     }])
     expect(layers[0].color).toBe('#0a141e')
+  })
+})
+
+describe('PSD 剪贴蒙版：clipping 照片层关联下方圆形 base 形状层', () => {
+  const makeLayers = async (children: any[]) => flattenPsdLayers(
+    { width: 600, height: 800, children } as any,
+    { resolution: 300, resolutionUnit: 'PPI', availableFonts: [] },
+  )
+
+  const testCanvas = () => {
+    const c = document.createElement('canvas')
+    c.width = 200
+    c.height = 200
+    return c
+  }
+
+  // 200×200 内切圆路径（4 个贝塞尔节点，PSD 路径坐标为图层本地 0..200）
+  const circleVectorMask = {
+    paths: [{
+      open: false,
+      fillRule: 'non-zero' as const,
+      knots: [
+        { linked: true, points: [0, 0, 100, 0, 200, 0] },
+        { linked: true, points: [200, 0, 200, 100, 200, 200] },
+        { linked: true, points: [200, 200, 100, 200, 0, 200] },
+        { linked: true, points: [0, 200, 0, 100, 0, 0] },
+      ],
+    }],
+  }
+
+  it('裁剪组：照片层在上（clipping）、圆形 base 形状层在下（无栅格）→ 照片层 mask=circle', async () => {
+    const { layers, skipped } = await makeLayers([
+      {
+        name: '照片裁剪层', clipping: true,
+        left: 100, top: 100, right: 300, bottom: 300, opacity: 255,
+        canvas: testCanvas(),
+      },
+      {
+        name: '圆形底托',
+        left: 100, top: 100, right: 300, bottom: 300, opacity: 255,
+        vectorMask: circleVectorMask,
+      },
+    ])
+    const photo = layers.find(l => l.name === '照片裁剪层')
+    expect(photo).toBeDefined()
+    expect(photo!.mask).toBe('circle')
+    // base 形状层无栅格被跳过，但其圆形路径已作为蒙版形状生效
+    expect(skipped.map(s => s.name)).toContain('圆形底托')
+  })
+
+  it('裁剪组：多个 clipping 照片层共享同一圆形 base → 全部 mask=circle', async () => {
+    const { layers } = await makeLayers([
+      { name: '照片层2', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
+      { name: '照片层1', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
+      { name: '圆形底托', left: 100, top: 100, right: 300, bottom: 300, opacity: 255, vectorMask: circleVectorMask },
+    ])
+    expect(layers.find(l => l.name === '照片层2')!.mask).toBe('circle')
+    expect(layers.find(l => l.name === '照片层1')!.mask).toBe('circle')
+  })
+
+  it('普通照片层（非 clipping、下方无圆形形状层）→ 不误判为 circle', async () => {
+    const { layers } = await makeLayers([
+      {
+        name: '普通照片',
+        left: 100, top: 100, right: 300, bottom: 300, opacity: 255,
+        canvas: testCanvas(),
+      },
+    ])
+    expect(layers.find(l => l.name === '普通照片')!.mask).toBeUndefined()
+  })
+
+  it('裁剪组整体顺序：背景 → 照片裁剪层 → 顶层装饰（bottom-to-top），蒙版仍生效', async () => {
+    const { layers } = await makeLayers([
+      { name: '顶层装饰', opacity: 255, left: 0, top: 0, right: 600, bottom: 800, canvas: testCanvas() },
+      { name: '照片裁剪层', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
+      { name: '圆形底托', left: 100, top: 100, right: 300, bottom: 300, opacity: 255, vectorMask: circleVectorMask },
+      { name: '背景', opacity: 255, left: 0, top: 0, right: 600, bottom: 800, canvas: testCanvas() },
+    ])
+    const names = layers.filter(l => l.type !== 'group').map(l => l.name)
+    // bottom-to-top：背景（最底）→ 照片裁剪层 → 顶层装饰（最顶）
+    expect(names).toEqual(['背景', '照片裁剪层', '顶层装饰'])
+    expect(layers.find(l => l.name === '照片裁剪层')!.mask).toBe('circle')
   })
 })

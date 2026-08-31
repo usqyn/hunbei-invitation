@@ -554,9 +554,26 @@ function getImageSectionStyle(sec: PageSection): Record<string, string> {
   if (sec.rotation) transforms.push(`rotate(${sec.rotation}deg)`)
   if (sec.imageScale && sec.imageScale !== 1) transforms.push(`scale(${sec.imageScale})`)
   if (transforms.length > 0) style.transform = transforms.join(' ')
-  // 圆角
-  if (sec.borderRadius) {
+  // 圆形遮罩 / 圆角 / Alpha 通道遮罩
+  const mask = (sec as any).mask ?? sec.style?.mask
+  if (mask === 'alpha') {
+    const imgSrc = (sec as any).image || sec.text || ''
+    if (imgSrc) {
+      style.WebkitMaskImage = `url(${imgSrc})`
+      style.maskImage = `url(${imgSrc})`
+      style.WebkitMaskSize = 'contain'
+      style.maskSize = 'contain'
+      style.WebkitMaskRepeat = 'no-repeat'
+      style.maskRepeat = 'no-repeat'
+      style.WebkitMaskPosition = 'center'
+      style.maskPosition = 'center'
+    }
+  } else if (mask === 'circle') {
+    style.borderRadius = '50%'
+    style.overflow = 'hidden'
+  } else if (sec.borderRadius) {
     style.borderRadius = `${sec.borderRadius}rpx`
+    style.overflow = 'hidden'
   }
   // 图片滤镜：与 useCanvasRender/flip 一致（CSS filter，真机静默降级）
   // PageSection 也支持 brightness/contrast/saturate/blur/grayscale 字段

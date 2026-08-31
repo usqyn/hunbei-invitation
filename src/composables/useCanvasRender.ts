@@ -180,10 +180,22 @@ export function useCanvasRender(options: {
         style.borderWidth = `${borderWidth}rpx`
         style.borderStyle = 'solid'
       }
-      // 图片遮罩 mask（仅支持 'circle'，其余回退矩形）
+      // 图片遮罩 mask
       const mask = el.mask ?? el.style?.mask
       if (mask === 'circle') {
         style.borderRadius = '50%'
+      } else if (mask === 'alpha') {
+        const imgSrc = (el as any).text || (el as any).src || ''
+        if (imgSrc) {
+          style.WebkitMaskImage = `url(${imgSrc})`
+          style.maskImage = `url(${imgSrc})`
+          style.WebkitMaskSize = 'contain'
+          style.maskSize = 'contain'
+          style.WebkitMaskRepeat = 'no-repeat'
+          style.maskRepeat = 'no-repeat'
+          style.WebkitMaskPosition = 'center'
+          style.maskPosition = 'center'
+        }
       }
     }
 

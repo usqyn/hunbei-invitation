@@ -64,6 +64,8 @@ const props = defineProps<{
   targetRatio: number
   /** 元素圆角（rpx），仅影响裁剪窗口预览圆角，导出仍为矩形 */
   targetBorderRadius?: number
+  /** 元素遮罩类型：'circle' = 圆形裁剪预览 */
+  targetMask?: string
 }>()
 const emit = defineEmits<{
   (e: 'confirm', tempPath: string): void
@@ -97,16 +99,33 @@ const viewW = computed(() => {
 const viewH = computed(() => viewW.value / ratio.value)
 const cropLeft = computed(() => (WIN_W - viewW.value) / 2)
 const cropTop = computed(() => HEADER_H + (STAGE_H - viewH.value) / 2)
-// 元素圆角 rpx -> px（按屏幕宽换算）
-const borderPx = computed(() => ((props.targetBorderRadius || 0) * WIN_W) / 750)
+// 元素圆角 rpx -> px（按屏幕宽换算）；圆形遮罩时强制 50%；alpha 遮罩时 0
+const borderPx = computed(() => {
+  if (props.targetMask === 'circle') return Infinity
+  if (props.targetMask === 'alpha') return 0
+  return ((props.targetBorderRadius || 0) * WIN_W) / 750
+})
 
-const cropStyle = computed(() => ({
-  left: cropLeft.value + 'px',
-  top: cropTop.value + 'px',
-  width: viewW.value + 'px',
-  height: viewH.value + 'px',
-  borderRadius: borderPx.value + 'px',
-}))
+const cropStyle = computed(() => {
+  const base: Record<string, string> = {
+    left: cropLeft.value + 'px',
+    top: cropTop.value + 'px',
+    width: viewW.value + 'px',
+    height: viewH.value + 'px',
+  }
+  if (props.targetMask === 'alpha' && props.imageUrl) {
+    base.WebkitMaskImage = `url(${props.imageUrl})`
+    base.maskImage = `url(${props.imageUrl})`
+    base.WebkitMaskSize = 'contain'
+    base.maskSize = 'contain'
+    base.WebkitMaskRepeat = 'no-repeat'
+    base.WebkitMaskPosition = 'center'
+    base.borderRadius = '0'
+  } else {
+    base.borderRadius = props.targetMask === 'circle' ? '50%' : borderPx.value + 'px'
+  }
+  return base
+})
 
 const maskBg = 'rgba(0, 0, 0, 0.82)'
 const topMaskStyle = computed(() => ({

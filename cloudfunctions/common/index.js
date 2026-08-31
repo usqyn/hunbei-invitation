@@ -1,6 +1,6 @@
 // ============ common 云函数 ============
-// 包含 11 个路由：健康检查/版本/短信/登录/事件追踪/反馈
-// 路由清单：
+// 包含 13 个路由：健康检查/版本/短信/登录/事件追踪/反馈/云存储URL刷新
+// 路由清单（与下方 routes 数组保持一致，新增路由请同步更新此处）：
 //   GET  /api/health
 //   GET  /api/version
 //   POST /api/version/refresh (admin)
@@ -12,6 +12,8 @@
 //   POST /api/feedback（用户提交反馈）
 //   GET  /api/feedback（admin）
 //   PUT  /api/feedback/:id（admin）
+//   POST /api/refresh-url（单个 fileID 换取临时 https URL，前端 src/utils/url.ts 调用）
+//   POST /api/refresh-urls（批量 fileID，单次最多 50 个）
 
 const {
   db, collection, _, now, nowMs, uuid,

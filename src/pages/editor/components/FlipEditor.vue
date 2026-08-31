@@ -60,7 +60,7 @@
             }"
             :style="getElementStyle(el)"
             @touchstart="onElementTouchStart(el, eIdx, $event)"
-            @touchmove.stop.prevent="onElementTouchMove"
+            @touchmove="onElementTouchMove"
             @touchend="onElementTouchEnd"
             @click="onElementClick(el, eIdx)"
             @longpress="onElementLongPress(el, eIdx)"
@@ -211,6 +211,7 @@
       :image-url="adjusterImageUrl"
       :target-ratio="adjusterTargetRatio"
       :target-border-radius="adjusterTargetRadius"
+      :target-mask="adjusterTargetMask"
       @confirm="onAdjusterConfirm"
       @cancel="onAdjusterCancel"
     />
@@ -287,6 +288,7 @@ const adjusterVisible = ref(false)
 const adjusterImageUrl = ref('')
 const adjusterTargetRatio = ref(1)
 const adjusterTargetRadius = ref(0)
+const adjusterTargetMask = ref('')
 const showTextStylePanel = ref(false)
 const savingLoading = ref(false)
 const hasUnsavedChanges = ref(false)
@@ -851,6 +853,7 @@ function openImageAdjuster(el: any) {
   const h = el.height || 300
   adjusterTargetRatio.value = w / h
   adjusterTargetRadius.value = el.borderRadius || el.style?.borderRadius || 0
+  adjusterTargetMask.value = el.mask || el.style?.mask || ''
   adjusterVisible.value = true
 }
 
@@ -901,6 +904,7 @@ function onImageUpload() {
     const h = el.height || 300
     adjusterTargetRatio.value = w / h
     adjusterTargetRadius.value = el.borderRadius || el.style?.borderRadius || 0
+    adjusterTargetMask.value = el.mask || el.style?.mask || ''
     adjusterVisible.value = true
   }
   // #ifdef MP-WEIXIN
@@ -978,9 +982,25 @@ function getElementStyle(el: any): Record<string, string> {
   if (el.rotation) transforms.push(`rotate(${el.rotation}deg)`)
   if (el.type === 'image' && el.imageScale && el.imageScale !== 1) transforms.push(`scale(${el.imageScale})`)
   if (transforms.length > 0) style.transform = transforms.join(' ')
-  // 图片圆角
+  // 图片圆角 / 圆形遮罩 / Alpha 通道遮罩
+  const mask = el.mask ?? el.style?.mask
   const br = el.borderRadius ?? el.style?.borderRadius
-  if (el.type === 'image' && br) {
+  if (el.type === 'image' && mask === 'alpha') {
+    const imgSrc = el.text || (el as any).src || ''
+    if (imgSrc) {
+      style.WebkitMaskImage = `url(${imgSrc})`
+      style.maskImage = `url(${imgSrc})`
+      style.WebkitMaskSize = 'contain'
+      style.maskSize = 'contain'
+      style.WebkitMaskRepeat = 'no-repeat'
+      style.maskRepeat = 'no-repeat'
+      style.WebkitMaskPosition = 'center'
+      style.maskPosition = 'center'
+    }
+  } else if (el.type === 'image' && mask === 'circle') {
+    style.borderRadius = '50%'
+    style.overflow = 'hidden'
+  } else if (el.type === 'image' && br) {
     style.borderRadius = `${br}rpx`
     style.overflow = 'hidden'
   }

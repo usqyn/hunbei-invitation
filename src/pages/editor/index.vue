@@ -93,7 +93,7 @@
                 }"
                 :style="getOverlayElementStyle(el)"
                 @touchstart="el.editable === false ? null : onElementTouchStart(idx, $event)"
-                @touchmove.stop.prevent="onElementTouchMove"
+                @touchmove="onElementTouchMove"
                 @touchend="onElementTouchEnd"
                 @click="el.editable === false ? null : onElementTap(idx)"
                 @longpress="el.editable === false ? null : onElementLongPress(idx)"
@@ -128,7 +128,7 @@
                 }"
                 :style="canvasElementStyle(el)"
                 @touchstart="el.editable === false ? null : onElementTouchStart(idx, $event)"
-                @touchmove.stop.prevent="onElementTouchMove"
+                @touchmove="onElementTouchMove"
                 @touchend="onElementTouchEnd"
                 @click="el.editable === false ? null : onElementTap(idx)"
                 @longpress="el.editable === false ? null : onElementLongPress(idx)"
@@ -332,6 +332,7 @@
       :image-url="adjusterImageUrl"
       :target-ratio="adjusterTargetRatio"
       :target-border-radius="adjusterTargetRadius"
+      :target-mask="adjusterTargetMask"
       @confirm="onAdjusterConfirm"
       @cancel="onAdjusterCancel"
     />
@@ -392,7 +393,8 @@ import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 import { getTierPrice, getTemplateTier } from '@/composables/useTemplateEntry'
-import { exportInvitation, uploadImage, consumeTemplateQuota, fetchTemplateQuota, fetchRecommendProducts } from '@/api'
+import { runWithExportGate, exportGate } from '@/composables/useTemplateEntry'
+import { exportInvitation, uploadImage, fetchTemplateQuota, fetchRecommendProducts } from '@/api'
 import { showRewardedAd } from '@/utils/rewarded-ad'
 import PageEditor from './components/PageEditor.vue'
 import FlipEditor from './components/FlipEditor.vue'
@@ -563,6 +565,7 @@ const adjusterVisible = ref(false)
 const adjusterImageUrl = ref('')
 const adjusterTargetRatio = ref(1)
 const adjusterTargetRadius = ref(0)
+const adjusterTargetMask = ref('')
 let adjusterElementIndex = -1
 // 文字样式面板显示控制
 const showTextStylePanel = ref(false)
@@ -1054,30 +1057,19 @@ function handleReset() {
 
 function handleRemoveWatermark() {
   if (isExporting) return
-  if (userStore.isVip()) {
-    // VIP 用户直接导出无水印
-    isExporting = true
-    doExport({ watermark: false, quality: 'high' }).finally(() => {
-      isExporting = false
-    })
-    return
-  }
-  // 非 VIP：弹付费 Modal → 跳购买页
+  const templateId = editorStore.currentTemplateId
   const tpl = (editorStore as any).currentTemplate || null
-  const price = getTierPrice(tpl)
-  const tier = tpl ? getTemplateTier(tpl) : 'limited'
-  uni.showModal({
-    title: '去水印',
-    content: `支付 ¥${price} 即可去除水印，高清导出无水印图片。`,
-    confirmText: `¥${price} 去水印`,
-    cancelText: '取消',
-    success: (res) => {
-      if (res.confirm) {
-        uni.navigateTo({
-          url: `/pages/vip/index?mode=purchase&templateId=${editorStore.currentTemplateId}&price=${price}&tier=${tier}&redirect=editor`,
-        })
-      }
-    },
+  const tier = templateId ? getTemplateTier(tpl) : 'limited'
+  // 去水印本质是「付费解锁后无水印导出」，走导出闸门（removeWatermark 动作直接付费解锁）
+  runWithExportGate(templateId, tier, 'removeWatermark', async () => {
+    let unlocked = false
+    try {
+      const quota = await fetchTemplateQuota(templateId)
+      unlocked = !!quota?.limitless
+    } catch { unlocked = false }
+    isExporting = true
+    await doExport({ watermark: !unlocked, quality: unlocked ? 'high' : 'normal' })
+    isExporting = false
   })
 }
 
@@ -1320,6 +1312,7 @@ function openImageAdjuster(idx: number, imageUrl: string) {
   const h = el.height || 300
   adjusterTargetRatio.value = w / h
   adjusterTargetRadius.value = el.borderRadius || 0
+  adjusterTargetMask.value = (el as any).mask || ''
   adjusterVisible.value = true
 }
 
@@ -1664,15 +1657,21 @@ function handleExport() {
   if (isExporting) return
   isExporting = true
   track('click_export')
-  if (userStore.isVip()) {
-    doExport({ watermark: false, quality: 'high' }).finally(() => { isExporting = false })
-  } else {
-    track('click_export', { export_type: 'free' })
-    // 免费导出：播放激励视频（看完获得下载资格；广告未配置/失败时放行）
-    showRewardedAd().then(() => {
-      return doExport({ watermark: true, quality: 'normal' })
-    }).finally(() => { isExporting = false })
-  }
+  const templateId = editorStore.currentTemplateId
+  const tpl = (editorStore as any).currentTemplate || null
+  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  // 导出闸门：已解锁→直接导出高清无水印；未解锁→弹窗付费/看广告带水印
+  runWithExportGate(templateId, tier, 'export', async () => {
+    // run 被调用时：若已解锁（付费回跳或永久解锁）导出无水印高清；否则看广告带水印普通画质
+    let unlocked = false
+    try {
+      const quota = await fetchTemplateQuota(templateId)
+      unlocked = !!quota?.limitless
+    } catch { unlocked = false }
+    await doExport({ watermark: !unlocked, quality: unlocked ? 'high' : 'normal' })
+  }).finally(() => {
+    isExporting = false
+  })
 }
 
 async function doExport(options: { watermark: boolean; quality: string }) {
@@ -1754,47 +1753,27 @@ async function doExport(options: { watermark: boolean; quality: string }) {
 async function handleShare() {
   if (sharingLoading.value) return
   haptic('medium')
-
-  // 限免版模板：非VIP用户分享时提示付费去水印
-  const tpl = (editorStore as any).currentTemplate || null
-  const tier = tpl ? getTemplateTier(tpl) : 'free'
-  if (tier === 'limited' && !userStore.isVip()) {
-    const price = getTierPrice(tpl)
-    const confirmed = await new Promise<boolean>((resolve) => {
-      uni.showModal({
-        title: '去水印分享',
-        content: `支付 ¥${price} 即可去除水印，高清分享给好友。不付费也可分享，但会带有水印。`,
-        confirmText: `¥${price} 去水印`,
-        cancelText: '带水印分享',
-        success: (res: any) => resolve(res.confirm || false),
-      })
-    })
-    if (confirmed) {
-      // 用户选择付费：跳转购买页，购买成功后回来分享
-      uni.navigateTo({
-        url: `/pages/vip/index?mode=purchase&templateId=${editorStore.currentTemplateId}&price=${price}&tier=${tier}&redirect=editor`,
-      })
-      return
-    }
-    // 用户选择带水印分享：继续保存并跳分享页
-  }
-
-  await runShare(async () => {
-    // 统一保存逻辑：无论新建还是更新都走 buildWorkFromEditor
-    const existing = findExistingWork()
-    const work = buildWorkFromEditor(existing)
-    // await 服务端同步完成，避免分享时服务端尚未收到最新数据
-    await worksStore.saveAsWork(work)
-    hasUnsavedChanges.value = false
-  }, { successMessage: '已保存', minLoadingDuration: 300 })
-
   const templateId = editorStore.currentTemplateId
-  const workId = editorStore.currentWorkId
-  const params: string[] = []
-  if (templateId) params.push(`templateId=${encodeURIComponent(templateId)}`)
-  if (workId) params.push(`workId=${encodeURIComponent(workId)}`)
-  const queryStr = params.join('&')
-  uni.navigateTo({ url: `/pages/share/index${queryStr ? '?' + queryStr : ''}` })
+  const tpl = (editorStore as any).currentTemplate || null
+  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  // 分享闸门：已解锁直接跳分享页；未解锁弹窗付费/看广告（带水印也可分享）
+  await runWithExportGate(templateId, tier, 'share', async () => {
+    await runShare(async () => {
+      // 统一保存逻辑：无论新建还是更新都走 buildWorkFromEditor
+      const existing = findExistingWork()
+      const work = buildWorkFromEditor(existing)
+      // await 服务端同步完成，避免分享时服务端尚未收到最新数据
+      await worksStore.saveAsWork(work)
+      hasUnsavedChanges.value = false
+    }, { successMessage: '已保存', minLoadingDuration: 300 })
+
+    const workId = editorStore.currentWorkId
+    const params: string[] = []
+    if (templateId) params.push(`templateId=${encodeURIComponent(templateId)}`)
+    if (workId) params.push(`workId=${encodeURIComponent(workId)}`)
+    const queryStr = params.join('&')
+    uni.navigateTo({ url: `/pages/share/index${queryStr ? '?' + queryStr : ''}` })
+  })
 }
 
 function handleLocation() {
@@ -1860,9 +1839,7 @@ async function loadEditorData(options: any) {
       const templateId = options.templateId || options.id
       if (templateId) {
         await editorStore.loadTemplateById(templateId)
-        // 限免版模板：非 VIP 用户从模板新建时扣减 1 次免费额度（仅新建场景扣，编辑已有作品不扣）
-        const quotaOk = await consumeLimitedQuotaIfNeeded(templateId)
-        if (!quotaOk) return
+        // 计费模型：进门不收费，直接进编辑器；导出/海报/分享/去水印时才弹闸门
         track('edit_start', { template_id: templateId })
       } else {
         await editorStore.restoreTemplate()
@@ -1880,52 +1857,6 @@ async function loadEditorData(options: any) {
   } finally {
     isLoading.value = false
   }
-}
-
-// 制作额度扣减：限免版/付费档（VIP版/SVIP版）从模板新建作品时扣减 1 次额度；
-// 免费版、会员特权用户（VIP版→VIP，SVIP版→专业版）、专业版模板直接放行；
-// 额度用尽时按档位弹 分享/按次付费 出口（会员套餐暂未开放）
-async function consumeLimitedQuotaIfNeeded(templateId: string): Promise<boolean> {
-  try {
-    const level = editorStore.currentTemplateVipLevel
-    if (level === 'free' || level === 'pro') return true
-    if (level === 'limited' && userStore.isVip()) return true
-    if (level === 'personal' && userStore.isVip()) return true
-    if (level === 'svip' && userStore.isPro()) return true
-    try {
-      await consumeTemplateQuota(templateId)
-      return true
-    } catch (err: any) {
-      if (err?.message === 'QUOTA_EXHAUSTED') {
-        // 限免版：quota 用尽直接放行进编辑器（编辑器加水印，分享时才提示付费）
-        if (level === 'limited') return true
-        showQuotaExhausted(templateId, level)
-        return false
-      }
-      // 其他错误（网络等）：放行，不阻断编辑（下次保存导出时会再次受限）
-      console.warn('[editor] consume quota failed:', err?.message || err)
-      return true
-    }
-  } catch (e) {
-    console.warn('[editor] quota check failed:', e)
-    return true
-  }
-}
-
-// 额度用尽出口：
-//   限免版/VIP版/SVIP版：直接按次付费（会员套餐暂未开放，无开通入口）
-function showQuotaExhausted(templateId: string, level: string) {
-  const tpl = (editorStore as any).currentTemplate || { id: templateId }
-  const price = getTierPrice(tpl)
-  const goPay = () => {
-    uni.redirectTo({ url: `/pages/vip/index?mode=purchase&templateId=${templateId}&price=${price}&tier=${level}&redirect=editor` })
-  }
-
-  if (level === 'limited' || level === 'personal' || level === 'svip') {
-    goPay()
-    return
-  }
-  uni.navigateBack()
 }
 
 // 重试加载
@@ -1963,15 +1894,28 @@ onMounted(async () => {
 
 // 用户从登录页返回后，如果模板尚未加载，则重新触发加载，避免空白页
 onShow(() => {
-  if (userStore.isLoggedIn && !templateLoaded.value) {
-    const pages = getCurrentPages()
-    const curPage = pages[pages.length - 1] as any
-    const options = curPage?.options || {}
-    loadEditorData(options).then(() => {
-      nextTick(() => {
-        _mountTimers.push(setTimeout(() => updateCardSize(), 100))
-      })
-    }).catch(() => {})
+  // 从 VIP 付费页返回：若之前在导出闸门选择了付费，恢复导出现场。
+  // 等待模板加载完成（canvas 就绪）后再执行导出现场，避免导出时画布未就绪。
+  const pending = exportGate.takePendingGateAction()
+
+  const runPendingAfterReady = () => {
+    if (pending) pending()
+  }
+
+  if (userStore.isLoggedIn) {
+    if (!templateLoaded.value) {
+      const pages = getCurrentPages()
+      const curPage = pages[pages.length - 1] as any
+      const options = curPage?.options || {}
+      loadEditorData(options).then(() => {
+        nextTick(() => {
+          _mountTimers.push(setTimeout(() => updateCardSize(), 100))
+        })
+        runPendingAfterReady()
+      }).catch(() => {})
+    } else {
+      runPendingAfterReady()
+    }
   }
 })
 
@@ -2344,6 +2288,7 @@ onUnmounted(() => {
   position: absolute;
   z-index: 10;
   border-radius: 4rpx;
+  background: transparent;
   transition: box-shadow 0.3s ease;
 }
 

@@ -195,7 +195,7 @@
           </div>
           <div class="mat-grid">
             <div v-for="mat in filteredMaterials" :key="mat.id" class="mat-item" draggable="true" @dragstart="onMaterialDragStart($event, mat)" @click="onMaterialClick(mat)" :title="mat.name">
-              <div v-if="mat.type === 'shape'" class="mat-shape" v-html="mat.svg" :style="{ color: mat.color || '#333' }"></div>
+              <div v-if="mat.type === 'shape'" class="mat-shape" v-html="sanitizeSvg(mat.svg)" :style="{ color: mat.color || '#333' }"></div>
               <div v-else-if="mat.svg" class="mat-shape" v-html="sanitizeSvg(mat.svg)" :style="{ color: mat.color || '#333' }"></div>
               <div class="mat-name">{{ mat.name }}</div>
             </div>
@@ -832,6 +832,11 @@
                 :class="{ active: (selectedElement as any).mask === 'heart' }"
                 @click="updateSelected({ mask: 'heart' } as any)"
               >心</button>
+              <button
+                class="btn-seg"
+                :class="{ active: (selectedElement as any).mask === 'alpha' }"
+                @click="updateSelected({ mask: 'alpha' } as any)"
+              >自定义形状</button>
             </div>
             <div class="section-title">圆角</div>
             <div class="form-row">
@@ -1044,6 +1049,7 @@ import { useFlipPages } from './composables/useFlipPages'
 import { shapeText, containsRtl } from './utils/bidi'
 import { fontListBase } from './constants/config-data'
 import { ensureFontLoaded, preloadBaseFonts } from './utils/font-loader'
+import { sanitizeSvg, formatTime, fileToDataURL, getLuminance } from './utils/common'
 
 /**
  * 等待浏览器 @font-face 加载完成（特别是哈萨克字体 KazakhSoftAsilya）
@@ -1999,19 +2005,15 @@ async function onLoadTemplate(id: string) {
   }
 }
 
-// 按容器视口计算适配缩放，一次性 fit（不触发 applyZoom 的锚点补偿，直接居中）
+// 按容器视口计算适配缩放，一次性 fit（margin:auto 自然居中，无需手动 scroll）
 function fitCanvasToViewport() {
   const scrollEl = canvasScrollRef.value
   if (!scrollEl) return
-  const fitX = (scrollEl.clientWidth - 2) / canvasSize.value.width
-  const fitY = (scrollEl.clientHeight - 2) / canvasSize.value.height
+  const fitX = (scrollEl.clientWidth - 48) / canvasSize.value.width
+  const fitY = (scrollEl.clientHeight - 48) / canvasSize.value.height
   const fitZoom = Math.max(0.15, Math.min(3, Math.min(fitX, fitY)))
   if (Math.abs(fitZoom - zoom.value) < 0.001) return
   zoom.value = fitZoom
-  requestAnimationFrame(() => {
-    scrollEl.scrollTop = 0
-    scrollEl.scrollLeft = 0
-  })
 }
 
 function onCloneTemplate(tpl: any) {
@@ -2056,11 +2058,6 @@ async function onChangeTemplateVip(tpl: any, e: Event) {
     alert('更新失败：' + (err?.message || err))
     target.value = tpl.vipLevel || 'free'
   }
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function createNewFromCanvas() {
@@ -2144,14 +2141,6 @@ function applyColorScheme(cs: ColorScheme) {
   showToast(`已应用「${cs.name}」配色，修改 ${changed} 个元素 ✅`)
 }
 
-// 简单 hex 亮度计算
-function getLuminance(hex: string): number {
-  const rgb = parseInt(hex.replace('#', ''), 16)
-  const r = (rgb >> 16) & 0xff
-  const g = (rgb >> 8) & 0xff
-  const b = (rgb >> 0) & 0xff
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255
-}
 
 // 滤镜预设
 const FILTER_PRESETS: Record<string, { brightness: number; contrast: number; saturate: number; blur: number; grayscale: number }> = {
@@ -2462,6 +2451,8 @@ async function onPsdImportConfirm(payload: { width: number; height: number; laye
     showToast(`PSD 导入成功：${imported} 层`)
   }
   psdImportResult.value = null
+  await nextTick()
+  fitCanvasToViewport()
 }
 
 async function onImageFile(e: Event) {
@@ -2512,19 +2503,6 @@ async function onBgImageFile(e: Event) {
   } finally {
     input.value = ''
   }
-}
-
-function fileToDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
-function sanitizeSvg(svg: string): string {
-  return svg.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '').replace(/on\w+="[^"]*"/gi, '')
 }
 
 // 背景设置：类型改变 / 颜色改变

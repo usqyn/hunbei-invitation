@@ -1,4 +1,4 @@
-import { APP_VERSION, getRequestUrl } from '@/config'
+import { APP_VERSION, USE_CLOUD_FUNCTIONS, getFunctionName } from '@/config'
 
 let sessionId = ''
 
@@ -71,20 +71,33 @@ export function track(event: string, params?: Record<string, any>, immediate = t
 
   if (immediate) {
     // 立即上报
-    uni.request({
-      url: getRequestUrl('/api/track'),
-      method: 'POST',
-      data: payload,
-      header: { 'Content-Type': 'application/json' },
-      timeout: 5000,
-      fail: () => {
-        // 上报失败，存入本地队列稍后重试
-        enqueue(payload)
-      },
-    })
+    callTrackApi('/api/track', payload, () => enqueue(payload))
   } else {
     enqueue(payload)
   }
+}
+
+/** 通过云函数 SDK 调用 track 接口（与 request.ts 一致，避免 HTTP 路由 404） */
+function callTrackApi(path: string, data: any, onFail?: () => void) {
+  // #ifdef MP-WEIXIN
+  if (USE_CLOUD_FUNCTIONS) {
+    wx.cloud.callFunction({
+      name: getFunctionName(path),
+      data: { path, httpMethod: 'POST', body: data, headers: { 'Content-Type': 'application/json' } },
+      fail: () => { if (onFail) onFail() },
+    })
+    return
+  }
+  // #endif
+  // 非云函数模式（H5 dev）回退 HTTP
+  uni.request({
+    url: `/api/track`,
+    method: 'POST',
+    data,
+    header: { 'Content-Type': 'application/json' },
+    timeout: 5000,
+    fail: () => { if (onFail) onFail() },
+  })
 }
 
 // 本地队列（批量上报）
@@ -113,18 +126,11 @@ export function flushTrackQueue() {
     uni.setStorageSync(QUEUE_KEY, [])
 
     // 批量上报
-    uni.request({
-      url: getRequestUrl('/api/track/batch'),
-      method: 'POST',
-      data: { events: queue },
-      header: { 'Content-Type': 'application/json' },
-      timeout: 10000,
-      fail: () => {
-        // 重新入队
-        const existing = uni.getStorageSync(QUEUE_KEY) || []
-        const combined = (Array.isArray(existing) ? existing : []).concat(queue)
-        uni.setStorageSync(QUEUE_KEY, combined.slice(-MAX_QUEUE_SIZE))
-      },
+    callTrackApi('/api/track/batch', { events: queue }, () => {
+      // 重新入队
+      const existing = uni.getStorageSync(QUEUE_KEY) || []
+      const combined = (Array.isArray(existing) ? existing : []).concat(queue)
+      uni.setStorageSync(QUEUE_KEY, combined.slice(-MAX_QUEUE_SIZE))
     })
   } catch (e) { /* ignore */ }
 }

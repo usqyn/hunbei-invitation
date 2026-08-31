@@ -503,7 +503,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.aac', '.ttf', '.otf', '.woff', '.woff2']
     const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/aac', 'font/ttf', 'font/otf', 'font/woff', 'font/woff2', 'application/octet-stream']
@@ -622,7 +622,9 @@ app.get('/api/health', (req, res) => {
 })
 
 // 短信验证码存储（生产环境应使用 Redis）
+// 格式：{ [phone]: { code, time, attempts, locked } }
 const smsCodes = {}
+const MAX_SMS_ATTEMPTS = 3 // 验证码最大尝试次数
 setInterval(() => {
   const now = Date.now()
   Object.keys(smsCodes).forEach(k => { if (now - smsCodes[k].time > 300000) delete smsCodes[k] })
@@ -646,7 +648,7 @@ app.post('/api/sms/send', rateLimit(), (req, res) => {
     return res.status(400).json({ success: false, error: '请输入正确的手机号' })
   }
   const code = String(Math.floor(100000 + Math.random() * 900000))
-  smsCodes[phone] = { code, time: Date.now() }
+  smsCodes[phone] = { code, time: Date.now(), attempts: 0, locked: false }
   // 仅在非生产环境打印验证码，且只显示手机号后4位，避免明文泄露
   if (process.env.NODE_ENV !== 'production') {
     console.log(`\n📱 [验证码] ${phone.slice(-4)} → ${code}\n`)
@@ -753,19 +755,29 @@ app.post('/api/user/login', rateLimit(), async (req, res) => {
     // 开发环境使用万能验证码（仅非 production 环境生效，通过 DEV_CODE 环境变量控制）
     const isDev = process.env.NODE_ENV !== 'production'
     const devCode = isDev ? (process.env.DEV_CODE || '000000') : null
-    if (!isDev || code !== devCode) {
-      const stored = smsCodes[phone]
-      if (!stored) return res.status(400).json({ success: false, error: '请先获取验证码' })
-      if (Date.now() - stored.time > 300000) {
+      if (!isDev || code !== devCode) {
+        const stored = smsCodes[phone]
+        if (!stored) return res.status(400).json({ success: false, error: '请先获取验证码' })
+        if (stored.locked) {
+          return res.status(429).json({ success: false, error: '验证码已锁定，请重新获取' })
+        }
+        if (Date.now() - stored.time > 300000) {
+          delete smsCodes[phone]
+          return res.status(400).json({ success: false, error: '验证码已过期，请重新获取' })
+        }
+        if (stored.code !== code) {
+          stored.attempts = (stored.attempts || 0) + 1
+          if (stored.attempts >= MAX_SMS_ATTEMPTS) {
+            stored.locked = true
+            return res.status(429).json({ success: false, error: '验证码错误次数过多，请重新获取' })
+          }
+          return res.status(400).json({ success: false, error: `验证码错误，还剩${MAX_SMS_ATTEMPTS - stored.attempts}次机会` })
+        }
         delete smsCodes[phone]
-        return res.status(400).json({ success: false, error: '验证码已过期，请重新获取' })
       }
-      if (stored.code !== code) return res.status(400).json({ success: false, error: '验证码错误' })
-      delete smsCodes[phone]
-    }
 
     // 如果手机号为管理员账号（ADMIN_PHONE），签发的 JWT 中 role 设为 'admin'
-    const adminPhone = process.env.ADMIN_PHONE || '13800138000'
+    const adminPhone = process.env.ADMIN_PHONE || ''
     const role = phone === adminPhone ? 'admin' : 'user'
     const token = jwt.sign({ phone, role }, JWT_SECRET, { expiresIn: '30d' })
     const now = new Date().toISOString()
@@ -807,7 +819,10 @@ app.post('/api/admin/login', rateLimit(), (req, res) => {
   if (!phone) {
     return res.status(400).json({ success: false, error: '请输入手机号' })
   }
-  const adminPhone = process.env.ADMIN_PHONE || '13800138000'
+  const adminPhone = process.env.ADMIN_PHONE || ''
+  if (!adminPhone) {
+    return res.status(500).json({ success: false, error: '管理员手机号未配置' })
+  }
   // 校验手机号是否为管理员账号
   if (phone !== adminPhone) {
     return res.status(403).json({ success: false, error: '该账号无管理员权限' })
@@ -817,18 +832,26 @@ app.post('/api/admin/login', rateLimit(), (req, res) => {
   }
   // 验证码校验：开发环境支持 DEV_CODE 万能码，生产环境仅校验短信验证码
   const isDev = process.env.NODE_ENV !== 'production'
-  const devCode = isDev ? (process.env.DEV_CODE || '000000') : null
+  const devCode = isDev ? (process.env.DEV_CODE || '') : null
   if (!isDev || code !== devCode) {
     const stored = smsCodes[phone]
     if (!stored) {
       return res.status(400).json({ success: false, error: '请先获取验证码' })
+    }
+    if (stored.locked) {
+      return res.status(429).json({ success: false, error: '验证码已锁定，请重新获取' })
     }
     if (Date.now() - stored.time > 300000) {
       delete smsCodes[phone]
       return res.status(400).json({ success: false, error: '验证码已过期，请重新获取' })
     }
     if (stored.code !== code) {
-      return res.status(400).json({ success: false, error: '验证码错误' })
+      stored.attempts = (stored.attempts || 0) + 1
+      if (stored.attempts >= MAX_SMS_ATTEMPTS) {
+        stored.locked = true
+        return res.status(429).json({ success: false, error: '验证码错误次数过多，请重新获取' })
+      }
+      return res.status(400).json({ success: false, error: `验证码错误，还剩${MAX_SMS_ATTEMPTS - stored.attempts}次机会` })
     }
     delete smsCodes[phone]
   }
@@ -2310,8 +2333,13 @@ app.post('/api/export/poster', requireAuth, (req, res) => {
 // 当前实现的已知风险：
 //   - 任何登录用户调用此接口即可将自己的 pending 订单标记为 paid
 //   - 已通过 payLimiter 限流（同 IP 每分钟 10 次）缓解，但非根本修复
+//   - 生产环境禁止直接调用，仅允许开发/测试环境使用此测试接口
 app.post('/api/orders/:id/pay', payLimiter, requireAuth, (req, res) => {
   try {
+    // 生产环境禁止自行标记支付：必须通过微信支付回调确认
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ success: false, error: '生产环境请通过微信支付完成付款' })
+    }
     const phone = req.user?.phone || ''
     const existing = db.exec("SELECT id, status, items FROM orders WHERE id = ? AND phone = ?", [req.params.id, phone])
     if (!existing.length || !existing[0].values.length) {

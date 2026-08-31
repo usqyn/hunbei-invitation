@@ -48,8 +48,8 @@
     </view>
 
     <template v-else>
-      <view class="pay-model-title">按次制作，灵活付费</view>
-      <text class="pay-model-sub">无需会员，用一次付一次，制作完成后可随时编辑与导出</text>
+      <view class="pay-model-title">一次解锁，永久使用</view>
+      <text class="pay-model-sub">无需开通会员，付费即永久解锁该模板，可随时编辑、导出无水印高清版本与分享</text>
 
       <view class="tier-list">
         <view class="tier-card">
@@ -196,10 +196,10 @@ async function handleUnlockPay() {
 const paying = ref(false)
 
 const faqList = ref([
-  { q: '按次付费后可以制作几次？', a: '支付 1 次获得该模板的 1 次制作机会，制作完成的作品可随时编辑与导出，编辑不重复收费。', open: false },
-  { q: '限免版怎么用最划算？', a: '限免版模板第 1 次制作免费，第 2 次分享朋友圈给好友即可获得 1 次额外机会，之后每次 ¥6.6。', open: false },
+  { q: '付费后可以制作几次？', a: '付费即永久解锁该模板，可不限次数地编辑、导出无水印高清版本与分享，不重复收费。', open: false },
+  { q: '不付费能导出吗？', a: '可以。免费用户看广告后可导出带水印的普通画质版本，付费解锁后导出无水印高清版本。', open: false },
   { q: '作品会因为我没付费而被删除吗？', a: '不会。您已制作的作品会一直保留，随时可以查看与编辑。', open: false },
-  { q: '可以退款吗？', a: '按次付费为虚拟商品，一经支付即获得制作权益，除法律规定的情形外不予退款。', open: false },
+  { q: '可以退款吗？', a: '解锁为虚拟商品，一经支付即永久获得该模板的使用权益，除法律规定的情形外不予退款。', open: false },
 ])
 
 function toggleFaq(index: number) {

@@ -32,10 +32,15 @@ const nowMs = () => Date.now()
 const uuid = () => uuidv4()
 
 // ============ 配置 ============
-const ADMIN_PHONE = process.env.ADMIN_PHONE || '13800138000'
-const DEV_CODE = process.env.DEV_CODE || '000000'
-const JWT_SECRET = process.env.JWT_SECRET || 'TOYtamaxia-test-secret'
+const ADMIN_PHONE = process.env.ADMIN_PHONE || ''
+const DEV_CODE = process.env.DEV_CODE || ''
+const JWT_SECRET = process.env.JWT_SECRET || ''
 const IS_DEV = process.env.NODE_ENV !== 'production'
+
+// 安全检查：生产环境必须配置必要密钥
+if (!JWT_SECRET) {
+  console.warn('[shared] ⚠️ JWT_SECRET 未配置，鉴权功能不可用')
+}
 
 // ============ 鉴权 ============
 // 签发 JWT，保留与原 Express 相同的 payload 结构 { phone, role }
@@ -89,12 +94,22 @@ const ok = (data, extra) => Object.assign({ success: true, data }, extra || {})
 const okMsg = (message) => ({ success: true, message })
 const fail = (error, statusCode = 400) => ({ success: false, error })
 
+// CORS 允许的域名白名单（生产环境必须配置，开发环境允许 localhost）
+const getAllowedOrigin = () => {
+  const allowed = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean)
+  if (IS_DEV) {
+    // 开发环境允许 localhost 和 127.0.0.1
+    return 'http://localhost:5173,http://127.0.0.1:5173'
+  }
+  return allowed.length > 0 ? allowed[0] : ''
+}
+
 // 包装为云函数 HTTP 触发器返回格式 { statusCode, headers, body }
 const httpOK = (bodyObj, statusCode = 200) => ({
   statusCode,
   headers: {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': getAllowedOrigin(),
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Session-Id,Session-Id',
   },
@@ -107,7 +122,7 @@ const httpFail = (error, statusCode = 400) => httpOK({ success: false, error }, 
 const httpOptions = () => ({
   statusCode: 200,
   headers: {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': getAllowedOrigin(),
     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Session-Id,Session-Id',
   },
@@ -240,6 +255,8 @@ const toCloudFileID = (path) => `cloud://${envId}/${path.replace(/^\/+/, '')}`
 const normalizeToHttpsUrl = (url) => {
   if (!url || typeof url !== 'string') return url || ''
   if (url.startsWith('cloud://')) return url
+  // https://tmp/ 是微信临时文件的错误编码格式，不是合法域名，直接丢弃
+  if (url.startsWith('https://tmp/')) return ''
   // 已经是 HTTPS（非 localhost）→ 直接返回
   if (url.startsWith('https://')) return url
   // HTTP 旧地址（localhost/127.0.0.1）→ 映射云存储 uploads 路径

@@ -20,5 +20,17 @@
   "KazakhSoftRwqyJolaq": "/uploads/fonts/KazakhSoftRwqyJolaq.ttf",
   "KazakhSoftSulus": "/uploads/fonts/KazakhSoftSulus.ttf",
   "KazNet": "/uploads/fonts/KazNet.ttf",
-  "UKKUniKuf": "/uploads/fonts/UKKUniKuf.ttf"
+  "UKKUniKuf": "/uploads/fonts/UKKUniKuf.ttf",
+  "思源黑体粗体": "/uploads/fonts/SourceHanSansSC-Bold.otf",
+  "思源宋体粗体": "/uploads/fonts/SourceHanSerifCN-Bold.otf",
+  "思源宋体重": "/uploads/fonts/SourceHanSerifCN-Heavy.otf",
+  "思源宋体细": "/uploads/fonts/SourceHanSerifCN-Light.otf",
+  "思源宋体中": "/uploads/fonts/SourceHanSerifCN-Medium.otf",
+  "思源宋体半粗": "/uploads/fonts/SourceHanSerifCN-SemiBold.otf",
+  "SourceHanSansSC-Bold": "/uploads/fonts/SourceHanSansSC-Bold.otf",
+  "SourceHanSerifCN-Bold": "/uploads/fonts/SourceHanSerifCN-Bold.otf",
+  "SourceHanSerifCN-Heavy": "/uploads/fonts/SourceHanSerifCN-Heavy.otf",
+  "SourceHanSerifCN-Light": "/uploads/fonts/SourceHanSerifCN-Light.otf",
+  "SourceHanSerifCN-Medium": "/uploads/fonts/SourceHanSerifCN-Medium.otf",
+  "SourceHanSerifCN-SemiBold": "/uploads/fonts/SourceHanSerifCN-SemiBold.otf"
 }

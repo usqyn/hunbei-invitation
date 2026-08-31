@@ -22,9 +22,9 @@ describe('resolveTextPlaceholders（注册表驱动渲染）', () => {
     expect(formatCnDate('abc')).toBe('abc')
   })
 
-  it('未填值的 token 保留字面量（便于识别与后续回填）', () => {
+  it('未填值的 token 用 preview 兜底显示', () => {
     const out = resolveTextPlaceholders('时间：{time}', {} as any)
-    expect(out).toBe('时间：{time}')
+    expect(out).toBe('时间：18:00')
   })
 
   it('kzDate 优先使用回填的原文格式（PSD 原文一致性）', () => {
@@ -34,8 +34,8 @@ describe('resolveTextPlaceholders（注册表驱动渲染）', () => {
     expect(out).toBe('سىزدەردى 2026-جىلى 10-ايدىڭ 01-كۇنى')
   })
 
-  it('kzDate 无回填值且无中文日期时保留字面', () => {
-    expect(resolveTextPlaceholders('{kzDate}', {} as any)).toBe('{kzDate}')
+  it('kzDate 无回填值且无中文日期时用 preview 兜底', () => {
+    expect(resolveTextPlaceholders('{kzDate}', {} as any)).toBe('2026 جىلعى 1 ايدىڭ 22 كۇنى')
   })
 
   it('kzDate 无回填值时按中文 date 生成标准哈语表达式', () => {

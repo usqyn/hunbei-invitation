@@ -21,6 +21,8 @@ interface SerializedElement {
   rotation: number
   opacity: number
   editable: boolean
+  /** PS 混合模式（multiply/screen/overlay 等） */
+  blendMode?: string
   style?: Record<string, any>
 }
 
@@ -56,6 +58,7 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
     rotation: el.rotation ?? 0,
     opacity: el.opacity ?? 1,
     editable: el.editable !== false,
+    blendMode: el.blendMode || undefined,
   }
 
   if (el.type === 'text') {

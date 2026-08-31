@@ -39,6 +39,8 @@ export interface BaseElement {
   visible: boolean
   zIndex: number
   editable: boolean
+  /** PS 混合模式（multiply/screen/overlay 等），映射为 Canvas 2D globalCompositeOperation */
+  blendMode?: string
 }
 
 // 文字元素
@@ -74,7 +76,7 @@ export interface ImageElement extends BaseElement {
   src: string
   dataKey?: string
   scale: 'contain' | 'cover' | 'fill' | 'none'
-  mask: 'rect' | 'rounded' | 'circle' | 'heart' | 'star'
+  mask: 'rect' | 'rounded' | 'circle' | 'heart' | 'star' | 'alpha'
   borderRadius: number
   borderColor: string
   borderWidth: number

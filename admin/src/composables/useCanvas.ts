@@ -11,6 +11,7 @@ import type {
   CanvasDraft,
 } from '../types/canvas'
 import type { PsdLayerPreview } from '../utils/psd-import'
+import { mapBlendMode } from '../utils/psd-import'
 import { PLACEHOLDER_DEFS } from '../constants/placeholder-defs'
 import { createId, DEFAULT_CANVAS_SIZE, DEFAULT_BACKGROUND } from '../types/canvas'
 import { uploadImages } from './useApi'
@@ -481,6 +482,7 @@ export function useCanvas(opts: UseCanvasOptions) {
     })
     ;text.id = el.id
     ;text.elementType = 'text'
+    text.set('globalCompositeOperation', mapBlendMode(el.blendMode || 'normal'))
 
     // 先同步 model 再 add：保证 object:added 触发历史快照时元素已在 model 中
     elements.value.push(el)
@@ -553,6 +555,7 @@ export function useCanvas(opts: UseCanvasOptions) {
         ;obj.id = el.id
         ;obj.elementType = 'image'
         ;obj.srcUrl = src
+        obj.set('globalCompositeOperation', mapBlendMode(el.blendMode || 'normal'))
 
         elements.value.push(el)
         canvas.insertAt(el.zIndex, obj)
@@ -621,6 +624,7 @@ export function useCanvas(opts: UseCanvasOptions) {
       ;img.id = el.id
       ;img.elementType = 'image'
       ;img.srcUrl = src
+      img.set('globalCompositeOperation', mapBlendMode(el.blendMode || 'normal'))
 
       elements.value.push(el)
       canvas.insertAt(el.zIndex, img)
@@ -736,6 +740,7 @@ export function useCanvas(opts: UseCanvasOptions) {
             shadowOffsetY: layer.shadowOffsetY ?? 0,
             shadowBlur: layer.shadowBlur ?? 0,
             textDecoration: 'none',
+            blendMode: layer.blendMode,
           })
           imported++
           continue
@@ -745,6 +750,10 @@ export function useCanvas(opts: UseCanvasOptions) {
           const src = dataUrlToRemote.get(layer.dataUrl) || layer.dataUrl
           // editable 决定导入后是否锁定：默认 false（锁定），勾选才解锁
           const editable = layer.editable ?? false
+          // 反相矢量蒙版（圆环头像框等）小程序端暂不支持挖洞，归一为 circle 并告警
+          const maskForCanvas = layer.mask === 'circle-invert'
+            ? (console.warn('[PSD] 反相蒙版 circle-invert 暂不支持挖洞，回退为 circle:', layer.name), 'circle' as const)
+            : (layer.mask || 'rect')
           const el = await addImage(src, {
             id: createId('image'),
             type: 'image',
@@ -759,6 +768,8 @@ export function useCanvas(opts: UseCanvasOptions) {
             visible: true,
             zIndex,
             editable,
+            mask: maskForCanvas,
+            blendMode: layer.blendMode,
           })
           if (!el) {
             failed++
@@ -991,7 +1002,10 @@ export function useCanvas(opts: UseCanvasOptions) {
       updateZIndexFromFabric()
     } else if (newEl.type === 'image') {
       const ie = newEl as ImageElement
+      const epoch = canvasEpoch
       fabric.FabricImage.fromURL(ie.src, { crossOrigin: 'anonymous' }).then(img => {
+        // 画布已进入新世代（清空/翻页/切模式/撤销重做）时丢弃迟到结果
+        if (epoch !== canvasEpoch || canvas !== fabricCanvas.value) return
         const sx = ie.width / (img.width || 1)
         const sy = ie.height / (img.height || 1)
         img.set({
@@ -1154,6 +1168,8 @@ export function useCanvas(opts: UseCanvasOptions) {
 
     // 下划线 / 删除线
     textObj.set('textDecoration', el.textDecoration ?? 'none')
+    // 混合模式
+    textObj.set('globalCompositeOperation', mapBlendMode(el.blendMode || 'normal'))
   }
 
   // ---- 图片特效应用（滤镜/圆角/边框，供 updateSelected 与 loadDraft 复用）----
@@ -1176,20 +1192,41 @@ export function useCanvas(opts: UseCanvasOptions) {
     } catch (e) {
       console.warn('Failed to apply CSS filter:', e)
     }
-    // borderRadius → clipPath
-    const br = el.borderRadius ?? 0
-    if (br > 0) {
-      imgObj.set('clipPath', new fabric.Rect({
+    // mask: 'alpha' → 图片自身透明通道即为遮罩，不需要 clipPath
+    // mask: 'circle' → 椭圆/圆形 clipPath（PSD 矢量蒙版 / 剪贴蒙版导入）
+    // 优先级高于 borderRadius：圆形头像框导入时不叠加圆角逻辑
+    if (el.mask === 'alpha') {
+      imgObj.set('clipPath', null)
+    } else if (el.mask === 'circle') {
+      const rx = imgObj.width / 2
+      const ry = imgObj.height / 2
+      const r = Math.min(rx, ry)
+      imgObj.set('clipPath', new fabric.Circle({
         absolutePositioned: true,
-        width: imgObj.width,
-        height: imgObj.height,
-        rx: br,
-        ry: br,
-        originX: 'left',
-        originY: 'top',
+        radius: r,
+        scaleX: rx / r,
+        scaleY: ry / r,
+        originX: 'center',
+        originY: 'center',
+        left: imgObj.width / 2,
+        top: imgObj.height / 2,
       }))
     } else {
-      imgObj.set('clipPath', null)
+      // borderRadius → clipPath
+      const br = el.borderRadius ?? 0
+      if (br > 0) {
+        imgObj.set('clipPath', new fabric.Rect({
+          absolutePositioned: true,
+          width: imgObj.width,
+          height: imgObj.height,
+          rx: br,
+          ry: br,
+          originX: 'left',
+          originY: 'top',
+        }))
+      } else {
+        imgObj.set('clipPath', null)
+      }
     }
     // border
     const bw = el.borderWidth ?? 0
@@ -1201,6 +1238,8 @@ export function useCanvas(opts: UseCanvasOptions) {
       imgObj.set('stroke', undefined)
       imgObj.set('strokeWidth', 0)
     }
+    // 混合模式
+    imgObj.set('globalCompositeOperation', mapBlendMode(el.blendMode || 'normal'))
   }
 
   // ---- 更新选中元素属性 ----

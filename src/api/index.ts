@@ -380,6 +380,12 @@ export function fetchFootprints() {
   return request<any[]>({ url: '/api/footprints' })
 }
 
+// 新增足迹：浏览模板时记录（后端按 templateId 关联模板名与封面，需登录）
+// hideLoading：不能打断用户进入编辑器的操作
+export function addFootprint(templateId: string) {
+  return request({ url: '/api/footprints', method: 'POST', data: { templateId }, hideLoading: true })
+}
+
 export function fetchNotifications() {
   return request<any[]>({ url: '/api/notifications' })
 }

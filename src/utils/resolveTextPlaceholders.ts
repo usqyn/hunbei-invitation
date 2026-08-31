@@ -15,7 +15,7 @@ export function resolveTextPlaceholders(text: string, data: Partial<TemplateData
   for (const def of PLACEHOLDER_DEFS) {
     const token = `{${def.key}}`
     if (!result.includes(token)) continue
-    const value = def.resolve(data)
+    const value = def.resolve(data) || def.preview
     if (!value) continue
     result = result.split(token).join(value)
   }

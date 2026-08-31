@@ -47,6 +47,20 @@ const TIER_DEFAULT_PRICE = {
   pro: 0,
 }
 
+// ============ 支付模式安全开关 ============
+// PAY_ALLOW_TEST_MODE=true（默认）：保留旧的"前端调用即标记已付"行为，仅供本地/体验联调。
+// ⚠️ 该模式下任何登录用户都能把自己的 pending 订单标记为 paid，直接白嫖 VIP / 制作额度。
+//
+// 【生产环境必须】在云开发控制台把环境变量设为 PAY_ALLOW_TEST_MODE=false，
+// 届时 POST /api/orders/:id/pay 将拒绝前端直接调用，支付结果只能由微信支付回调写入。
+// 完整改造要求（接入真实微信支付时）：
+//   1. 下单接口调用微信支付「统一下单」获取 prepay_id 并返回支付参数给前端
+//   2. 前端用 wx.requestPayment 拉起支付
+//   3. 微信服务器回调本云函数 → 校验签名 → 校验金额 → 条件更新 status='paid' 并发放权益
+//   4. 前端轮询订单状态或接收订阅消息感知支付完成
+// 只有第 3 步（服务端回调）才有权把订单改为 paid，绝不能信任前端的"我付过了"。
+const PAY_ALLOW_TEST_MODE = process.env.PAY_ALLOW_TEST_MODE !== 'false'
+
 // ============ 订单 CRUD ============
 
 // POST /api/orders — 创建订单（服务端计算金额）
@@ -165,6 +179,12 @@ const updateOrderStatus = async (ctx) => {
 //   3. 前端通过轮询订单状态或接收 WebSocket 推送来感知支付完成
 // 当前实现的已知风险：任何登录用户调用此接口即可将自己的 pending 订单标记为 paid
 const payOrder = async (ctx) => {
+  // 生产环境（PAY_ALLOW_TEST_MODE=false）禁止前端直接标记已付：
+  // 支付结果只能由微信支付回调写入，否则任何人都能零成本拿到 VIP / 制作额度。
+  if (!PAY_ALLOW_TEST_MODE) {
+    console.warn('[Pay] 拒绝前端直接支付：当前为正式支付模式，请通过微信支付完成')
+    return httpFail('请通过微信支付完成付款', 403)
+  }
   const auth = requireAuth(ctx.event)
   if (!auth.ok) return auth.body
   const phone = auth.user.phone

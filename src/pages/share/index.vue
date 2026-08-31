@@ -152,6 +152,7 @@ import { generatePoster } from '@/api'
 import CloudImage from '@/components/CloudImage.vue'
 import Watermark from '@/components/Watermark.vue'
 import { useUserStore } from '@/stores/user'
+import { runWithExportGate, getTemplateTier } from '@/composables/useTemplateEntry'
 import { getSceneShareText } from '@/constants/share-text'
 import { request } from '@/utils/request'
 import type { TemplateItem } from '@/types'
@@ -343,12 +344,9 @@ function onSelectTemplate(item: string) {
   showTemplateLib.value = false
 }
 
-// 分享渠道
-async function onShareMoments() {
-  haptic('medium')
+// 生成并保存海报到相册（海报闸门通过后调用）
+async function generatePosterCore(workId: string, saveDirectly: boolean) {
   if (isGenerating.value) return
-  const workId = editorStore.currentWorkId
-  if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
   isGenerating.value = true
   uni.showLoading({ title: '生成海报中...' })
   try {
@@ -359,45 +357,88 @@ async function onShareMoments() {
       isGenerating.value = false
       return
     }
-    uni.downloadFile({
-      url: res.url,
-      success: (r) => {
-        uni.hideLoading({ fail: () => {} })
-        // 校验下载状态码，非 200 视为下载失败
-        if (r.statusCode !== 200) {
+    if (saveDirectly) {
+      uni.downloadFile({
+        url: res.url,
+        success: (r) => {
+          uni.hideLoading({ fail: () => {} })
+          if (r.statusCode !== 200) {
+            uni.showToast({ title: '下载失败', icon: 'none' })
+            isGenerating.value = false
+            return
+          }
+          uni.saveImageToPhotosAlbum({
+            filePath: r.tempFilePath,
+            success: () => {
+              uni.showToast({ title: '已保存到相册', icon: 'success' })
+              isGenerating.value = false
+            },
+            fail: (err) => {
+              if (err.errMsg && err.errMsg.includes('auth')) {
+                uni.showModal({
+                  title: '提示',
+                  content: '需要相册权限才能保存图片，请在设置中开启',
+                  confirmText: '去设置',
+                  success: (modalRes) => { if (modalRes.confirm) uni.openSetting({}) },
+                })
+              } else {
+                uni.showToast({ title: '保存失败', icon: 'none' })
+              }
+              isGenerating.value = false
+            },
+          })
+        },
+        fail: () => {
+          uni.hideLoading({ fail: () => {} })
           uni.showToast({ title: '下载失败', icon: 'none' })
           isGenerating.value = false
-          return
-        }
-        uni.saveImageToPhotosAlbum({
-          filePath: r.tempFilePath,
-          success: () => {
-            uni.showToast({ title: '已保存到相册', icon: 'success' })
-            // 整个下载+保存流程完成后再释放锁
+        },
+      })
+    } else {
+      uni.showModal({
+        title: '分享海报',
+        content: '如需将请柬分享到朋友圈，请保存下方图片后从相册分享。',
+        confirmText: '保存图片',
+        success: (modalRes) => {
+          if (modalRes.confirm) {
+            uni.downloadFile({
+              url: res.url,
+              success: (r) => {
+                uni.hideLoading({ fail: () => {} })
+                uni.saveImageToPhotosAlbum({
+                  filePath: r.tempFilePath,
+                  success: () => {
+                    uni.showToast({ title: '图片已保存到相册', icon: 'success' })
+                    isGenerating.value = false
+                  },
+                  fail: (err) => {
+                    if (err.errMsg && err.errMsg.includes('auth')) {
+                      uni.showModal({
+                        title: '提示',
+                        content: '需要相册权限才能保存图片，请在设置中开启',
+                        confirmText: '去设置',
+                        success: (settingsRes) => { if (settingsRes.confirm) uni.openSetting({}) },
+                      })
+                    } else {
+                      uni.showToast({ title: '保存失败', icon: 'none' })
+                    }
+                    isGenerating.value = false
+                  },
+                })
+              },
+              fail: () => {
+                uni.hideLoading({ fail: () => {} })
+                uni.showToast({ title: '下载失败', icon: 'none' })
+                isGenerating.value = false
+              },
+            })
+          } else {
+            uni.hideLoading({ fail: () => {} })
             isGenerating.value = false
-          },
-          fail: (err) => {
-            if (err.errMsg && err.errMsg.includes('auth')) {
-              uni.showModal({
-                title: '提示',
-                content: '需要相册权限才能保存图片，请在设置中开启',
-                confirmText: '去设置',
-                success: (modalRes) => { if (modalRes.confirm) uni.openSetting({}) },
-              })
-            } else {
-              uni.showToast({ title: '保存失败', icon: 'none' })
-            }
-            // 整个下载+保存流程完成后再释放锁
-            isGenerating.value = false
-          },
-        })
-      },
-      fail: () => {
-        uni.hideLoading({ fail: () => {} })
-        uni.showToast({ title: '下载失败', icon: 'none' })
-        isGenerating.value = false
-      },
-    })
+          }
+        },
+      })
+    }
   } catch (e) {
     uni.hideLoading({ fail: () => {} })
     uni.showToast({ title: '生成海报失败', icon: 'none' })
@@ -405,72 +446,27 @@ async function onShareMoments() {
   }
 }
 
-async function onSharePoster() {
+// 分享渠道（海报生成前走导出闸门：已解锁直接生成；未解锁弹付费/看广告）
+async function onShareMoments() {
   haptic('medium')
-  if (isGenerating.value) return
   const workId = editorStore.currentWorkId
   if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
-  isGenerating.value = true
-  uni.showLoading({ title: '生成海报中...' })
-  try {
-    const res = await generatePoster(workId)
-    if (!res || !res.url) {
-      uni.hideLoading({ fail: () => {} })
-      uni.showToast({ title: '生成海报失败', icon: 'none' })
-      isGenerating.value = false
-      return
-    }
-    uni.showModal({
-      title: '分享海报',
-      content: '如需将请柬分享到朋友圈，请保存下方图片后从相册分享。',
-      confirmText: '保存图片',
-      success: (modalRes) => {
-        if (modalRes.confirm) {
-          uni.downloadFile({
-            url: res.url,
-            success: (r) => {
-              uni.hideLoading({ fail: () => {} })
-              uni.saveImageToPhotosAlbum({
-                filePath: r.tempFilePath,
-                success: () => {
-                  uni.showToast({ title: '图片已保存到相册', icon: 'success' })
-                  // 整个下载+保存流程完成后再释放锁
-                  isGenerating.value = false
-                },
-                fail: (err) => {
-                  if (err.errMsg && err.errMsg.includes('auth')) {
-                    uni.showModal({
-                      title: '提示',
-                      content: '需要相册权限才能保存图片，请在设置中开启',
-                      confirmText: '去设置',
-                      success: (settingsRes) => { if (settingsRes.confirm) uni.openSetting({}) },
-                    })
-                  } else {
-                    uni.showToast({ title: '保存失败', icon: 'none' })
-                  }
-                  // 整个下载+保存流程完成后再释放锁
-                  isGenerating.value = false
-                },
-              })
-            },
-            fail: () => {
-              uni.hideLoading({ fail: () => {} })
-              uni.showToast({ title: '下载失败', icon: 'none' })
-              isGenerating.value = false
-            },
-          })
-        } else {
-          uni.hideLoading({ fail: () => {} })
-          isGenerating.value = false
-        }
-      },
-    })
-  } catch (e) {
-    uni.hideLoading({ fail: () => {} })
-    uni.showToast({ title: '生成海报失败', icon: 'none' })
-    isGenerating.value = false
-  }
+  const templateId = editorStore.currentTemplateId
+  const tpl = (editorStore as any).currentTemplate || null
+  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  await runWithExportGate(templateId, tier, 'poster', () => generatePosterCore(workId, true))
 }
+
+async function onSharePoster() {
+  haptic('medium')
+  const workId = editorStore.currentWorkId
+  if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
+  const templateId = editorStore.currentTemplateId
+  const tpl = (editorStore as any).currentTemplate || null
+  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  await runWithExportGate(templateId, tier, 'poster', () => generatePosterCore(workId, false))
+}
+
 
 function onCopyLink() {
   haptic('medium')

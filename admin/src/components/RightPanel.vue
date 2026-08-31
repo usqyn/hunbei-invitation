@@ -459,6 +459,11 @@
             :class="{ active: selectedElement.mask === 'heart' }"
             @click="$emit('updateSelected', { mask: 'heart' })"
           >心</button>
+          <button
+            class="btn-seg"
+            :class="{ active: selectedElement.mask === 'alpha' }"
+            @click="$emit('updateSelected', { mask: 'alpha' })"
+          >自定义形状</button>
         </div>
         <div class="section-title">圆角</div>
         <div class="form-row">

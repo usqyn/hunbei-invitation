@@ -1,4 +1,4 @@
-// PSD 文件解析与导入工具
+﻿// PSD 文件解析与导入工具
 // 基于 ag-psd（Photopea 同款解析库）在浏览器端解析 Photoshop 源文件：
 //  - 安全校验（先读结构、拒绝超大尺寸，防 DoS）
 //  - 图层树展平（跳过隐藏层 / 调整层）
@@ -92,6 +92,8 @@ export interface PsdLayerPreview {
   groupId?: string
   /** 是否为组容器占位条目（组本身不入画布，仅作分组信息） */
   isGroupContainer?: boolean
+  /** 检测到的蒙版类型（由 vectorMask 路径分析得出：圆形/椭圆/反相圆） */
+  mask?: 'circle' | 'rounded' | 'circle-invert' | 'alpha'
 }
 
 export interface PsdImportResult {
@@ -276,9 +278,20 @@ function normalizeFontName(name: string): string {
 }
 
 // PSD 内常见的字体拉丁/英文名 → 系统字体名别名（模糊匹配失败后的兜底）
+// 注意：字重别名必须排在基础名之前（短名优先会被子串抢先，所以粗体等字重单独列出）
 const FONT_ALIASES: Array<{ pattern: RegExp; name: string }> = [
+  // 思源宋体各字重（精确匹配字重关键词）
+  { pattern: /sourcehanserif.*semibold/i, name: 'SourceHanSerifCN-SemiBold' },
+  { pattern: /sourcehanserif.*medium/i, name: 'SourceHanSerifCN-Medium' },
+  { pattern: /sourcehanserif.*bold/i, name: 'SourceHanSerifCN-Bold' },
+  { pattern: /sourcehanserif.*heavy/i, name: 'SourceHanSerifCN-Heavy' },
+  { pattern: /sourcehanserif.*light/i, name: 'SourceHanSerifCN-Light' },
+  { pattern: /sourcehanserif.*extralight/i, name: '思源宋体极细' },
   { pattern: /sourcehanserif/i, name: '思源宋体' },
+  // 思源黑体各字重
+  { pattern: /sourcehansans.*bold/i, name: 'SourceHanSansSC-Bold' },
   { pattern: /sourcehansans/i, name: '思源黑体' },
+  // 其他字体
   { pattern: /alimama\w*yuan/i, name: 'AlimamaFangYuanTiVF' },
   { pattern: /kaiti|kaitisc/i, name: '华文楷体' },
   { pattern: /xingkai/i, name: '华文行楷' },
@@ -513,7 +526,7 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement {
 }
 
 /** PS 混合模式 → canvas composite 操作（不支持时回退 source-over） */
-function mapBlendMode(mode: string): GlobalCompositeOperation {
+export function mapBlendMode(mode: string): GlobalCompositeOperation {
   const map: Record<string, GlobalCompositeOperation> = {
     multiply: 'multiply',
     screen: 'screen',
@@ -682,6 +695,116 @@ export function compositeLayerEffects(
   return { canvas: out, pad }
 }
 
+// ============ PSD 矢量蒙版 / 剪贴蒙版 → 圆形蒙版识别 ============
+
+/**
+ * 由图层矢量蒙版路径分析出简单蒙版类型（参考 ag-psd LayerVectorMask 结构）。
+ * 仅处理「单一闭合路径、≤12 个节点、路径填满图层、宽高比合理」的形状，
+ * 圆/椭圆统一映射为 'circle'（小程序端 border-radius:50% 对非正方元素自动产生椭圆）。
+ * 允许少量角点（≤4个），因为椭圆的起止点可能表现为角点。
+ * 任意复杂形状（布尔运算/多路径）返回 null，由 ag-psd 已烘焙的栅格效果兜底。
+ *
+ * 对照 ag-psd 官方字段补充两点安全帽：
+ * - vectorMask.disable：蒙版被禁用时不识别（返回 null）
+ * - vectorMask.invert：反相蒙版（如圆环头像框）返回 'circle-invert'，
+ *   由 useCanvas 暂回退为 circle 并告警，待小程序端支持挖洞再细做
+ */
+export function detectMaskFromVectorMask(
+  vectorMask: { disable?: boolean; invert?: boolean; paths: Array<{ open: boolean; knots: Array<{ linked: boolean; points: number[] }> }> } | undefined,
+  layerWidth: number,
+  layerHeight: number,
+): 'circle' | 'circle-invert' | null {
+  if (!vectorMask?.paths?.length) return null
+  if (vectorMask.disable) return null // 蒙版被禁用 → 忽略（ag-psd 字段）
+  // 只处理简单形状：1 条闭合路径、≤12 个节点
+  const path = vectorMask.paths[0]
+  if (path.open || vectorMask.paths.length > 1 || path.knots.length > 12) return null
+
+  // 图层宽高比需合理（容差 0.3~3.0），覆盖椭圆/胶囊形等常见形状
+  if (layerWidth < 1 || layerHeight < 1) return null
+  const layerAspect = layerWidth / layerHeight
+  if (layerAspect < 0.3 || layerAspect > 3.0) return null
+
+  // 允许少量角点（≤4个）：椭圆起止点可能表现为角点，路径简化也可能产生额外角点
+  let cornerCount = 0
+  for (const knot of path.knots) {
+    const [ax, ay, px, py, nx, ny] = knot.points
+    const isCorner = ax === px && ay === py && ax === nx && ay === ny
+    if (isCorner) cornerCount++
+  }
+  if (cornerCount > 4) return null
+
+  // 计算路径包围盒（ag-psd 路径坐标为图层本地 0..width / 0..height）
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const knot of path.knots) {
+    const [x, y] = knot.points
+    minX = Math.min(minX, x); minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y)
+  }
+  const pathW = maxX - minX
+  const pathH = maxY - minY
+  if (pathW < 1 || pathH < 1) return null
+
+  // 包围盒需接近图层尺寸（容差 35%）
+  const wRatio = pathW / layerWidth
+  const hRatio = pathH / layerHeight
+  if (wRatio < 0.65 || wRatio > 1.35 || hRatio < 0.65 || hRatio > 1.35) return null
+
+  // 圆 / 椭圆 → 都映射到 'circle'；反相蒙版标记 'circle-invert'（小程序端暂回退为圆）
+  return vectorMask.invert ? 'circle-invert' : 'circle'
+}
+
+/**
+ * 检测 canvas 是否有显著的 alpha 透明通道，用于识别非规则形状（星形、花形等）。
+ * 降采样扫描，阈值：>5% 全透明 + >0.3% 半透明 + 透明区域深度 >10%。
+ */
+export function detectAlphaMaskFromCanvas(canvas: HTMLCanvasElement): 'alpha' | null {
+  const w = canvas.width
+  const h = canvas.height
+  if (w < 10 || h < 10) return null
+  const ctx = canvas.getContext('2d')
+  if (!ctx || typeof ctx.getImageData !== 'function') return null
+
+  const stride = Math.max(1, Math.floor(Math.min(w, h) / 64))
+  const imageData = ctx.getImageData(0, 0, w, h)
+  const data = imageData.data
+
+  let transparentCount = 0
+  let semiTransparentCount = 0
+  let opaqueCount = 0
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+
+  for (let y = 0; y < h; y += stride) {
+    for (let x = 0; x < w; x += stride) {
+      const alpha = data[(y * w + x) * 4 + 3]
+      if (alpha <= 5) {
+        transparentCount++
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      } else if (alpha < 250) {
+        semiTransparentCount++
+      } else {
+        opaqueCount++
+      }
+    }
+  }
+
+  const total = transparentCount + semiTransparentCount + opaqueCount
+  if (total === 0) return null
+
+  // 条件1：透明像素 > 5%
+  if (transparentCount / total < 0.05) return null
+  // 条件2：半透明像素 > 0.3%（排除简单圆形的抗锯齿边缘）
+  if (semiTransparentCount / total < 0.003) return null
+  // 条件3：透明区域深度 > 10%（排除圆角侵蚀）
+  const depthRatio = Math.max((maxX - minX) / w, (maxY - minY) / h)
+  if (depthRatio < 0.10) return null
+
+  return 'alpha'
+}
+
 // ============ 智能对象嵌入文件提取 ============
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -714,7 +837,7 @@ export async function decodeLinkedFileToCanvas(data: Uint8Array | undefined): Pr
   }
 }
 
-/** 展平图层树（跳过隐藏层），ag-psd children 为 top-to-bottom，反转后返回 bottom-to-top（z-index 顺序） */
+/** Flatten layer tree (skip hidden layers). ag-psd children for real files are bottom-to-top (lowest layer first), matching z-index order, so returned as-is. */
 export async function flattenPsdLayers(
   psd: Psd,
   options: {
@@ -728,12 +851,22 @@ export async function flattenPsdLayers(
   const skipped: { name: string; reason: string }[] = []
   const warnings: string[] = []
 
+  // 收集尚未关联 base 形状的 clipping 图片层。
+  // PSD 剪贴蒙版规则：clipping 图层裁剪到其「下方」第一个非 clipping 图层（base 形状层）的形状上。
+  // walk 为 top-to-bottom 遍历，base 层在 clipping 层之后才出现，故先收集、遇到 base 时再统一补蒙版。
+  const pendingClips: PsdLayerPreview[] = []
+
   // 记录每次递归的组 id，使子层继承所属组，便于画布端按组整体锁定/拖动
   const walk = async (children: Layer[] | undefined, depth: number, groupId?: string) => {
     if (!children || depth > 50) return
     for (const layer of children) {
       // 组节点：生成一个组 id，递归子层时传入；组本身也作为占位条目保留（type: 'group'）
       if (layer.children && layer.children.length > 0) {
+        // 组节点也遵循隐藏标记：整组隐藏则整组跳过（避免隐藏组的内容意外导入）
+        if (layer.hidden) {
+          skipped.push({ name: layer.name || '组', reason: '隐藏组' })
+          continue
+        }
         const gid = `grp_${layer.name || 'group'}_${depth}_${layers.length}`
         layers.push({
           type: 'group',
@@ -784,8 +917,8 @@ export async function flattenPsdLayers(
         }
       }
       if (layer.blendMode && layer.blendMode !== 'normal' && layer.blendMode !== 'pass through') {
-        layerWarnings.push(`混合模式「${layer.blendMode}」：编辑器画布与小程序端均不支持，将按普通模式显示`)
-        warnings.push(`图层「${name}」混合模式「${layer.blendMode}」无法还原`)
+        layerWarnings.push(`混合模式「${layer.blendMode}」：编辑器画布已支持，小程序端暂不支持`)
+        warnings.push(`图层「${name}」混合模式「${layer.blendMode}」在小程序端暂不支持`)
       }
 
       // 边界：文字层 bounds 可能为 0x0（ag-psd 已知问题 #251），用栅格尺寸兜底
@@ -910,11 +1043,28 @@ export async function flattenPsdLayers(
           defaults,
           groupId,
         })
+        // 文字层也可作为 clipping 的 base（Photoshop 允许以文字作为剪贴蒙版形状）
+        if (!layer.clipping && pendingClips.length > 0) {
+          const baseMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
+          if (baseMask) {
+            for (const clip of pendingClips) clip.mask = baseMask
+          }
+          pendingClips.length = 0
+        }
         continue
       }
 
       // 图片类图层（含智能对象/矢量层，均有栅格预览）
       if (!canvas) {
+        // 无栅格层（矢量形状层等）即使无法作为图片导入，仍可能是下方 clipping 图层的 base 形状
+        // （如圆形头像框的圆形路径层）。先尝试作为 base 关联，再走原有智能对象/跳过逻辑。
+        if (!layer.clipping && pendingClips.length > 0) {
+          const baseMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
+          if (baseMask) {
+            for (const clip of pendingClips) clip.mask = baseMask
+          }
+          pendingClips.length = 0
+        }
         const placed = layer.placedLayer as any
         // ag-psd：linkedFiles[].id 为 PascalString，placedLayer.id 来自 descriptor（数值），统一转字符串比较
         const linkedFile = placed?.id != null ? psd.linkedFiles?.find(f => String(f.id) === String(placed.id)) : undefined
@@ -957,7 +1107,18 @@ export async function flattenPsdLayers(
         continue
       }
 
-      layers.push({
+      // 蒙版检测：只检测图层自身 vectorMask；clipping 层收集到 pendingClips，
+      // 等下方第一个非 clipping 层（base 形状层）出现时统一关联其 vectorMask
+      // （PSD 剪贴蒙版规则：clipping 图层裁剪到其下方第一个非 clipping 图层的形状上）
+      const detectedMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
+
+      // alpha 通道检测：若无矢量蒙版，则分析像素透明度识别非规则形状
+      let alphaMask: 'alpha' | null = null
+      if (!detectedMask && canvas) {
+        alphaMask = detectAlphaMaskFromCanvas(canvas)
+      }
+
+      const entry: PsdLayerPreview = {
         id: `psd_${layers.length}`,
         name,
         type: 'image',
@@ -972,13 +1133,31 @@ export async function flattenPsdLayers(
         hasEffects,
         warnings: layerWarnings,
         groupId,
-      })
+        mask: detectedMask || alphaMask || undefined,
+      }
+      layers.push(entry)
+
+      // clipping 层：收集起来等待下方 base 形状层关联蒙版；
+      // 非 clipping 层：作为 base 为已收集的 clipping 层补蒙版（裁剪到其形状上）
+      if (layer.clipping) {
+        pendingClips.push(entry)
+      } else {
+        if (pendingClips.length > 0) {
+          const baseMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
+          if (baseMask) {
+            for (const clip of pendingClips) clip.mask = baseMask
+          }
+          pendingClips.length = 0
+        }
+      }
     }
   }
 
   await walk(psd.children, 0)
-  // ag-psd children 为 top-to-bottom（Photoshop 最上层在前），反转为 bottom-to-top 以匹配 z-index 顺序
+  // ag-psd walk traverses children top-to-bottom (Photoshop topmost layer first).
+  // Reverse to bottom-to-top so the array order matches canvas z-index (0 = bottom).
   layers.reverse()
+
   return { layers, skipped, warnings, warningGroups: groupPsdWarnings(warnings) }
 }
 

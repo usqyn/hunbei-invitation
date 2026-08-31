@@ -1,14 +1,19 @@
-import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName, CLOUD_BASE } from '@/config'
+import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName, CLOUD_BASE, CLOUD_ENV_ID } from '@/config'
 import { getWechatEnvVersion, WECHAT_ENV } from '@/config/env'
 
 // 云函数模式下兜底的资源域名（当 API_BASE 为 localhost 时使用）
 // 原生产资源域名（api 子域）公网不存在已废弃，统一以云 API 网关域名兜底。
 const CLOUD_FALLBACK_ASSETS_BASE = CLOUD_BASE
 
-// 云开发环境 ID：从 CLOUD_BASE（https://<envId>.service.tcloudbase.com）提取
-// 用于把 /uploads/ 相对路径映射为云存储文件 ID cloud://envId/uploads/...
+// 云开发环境 ID：直接取自 config（VITE_CLOUD_ENV_ID），形如 cloud1-xxxxxxxx。
+// 用于把 /uploads/ 相对路径映射为云存储文件 ID cloud://<envId>/uploads/...
 // （云网关 /uploads/ 路径不存在，拼网关会产生 404；cloud:// 由 resolveCloudUrl 换临时 URL）
-const CLOUD_ENV_ID = CLOUD_BASE.replace(/^https:\/\//, '').replace(/\.service\.tcloudbase\.com$/, '')
+//
+// ⚠️ 历史 bug：此处曾从 CLOUD_BASE 用正则 /\.service\.tcloudbase\.com$/ 反推 envId，
+// 但生产域名是 .app.tcloudbase.com，正则不匹配导致整个域名被当成 envId，
+// 拼出非法 fileID（cloud://cloud1-xxx.ap-guangzhou.app.tcloudbase.com/uploads/...），
+// 使 /api/refresh-url 换取临时链接全部失败，云存储图片一张都加载不出来。
+// 绝不要再从 CLOUD_BASE 反推 envId：域名后缀会随地域/控制台变化。
 
 // 本地开发（微信开发者工具 develop 模式）：云函数/云数据库返回的封面等资源 URL
 // 若指向线上资源域名，本机可能无法解析（历史上曾因假域名导致图片全部加载失败，
@@ -68,6 +73,8 @@ function resolveUrlInternal(url: string | undefined | null): string {
     url.startsWith('/static/') ||
     url.startsWith('static/')
   ) {
+    // https://tmp/ 是微信临时文件的错误编码格式，不是合法域名，直接丢弃
+    if (url.startsWith('https://tmp/')) return ''
     return url
   }
   // 云函数模式下：/uploads/ 相对路径直接映射为云存储文件 ID（避免拼网关 404）
