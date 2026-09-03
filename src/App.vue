@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onLaunch, onShow } from '@dcloudio/uni-app'
+import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
 import { flushTrackQueue } from '@/utils/track'
 import { preloadRtlFonts } from '@/utils/font-loader'
+import { flushCloudUrlCache } from '@/utils/url'
 import { CLOUD_ENV_ID } from '@/config'
 
 onLaunch(async () => {
@@ -89,6 +90,11 @@ onLaunch(async () => {
 
 onShow(() => {
   flushTrackQueue()
+})
+
+// 小程序切后台时立即持久化云 URL 缓存，防止节流期间数据丢失
+onHide(() => {
+  flushCloudUrlCache()
 })
 </script>
 

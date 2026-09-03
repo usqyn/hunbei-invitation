@@ -146,6 +146,8 @@ export function useCanvas(opts: UseCanvasOptions) {
     })
 
     fabricCanvas.value = canvas
+    // TODO-debug: 临时诊断钩子，问题1排查完成后删除
+    ;(window as any).__fbcanvas = canvas
     syncCanvasCssSize()
 
     // 选中事件 → 同步到 Vue
@@ -277,26 +279,38 @@ export function useCanvas(opts: UseCanvasOptions) {
     pushHistory('initial')
   }
 
-  // fabric 的 setDimensions 会直接写 canvas 元素内联样式（style.width/height），
-  // 与 Vue 的 :style 绑定冲突，导致模板加载后画布保持全尺寸。这里强制同步为 canvasSize × zoom。
+  // 【zoom 架构说明 2025】
+  // 旧实现：把 canvas DOM 的 style.width/height 直接写为 canvasSize × zoom。
+  //   后果：Fabric v6 内部用 HTMLCanvasElement.getBoundingClientRect() 做屏幕坐标 → 画布坐标映射，
+  //   当 canvas CSS 尺寸 ≠ backing store 时，整个映射会多除/乘一个 zoom 因子，
+  //   表现为 zoom<1 时画布右半边元素点不中、drag 起点偏移（历史上用户反复投诉的"右边无法编辑"）。
+  // 新实现：缩放全部由模板外层 wrapper 的 CSS transform: scale(zoom) 完成，
+  //   wrapper 的 box = (W, H)，transform origin = top-left，视觉尺寸 = W*z × H*z，
+  //   而 canvas 的 CSS 尺寸永远等于 backing store（W × H），由 Fabric setDimensions 维护。
+  //   getBoundingClientRect() 会自动累计祖先的 transform，因此命中坐标在任何 zoom 下都精确。
+  // 这里的 syncCanvasCssSize 仅做 2 件事：
+  //   (a) 强制把遗留下来的 lowerCanvasEl/upperCanvasEl 的内联 style width/height 清到 backing store，
+  //       防止老的调用路径把 canvas CSS 放大导致再次出现命中偏移；
+  //   (b) viewport DPR 适配交给 Fabric（默认已做）。
   function syncCanvasCssSize() {
     const canvas = fabricCanvas.value
     if (!canvas) return
-    const w = (canvasSize.value.width * zoom.value) + 'px'
-    const h = (canvasSize.value.height * zoom.value) + 'px'
+    const w = canvasSize.value.width
+    const h = canvasSize.value.height
     const els: Array<HTMLCanvasElement | undefined> = [
       (canvas as any).lowerCanvasEl,
       (canvas as any).upperCanvasEl,
     ]
     els.forEach(el => {
-      if (el) {
-        el.style.width = w
-        el.style.height = h
-      }
+      if (!el) return
+      // 禁止任何 zoom 因子写入 canvas 的 CSS width/height：
+      // 保持 CSS = backing store = canvasSize 逻辑值，命中坐标才正确。
+      el.style.width = w + 'px'
+      el.style.height = h + 'px'
     })
   }
 
-  // zoom / canvasSize 变化时保持画布 CSS 尺寸正确
+  // zoom / canvasSize 变化时保持画布 CSS 尺寸正确（按上述新规则仅修正遗留值）
   watchEffect(syncCanvasCssSize)
 
   function syncSelectionFromFabric() {
@@ -476,9 +490,18 @@ export function useCanvas(opts: UseCanvasOptions) {
       ...(el.shadowColor && el.shadowColor !== 'transparent'
         ? { shadow: new fabric.Shadow({ color: el.shadowColor, blur: el.shadowBlur, offsetX: el.shadowOffsetX, offsetY: el.shadowOffsetY }) }
         : {}),
+      // 修复：locked 与图层面板锁按钮/解锁按钮（toggleLock）完全一致：
+      //   锁定时禁用移动/旋转/缩放，且 selectable=false + evented=false，
+      //   保证"导入时PSD对话框勾选了'解锁→可拖动'"与"图层🔒按钮显示状态"完全同步。
       lockRotation: el.locked,
       lockMovementX: el.locked,
       lockMovementY: el.locked,
+      lockScalingX: el.locked,
+      lockScalingY: el.locked,
+      lockSkewingX: el.locked,
+      lockSkewingY: el.locked,
+      selectable: !el.locked,
+      evented: !el.locked,
     })
     ;text.id = el.id
     ;text.elementType = 'text'
@@ -551,6 +574,14 @@ export function useCanvas(opts: UseCanvasOptions) {
           scaleY: sc,
           opacity: el.opacity,
           lockRotation: el.locked,
+          lockMovementX: el.locked,
+          lockMovementY: el.locked,
+          lockScalingX: el.locked,
+          lockScalingY: el.locked,
+          lockSkewingX: el.locked,
+          lockSkewingY: el.locked,
+          selectable: !el.locked,
+          evented: !el.locked,
         })
         ;obj.id = el.id
         ;obj.elementType = 'image'
@@ -620,6 +651,14 @@ export function useCanvas(opts: UseCanvasOptions) {
         scaleY: scale,
         opacity: el.opacity,
         lockRotation: el.locked,
+        lockMovementX: el.locked,
+        lockMovementY: el.locked,
+        lockScalingX: el.locked,
+        lockScalingY: el.locked,
+        lockSkewingX: el.locked,
+        lockSkewingY: el.locked,
+        selectable: !el.locked,
+        evented: !el.locked,
       })
       ;img.id = el.id
       ;img.elementType = 'image'
@@ -769,6 +808,8 @@ export function useCanvas(opts: UseCanvasOptions) {
             zIndex,
             editable,
             mask: maskForCanvas,
+            // 圆角矩形矢量蒙版（mask='rounded'）的圆角半径；clipPath 分支按 borderRadius 生成圆角矩形裁剪
+            borderRadius: layer.borderRadius,
             blendMode: layer.blendMode,
           })
           if (!el) {
@@ -797,19 +838,88 @@ export function useCanvas(opts: UseCanvasOptions) {
     // 文字层同步 insertAt 时数组尚短，大 index 被 Fabric clamp 到末尾；
     // 后完成的图片层插中间会把文字层挤乱。此处先全部移出，再按 zIndex 升序重排，
     // 此时数组为空，insertAt(i) 即第 i 层，不会有 clamp 错位。
-    const orderedObjs = [...elements.value]
-      .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
+    const sortedEls = [...elements.value].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
+    const orderedObjs = sortedEls
       .map(el => canvas.getObjects().find(o => o.id === el.id))
-      .filter(Boolean)
+      .filter((o): o is fabric.Object => !!o)
     orderedObjs.forEach(obj => canvas.remove(obj))
     orderedObjs.forEach((obj, i) => canvas.insertAt(i, obj))
+
+    // ---- 修复 #2：PSD 底层满画布背景图被其他图层覆盖 ----
+    // 规则：找到排序后最低层（zIndex 最小）的元素：
+    //   - type === 'image'
+    //   - 视觉上覆盖几乎整个画布（left<=2 && top<=2 && right>=canvasW-2 && bottom>=canvasH-2）
+    // 则自动升格为 canvas.backgroundImage，并从元素列表移除。
+    // 好处：backgroundImage 物理上永远在所有图层之下（Fabric 保证），不再可能
+    // 被 async insertAt 错位/后续操作意外调到上层。
+    const W = canvasSize.value.width
+    const H = canvasSize.value.height
+    const TOL = Math.max(2, Math.min(W, H) * 0.01) // 1% 容差，PSD 导出偶尔有亚像素偏差
+    for (const el of sortedEls) {
+      if (!el || el.type !== 'image') continue
+      const ie = el as ImageElement
+      // Fabric 元素中心坐标：left = x - width/2, top = y - height/2
+      const halfW = ie.width / 2
+      const halfH = ie.height / 2
+      const left = ie.x - halfW
+      const top = ie.y - halfH
+      const right = ie.x + halfW
+      const bottom = ie.y + halfH
+      const fullBleed =
+        left <= TOL &&
+        top <= TOL &&
+        right >= W - TOL &&
+        bottom >= H - TOL
+      if (!fullBleed) continue
+
+      // 命中：把该图片转为画布背景，并从 elements / fabric objects 里移除
+      try {
+        // setBackground 会 pushHistory，但 PSD 导入的末尾我们已经在 suppressHistory 控制下，
+        // 最后还会统一 push 一条 psd-import；为了避免多入历史，这里直接 mutate background.value
+        // + 调用 applyBackground（同样不触发外部 onBackgroundChange 回调）。
+        const bgPayload: CanvasBackground = {
+          type: 'image',
+          color1: '#ffffff',
+          color2: '#ffffff',
+          angle: 0,
+          imageUrl: ie.src,
+          image: '',
+          imageScale: 'cover',
+          imageOpacity: ie.opacity ?? 1,
+        }
+        background.value = bgPayload
+        applyBackground(bgPayload)
+        opts.onBackgroundChange?.(bgPayload)
+
+        // 从 fabric 和 elements 里移除底层背景元素
+        const bgObj = canvas.getObjects().find(o => o.id === ie.id)
+        if (bgObj) canvas.remove(bgObj)
+        elements.value = elements.value.filter(e => e.id !== ie.id)
+
+        // 剩余元素的 zIndex 重新紧凑编码（0..N-1）并再排一次序，保证后续 UI 无空洞
+        elements.value.forEach((e, i) => { e.zIndex = i })
+        const remain = elements.value
+          .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
+          .map(e => canvas.getObjects().find(o => o.id === e.id))
+          .filter((o): o is fabric.Object => !!o)
+        remain.forEach(obj => canvas.remove(obj))
+        remain.forEach((obj, i) => canvas.insertAt(i, obj))
+        console.info(`[PSD import] 自动识别底层满画布图片为画布背景: ${ie.name || ie.id}`, {
+          box: [left, top, right, bottom], canvas: [W, H],
+        })
+      } catch (bgErr) {
+        console.warn('[PSD import] 底层满画布图片升格为背景失败，保留为普通图层：', bgErr)
+      }
+      break // 只处理最底层的一张
+    }
+
     canvas.discardActiveObject()
     canvas.renderAll()
     updateZIndexFromFabric()
     suppressHistory = false
     pushHistory('psd-import')
     return { imported, failed }
-    }
+  }
 
   // 删除选中元素
   function deleteSelected() {
@@ -991,7 +1101,15 @@ export function useCanvas(opts: UseCanvasOptions) {
         stroke: newEl.strokeColor, strokeWidth: newEl.strokeWidth,
         opacity: newEl.opacity, angle: newEl.rotation,
         direction: rtlPaste.direction,
-        lockRotation: newEl.locked, selectable: !newEl.locked,
+        lockRotation: newEl.locked,
+        lockMovementX: newEl.locked,
+        lockMovementY: newEl.locked,
+        lockScalingX: newEl.locked,
+        lockScalingY: newEl.locked,
+        lockSkewingX: newEl.locked,
+        lockSkewingY: newEl.locked,
+        selectable: !newEl.locked,
+        evented: !newEl.locked,
       })
       ;t.id = newEl.id
       ;t.elementType = 'text'
@@ -1013,7 +1131,15 @@ export function useCanvas(opts: UseCanvasOptions) {
           originX: 'center', originY: 'center',
           scaleX: sx, scaleY: sy,
           opacity: ie.opacity, angle: ie.rotation,
-          lockRotation: ie.locked, selectable: !ie.locked,
+          lockRotation: ie.locked,
+          lockMovementX: ie.locked,
+          lockMovementY: ie.locked,
+          lockScalingX: ie.locked,
+          lockScalingY: ie.locked,
+          lockSkewingX: ie.locked,
+          lockSkewingY: ie.locked,
+          selectable: !ie.locked,
+          evented: !ie.locked,
         })
         ;img.id = ie.id
         ;img.elementType = 'image'
@@ -1324,6 +1450,15 @@ export function useCanvas(opts: UseCanvasOptions) {
               scaleY,
               opacity: obj.opacity,
               angle: obj.angle,
+              lockRotation: obj.lockRotation,
+              lockMovementX: obj.lockMovementX,
+              lockMovementY: obj.lockMovementY,
+              lockScalingX: obj.lockScalingX,
+              lockScalingY: obj.lockScalingY,
+              lockSkewingX: obj.lockSkewingX,
+              lockSkewingY: obj.lockSkewingY,
+              selectable: obj.selectable,
+              evented: obj.evented,
             })
             ;(newObj as any).id = (obj as any).id
             ;(newObj as any).elementType = 'image'
@@ -1356,6 +1491,15 @@ export function useCanvas(opts: UseCanvasOptions) {
               scaleY: scale,
               opacity: obj.opacity,
               angle: obj.angle,
+              lockRotation: obj.lockRotation,
+              lockMovementX: obj.lockMovementX,
+              lockMovementY: obj.lockMovementY,
+              lockScalingX: obj.lockScalingX,
+              lockScalingY: obj.lockScalingY,
+              lockSkewingX: obj.lockSkewingX,
+              lockSkewingY: obj.lockSkewingY,
+              selectable: obj.selectable,
+              evented: obj.evented,
             })
             ;(newImg as any).id = (obj as any).id
             ;(newImg as any).elementType = 'image'
@@ -1488,6 +1632,30 @@ export function useCanvas(opts: UseCanvasOptions) {
     canvas.renderAll()
   }
 
+  /**
+   * 字体加载后重新计算所有文字层的尺寸（width/height）。
+   * Fabric IText 在创建时用当前已加载字体计算 width，若字体未就绪则用默认字体测量，
+   * 导致 width 偏小。Fabric 渲染时会按 width 裁剪文字，造成文字被截断、
+   * 选中控制框（虚线框）比文字窄、缩放后仍裁剪等问题。
+   * 字体加载完成后调用此函数触发 Fabric 重算 dimensions 并重绘。
+   */
+  function recalcTextDimensions() {
+    const canvas = fabricCanvas.value
+    if (!canvas) return
+    const prevSuppress = suppressHistory
+    suppressHistory = true
+    for (const obj of canvas.getObjects()) {
+      if (obj.type === 'i-text' || obj.type === 'textbox') {
+        const t = obj as fabric.IText
+        // set('text', ...) 会触发 Fabric 内部 initDimensions() 重算 width/height
+        t.set('text', t.text || '')
+        t.setCoords()
+      }
+    }
+    suppressHistory = prevSuppress
+    canvas.renderAll()
+  }
+
   async function loadDraft(draft: CanvasDraft, loadOpts?: { resetHistory?: boolean }) {
     const canvas = fabricCanvas.value
     if (!canvas) return
@@ -1536,7 +1704,15 @@ export function useCanvas(opts: UseCanvasOptions) {
           opacity: el.opacity, angle: el.rotation,
           direction: rtlDraft.direction,
           visible: el.visible !== false,
-          lockRotation: el.locked, selectable: !el.locked,
+          lockRotation: el.locked,
+          lockMovementX: el.locked,
+          lockMovementY: el.locked,
+          lockScalingX: el.locked,
+          lockScalingY: el.locked,
+          lockSkewingX: el.locked,
+          lockSkewingY: el.locked,
+          selectable: !el.locked,
+          evented: !el.locked,
         })
         // 恢复文字特效（渐变/阴影/长阴影/霓虹/下划线），撤销/重做/加载草稿时不丢失
         applyTextFxToObject(t, et)
@@ -1563,7 +1739,15 @@ export function useCanvas(opts: UseCanvasOptions) {
             scaleX: sx, scaleY: sy,
             opacity: ie.opacity, angle: ie.rotation,
             visible: ie.visible !== false,
-            lockRotation: ie.locked, selectable: !ie.locked,
+            lockRotation: ie.locked,
+            lockMovementX: ie.locked,
+            lockMovementY: ie.locked,
+            lockScalingX: ie.locked,
+            lockScalingY: ie.locked,
+            lockSkewingX: ie.locked,
+            lockSkewingY: ie.locked,
+            selectable: !ie.locked,
+            evented: !ie.locked,
           })
           // 恢复图片特效（CSS filter / 圆角 clipPath / 边框）
           applyImageFxToObject(img, ie)
@@ -1594,7 +1778,15 @@ export function useCanvas(opts: UseCanvasOptions) {
               scaleX: sx, scaleY: sy,
               opacity: se.opacity, angle: se.rotation,
               visible: se.visible !== false,
-              lockRotation: se.locked, selectable: !se.locked,
+              lockRotation: se.locked,
+              lockMovementX: se.locked,
+              lockMovementY: se.locked,
+              lockScalingX: se.locked,
+              lockScalingY: se.locked,
+              lockSkewingX: se.locked,
+              lockSkewingY: se.locked,
+              selectable: !se.locked,
+              evented: !se.locked,
             })
             ;(svgObj as any).id = se.id
             ;(svgObj as any).elementType = 'sticker'
@@ -1944,5 +2136,6 @@ export function useCanvas(opts: UseCanvasOptions) {
     nudgeElement,
     duplicateSelected,
     refreshAllPlaceholders,
+    recalcTextDimensions,
   }
 }

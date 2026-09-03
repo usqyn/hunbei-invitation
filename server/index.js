@@ -1115,7 +1115,8 @@ app.get('/api/templates/:id', (req, res) => {
 // 注意：返回相对路径 /uploads/x 而非绝对 URL —— 绝对 URL 依赖请求 Host，
 // 非 localhost 的绝对地址会被 cloudSync 跳过、并在云函数侧映射成不存在的 cloud:// fileID，
 // 导致小程序端图片/背景加载失败。相对路径在管理端同源可用，且能被 cloudSync 正确识别上传云存储。
-app.post('/api/upload', uploadLimiter, requireAuth, upload.array('images', 10), (req, res) => {
+// 注意：PSD 导入模板图片层常超过 10 张，限制放宽到 100；前端另做分批上传兜底
+app.post('/api/upload', uploadLimiter, requireAuth, upload.array('images', 100), (req, res) => {
   try {
     const files = req.files.map(f => ({
       filename: f.filename,
@@ -1184,6 +1185,15 @@ app.post('/api/fonts/upload', uploadLimiter, requireAuth, fontUpload.array('font
       fontMap[name] = f.url
     })
     fs.writeFileSync(mapPath, JSON.stringify(fontMap, null, 2))
+    // 自动云同步：小程序云函数模式从云数据库 settings.font_map 读取字体，
+    // 上传后立即同步到云存储 + 云数据库（失败不影响本地结果，仅告警）
+    if (cloudSync.isEnabled()) {
+      for (const f of files) {
+        const localPath = path.join(FONTS_DIR, f.filename)
+        const fontName = Object.keys(fontMap).find(k => fontMap[k] === f.url) || f.originalName.replace(/\.[^.]+$/, '')
+        await cloudSync.syncFontToCloud(fontName, localPath)
+      }
+    }
     res.json({ success: true, data: files })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -1413,7 +1423,8 @@ app.post('/api/templates', requireAdmin, async (req, res) => {
     const updatedTemplate = rowToObject(updatedResult)
     res.json({ success: true, data: updatedTemplate })
   } catch (e) {
-    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+    console.error('[templates:create] 保存失败:', e)
+    res.status(500).json({ success: false, error: `保存模板失败：${e.message}` })
   }
 })
 
@@ -1526,7 +1537,8 @@ app.put('/api/templates/:id', requireAdmin, async (req, res) => {
     const updatedTemplate = rowToObject(updatedResult)
     res.json({ success: true, data: updatedTemplate })
   } catch (e) {
-    console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
+    console.error('[templates:update] 保存失败:', e)
+    res.status(500).json({ success: false, error: `更新模板失败：${e.message}` })
   }
 })
 
@@ -2458,14 +2470,31 @@ app.post('/api/quota/consume', createLimiter, requireAuth, (req, res) => {
       return res.status(403).json({ success: false, error: 'QUOTA_EXHAUSTED', message: '该模板免费制作次数已用完' })
     }
     const now = new Date().toISOString()
-    const result = db.exec("SELECT remaining FROM template_quota WHERE phone = ? AND template_id = ?", [phone, templateId])
-    if (result.length && result[0].values.length) {
-      db.run("UPDATE template_quota SET remaining = remaining - 1, updatedAt = ? WHERE phone = ? AND template_id = ?", [now, phone, templateId])
+    // 原子条件更新：WHERE remaining > 0 保证并发两次请求时只有一方命中行（changes=1），
+    // 另一方 changes=0 → 返回 QUOTA_EXHAUSTED。与云函数版 _.gt(0)+_.inc(-1) 对齐。
+    const row = db.exec("SELECT remaining FROM template_quota WHERE phone = ? AND template_id = ?", [phone, templateId])
+    if (row.length && row[0].values.length) {
+      db.run("UPDATE template_quota SET remaining = remaining - 1, updatedAt = ? WHERE phone = ? AND template_id = ? AND remaining > 0", [now, phone, templateId])
+      const changes = db.exec("SELECT changes() AS c")[0].values[0][0]
+      if (changes === 0) {
+        // 并发竞争：对方已把 remaining 减到 0，这次命中不到行 → 失败
+        saveDatabaseDebounced()
+        return res.status(403).json({ success: false, error: 'QUOTA_EXHAUSTED', message: '该模板免费制作次数已用完（并发竞争）' })
+      }
     } else {
+      // 首次使用：先 INSERT 默认配额（限免版默认 1），再走原子减 1。
+      // 这里复用 getTemplateQuota 返回的 remaining 作为 INSERT 初值：限免版首次是 1，VIP 版可能更大
       db.run("INSERT INTO template_quota (phone, template_id, remaining, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)",
-        [phone, templateId, 0, now, now])
+        [phone, templateId, remaining, now, now])
+      db.run("UPDATE template_quota SET remaining = remaining - 1, updatedAt = ? WHERE phone = ? AND template_id = ? AND remaining > 0", [now, phone, templateId])
+      const changes = db.exec("SELECT changes() AS c")[0].values[0][0]
+      if (changes === 0) {
+        saveDatabaseDebounced()
+        return res.status(403).json({ success: false, error: 'QUOTA_EXHAUSTED', message: '该模板免费制作次数已用完' })
+      }
     }
     saveDatabaseDebounced()
+    // 用新 remaining - 1 回告客户端（真实 remaining 由 atomic UPDATE 保证不会负）
     res.json({ success: true, data: { remaining: remaining - 1, limitless: false } })
   } catch (e) {
     console.error(e); res.status(500).json({ success: false, error: '服务器内部错误' })
@@ -2473,13 +2502,13 @@ app.post('/api/quota/consume', createLimiter, requireAuth, (req, res) => {
 })
 
 // 分享奖励：POST /api/share/reward { templateId, phone }
-// 任意用户打开分享落地页时触发：给分享者（作品创建者 phone）的限数模板剩余次数 +1。
-// 分享页为公开访问（无登录态），防刷依赖：同人同模板每日 1 次 + 每日奖励总数上限 + IP 限流。
-app.post('/api/share/reward', payLimiter, (req, res) => {
+// 公开访问（无登录态的分享落地页触发），但 phone 必须属于当前请求者（由 auth 中间件注入 req.user.phone 替代 body.phone）。
+// 修复：原 Express 版无 requireAuth → 任何人 POST 自己手机号即可刷配额。改为强制 requireAuth + 忽略 body.phone。
+app.post('/api/share/reward', payLimiter, requireAuth, (req, res) => {
   try {
-    const { templateId, phone } = req.body
+    const { templateId } = req.body
+    const phone = req.user.phone
     if (!templateId) return res.status(400).json({ success: false, error: '缺少 templateId' })
-    if (!phone) return res.status(400).json({ success: false, error: '缺少 phone' })
     const remaining = getTemplateQuota(phone, templateId)
     if (remaining === null) return res.status(404).json({ success: false, error: '模板不存在' })
     if (remaining === QUOTA_LIMITLESS) {

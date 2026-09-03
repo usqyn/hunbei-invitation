@@ -120,6 +120,59 @@ const cloudUrlCache = new Map<string, CloudUrlEntry>()
 // 缓存有效期：1.5 小时（云存储临时 URL 有效期 2 小时，留 30 分钟余量）
 const CACHE_TTL = 1.5 * 60 * 60 * 1000
 
+// ============ 持久化缓存（避免 app 重启后重复换取） ============
+// 内存缓存重启即失，所有 cloud:// URL 需重新换取（冷启动 1-5s）。
+// 启动时从 uni storage 同步加载到内存，写入时节流（5s）异步持久化。
+// LRU 上限 50 条，避免无限增长撑大 storage。
+const PERSIST_KEY = 'cloud_url_cache'
+const PERSIST_MAX_ENTRIES = 50
+const PERSIST_DELAY = 5000
+let _persistTimer: ReturnType<typeof setTimeout> | null = null
+let _persistLoaded = false
+
+// 惰性加载持久化缓存到内存（同步，仅执行一次）
+function ensurePersistLoaded(): void {
+  if (_persistLoaded) return
+  _persistLoaded = true
+  try {
+    const stored = uni.getStorageSync(PERSIST_KEY)
+    if (stored && typeof stored === 'object') {
+      const now = Date.now()
+      for (const [fileID, entry] of Object.entries(stored) as [string, CloudUrlEntry][]) {
+        if (entry && typeof entry.expireAt === 'number' && now < entry.expireAt) {
+          cloudUrlCache.set(fileID, entry)
+        }
+      }
+    }
+  } catch { /* uni 不可用时忽略 */ }
+}
+
+// 节流异步写入 storage（不阻塞 UI）
+function schedulePersist(): void {
+  if (_persistTimer) return
+  _persistTimer = setTimeout(flushCloudUrlCache, PERSIST_DELAY)
+}
+
+// 立即写入 storage（退出时调用，确保数据不丢失）
+export function flushCloudUrlCache(): void {
+  if (_persistTimer) {
+    clearTimeout(_persistTimer)
+    _persistTimer = null
+  }
+  const snapshot: Record<string, CloudUrlEntry> = {}
+  let count = 0
+  const now = Date.now()
+  for (const [fileID, entry] of cloudUrlCache) {
+    if (now < entry.expireAt) {
+      snapshot[fileID] = entry
+      if (++count >= PERSIST_MAX_ENTRIES) break
+    }
+  }
+  try {
+    uni.setStorage({ key: PERSIST_KEY, data: snapshot, fail: () => {} })
+  } catch { /* uni 不可用时忽略 */ }
+}
+
 // 是否为 cloud:// 协议 URL
 export function isCloudUrl(url: string): boolean {
   return typeof url === 'string' && url.startsWith('cloud://')
@@ -132,21 +185,37 @@ function getCachedCloudUrl(fileID: string): string | null {
     return entry.url
   }
   if (entry) cloudUrlCache.delete(fileID)
+  // 持久化缓存回填（仅加载一次，同步）
+  ensurePersistLoaded()
+  // 回填后再查一次内存
+  const fromPersist = cloudUrlCache.get(fileID)
+  if (fromPersist && Date.now() < fromPersist.expireAt) {
+    return fromPersist.url
+  }
   return null
 }
 
 function setCachedCloudUrl(fileID: string, url: string): void {
   cloudUrlCache.set(fileID, { url, expireAt: Date.now() + CACHE_TTL })
+  // LRU：超过上限删除最早插入的条目（Map 保持插入顺序）
+  if (cloudUrlCache.size > PERSIST_MAX_ENTRIES) {
+    const firstKey = cloudUrlCache.keys().next().value
+    if (firstKey) cloudUrlCache.delete(firstKey)
+  }
+  // 节流异步持久化
+  schedulePersist()
 }
 
 // 清除单个 fileID 的缓存（图片加载失败时调用）
 export function invalidateCloudUrl(fileID: string): void {
   cloudUrlCache.delete(fileID)
+  schedulePersist()
 }
 
 // 清除所有缓存
 export function invalidateAllCloudUrls(): void {
   cloudUrlCache.clear()
+  schedulePersist()
 }
 
 // 直接调用 wx.cloud.callFunction 刷新云存储 URL（避免循环依赖）
@@ -213,11 +282,13 @@ async function getRefreshUrlFn(): Promise<(fileID: string) => Promise<string>> {
 }
 
 /**
- * 把 cloud:// URL 换取 https 临时 URL（带缓存）
+ * 把 cloud:// URL 换取 https 临时 URL（带缓存 + 并发去重 + 微批合并）
  *
  * - 非 cloud:// 协议：原样返回
  * - cloud:// 且缓存有效：直接返回缓存
- * - cloud:// 且缓存过期或无：调用后端 /api/refresh-url 换取新 URL
+ * - cloud:// 且缓存过期或无：调用后端换取新 URL
+ *   （20ms 窗口内的请求合并为一次 /api/refresh-urls 批量调用，
+ *   避免列表页 N 张封面图 → N 次云函数冷启动调用）
  *
  * 注意：此函数仅云函数模式下有效；非云函数模式下原样返回（dev 不涉及云存储）
  *
@@ -233,16 +304,224 @@ export async function resolveCloudUrl(url: string): Promise<string> {
   const cached = getCachedCloudUrl(url)
   if (cached) return cached
 
-  // 调用后端换取临时 URL
   try {
-    const refreshUrl = await getRefreshUrlFn()
-    const httpsUrl = await refreshUrl(url)
-    setCachedCloudUrl(url, httpsUrl)
-    return httpsUrl
+    const httpsUrl = await resolveCloudUrlQueued(url)
+    return httpsUrl || url
   } catch (e) {
     console.warn('[cloud-url] 刷新 URL 失败:', url, e)
     return url // 返回原始 cloud:// URL，让 image 加载失败
   }
+}
+
+// ============ 批量合并换取（列表页加载性能优化） ============
+// 列表页每张封面一个 cloud://，逐个调用云函数受冷启动影响可达数秒。
+// 20ms 窗口内到达的请求合并为一次 /api/refresh-urls 批量调用（单次最多 50 个），
+// 同一 fileID 的并发请求共享同一 Promise（去重）。
+
+interface BatchWaiter {
+  fileID: string
+  resolve: (url: string) => void
+  reject: (e: any) => void
+}
+
+const _inflightCloudUrls = new Map<string, Promise<string>>()
+let _batchQueue: BatchWaiter[] = []
+let _batchTimer: ReturnType<typeof setTimeout> | null = null
+// 批量接口不可用时回退逐个调用（旧版云函数未部署 refresh-urls 路由的场景）
+let _batchEndpointBroken = false
+
+const BATCH_WINDOW_MS = 20
+const BATCH_MAX_SIZE = 50
+
+// ============ 客户端直连换取（优先路径，无云函数依赖） ============
+// wx.cloud.getTempFileURL 是客户端 SDK 能力：无需云函数、无冷启动、支持批量（≤50）。
+// <image> 组件加载 https 图片不要求域名白名单，因此这是小程序内最可靠的换取方式。
+// 云函数路由（/api/refresh-urls、/api/refresh-url）仅作降级备用。
+let _directTempFileFn: ((fileIDs: string[]) => Promise<Map<string, string>>) | null = null
+function getTempFileUrlsDirect(): (fileIDs: string[]) => Promise<Map<string, string>> {
+  if (_directTempFileFn) return _directTempFileFn
+  // #ifdef MP-WEIXIN
+  _directTempFileFn = (fileIDs: string[]): Promise<Map<string, string>> => {
+    return new Promise((resolve, reject) => {
+      if (typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.getTempFileURL !== 'function') {
+        reject(new Error('wx.cloud.getTempFileURL 不可用'))
+        return
+      }
+      wx.cloud.getTempFileURL({
+        fileList: fileIDs,
+        success: (res: any) => {
+          const map = new Map<string, string>()
+          for (const f of (res.fileList || [])) {
+            // status===0 表示成功；失败项没有 tempFileURL
+            if (f?.fileID && f?.tempFileURL && f.status === 0) {
+              map.set(f.fileID, f.tempFileURL)
+            }
+          }
+          resolve(map)
+        },
+        fail: (err: any) => reject(err),
+      })
+    })
+  }
+  // #endif
+  // #ifndef MP-WEIXIN
+  _directTempFileFn = async (): Promise<Map<string, string>> => {
+    throw new Error('非小程序环境无客户端直连能力')
+  }
+  // #endif
+  return _directTempFileFn
+}
+
+// 批量刷新原始调用（与 getRefreshUrlFn 同构，按运行环境区分）
+let _batchRefreshFn: ((fileIDs: string[]) => Promise<Map<string, string>>) | null = null
+function getBatchRefreshFn(): (fileIDs: string[]) => Promise<Map<string, string>> {
+  if (_batchRefreshFn) return _batchRefreshFn
+  // #ifdef MP-WEIXIN
+  _batchRefreshFn = async (fileIDs: string[]): Promise<Map<string, string>> => {
+    const fnName = getFunctionName('/api/refresh-urls')
+    // 超时保护：同 getRefreshUrlFn，防 iOS 云函数回调丢失导致永久挂起
+    const res = await new Promise<any>((resolve, reject) => {
+      let settled = false
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        reject(new Error('批量刷新 URL 超时(15s)'))
+      }, 15000)
+      wx.cloud.callFunction({
+        name: fnName,
+        data: {
+          path: '/api/refresh-urls',
+          httpMethod: 'POST',
+          query: {},
+          body: { fileIDs },
+          headers: {},
+        },
+        success: (r: any) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          resolve(r.result)
+        },
+        fail: (err: any) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          reject(err)
+        },
+      })
+    })
+    const rows = res && res.success ? res.data : null
+    if (!Array.isArray(rows)) throw new Error(res?.error || '批量刷新 URL 失败')
+    const map = new Map<string, string>()
+    for (const row of rows) {
+      if (row?.fileID && row?.url) map.set(row.fileID, row.url)
+    }
+    return map
+  }
+  // #endif
+  // #ifndef MP-WEIXIN
+  _batchRefreshFn = async (fileIDs: string[]): Promise<Map<string, string>> => {
+    const { request } = await import('@/utils/request')
+    const rows = await request<Array<{ fileID: string; url: string }>>({
+      url: '/api/refresh-urls',
+      method: 'POST',
+      data: { fileIDs },
+      hideLoading: true,
+    })
+    const map = new Map<string, string>()
+    for (const row of rows || []) {
+      if (row?.fileID && row?.url) map.set(row.fileID, row.url)
+    }
+    return map
+  }
+  // #endif
+  return _batchRefreshFn
+}
+
+// 批量失败时回退：逐个调用单文件接口（并行，量小且仅在回退时发生）
+async function refreshChunkIndividually(chunk: BatchWaiter[]): Promise<void> {
+  const refreshUrl = await getRefreshUrlFn()
+  await Promise.all(chunk.map(async (w) => {
+    try {
+      const u = await refreshUrl(w.fileID)
+      setCachedCloudUrl(w.fileID, u)
+      w.resolve(u)
+    } catch (e) {
+      w.reject(e)
+    }
+  }))
+}
+
+function flushCloudUrlBatch(): void {
+  _batchTimer = null
+  const batch = _batchQueue
+  _batchQueue = []
+  if (!batch.length) return
+  // 分片（批量接口单次最多 50 个）
+  for (let i = 0; i < batch.length; i += BATCH_MAX_SIZE) {
+    const chunk = batch.slice(i, i + BATCH_MAX_SIZE)
+    void (async () => {
+      // 1) 优先客户端直连 wx.cloud.getTempFileURL（无云函数依赖、无冷启动）
+      try {
+        const directMap = await getTempFileUrlsDirect()(chunk.map(w => w.fileID))
+        for (const w of chunk) {
+          const u = directMap.get(w.fileID)
+          if (u) {
+            setCachedCloudUrl(w.fileID, u)
+            w.resolve(u)
+          } else {
+            // 该 fileID 换取失败（可能文件不存在/无权限）
+            w.reject(new Error('getTempFileURL 缺少结果: ' + w.fileID))
+          }
+        }
+        return
+      } catch {
+        // 直连不可用（非 MP 环境或 wx.cloud 未初始化），继续走云函数链路
+      }
+      try {
+        if (_batchEndpointBroken) {
+          await refreshChunkIndividually(chunk)
+          return
+        }
+        const map = await getBatchRefreshFn()(chunk.map(w => w.fileID))
+        for (const w of chunk) {
+          const u = map.get(w.fileID)
+          if (u) {
+            setCachedCloudUrl(w.fileID, u)
+            w.resolve(u)
+          } else {
+            w.reject(new Error('批量刷新 URL 缺少结果: ' + w.fileID))
+          }
+        }
+      } catch (e) {
+        // 批量路由不可用 → 标记并回退逐个换取（本批立即重试）
+        _batchEndpointBroken = true
+        console.warn('[cloud-url] 批量刷新失败，回退逐个换取:', e)
+        await refreshChunkIndividually(chunk)
+      } finally {
+        for (const w of chunk) _inflightCloudUrls.delete(w.fileID)
+      }
+    })()
+  }
+}
+
+/**
+ * 带并发去重 + 微批合并的 cloud:// 临时 URL 换取。
+ * 同一 fileID 并发请求共享同一 Promise；窗口内请求合并为一次批量调用。
+ */
+function resolveCloudUrlQueued(fileID: string): Promise<string> {
+  const cached = getCachedCloudUrl(fileID)
+  if (cached) return Promise.resolve(cached)
+  const inflight = _inflightCloudUrls.get(fileID)
+  if (inflight) return inflight
+  const p = new Promise<string>((resolve, reject) => {
+    _batchQueue.push({ fileID, resolve, reject })
+  })
+  _inflightCloudUrls.set(fileID, p)
+  if (!_batchTimer) {
+    _batchTimer = setTimeout(flushCloudUrlBatch, BATCH_WINDOW_MS)
+  }
+  return p
 }
 
 /**

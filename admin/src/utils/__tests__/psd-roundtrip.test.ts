@@ -3,10 +3,24 @@ import { writePsd, readPsd, type Psd } from 'ag-psd'
 import { flattenPsdLayers, getResolutionInfo, dominantRunFontSize, transformScale } from '../psd-import'
 
 // jsdom 无 node-canvas：ag-psd 的 useImageData 内部用 ctx.createImageData 分配像素缓冲，
-// 这里提供最小占位（ag-psd 会自行写入 data，不需要真实绘制）
+// 这里提供最小占位（ag-psd 会自行写入 data，不需要真实绘制）；
+// 另提供剪贴蒙版烘焙（bakeClipMask）所需的最小绘制方法（no-op，测试只断言流程与属性）
+const noop = () => {}
 ;(HTMLCanvasElement.prototype as any).getContext = function () {
   return {
     createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+    drawImage: noop,
+    fillRect: noop,
+    beginPath: noop,
+    ellipse: noop,
+    arcTo: noop,
+    moveTo: noop,
+    closePath: noop,
+    fill: noop,
+    save: noop,
+    restore: noop,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '#000000',
   }
 }
 // 图片层走 flattenPsdLayers 时会调用 canvas.toDataURL 生成预览 dataUrl，jsdom 默认抛 not implemented
@@ -180,7 +194,8 @@ describe('PSD 读写往返 + 图层展平（ag-psd 真实序列化）', () => {
 
   it('图层顺序为 bottom-to-top（z-index 顺序）', () => {
     const names = layers.layers.filter(l => l.type !== 'group').map(l => l.name)
-    expect(names).toEqual(['组内文字', '旋转文字', '哈萨克文标题'])
+    // ag-psd children[0] = 最底层（已用真实 PSD 合成像素对比验证），展平输出保持 children 原序
+    expect(names).toEqual(['哈萨克文标题', '旋转文字', '组内文字'])
   })
 })
 
@@ -232,13 +247,13 @@ describe('直接构造图层（模拟真实 Photoshop 读取结果，规避 writ
     expect(layers[0].textAlign).toBe('justify')
   })
 
-  it('颜色 alpha 保留为 8 位 hex', async () => {
+  it('颜色带 alpha → 截断为 6 位 hex（编辑器 color input 兼容）', async () => {
     const { layers } = await makeLayers([{
       name: 'x', opacity: 255,
       left: 0, top: 0, right: 50, bottom: 50,
       text: { text: 'a', transform: [1, 0, 0, 1, 0, 0], style: { font: { name: 'ArialMT' }, fontSize: 12, fillColor: { r: 0, g: 0, b: 0, a: 128 } } },
     }])
-    expect(layers[0].color).toBe('#00000080')
+    expect(layers[0].color).toBe('#000000')
   })
 
   it('direction：RTL 文本（含逻辑序基础字母）→ rtl，拉丁文本 → ltr', async () => {
@@ -409,34 +424,37 @@ describe('PSD 剪贴蒙版：clipping 照片层关联下方圆形 base 形状层
     }],
   }
 
-  it('裁剪组：照片层在上（clipping）、圆形 base 形状层在下（无栅格）→ 照片层 mask=circle', async () => {
+  it('裁剪组：圆形 base 形状层在下（无栅格）、照片层在上（clipping）→ 照片层按 base 圆形烘焙裁剪', async () => {
     const { layers, skipped } = await makeLayers([
-      {
-        name: '照片裁剪层', clipping: true,
-        left: 100, top: 100, right: 300, bottom: 300, opacity: 255,
-        canvas: testCanvas(),
-      },
+      // children[0] = 最底层：base 形状层在下
       {
         name: '圆形底托',
         left: 100, top: 100, right: 300, bottom: 300, opacity: 255,
         vectorMask: circleVectorMask,
       },
+      {
+        name: '照片裁剪层', clipping: true,
+        left: 100, top: 100, right: 300, bottom: 300, opacity: 255,
+        canvas: testCanvas(),
+      },
     ])
+    // base 形状层无栅格被跳过，但其圆形路径已作为几何 base 生效
+    expect(skipped.map(s => s.name)).toContain('圆形底托')
     const photo = layers.find(l => l.name === '照片裁剪层')
     expect(photo).toBeDefined()
-    expect(photo!.mask).toBe('circle')
-    // base 形状层无栅格被跳过，但其圆形路径已作为蒙版形状生效
-    expect(skipped.map(s => s.name)).toContain('圆形底托')
+    // jsdom 无真实像素：通过告警验证烘焙流程（真实浏览器中圆形已烘焙进 alpha）
+    expect(photo!.warnings).toContain('已按剪贴蒙版 base 形状裁剪')
   })
 
-  it('裁剪组：多个 clipping 照片层共享同一圆形 base → 全部 mask=circle', async () => {
+  it('裁剪组：多个 clipping 照片层共享同一圆形 base → 全部按 base 烘焙裁剪', async () => {
     const { layers } = await makeLayers([
-      { name: '照片层2', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
-      { name: '照片层1', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
+      // children[0] = 最底层：base 在下，两个 clipping 层依次共享同一 base
       { name: '圆形底托', left: 100, top: 100, right: 300, bottom: 300, opacity: 255, vectorMask: circleVectorMask },
+      { name: '照片层1', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
+      { name: '照片层2', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
     ])
-    expect(layers.find(l => l.name === '照片层2')!.mask).toBe('circle')
-    expect(layers.find(l => l.name === '照片层1')!.mask).toBe('circle')
+    expect(layers.find(l => l.name === '照片层1')!.warnings).toContain('已按剪贴蒙版 base 形状裁剪')
+    expect(layers.find(l => l.name === '照片层2')!.warnings).toContain('已按剪贴蒙版 base 形状裁剪')
   })
 
   it('普通照片层（非 clipping、下方无圆形形状层）→ 不误判为 circle', async () => {
@@ -450,16 +468,17 @@ describe('PSD 剪贴蒙版：clipping 照片层关联下方圆形 base 形状层
     expect(layers.find(l => l.name === '普通照片')!.mask).toBeUndefined()
   })
 
-  it('裁剪组整体顺序：背景 → 照片裁剪层 → 顶层装饰（bottom-to-top），蒙版仍生效', async () => {
+  it('裁剪组整体顺序：背景（底）→ 圆形 base → 照片裁剪层 → 顶层装饰（顶），蒙版烘焙仍生效', async () => {
     const { layers } = await makeLayers([
-      { name: '顶层装饰', opacity: 255, left: 0, top: 0, right: 600, bottom: 800, canvas: testCanvas() },
-      { name: '照片裁剪层', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
-      { name: '圆形底托', left: 100, top: 100, right: 300, bottom: 300, opacity: 255, vectorMask: circleVectorMask },
+      // children[0] = 最底层：背景 → base → clipping 照片 → 顶层装饰
       { name: '背景', opacity: 255, left: 0, top: 0, right: 600, bottom: 800, canvas: testCanvas() },
+      { name: '圆形底托', left: 100, top: 100, right: 300, bottom: 300, opacity: 255, vectorMask: circleVectorMask },
+      { name: '照片裁剪层', clipping: true, left: 100, top: 100, right: 300, bottom: 300, opacity: 255, canvas: testCanvas() },
+      { name: '顶层装饰', opacity: 255, left: 0, top: 0, right: 600, bottom: 800, canvas: testCanvas() },
     ])
     const names = layers.filter(l => l.type !== 'group').map(l => l.name)
-    // bottom-to-top：背景（最底）→ 照片裁剪层 → 顶层装饰（最顶）
+    // bottom-to-top：背景（最底）→ 照片裁剪层 → 顶层装饰（最顶）；圆形底托无栅格跳过
     expect(names).toEqual(['背景', '照片裁剪层', '顶层装饰'])
-    expect(layers.find(l => l.name === '照片裁剪层')!.mask).toBe('circle')
+    expect(layers.find(l => l.name === '照片裁剪层')!.warnings).toContain('已按剪贴蒙版 base 形状裁剪')
   })
 })

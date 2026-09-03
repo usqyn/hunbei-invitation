@@ -2,7 +2,7 @@ import { defineLocale } from './index'
 
 defineLocale('kk', {
   // ============ 九宫格分类副标题（对齐真实分类 id） ============
-  'cat.wedding': 'توي تاماش',
+  'cat.wedding': 'توي تاماشا',
   'cat.engagement': 'قۇدا تۇسۋ',
   'cat.consultation-tea': 'اقلداسۋ شايى',
   'cat.festival': 'سۇننەت توي',
@@ -10,7 +10,7 @@ defineLocale('kk', {
   'cat.baby': 'تۇساۋ كەسەر',
   'cat.graduation': 'وقۋ توي',
   'cat.festival-invitation': 'مەرەكەلىك شاقىرىۋ',
-  'cat.house': 'قونىس اۋدارىۋ ',
+  'cat.house': 'قونىس اۋدارىۋ',
 
   // ============ 首页双栏入口 ============
   'home.mall_title': 'توي دۇكەنى', // 婚礼商城

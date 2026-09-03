@@ -95,3 +95,102 @@ export function buildImageCssFilterFromElement(el: FilterFields & { style?: Filt
     el.grayscale ?? st.grayscale,
   )
 }
+
+// ============ 换图蒙版合成 ============
+// 用户替换 alpha 蒙版图片时，把新图与原模板图（形状烘焙在 alpha 通道）
+// 在离屏 canvas 上合成，生成自带蒙版形状的新图再上传。
+// 与 admin 端 PSD 导入 bakeClipMask 逻辑一致，合成结果对
+// webview / skyline / canvas / 导出渲染全部有效，不依赖 CSS mask-image 兼容性。
+
+/** 下载任意资源 URL 到本地临时文件（cloud:// 走 cloud.downloadFile，免域名白名单） */
+export function downloadToTemp(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!url) { reject(new Error('空 URL')); return }
+    // #ifdef MP-WEIXIN
+    if (url.startsWith('cloud://')) {
+      if (typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.downloadFile !== 'function') {
+        reject(new Error('wx.cloud.downloadFile 不可用'))
+        return
+      }
+      wx.cloud.downloadFile({
+        fileID: url,
+        success: (r: any) => {
+          if (r.tempFilePath) resolve(r.tempFilePath)
+          else reject(new Error('cloud 下载无 tempFilePath'))
+        },
+        fail: (e: any) => reject(e),
+      })
+      return
+    }
+    // #endif
+    if (/^https?:\/\//.test(url)) {
+      uni.downloadFile({
+        url,
+        success: (r: any) => {
+          if (r.statusCode === 200 && r.tempFilePath) resolve(r.tempFilePath)
+          else reject(new Error('下载失败 status=' + r.statusCode))
+        },
+        fail: (e: any) => reject(e),
+      })
+      return
+    }
+    // 本地路径（wxfile://tmp、http://tmp 等）直接返回
+    resolve(url)
+  })
+}
+
+/**
+ * 合成蒙版图：
+ * 1. 以原模板图（蒙版源）的原始尺寸建离屏 canvas
+ * 2. 新图按 cover 填充绘制
+ * 3. globalCompositeOperation = destination-in 绘制原图 → 只保留形状内像素
+ * 4. 导出 PNG 写入用户目录，返回本地文件路径
+ */
+export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: string): Promise<string> {
+  // #ifdef MP-WEIXIN
+  if (typeof wx === 'undefined' || typeof wx.createOffscreenCanvas !== 'function') {
+    throw new Error('offscreen canvas 不可用')
+  }
+  const maskPath = await downloadToTemp(maskSrcUrl)
+  const canvas = wx.createOffscreenCanvas({ type: '2d' })
+  const ctx = canvas.getContext('2d') as any
+  const loadImg = (src: string) => new Promise<any>((resolve, reject) => {
+    const img = canvas.createImage()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('图片加载失败: ' + String(src).slice(0, 60)))
+    img.src = src
+  })
+  const [newImg, maskImg] = await Promise.all([loadImg(newImagePath), loadImg(maskPath)])
+  const W = maskImg.width
+  const H = maskImg.height
+  if (!W || !H) throw new Error('蒙版图尺寸异常')
+
+  canvas.width = W
+  canvas.height = H
+  // 新图 cover 填充整个画布
+  const scale = Math.max(W / newImg.width, H / newImg.height)
+  const dw = newImg.width * scale
+  const dh = newImg.height * scale
+  ctx.drawImage(newImg, (W - dw) / 2, (H - dh) / 2, dw, dh)
+  // 原图 alpha 裁剪（保留形状内像素）
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(maskImg, 0, 0, W, H)
+
+  const dataUrl = canvas.toDataURL('image/png')
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+  const filePath = `${wx.env.USER_DATA_PATH}/masked_${Date.now()}_${Math.floor(Math.random() * 1e4)}.png`
+  await new Promise<void>((resolve, reject) => {
+    wx.getFileSystemManager().writeFile({
+      filePath,
+      data: base64,
+      encoding: 'base64',
+      success: () => resolve(),
+      fail: (e: any) => reject(e),
+    })
+  })
+  return filePath
+  // #endif
+  // #ifndef MP-WEIXIN
+  throw new Error('蒙版合成仅支持微信小程序')
+  // #endif
+}

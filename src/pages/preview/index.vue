@@ -137,8 +137,8 @@
             <CloudImage
               v-if="el.type === 'image'"
               class="preview-image-el"
-              :style="canvasImageFillStyle"
-              :custom-style="canvasImageFillStyle"
+              :style="getImageFillStyle(el)"
+              :custom-style="getImageFillStyle(el)"
               :src="el.text"
               :mode="resolveImageMode(el)"
               custom-class="preview-image-el"
@@ -303,7 +303,7 @@ import { RTL_CHAR_REGEX, FONT_FAMILY_BASE } from '@/constants/editor'
 import { getSceneShareText } from '@/constants/share-text'
 import { track } from '@/utils/track'
 import { resolveTextPlaceholders } from '@/utils/resolveTextPlaceholders'
-import { useCanvasRender } from '@/composables/useCanvasRender'
+import { useCanvasRender, resolveBackgroundImageUrl } from '@/composables/useCanvasRender'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
@@ -348,6 +348,7 @@ const {
   updateCardHeight,
   getCanvasElementStyle,
   getTextStyle,
+  getImageFillStyle,
   resolveImageMode,
 } = useCanvasRender({
   getElements: () => editorStore.editableElements,
@@ -965,7 +966,8 @@ function getFlipPageBgStyle(page: any): Record<string, string> {
     style.background = `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})`
   } else if (bg.type === 'image') {
     // admin 标准字段是 image，历史数据可能存 imageUrl，两者都兼容
-    const bgUrl = bg.image || bg.imageUrl
+    // cloud:// 文件 ID 需先换取 https 临时 URL（WXSS background-image 不支持 cloud://）
+    const bgUrl = resolveBackgroundImageUrl(bg.image || bg.imageUrl)
     if (bgUrl) {
       style.backgroundImage = `url(${bgUrl})`
       style.backgroundSize = bg.imageScale || 'cover'

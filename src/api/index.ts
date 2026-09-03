@@ -136,12 +136,55 @@ function readFileAsBase64(filePath: string): Promise<string> {
  *   用 uni.uploadFile multipart/form-data
  */
 export function uploadImage(filePath: string, onProgress?: (progress: number) => void): Promise<string> {
-  // 云函数模式：base64 JSON 上传
+  // #ifdef MP-WEIXIN
+  // 云函数模式优先直传云存储：无 callFunction 载荷限制，大图/蒙版图不再 -404012 超时
+  if (USE_CLOUD_FUNCTIONS && typeof wx !== 'undefined' && wx.cloud && typeof wx.cloud.uploadFile === 'function') {
+    return uploadImageViaCloudStorage(filePath, onProgress)
+  }
+  // #endif
+  // 云函数模式降级：base64 JSON 上传
   if (USE_CLOUD_FUNCTIONS) {
     return uploadImageViaBase64(filePath, onProgress)
   }
   // 非云函数模式：multipart 上传（兼容旧 Express）
   return uploadImageViaMultipart(filePath, onProgress)
+}
+
+// 客户端直传云存储（wx.cloud.uploadFile）：
+// - 无 base64 编码膨胀、无 callFunction 轮询超时（-404012）、支持真实进度回调
+// - 返回 cloud:// fileID，与模板资源同一套解析管线（resolveCloudUrl / CloudImage）
+// - PNG 跳过压缩：uni.compressImage 会转 JPEG 丢失 alpha 通道（蒙版合成图必需透明度）
+async function uploadImageViaCloudStorage(filePath: string, onProgress?: (progress: number) => void): Promise<string> {
+  if (onProgress) onProgress(10)
+  // compressIfNeeded 内部跳过 PNG（保 alpha），仅压缩超大 JPEG 省流量
+  const finalPath = await compressIfNeeded(filePath)
+  if (finalPath !== filePath && onProgress) onProgress(25)
+  const finalExt = getExtFromPath(finalPath).toLowerCase() || 'jpg'
+  const cloudPath = `user-uploads/${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${finalExt}`
+  if (onProgress) onProgress(40)
+  try {
+    const fileID = await new Promise<string>((resolve, reject) => {
+      const task = wx.cloud.uploadFile({
+        cloudPath,
+        filePath: finalPath,
+        success: (res: any) => {
+          if (res.fileID) resolve(res.fileID)
+          else reject(new Error('云存储上传响应缺少 fileID'))
+        },
+        fail: (err: any) => reject(err),
+      })
+      if (onProgress && task && typeof task.onUploadProgressUpdate === 'function') {
+        task.onUploadProgressUpdate((res: any) => {
+          onProgress!(40 + Math.round(((res.progress || 0) as number) * 0.6))
+        })
+      }
+    })
+    if (onProgress) onProgress(100)
+    return normalizeImageUrl(fileID)
+  } catch (e) {
+    if (onProgress) onProgress(0)
+    throw e
+  }
 }
 
 // 压缩阈值与目标参数：超过阈值的图片先压缩再上传，避免大图 base64 传输导致云函数调用超时
@@ -181,7 +224,9 @@ function getFileSize(filePath: string): Promise<number> {
 }
 
 // 图片过大时压缩（MP 用 uni.compressImage），返回压缩后的临时路径；压缩失败回退原路径
+// PNG 跳过压缩：uni.compressImage 转 JPEG 会丢失 alpha 通道（蒙版合成图必需透明度）
 async function compressIfNeeded(filePath: string): Promise<string> {
+  if (getExtFromPath(filePath).toLowerCase() === 'png') return filePath
   const size = await getFileSize(filePath)
   if (!size || size <= COMPRESS_SIZE_THRESHOLD) return filePath
   try {

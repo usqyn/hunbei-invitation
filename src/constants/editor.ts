@@ -122,7 +122,7 @@ export const DEFAULT_EDITABLE_ELEMENTS: EditableElement[] = [
 ]
 
 export const FONT_LIST = [
-  '思源宋体极细', '思源宋体', '思源黑体', '华文楷体', '华文行楷', '华文隶书',
+  '思源宋体极细', '思源宋体', '思源黑体', 'AdobeHeitiStd-Regular', '华文楷体', '华文行楷', '华文隶书',
 ]
 
 export const COLOR_LIST = [

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="share-page">
     <!-- 顶部标题栏 -->
     <view class="share-header">
@@ -152,7 +152,7 @@ import { generatePoster } from '@/api'
 import CloudImage from '@/components/CloudImage.vue'
 import Watermark from '@/components/Watermark.vue'
 import { useUserStore } from '@/stores/user'
-import { runWithExportGate, getTemplateTier } from '@/composables/useTemplateEntry'
+import { runWithExportGate } from '@/composables/useTemplateEntry'
 import { getSceneShareText } from '@/constants/share-text'
 import { request } from '@/utils/request'
 import type { TemplateItem } from '@/types'
@@ -268,7 +268,7 @@ onShareAppMessage(() => {
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
   if (workId) params.push(`workId=${workId}`)
-  if (userStore.phone) params.push(`inviterPhone=${userStore.phone}`)
+  // 安全修复：不再把用户手机号拼进分享 URL——任何人点开分享就能看到，且是 share/reward 漏洞链的利用入口
   if (params.length) path += '?' + params.join('&')
   return {
     title: shareTitle.value,
@@ -284,7 +284,7 @@ onShareTimeline(() => {
   const params: string[] = []
   if (templateId) params.push(`templateId=${templateId}`)
   if (workId) params.push(`workId=${workId}`)
-  if (userStore.phone) params.push(`inviterPhone=${userStore.phone}`)
+  // 同上：移除 inviterPhone 隐私泄露
   return {
     title: shareTitle.value,
     query: params.join('&'),
@@ -452,8 +452,8 @@ async function onShareMoments() {
   const workId = editorStore.currentWorkId
   if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
   const templateId = editorStore.currentTemplateId
-  const tpl = (editorStore as any).currentTemplate || null
-  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  // 档位取自 store（编辑器 loadTemplateById 时写入）；此前误用不存在的 currentTemplate 恒得 free
+  const tier = templateId ? editorStore.currentTemplateVipLevel : 'free'
   await runWithExportGate(templateId, tier, 'poster', () => generatePosterCore(workId, true))
 }
 
@@ -462,8 +462,7 @@ async function onSharePoster() {
   const workId = editorStore.currentWorkId
   if (!workId) { uni.showToast({ title: '请先创建作品', icon: 'none' }); return }
   const templateId = editorStore.currentTemplateId
-  const tpl = (editorStore as any).currentTemplate || null
-  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  const tier = templateId ? editorStore.currentTemplateVipLevel : 'free'
   await runWithExportGate(templateId, tier, 'poster', () => generatePosterCore(workId, false))
 }
 

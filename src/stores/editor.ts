@@ -2,10 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { useTemplateStore } from './template'
 import { getTemplateById, DEFAULT_TEMPLATE_ID } from '@/constants/templates'
-import { resolveUrl, resolveCloudUrlSync } from '@/utils/url'
+import { resolveUrl, resolveCloudUrlSync, isCloudUrl, resolveCloudUrl } from '@/utils/url'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import type { EditableElement, TemplateData, TemplateItem, PageSection, FlipPage, WorkEditorData, ElementStyle } from '@/types'
-import { request } from '@/utils/request'
+import { fetchTemplateData } from '@/utils/template-data'
+import { extractTokenKeys } from '@/utils/resolveTextPlaceholders'
+import { PLACEHOLDER_DEFS } from '@/constants/placeholder-defs'
 import { getStorage, setStorage } from '@/utils/storage'
 import { loadFontsForElements } from '@/utils/font-loader'
 import { deepClone } from '@/utils/common'
@@ -206,7 +208,9 @@ export const useEditorStore = defineStore('editor', () => {
 
     templateLoading.value = true
     try {
-      const data = await request<TemplateItem>({ url: `/api/templates/${templateId}`, hideLoading: true })
+      // 去重获取：与入口点击预取（prefetchTemplateData）共享同一 Promise，
+      // 预取已完成时此处零等待
+      const data = await fetchTemplateData(templateId)
       if (reqId !== _loadReqId) return false // 忽略过期请求
 
       if (data) {
@@ -284,6 +288,7 @@ export const useEditorStore = defineStore('editor', () => {
       borderColor: el.borderColor ?? style?.borderColor,
       borderWidth: el.borderWidth ?? style?.borderWidth,
       mask: el.mask ?? style?.mask,
+      maskSrc: el.maskSrc,
     } as EditableElement
   }
 
@@ -293,6 +298,9 @@ export const useEditorStore = defineStore('editor', () => {
     // 加载新模板时重置选中状态，避免选中失效的元素索引
     selectedElement.value = null
     activeSectionId.value = null
+
+    // 换模板：清空上一模板的占位符 key 历史（避免把无关字段带进新模板的「编辑信息」表单）
+    seenPlaceholderKeys.clear()
 
     // 设置模板 VIP 等级
     currentTemplateVipLevel.value = template.vipLevel || 'free'
@@ -415,6 +423,43 @@ export const useEditorStore = defineStore('editor', () => {
     pushHistory()
     // 保存初始快照用于「重置」功能
     saveInitialSnapshot()
+
+    // 批量预解析 cloud:// URL（元素图片 + 背景 + 渲染图 + flip pages）
+    // 逐个调用 resolveCloudUrl，由 url.ts 的 20ms 窗口自动合并为批量调用
+    prefetchTemplateCloudUrls()
+  }
+
+  /**
+   * 模板加载后批量预解析所有 cloud:// URL，预热缓存。
+   * 利用 url.ts 的 20ms 微批合并机制，逐个触发自动合并为一次批量调用。
+   */
+  function prefetchTemplateCloudUrls() {
+    const urls = new Set<string>()
+    // canvas 元素图片
+    for (const el of editableElements) {
+      if (el.text && isCloudUrl(el.text)) urls.add(el.text)
+    }
+    // flip pages 元素图片 + 背景
+    for (const page of flipPages) {
+      for (const el of (page.elements || [])) {
+        if (el.text && isCloudUrl(el.text)) urls.add(el.text)
+      }
+      const bg = page.background || {}
+      if (bg.image && isCloudUrl(bg.image)) urls.add(bg.image)
+      if (bg.imageUrl && isCloudUrl(bg.imageUrl)) urls.add(bg.imageUrl)
+    }
+    // canvas 背景
+    if (background.value?.image && isCloudUrl(background.value.image as string)) {
+      urls.add(background.value.image as string)
+    }
+    // 渲染图
+    if (renderedImage.value && isCloudUrl(renderedImage.value)) {
+      urls.add(renderedImage.value)
+    }
+    // 批量预热（逐个触发，20ms 窗口自动合并为一次 /api/refresh-urls 调用）
+    for (const url of urls) {
+      resolveCloudUrl(url).catch(() => {})
+    }
   }
 
   function persistTemplate() {
@@ -449,6 +494,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   async function restoreTemplate() {
     const savedId = getStorage<string>(STORAGE_KEY_TEMPLATE, '')
+    seenPlaceholderKeys.clear()
     const templateId = savedId || DEFAULT_TEMPLATE_ID
     try {
       const savedData = getStorage<any>(STORAGE_KEY_TEMPLATE_DATA, null)
@@ -534,6 +580,8 @@ export const useEditorStore = defineStore('editor', () => {
   /** 从已保存的作品数据恢复编辑状态（编辑已有作品时调用） */
   function restoreFromWorkData(data: WorkEditorData, musicId?: number | string | null) {
     if (!data) return
+    // 恢复作品：清空上一模板的占位符 key 历史
+    seenPlaceholderKeys.clear()
     if (data.templateType) templateType.value = data.templateType
     if (data.elements && Array.isArray(data.elements)) {
       const elements = JSON.parse(JSON.stringify(data.elements))
@@ -593,6 +641,18 @@ export const useEditorStore = defineStore('editor', () => {
       Object.assign(templateStore.templateData, td)
     }
     if (data.basicInfo) Object.assign(templateStore.basicInfo, data.basicInfo)
+    // 重新打开已保存作品：元素文本中的 token 已被实际值替换（保存前替换），
+    // token 扫描不再命中 → 「编辑信息」表单字段全部消失。此处从作品数据回填
+    // 曾使用的占位符 key（仅注册表内 key，避免把 coverTitle 等非表单字段带进来）
+    Object.entries(templateStore.templateData).forEach(([k, v]) => {
+      if (v && PLACEHOLDER_DEFS.some(d => d.key === k)) seenPlaceholderKeys.add(k)
+    })
+    const _bi = templateStore.basicInfo
+    if (_bi.groomName) seenPlaceholderKeys.add('groomName')
+    if (_bi.brideName) seenPlaceholderKeys.add('brideName')
+    if (_bi.weddingDate) seenPlaceholderKeys.add('date')
+    if (_bi.location) seenPlaceholderKeys.add('location')
+    if (_bi.detailAddress) seenPlaceholderKeys.add('address')
     if (data.settings) Object.assign(templateStore.settings, data.settings)
     // 恢复音乐选择（使用 !== undefined 确保正确处理 null/0）
     if (musicId !== undefined && musicId !== null) {
@@ -688,21 +748,16 @@ export const useEditorStore = defineStore('editor', () => {
         }
       }
     }
-    // flip 模式：在当前翻页的元素中查找并更新
+    // flip 模式：selectedElement 存的是 flip 页内元素引用（不是 editableElements 里的 index），
+    // 直接用引用判断即可。原 editableElements.indexOf(el) 永远返回 -1（flip 元素不在 editableElements 里），
+    // 导致 idx === selectedElement.value 永远不成立 → 文字修改被静默丢弃。
     if (flipPages.length > 0 && currentFlipPageIndex.value >= 0) {
       const page = flipPages[currentFlipPageIndex.value]
-      if (page?.elements) {
-        page.elements.forEach(el => {
-          if (el.type === 'text' && selectedElement.value !== null) {
-            // 仅更新选中的元素
-            const idx = editableElements.indexOf(el)
-            if (idx === selectedElement.value) {
-              el.text = editingText.value
-              applyRtlStyleIfNeeded(el, editingText.value)
-              if (el.dataKey) templateStore.updateField(el.dataKey, editingText.value)
-            }
-          }
-        })
+      const selEl = selectedElement.value
+      if (page?.elements && selEl && typeof selEl !== 'number' && selEl.type === 'text' && page.elements.includes(selEl)) {
+        selEl.text = editingText.value
+        applyRtlStyleIfNeeded(selEl, editingText.value)
+        if ((selEl as any).dataKey) templateStore.updateField((selEl as any).dataKey, editingText.value)
       }
     }
     showTextEditor.value = false
@@ -759,6 +814,9 @@ export const useEditorStore = defineStore('editor', () => {
   /** 将占位符字段值同步到所有模式元素文本中的 token（只替换 {key}，不整层覆盖文本） */
   function syncTokenToAllModes(key: string, value: string) {
     const token = `{${key}}`
+    // 关键：token 被值替换后文本中不再含 {key}，allTemplateDataKeys 的 token 扫描会丢失该字段，
+    // 导致「编辑信息」表单里刚填的字段行消失。替换前先登记到 seenPlaceholderKeys 保底。
+    seenPlaceholderKeys.add(key)
     const apply = (el: EditableElement) => {
       if (el.type !== 'text' || !el.text || !el.text.includes(token)) return
       el.text = el.text.split(token).join(value)
@@ -835,6 +893,11 @@ export const useEditorStore = defineStore('editor', () => {
     if (idx === null || idx < 0 || idx >= editableElements.length) return
     const el = editableElements[idx]
     if (!el || el.type !== 'image') return
+    // alpha 蒙版换图：保留原图 URL 作为蒙版源，使新图仍按原形状显示
+    const mask = el.mask ?? el.style?.mask
+    if (mask === 'alpha' && !el.maskSrc) {
+      el.maskSrc = el.text
+    }
     el.text = imageUrl
     // 同步到所有模式（canvas/page/flip），而非仅更新 templateData
     if (el.dataKey) {
@@ -891,11 +954,38 @@ export const useEditorStore = defineStore('editor', () => {
     updatePageSection(id, { image })
   }
 
+  // ============ 「编辑信息」表单字段收集 ============
+  // 曾在模板中出现过的占位符 key：token 被值替换后仍保留在表单中，
+  // 修复「填写日期后信息面板里日期选择行消失」的问题。
+  // 换模板/恢复作品时重置（见 applyTemplateData / restoreTemplate / restoreFromWorkData）。
+  const seenPlaceholderKeys = new Set<string>()
+
+  /** 模板中所有元素的 dataKey + 占位符 token key 集合（跨 canvas/page/flip 三种模式），
+   *  供 UnifiedEditForm 按需显示字段；与 seenPlaceholderKeys 取并集保证填写后不消失 */
+  const allTemplateDataKeys = computed(() => {
+    const keys = new Set<string>()
+    editableElements.forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
+    pageSections.forEach(sec => { if (sec.dataKey) keys.add(sec.dataKey) })
+    flipPages.forEach(page => {
+      (page.elements || []).forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
+    })
+    // 占位符 token 收集（token 化元素无 dataKey，扫描文本补齐表单字段），
+    // 扫描结果同时登记进 seenPlaceholderKeys（换模板时先重置再扫描）
+    ;[
+      ...editableElements,
+      ...pageSections,
+      ...flipPages.flatMap(page => page.elements || []),
+    ].forEach(el => {
+      extractTokenKeys((el as { text?: string }).text || '').forEach(k => { keys.add(k); seenPlaceholderKeys.add(k) })
+    })
+    seenPlaceholderKeys.forEach(k => keys.add(k))
+    return Array.from(keys)
+  })
+
   return {
-    showTextEditor, showSectionTextEditor, showBasicInfoEditor,
-    selectedElement, editingText,
+    showTextEditor, showSectionTextEditor, showBasicInfoEditor, selectedElement, editingText,
     editableElements, currentTemplateId, currentWorkId, templateLoading, currentTemplateVipLevel, currentTemplateCategory, canvasSize, background, renderedImage,
-    templateType, pageSections, activeSectionId,
+    templateType, pageSections, activeSectionId, allTemplateDataKeys,
     flipPages, currentFlipPageIndex,
     history, historyIndex, canUndo, canRedo, canReset,
     loadTemplateById, restoreTemplate, restoreFromWorkData, openSectionTextEditor, closeTextEditor, closeSectionTextEditor, confirmTextEdit,

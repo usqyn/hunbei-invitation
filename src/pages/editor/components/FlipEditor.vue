@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="flip-editor">
     <!-- 顶部导航栏 -->
     <view class="editor-header">
@@ -49,7 +49,16 @@
       @change="onSwiperChange"
     >
       <swiper-item v-for="(page, idx) in editorStore.flipPages" :key="page.id">
-        <view class="flip-page" :style="getPageBgStyle(page)">
+        <view class="flip-page" :style="getPageBgBaseStyle(page)">
+          <!-- 翻页背景图：<CloudImage> 原生组件支持 cloud:// 直连，无 WXSS url(cloud://) 降级空白 -->
+          <CloudImage
+            v-if="getPageBgImageConf(page).url"
+            :style="getPageBgImageHostStyle(page)"
+            :custom-style="getPageBgImageCustomStyle(page)"
+            :src="getPageBgImageConf(page).url"
+            :mode="getPageBgImageConf(page).mode"
+            :fade-show="false"
+          />
           <view
             v-for="(el, eIdx) in page.elements"
             :key="eIdx"
@@ -69,8 +78,8 @@
               v-if="el.type === 'image'"
               class="flip-image"
               custom-class="flip-image"
-              :style="flipImageFillStyle"
-              :custom-style="flipImageFillStyle"
+              :style="getImageFillStyle(el)"
+              :custom-style="getImageFillStyle(el)"
               :src="el.text || '/static/images/templates/wedding-1.png'"
               mode="aspectFit"
             />
@@ -88,19 +97,29 @@
     <view class="editor-footer">
       <!-- 选中元素时的上下文工具栏 -->
       <view v-if="selectedElement !== null" class="context-toolbar">
-        <view class="ctx-btn" @click="handleEditText">
-          <text class="ctx-icon">✏️</text>
-          <text class="ctx-label">编辑</text>
-        </view>
-        <view v-if="selectedElement.type === 'image'" class="ctx-btn" @click="handleReplaceImage">
+        <!-- 问题 3/5 守卫：当选中元素 editable === false 时隐藏修改入口 -->
+        <!-- 文字直接编辑入口已移除（统一走「信息」面板占位符），仅保留图片操作与文字样式 -->
+        <view
+          v-if="selectedElement.editable !== false && selectedElement.type === 'image'"
+          class="ctx-btn"
+          @click="handleReplaceImage"
+        >
           <text class="ctx-icon">🖼️</text>
           <text class="ctx-label">换图</text>
         </view>
-        <view v-if="selectedElement.type === 'image'" class="ctx-btn" @click="showImagePanel = true">
+        <view
+          v-if="selectedElement.editable !== false && selectedElement.type === 'image'"
+          class="ctx-btn"
+          @click="showImagePanel = true"
+        >
           <text class="ctx-icon">⚙️</text>
           <text class="ctx-label">调整</text>
         </view>
-        <view v-if="selectedElement.type === 'text' || selectedElement.type === 'basic'" class="ctx-btn" @click="showTextStylePanel = true">
+        <view
+          v-if="selectedElement.editable !== false && (selectedElement.type === 'text' || selectedElement.type === 'basic')"
+          class="ctx-btn"
+          @click="showTextStylePanel = true"
+        >
           <text class="ctx-icon">🎨</text>
           <text class="ctx-label">样式</text>
         </view>
@@ -123,16 +142,12 @@
           <text class="quick-label">重置</text>
         </view>
       </view>
-      <!-- 底部主操作区 -->
+      <!-- 底部主操作区（文字直接编辑入口已移除：原文只能通过「信息」面板占位符修改） -->
       <view class="footer-main">
         <view class="footer-tabs">
           <view class="footer-tab" @click="openUnifiedEdit">
             <text class="tab-icon">📋</text>
             <text class="tab-label">信息</text>
-          </view>
-          <view class="footer-tab" @click="handleEditText">
-            <text class="tab-icon">✏️</text>
-            <text class="tab-label">文字</text>
           </view>
           <view class="footer-tab" @click="handleReplaceImage">
             <text class="tab-icon">🖼️</text>
@@ -223,14 +238,16 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/editor'
 import { useTemplateStore } from '@/stores/template'
 import { useWorksStore } from '@/stores/works'
-import { useCanvasRender } from '@/composables/useCanvasRender'
+import { useCanvasRender, getMaskOverlayStyle } from '@/composables/useCanvasRender'
 import { usePinchGesture } from '../composables/usePinchGesture'
 import { useFrameThrottle } from '../composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
-import { resolveTextPlaceholders, extractTokenKeys } from '@/utils/resolveTextPlaceholders'
+import { runWithExportGate } from '@/composables/useTemplateEntry'
+import { resolveTextPlaceholders } from '@/utils/resolveTextPlaceholders'
 import { formatBiDi } from '@/utils/font-loader'
-import { buildImageCssFilterFromElement } from '@/utils/imageFilter'
+import { buildImageCssFilterFromElement, compositeImageWithMask } from '@/utils/imageFilter'
+import { resolveUrl } from '@/utils/url'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
@@ -274,7 +291,7 @@ const _screenInfo = (() => {
   }
 })()
 
-const { getTextStyle } = useCanvasRender({
+const { getTextStyle, getImageFillStyle } = useCanvasRender({
   getElements: () => [],
   getCanvasSize: () => undefined,
   getBackground: () => undefined,
@@ -298,23 +315,8 @@ let _formSnapshot: any = null
 let _isMounted = true
 
 // 收集模板中所有元素的 dataKey（跨 canvas/page/flip 三种模式），用于 UnifiedEditForm 按需显示字段
-const allTemplateDataKeys = computed(() => {
-  const keys = new Set<string>()
-  editorStore.editableElements.forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
-  editorStore.pageSections.forEach(sec => { if (sec.dataKey) keys.add(sec.dataKey) })
-  editorStore.flipPages.forEach(page => {
-    (page.elements || []).forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
-  })
-  // 新增：占位符 token 收集（token 化元素无 dataKey，扫描文本补齐表单字段）
-  ;[
-    ...editorStore.editableElements,
-    ...editorStore.pageSections,
-    ...editorStore.flipPages.flatMap(page => page.elements || []),
-  ].forEach(el => {
-    extractTokenKeys((el as { text?: string }).text || '').forEach(k => keys.add(k))
-  })
-  return Array.from(keys)
-})
+// 已上移至 editorStore.allTemplateDataKeys（含 token 被替换后的字段保底，修复填写后字段行消失）
+const allTemplateDataKeys = computed(() => editorStore.allTemplateDataKeys)
 
 // 所有翻页的元素汇总（传给 UnifiedEditForm 用于收集动态字段）
 const allFlipElements = computed(() => {
@@ -604,7 +606,8 @@ function onElementLongPress(el: any, idx: number) {
   activeElementIndex.value = idx
   selectedElement.value = el
   haptic('medium')
-  const items: string[] = ['编辑']
+  // 文字直接编辑入口已移除（统一走「信息」面板占位符）：长按菜单对文字仅保留删除
+  const items: string[] = []
   if (el.type === 'image') {
     items.push('换图')
     items.push('调整')
@@ -614,13 +617,6 @@ function onElementLongPress(el: any, idx: number) {
     itemList: items,
     success: (res: any) => {
       let offset = 0
-      if (items[offset] === '编辑') {
-        if (res.tapIndex === offset) {
-          openEditorForElement(el)
-          return
-        }
-        offset++
-      }
       if (el.type === 'image' && items[offset] === '换图') {
         if (res.tapIndex === offset) {
           handleReplaceImage()
@@ -662,8 +658,8 @@ function openEditorForElement(el: any) {
       onImageUpload()
     }
   } else if (el.type === 'text') {
-    editorStore.editingText = el.text
-    editorStore.showTextEditor = true
+    // 文字内容统一通过「信息」面板占位符修改，不再开放原文直接编辑（避免用户改动原文）
+    openUnifiedEdit()
   }
 }
 
@@ -809,17 +805,12 @@ watch(selectedElement, () => {
   _flipInitialTextStyle.value = null
 })
 
-function handleEditText() {
-  if (!selectedElement.value || selectedElement.value.type !== 'text') {
-    uni.showToast({ title: '请先选择文字元素', icon: 'none' })
+function handleReplaceImage() {
+  if (!selectedElement.value || selectedElement.value.editable === false) {
+    uni.showToast({ title: '当前图片不可替换', icon: 'none' })
     return
   }
-  editorStore.editingText = selectedElement.value.text
-  editorStore.showTextEditor = true
-}
-
-function handleReplaceImage() {
-  if (!selectedElement.value || selectedElement.value.type !== 'image') {
+  if (selectedElement.value.type !== 'image') {
     uni.showToast({ title: '请先选择图片元素', icon: 'none' })
     return
   }
@@ -862,9 +853,24 @@ async function onAdjusterConfirm(tempPath: string) {
   adjusterVisible.value = false
   const targetElement = selectedElement.value
   if (!targetElement || targetElement.type !== 'image' || !tempPath) return
+  // alpha 蒙版：首次换图时把原图（形状烘焙在 alpha 通道）记为蒙版源
+  const elMask = targetElement.mask ?? targetElement.style?.mask
+  if (elMask === 'alpha' && !targetElement.maskSrc) {
+    targetElement.maskSrc = targetElement.text
+  }
   uni.showLoading({ title: '上传中 0%' })
   try {
-    const permanentUrl = await uploadImage(tempPath, (progress: number) => {
+    // alpha 蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
+    let pathToUpload = tempPath
+    if (elMask === 'alpha' && targetElement.maskSrc) {
+      try {
+        uni.showLoading({ title: '处理蒙版...' })
+        pathToUpload = await compositeImageWithMask(tempPath, targetElement.maskSrc)
+      } catch (e) {
+        console.warn('[flip-editor] 蒙版合成失败，退回原图上传（渲染时仍有 CSS mask 兜底）:', e)
+      }
+    }
+    const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
     if (_isMounted && targetElement) {
@@ -944,26 +950,49 @@ function onImageUpload() {
   // #endif
 }
 
-function getPageBgStyle(page: any): Record<string, string> {
+function getPageBgBaseStyle(page: any): Record<string, string> {
   const bg = page.background
   const style: Record<string, string> = {}
-  if (bg.type === 'solid') {
-    style.background = bg.color1
+  if (!bg || bg.type === 'solid') {
+    style.background = bg?.color1 || '#ffffff'
   } else if (bg.type === 'linear-gradient') {
     style.background = `linear-gradient(${bg.angle || 180}deg, ${bg.color1}, ${bg.color2 || bg.color1})`
+  } else if (bg.type === 'radial-gradient') {
+    style.background = `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})`
   } else if (bg.type === 'image') {
-    // admin 标准字段是 image，历史数据可能存 imageUrl，两者都兼容
-    const bgUrl = bg.image || bg.imageUrl
-    if (bgUrl) {
-      style.backgroundImage = `url(${bgUrl})`
-      style.backgroundSize = bg.imageScale || 'cover'
-      style.backgroundPosition = 'center'
-      style.backgroundRepeat = 'no-repeat'
-    } else {
-      style.background = bg.color1 || '#ffffff'
-    }
+    // 图片背景：只给底底色，图片层用独立 <CloudImage>（原生组件支持 cloud:// 直连，无降级空白）
+    style.background = bg.color1 || '#ffffff'
   }
   return style
+}
+// 翻页图片背景配置：可能为空；URL 返回 resolveUrl 处理后的原始值（含 cloud://）
+function getPageBgImageConf(page: any): {
+  url: string
+  mode: 'aspectFill' | 'aspectFit' | 'widthFix'
+  opacity: number
+} {
+  const bg = page.background || {}
+  if (bg.type !== 'image') return { url: '', mode: 'aspectFill', opacity: 1 }
+  const url = resolveUrl(bg.image || bg.imageUrl) || ''
+  const s = bg.imageScale
+  let mode: 'aspectFill' | 'aspectFit' | 'widthFix' = 'aspectFill'
+  if (s === 'contain' || s === 'aspectFit') mode = 'aspectFit'
+  else if (s === '100%' || s === 'widthFix') mode = 'widthFix'
+  const o = bg.imageOpacity
+  return { url, mode, opacity: typeof o === 'number' ? o : 1 }
+}
+
+// 背景图 inline style：穿透 CloudImage 组件隔离，确保 <image> 拿到定位/尺寸
+const BG_IMAGE_BASE_STYLE = 'position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;pointer-events:none;z-index:0'
+function getPageBgImageHostStyle(page: any) {
+  const conf = getPageBgImageConf(page)
+  return { opacity: conf.opacity < 1 ? String(conf.opacity) : undefined }
+}
+function getPageBgImageCustomStyle(page: any) {
+  const conf = getPageBgImageConf(page)
+  let s = BG_IMAGE_BASE_STYLE
+  if (conf.opacity < 1) s += `;opacity:${conf.opacity}`
+  return s
 }
 
 function getElementStyle(el: any): Record<string, string> {
@@ -986,17 +1015,10 @@ function getElementStyle(el: any): Record<string, string> {
   const mask = el.mask ?? el.style?.mask
   const br = el.borderRadius ?? el.style?.borderRadius
   if (el.type === 'image' && mask === 'alpha') {
-    const imgSrc = el.text || (el as any).src || ''
-    if (imgSrc) {
-      style.WebkitMaskImage = `url(${imgSrc})`
-      style.maskImage = `url(${imgSrc})`
-      style.WebkitMaskSize = 'contain'
-      style.maskSize = 'contain'
-      style.WebkitMaskRepeat = 'no-repeat'
-      style.maskRepeat = 'no-repeat'
-      style.WebkitMaskPosition = 'center'
-      style.maskPosition = 'center'
-    }
+    // alpha 蒙版兜底：仅在换过图（有 maskSrc）时用原图 alpha 作 CSS mask；
+    // cloud:// 需解析为 https（WXSS mask-image 不支持 cloud:// 协议，静默失败）。
+    // 未换图时形状烘焙在原图 alpha 通道，无需 mask（与 getImageFillStyle 语义一致）。
+    Object.assign(style, getMaskOverlayStyle(el.maskSrc))
   } else if (el.type === 'image' && mask === 'circle') {
     style.borderRadius = '50%'
     style.overflow = 'hidden'
@@ -1256,12 +1278,17 @@ async function handleSave() {
 }
 
 async function handleShare() {
-  await handleSave()
-  if (!editorStore.currentWorkId) {
-    uni.showToast({ title: '保存失败，请重试', icon: 'none' })
-    return
-  }
-  uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
+  const templateId = editorStore.currentTemplateId
+  const tier = templateId ? editorStore.currentTemplateVipLevel : 'free'
+  // 分享闸门：付费模板分享前先付费解锁（与 canvas 模式 handleShare 行为一致）
+  await runWithExportGate(templateId, tier, 'share', async () => {
+    await handleSave()
+    if (!editorStore.currentWorkId) {
+      uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+      return
+    }
+    uni.navigateTo({ url: '/pages/preview/index?workId=' + editorStore.currentWorkId })
+  })
 }
 
 onUnmounted(() => {

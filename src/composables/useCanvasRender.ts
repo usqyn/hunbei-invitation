@@ -11,6 +11,91 @@ import {
 } from '@/constants/editor'
 import type { EditableElement, ElementStyle } from '@/types'
 import { buildImageCssFilterFromElement } from '@/utils/imageFilter'
+import { isCloudUrl, resolveCloudUrl, resolveCloudUrlSync, resolveUrl } from '@/utils/url'
+
+// ---- 背景图 cloud:// URL 解析（模块级共享缓存）----
+// 小程序 WXSS 的 background-image 只支持 https 网络图/base64，
+// cloud:// 文件 ID 直接放进 url() 会静默失败（无任何报错），表现为"背景加载不出来"。
+// 先用缓存中的临时 URL 同步渲染；无缓存时异步换取 https URL，成功后写入映射触发响应式刷新。
+const cloudBgUrlMap = ref<Record<string, string>>({})
+// bump 计数器：每次写入 cloudBgUrlMap 时 bump 一下，getImageFillStyle 开头读它强制建立
+// Vue 响应式依赖（因为 getImageFillStyle 是方法调用，Vue 3 不会自动追踪方法内的 ref 访问），
+// 确保异步 resolveCloudUrl 完成后 mask-image 能重渲染。
+const cloudBgBump = ref(0)
+
+function setCloudBgUrl(key: string, value: string) {
+  cloudBgUrlMap.value = { ...cloudBgUrlMap.value, [key]: value }
+  cloudBgBump.value++
+}
+
+export function resolveBackgroundImageUrl(url: string | undefined | null): string {
+  if (!url) return ''
+  // 先用 resolveUrl 处理所有格式（/uploads/ → cloud://、http → https、相对路径拼接等）
+  const resolved = resolveUrl(url)
+  if (!resolved) return ''
+  if (!isCloudUrl(resolved)) return resolved
+  // cloud:// URL 需换取 https 临时 URL
+  // 1) 组件级映射缓存
+  const cached = cloudBgUrlMap.value[resolved]
+  if (cached) return cached
+  // 2) url.ts 同步缓存（含持久化冷启动加载）——命中可立即渲染，避免首帧空白回退纯色
+  const syncCached = resolveCloudUrlSync(resolved)
+  if (syncCached && !isCloudUrl(syncCached)) {
+    setCloudBgUrl(resolved, syncCached)
+    return syncCached
+  }
+  // 3) 未命中：异步换取，成功后写入映射触发响应式刷新
+  resolveCloudUrl(resolved)
+    .then((httpsUrl) => {
+      if (httpsUrl && !isCloudUrl(httpsUrl)) {
+        setCloudBgUrl(resolved, httpsUrl)
+      }
+    })
+    .catch(() => {})
+  // 未就绪时返回空串：调用方回退纯色背景，避免渲染非法的 url(cloud://...)
+  return ''
+}
+
+// ---- alpha 蒙版兜底样式（Record 形式，供 FlipEditor/PageEditor/ImageAdjuster 复用）----
+// 用 maskSrc（原模板图，形状烘焙在 alpha 通道）裁剪换过的新图。
+// cloud:// 先同步查缓存（含持久化冷启动加载）命中立即渲染；未命中异步换取后响应式刷新。
+function buildMaskStyle(httpsUrl: string): Record<string, string> {
+  return {
+    WebkitMaskImage: `url(${httpsUrl})`,
+    maskImage: `url(${httpsUrl})`,
+    WebkitMaskSize: 'contain',
+    maskSize: 'contain',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskPosition: 'center',
+    maskPosition: 'center',
+  }
+}
+
+export function getMaskOverlayStyle(maskSrc: string | undefined | null): Record<string, string> {
+  if (!maskSrc) return {}
+  const resolved = resolveUrl(maskSrc)
+  if (!resolved) return {}
+  if (!isCloudUrl(resolved)) {
+    // https 可直接用；wxfile://tmp 等本地路径在 WXSS mask-image 中不可靠，不作为蒙版
+    return resolved.startsWith('http') ? buildMaskStyle(resolved) : {}
+  }
+  let httpsUrl = cloudBgUrlMap.value[resolved] || ''
+  if (!httpsUrl) {
+    const syncCached = resolveCloudUrlSync(resolved)
+    if (syncCached && !isCloudUrl(syncCached)) {
+      httpsUrl = syncCached
+      setCloudBgUrl(resolved, syncCached)
+    } else {
+      void resolveCloudUrl(resolved).then(u => {
+        if (u && !isCloudUrl(u)) {
+          setCloudBgUrl(resolved, u)
+        }
+      }).catch(() => {})
+    }
+  }
+  return httpsUrl ? buildMaskStyle(httpsUrl) : {}
+}
 
 interface BackgroundConfig {
   type: 'solid' | 'linear-gradient' | 'radial-gradient' | 'image'
@@ -71,7 +156,9 @@ export function useCanvasRender(options: {
     }
   })
 
-  const canvasBackgroundStyle = computed(() => {
+  // ============ 背景层（拆分「基础底色 + 图片层」，避免 WXSS background-image 的 cloud:// 解析降级）============
+  // 基础底色（渐变/纯色）永远存在，作为图片加载前 / imageOpacity<1 叠加层的底色
+  const canvasBgBaseStyle = computed((): Record<string, string> => {
     const bg = getBackground()
     if (!bg || bg.type === 'solid') {
       return { background: bg?.color1 || '#ffffff' }
@@ -83,35 +170,28 @@ export function useCanvasRender(options: {
     if (bg.type === 'radial-gradient') {
       return { background: `radial-gradient(circle, ${bg.color1}, ${bg.color2 || bg.color1})` }
     }
-    if (bg.type === 'image') {
-      // 兼容 admin 标准字段 image 与历史字段 imageUrl
-      const bgImage = bg.image || bg.imageUrl
-      // 背景图 URL 为空时回退到纯色背景，避免渲染空 url()
-      if (!bgImage) {
-        return { background: bg.color1 || '#ffffff' }
-      }
-      // 应用背景图缩放（imageScale: 'cover' | 'contain' | '100%'）与透明度
-      const scale = bg.imageScale
-      const bgSize = scale === 'contain' ? 'contain' : (scale === '100%' ? '100% 100%' : 'cover')
-      const opacity = bg.imageOpacity
-      if (opacity != null && opacity < 1) {
-        // opacity<1 时用伪背景层无法实现，这里用 rgba 叠加近似（uniapp view 不支持 ::before）
-        return {
-          backgroundImage: `url(${bgImage})`,
-          backgroundPosition: 'center',
-          backgroundSize: bgSize,
-          backgroundRepeat: 'no-repeat',
-          opacity: opacity,
-        }
-      }
-      return {
-        backgroundImage: `url(${bgImage})`,
-        backgroundPosition: 'center',
-        backgroundSize: bgSize,
-        backgroundRepeat: 'no-repeat',
-      }
-    }
+    // image: 只给底底色，图片交给独立的 <CloudImage> 背景层（直接支持 cloud://，无"降级=空"）
     return { background: bg?.color1 || '#ffffff' }
+  })
+  // 图片背景 URL：image 类型才非空，返回原始 URL（可能是 cloud:///https//本地），
+  // 由 CloudImage 组件内部统一解析，不依赖 WXSS background-image 的 url() 能力。
+  const canvasBgImageUrl = computed((): string => {
+    const bg = getBackground()
+    if (!bg || bg.type !== 'image') return ''
+    return resolveUrl(bg.image || bg.imageUrl) || ''
+  })
+  const canvasBgImageScale = computed((): 'aspectFill' | 'widthFix' | 'aspectFit' => {
+    const bg = getBackground()
+    const s = bg?.imageScale
+    if (s === 'contain' || s === 'aspectFit') return 'aspectFit'
+    if (s === '100%' || s === 'widthFix') return 'widthFix'
+    return 'aspectFill' // cover 对应 aspectFill（默认）
+  })
+  const canvasBgImageOpacity = computed((): number => {
+    const bg = getBackground()
+    if (!bg || bg.type !== 'image') return 1
+    const o = bg.imageOpacity
+    return typeof o === 'number' ? o : 1
   })
 
   function getCanvasElementStyle(el: EditableElement): Record<string, string> {
@@ -351,6 +431,79 @@ export function useCanvasRender(options: {
     return style
   }
 
+  /**
+   * 图片元素的内联样式（直接应用到 <image>，而非容器 <view>）。
+   * 小程序 <view> 的 overflow:hidden 不能可靠裁剪子 <image>，
+   * 因此 border-radius 必须直接设在 <image> 上才能生效。
+   * alpha 蒙版换图后用 maskSrc（原图 alpha）保持形状不变。
+   */
+  function getImageFillStyle(el: EditableElement): string {
+    // 强制 Vue 响应式依赖：cloudBgBump 在 setCloudBgUrl 时递增，
+    // 确保异步 resolveCloudUrl 完成后此方法会被重新调用（Vue 3 方法调用内的 ref 访问不自动追踪）。
+    cloudBgBump.value
+    let s = 'position:absolute;left:0;top:0;width:100%;height:100%'
+    const mask = el.mask ?? el.style?.mask
+    const br = el.borderRadius ?? el.style?.borderRadius
+
+    if (mask === 'circle') {
+      s += ';border-radius:50%;overflow:hidden'
+    } else if (br) {
+      s += `;border-radius:${br}rpx;overflow:hidden`
+    }
+
+    // alpha 蒙版：仅在换过图（有 maskSrc）时用原图 alpha 作为 CSS mask 兜底。
+    // 未换图的元素形状烘焙在图片自身 alpha 通道，无需 mask（避免重复加载同一张图）。
+    // 正常路径换图时已在 image-mask.ts 中离屏合成（蒙版烘焙进新图像素），此兜底很少触发。
+    if (mask === 'alpha') {
+      const maskUrl = el.maskSrc || ''
+      if (maskUrl) {
+        let resolved = ''
+        if (isCloudUrl(maskUrl)) {
+          resolved = cloudBgUrlMap.value[maskUrl] || ''
+          if (!resolved) {
+            const syncCached = resolveCloudUrlSync(maskUrl)
+            if (syncCached && !isCloudUrl(syncCached)) {
+              resolved = syncCached
+              setCloudBgUrl(maskUrl, syncCached)
+            } else {
+              resolveCloudUrl(maskUrl).then(u => {
+                if (u) setCloudBgUrl(maskUrl, u)
+              }).catch(() => {})
+            }
+          }
+        } else if (maskUrl.startsWith('http')) {
+          resolved = maskUrl
+        } else {
+          const r = resolveUrl(maskUrl)
+          if (isCloudUrl(r)) {
+            resolved = cloudBgUrlMap.value[r] || ''
+            if (!resolved) {
+              const syncCached = resolveCloudUrlSync(r)
+              if (syncCached && !isCloudUrl(syncCached)) {
+                resolved = syncCached
+                setCloudBgUrl(r, syncCached)
+              } else {
+                resolveCloudUrl(r).then(u => {
+                  if (u) setCloudBgUrl(r, u)
+                }).catch(() => {})
+              }
+            }
+          } else if (r.startsWith('http')) {
+            resolved = r
+          }
+        }
+        if (resolved) {
+          s += `;-webkit-mask-image:url(${resolved});mask-image:url(${resolved})`
+          s += ';-webkit-mask-size:contain;mask-size:contain'
+          s += ';-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat'
+          s += ';-webkit-mask-position:center;mask-position:center'
+        }
+      }
+    }
+
+    return s
+  }
+
   return {
     cardHeight,
     canvasWidth,
@@ -359,8 +512,15 @@ export function useCanvasRender(options: {
     isLandscape,
     updateCardHeight,
     canvasCardStyle,
-    canvasBackgroundStyle,
+    // 新的拆分背景层：底色 + 独立图片层，<CloudImage> 原生组件支持 cloud:// 直接渲染，不再有 WXSS 降级空白
+    canvasBgBaseStyle,
+    canvasBgImageUrl,
+    canvasBgImageScale,
+    canvasBgImageOpacity,
+    // 兼容旧调用方（FlipEditor getPageBgStyle / 预览组件 等仍可能用到）
+    canvasBackgroundStyle: canvasBgBaseStyle,
     getCanvasElementStyle,
+    getImageFillStyle,
     getFontFamily,
     detectTextDirection,
     getTextStyle,

@@ -20,6 +20,16 @@ export function getCategoryName(catId: string): string {
   return CATEGORIES.find(c => c.id === catId)?.name || catId
 }
 
+/**
+ * <input type="color"> 只接受 #rgb/#rrggbb 格式，'transparent'（数据层表示"无颜色"）
+ * 等非法值会导致 Chrome 警告 "does not conform to the required format"。
+ * 绑定到颜色输入框时统一用本函数净化；用户改色后正常写回，数据层语义不受影响。
+ */
+export function toColorInputValue(v: string | null | undefined, fallback = '#000000'): string {
+  if (typeof v === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) return v
+  return fallback
+}
+
 /** 格式化时间戳为 M/D H:mm 形式 */
 export function formatTime(ts: number): string {
   const d = new Date(ts)

@@ -92,6 +92,14 @@ const createOrder = async (ctx) => {
           // 与 getTemplateLevel 展示价同源：模板自带 price 优先，否则档位默认价
           const unitPrice = parseFloat(tpl.price) > 0 ? parseFloat(tpl.price) : (TIER_DEFAULT_PRICE[tier] || 0)
           serverTotal += unitPrice * (item.quantity || 1)
+        } else if (item.type === 'unlock') {
+          // 永久解锁订单：计价必须与 getTemplateLevel / 前端闸门展示价同源
+          // （模板自带 price 优先，缺失时按档位默认价）。
+          // 修复：此前 unlock 无独立分支，落入 is_paid 判断——模板 price 缺失或
+          // 仅靠 vipLevel 定档时订单金额算成 ¥0，用户按展示价 ¥9.9 看到却 0 元解锁。
+          const tier = getTemplateTier(tpl)
+          const unitPrice = parseFloat(tpl.price) > 0 ? parseFloat(tpl.price) : (TIER_DEFAULT_PRICE[tier] || 0)
+          serverTotal += unitPrice * (item.quantity || 1)
         } else if (tpl.is_paid === 1) {
           serverTotal += (parseFloat(tpl.price) || 0) * (item.quantity || 1)
         }
@@ -100,7 +108,9 @@ const createOrder = async (ctx) => {
   }
 
   // 2. 商城商品（修复商城订单金额恒为 0 的 bug）
+  // productTotal 单独累计：商城订单需在商品金额之上计算运费与 VIP 折扣（与前端展示规则一致）
   const prodPriceMap = {}
+  let productTotal = 0
   if (productIds.length > 0) {
     const prodRes = await collection('products').where({ id: _.in(productIds) }).limit(100).get()
     ;(prodRes.data || []).forEach(p => { prodPriceMap[p.id] = parseFloat(p.price) || 0 })
@@ -108,9 +118,19 @@ const createOrder = async (ctx) => {
       if (item.productId) {
         const prodPrice = prodPriceMap[item.productId]
         const unitPrice = prodPrice !== undefined ? prodPrice : (parseFloat(item.price) || 0)
-        serverTotal += unitPrice * (item.quantity || 1)
+        productTotal += unitPrice * (item.quantity || 1)
       }
     }
+    // 服务端权威计价（不信任客户端传入的 totalAmount/freight/discount）：
+    //   运费：商品金额满 99 包邮，否则固定 ¥10
+    //   VIP 折扣：有效 VIP 用户商品金额 9 折（向下取整到分）
+    // 与 order-confirm.vue 展示规则保持同源，避免「展示 ¥169.2 实扣 ¥188」的金额不一致
+    if (productTotal > 0) {
+      const freight = productTotal >= 99 ? 0 : 10
+      const discount = (await isUserVip(auth.user.phone)) ? Math.floor(productTotal * 0.1 * 100) / 100 : 0
+      productTotal += freight - discount
+    }
+    serverTotal += productTotal
   }
 
   const totalAmount = String(serverTotal.toFixed(2))

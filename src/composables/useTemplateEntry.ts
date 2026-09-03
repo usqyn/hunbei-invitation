@@ -10,6 +10,7 @@ import { useFeedback } from '@/composables/useFeedback'
 import { addFootprint, fetchTemplateQuota } from '@/api'
 import { showRewardedAd } from '@/utils/rewarded-ad'
 import { track } from '@/utils/track'
+import { prefetchTemplateData } from '@/utils/template-data'
 
 // 防重复跳转（页面间共享，避免连点触发多次 navigateTo）
 const navigating = ref(false)
@@ -101,6 +102,9 @@ export function useTemplateEntry() {
   function enterEditor(template: any) {
     haptic('light')
     navigating.value = true
+    // 点击瞬间预取模板 JSON（与编辑器加载共享去重缓存）：
+    // 跳转页面栈初始化的几百毫秒内网络请求已在途，编辑器首屏等待显著缩短
+    prefetchTemplateData(template.id)
     uni.navigateTo({
       url: `/pages/editor/index?templateId=${template.id}`,
       fail: () => { navigating.value = false },
@@ -166,9 +170,17 @@ export async function runWithExportGate(
 
   // 已解锁（永久解锁该模板 / 免费 / 专业版）直接放行：后端对这类返回 limitless=true
   let passed = false
+  // 服务端权威档位/价格：云函数 /api/quota 返回 tier + price（模板自带 price 优先）。
+  // 旧 Express 后端不返回这两个字段 → 回退调用方传入的 tier 与档位默认价。
+  // 修复：此前调用方经 (editorStore as any).currentTemplate（不存在）取档位恒为 free，
+  // 导致付费模板分享/导出弹窗显示 ¥0 并按错误档位下单。
+  let effTier: TemplateTier = tier
+  let effPrice = TIER_DEFAULT_PRICE[tier] || 0
   try {
     const quota = await fetchTemplateQuota(templateId)
     passed = !!quota?.limitless
+    if (quota?.tier && TIER_WHITELIST.includes(quota.tier)) effTier = quota.tier
+    if (typeof quota?.price === 'number' && quota.price > 0) effPrice = quota.price
   } catch (e) {
     // 查询失败不阻断用户体验，按未解锁走闸门流程
     passed = false
@@ -187,7 +199,7 @@ export async function runWithExportGate(
           ? '去除水印'
           : '导出作品'
 
-  const price = (tier === 'svip' ? 18.8 : tier === 'personal' ? 9.9 : tier === 'limited' ? 6.6 : 0)
+  const price = effPrice
   const priceText = price > 0 ? `¥${price}` : ''
 
   uni.showModal({
@@ -203,11 +215,11 @@ export async function runWithExportGate(
         const params = [
           `mode=purchase`,
           `templateId=${encodeURIComponent(templateId)}`,
-          `tier=${tier}`,
+          `tier=${effTier}`,
           `price=${price}`,
           `redirect=${redirect}`,
         ].join('&')
-        track('export_gate_pay_click', { templateId, tier, action })
+        track('export_gate_pay_click', { templateId, tier: effTier, action })
         uni.navigateTo({ url: `/pages/vip/index?${params}` })
       } else if (res.cancel) {
         // 看广告：看完则带水印继续，否则提示

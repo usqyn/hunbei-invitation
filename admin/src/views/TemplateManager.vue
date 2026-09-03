@@ -65,11 +65,16 @@
           <div class="tm-stat-label">付费档（VIP/SVIP/专业）</div>
         </div>
       </div>
-      <div class="tm-stat-card" :class="{ warn: stats.unsyncedCount > 0 }">
+      <div
+        class="tm-stat-card clickable"
+        :class="{ warn: stats.unsyncedCount > 0, active: filterSync === 'unsynced' }"
+        :title="stats.unsyncedCount > 0 ? '点击筛选出所有未同步的模板' : '全部模板均已同步'"
+        @click="filterSync = filterSync === 'unsynced' ? 'all' : 'unsynced'"
+      >
         <div class="tm-stat-icon">☁️</div>
         <div class="tm-stat-body">
           <div class="tm-stat-value">{{ stats.unsyncedCount }}</div>
-          <div class="tm-stat-label">未同步云端</div>
+          <div class="tm-stat-label">未同步云端{{ filterSync === 'unsynced' ? '（筛选中·再点取消）' : '' }}</div>
         </div>
       </div>
     </div>
@@ -509,6 +514,9 @@ onMounted(async () => {
   border-radius: 12px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
+.tm-stat-card.clickable { cursor: pointer; transition: box-shadow 0.15s, transform 0.15s; }
+.tm-stat-card.clickable:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+.tm-stat-card.clickable.active { box-shadow: 0 0 0 2px #ffb300; }
 .tm-stat-card.warn { background: #fff8f0; border: 1px solid #ffe0b2; }
 
 .tm-stat-icon { font-size: 32px; line-height: 1; }

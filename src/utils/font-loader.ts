@@ -1,5 +1,6 @@
 import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
+import { isCloudUrl, resolveCloudUrl } from '@/utils/url'
 
 // ============ 字体加载 ============
 // 系统字体白名单（不需下载，直接跳过）。包含华文系列和思源系列别名
@@ -107,97 +108,195 @@ function loadCustomFont(fontFamily: string): Promise<void> {
       resolve()
       return
     }
+    // cloud:// fileID（云数据库 font_map 存的是云存储 fileID）→ 先异步换取 https 临时 URL
+    if (isCloudUrl(rawFontUrl)) {
+      resolveCloudUrl(rawFontUrl)
+        .then((httpsUrl) => { downloadAndLoadFont(fontFamily, httpsUrl || rawFontUrl, resolve, rawFontUrl) })
+        .catch(() => {
+          if (USE_CLOUD_FUNCTIONS) console.warn(`[FontLoader] cloud:// 字体换取失败: ${fontFamily}`)
+          resolve()
+        })
+      return
+    }
     // 字体 URL HTTPS 升级（非 localhost）
     let fullUrl = rawFontUrl.startsWith('http') ? rawFontUrl : API_BASE + rawFontUrl
     if (fullUrl.startsWith('http://') && !fullUrl.includes('127.0.0.1') && !fullUrl.includes('localhost')) {
       fullUrl = fullUrl.replace('http://', 'https://')
     }
 
-    fontsLoading++
+    downloadAndLoadFont(fontFamily, fullUrl, resolve)
+  })
+}
 
-    // #ifdef MP-WEIXIN
-    if (typeof wx === 'undefined' || typeof wx.downloadFile !== 'function') {
-      console.warn(`[FontLoader] wx.downloadFile not available, skip: ${fontFamily}`)
-      fontsLoading--
-      if (fontsLoading <= 0) notifyFontLoadComplete()
-      resolve()
+/**
+ * 下载字体文件并调用 loadFontFace 注册。
+ * MP-WEIXIN 按平台分流：
+ *   开发者工具：webview 加载网络字体有已知 ERR_CACHE_MISS bug，
+ *     直接下载到本地 → loadFontFace(local tempFilePath)（工具内本地路径可用）
+ *   真机：loadFontFace(https URL)（需 downloadFile 合法域名）
+ *     → 失败降级 cloud.downloadFile(cloud:// fileID) → base64 data URL → loadFontFace
+ *       （真机不支持本地路径，但支持 data URL；cloud.downloadFile 免域名白名单）
+ * 其他平台：直接 loadFontFace(https URL)。
+ */
+function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () => void, cloudFileID?: string) {
+  fontsLoading++
+
+  // #ifdef MP-WEIXIN
+  const finish = (ok: boolean) => {
+    if (ok) loadedFonts.add(fontFamily)
+    else console.warn('[FontLoader] Failed: ' + fontFamily + ', src=' + fullUrl.slice(0, 80))
+    fontsLoading--
+    if (fontsLoading <= 0) notifyFontLoadComplete()
+    resolve()
+  }
+  const loadViaUrl = (url: string, onFail: () => void) => {
+    if (typeof wx === 'undefined' || typeof wx.loadFontFace !== 'function') {
+      console.warn(`[FontLoader] wx.loadFontFace not available, skip: ${fontFamily}`)
+      finish(false)
       return
     }
-    wx.downloadFile({
-      url: fullUrl,
-      success: (res: any) => {
-        if (res.statusCode === 200 && res.tempFilePath) {
-          if (typeof wx.loadFontFace !== 'function') {
-            console.warn(`[FontLoader] wx.loadFontFace not available, skip: ${fontFamily}`)
-            fontsLoading--
-            if (fontsLoading <= 0) notifyFontLoadComplete()
-            resolve()
-            return
-          }
-          wx.loadFontFace({
-            family: fontFamily,
-            source: 'url("' + res.tempFilePath + '")',
-            global: true,
-            scopes: ['webview', 'canvas'],
-            success: () => {
-              loadedFonts.add(fontFamily)
-              console.log('[FontLoader] Loaded: ' + fontFamily)
-              fontsLoading--
-              if (fontsLoading <= 0) notifyFontLoadComplete()
-              resolve()
-            },
-            fail: (err: any) => {
-              console.warn('[FontLoader] Failed: ' + fontFamily, err)
-              fontsLoading--
-              if (fontsLoading <= 0) notifyFontLoadComplete()
-              resolve()
-            },
-          })
-        } else {
-          console.warn('[FontLoader] Download failed: ' + fontFamily + ', status: ' + res.statusCode)
-          fontsLoading--
-          if (fontsLoading <= 0) notifyFontLoadComplete()
-          resolve()
-        }
+    wx.loadFontFace({
+      family: fontFamily,
+      source: 'url("' + url + '")',
+      global: true,
+      scopes: ['webview', 'canvas'],
+      success: () => {
+        console.log('[FontLoader] Loaded: ' + fontFamily)
+        finish(true)
       },
-      fail: (err: any) => {
-        console.warn('[FontLoader] Download error: ' + fontFamily, err)
+      fail: onFail,
+    })
+  }
+
+  // 下载字体到本地临时文件（cloud:// 走 cloud.downloadFile 免域名；https 走 downloadFile）
+  const downloadToLocal = (onOk: (p: string) => void, onFail: () => void) => {
+    const tryHttp = () => {
+      if (typeof wx === 'undefined' || typeof wx.downloadFile !== 'function' || !/^https?:\/\//.test(fullUrl)) {
+        onFail()
+        return
+      }
+      wx.downloadFile({
+        url: fullUrl,
+        success: (r: any) => {
+          if (r.statusCode === 200 && r.tempFilePath) onOk(r.tempFilePath)
+          else {
+            console.warn('[FontLoader] downloadFile failed: ' + fontFamily + ', status: ' + r.statusCode)
+            onFail()
+          }
+        },
+        fail: (err: any) => {
+          console.warn('[FontLoader] downloadFile error: ' + fontFamily, err)
+          onFail()
+        },
+      })
+    }
+    if (cloudFileID && wx.cloud && typeof wx.cloud.downloadFile === 'function') {
+      wx.cloud.downloadFile({
+        fileID: cloudFileID,
+        success: (r: any) => {
+          if (r.tempFilePath) onOk(r.tempFilePath)
+          else tryHttp()
+        },
+        fail: (err: any) => {
+          console.warn('[FontLoader] cloud.downloadFile failed: ' + fontFamily, err)
+          tryHttp()
+        },
+      })
+    } else {
+      tryHttp()
+    }
+  }
+
+  // 读取本地文件为 base64 → data URL（真机 loadFontFace 不支持本地路径，但支持 data URL）
+  const loadViaDataUrl = (localPath: string, onFail: () => void) => {
+    try {
+      wx.getFileSystemManager().readFile({
+        filePath: localPath,
+        encoding: 'base64',
+        success: (r: any) => {
+          const src = cloudFileID || fullUrl
+          const ext = src.includes('.woff2') ? 'font/woff2'
+            : src.includes('.woff') ? 'font/woff'
+            : 'font/ttf'
+          loadViaUrl(`data:${ext};charset=utf-8;base64,${r.data}`, onFail)
+        },
+        fail: () => {
+          console.warn('[FontLoader] readFile base64 failed: ' + fontFamily)
+          onFail()
+        },
+      })
+    } catch {
+      onFail()
+    }
+  }
+
+  // 判定是否开发者工具：用于决定字体加载策略（微信 devtools 有 ERR_CACHE_MISS）。
+  // 使用 getDeviceInfo/getWindowInfo 拆分新 API，避免 deprecated getSystemInfoSync 告警。
+  const isDevtools = (() => {
+    try {
+      // @ts-ignore getDeviceInfo 基础库 2.20.1+
+      if (typeof uni.getDeviceInfo === 'function') {
+        const info = (uni as any).getDeviceInfo()
+        if (info?.platform === 'devtools') return true
+        if (info?.platform) return false
+      }
+      // @ts-ignore 兜底 getAppBaseInfo（小程序基础库 2.20.2+）
+      if (typeof uni.getAppBaseInfo === 'function') {
+        const info = (uni as any).getAppBaseInfo()
+        if (info?.host?.envType === 'develop' || info?.envVersion === 'develop') return true
+      }
+      // 旧基础库兜底（已 deprecated，但兼容旧环境）
+      const info = uni.getSystemInfoSync() as any
+      return info?.platform === 'devtools'
+    } catch { return false }
+  })()
+
+  if (isDevtools) {
+    // 开发者工具：wx.loadFontFace(https) 有已知 ERR_CACHE_MISS bug，直接 downloadFile→本地 tempPath→loadFontFace
+    downloadToLocal((p) => loadViaUrl(p, () => finish(false)), () => finish(false))
+  } else {
+    // 真机：wx.loadFontFace(https URL) 需要域名在「downloadFile 合法域名」白名单（mp 控制台配置）。
+    // 生产域名 636c-cloud1-d4gyvmo1d9a1e148a-1459215386.tcb.qcloud.la 未配置白名单时会失败，
+    // 然后自动降级为 cloud.downloadFile（免白名单）+ base64 data URL 加载。该降级属于正常流程，
+    // 仅用 info 级日志，避免与真实报错混淆。
+    loadViaUrl(fullUrl, () => {
+      console.info('[FontLoader] https 直连未生效（未配置 downloadFile 合法域名或临时链接过期），降级 cloud.downloadFile + data URL: ' + fontFamily)
+      downloadToLocal(
+        (p) => loadViaDataUrl(p, () => loadViaUrl(p, () => finish(false))),
+        () => finish(false),
+      )
+    })
+  }
+  // #endif
+
+  // #ifndef MP-WEIXIN
+  try {
+    uni.loadFontFace({
+      family: fontFamily,
+      source: 'url("' + fullUrl + '")',
+      global: true,
+      scopes: ['webview', 'canvas'],
+      success: () => {
+        loadedFonts.add(fontFamily)
+        console.log('[FontLoader] Loaded: ' + fontFamily)
         fontsLoading--
         if (fontsLoading <= 0) notifyFontLoadComplete()
         resolve()
       },
-    })
-    // #endif
-
-    // #ifndef MP-WEIXIN
-    try {
-      uni.loadFontFace({
-        family: fontFamily,
-        source: 'url("' + fullUrl + '")',
-        global: true,
-        scopes: ['webview', 'canvas'],
-        success: () => {
-          loadedFonts.add(fontFamily)
-          console.log('[FontLoader] Loaded: ' + fontFamily)
-          fontsLoading--
-          if (fontsLoading <= 0) notifyFontLoadComplete()
-          resolve()
-        },
-        fail: (err: any) => {
-          console.warn('[FontLoader] Failed: ' + fontFamily, err)
-          fontsLoading--
-          if (fontsLoading <= 0) notifyFontLoadComplete()
-          resolve()
-        },
-      } as any)
-    } catch (e) {
-      console.warn('[FontLoader] Error: ' + fontFamily, e)
-      fontsLoading--
-      if (fontsLoading <= 0) notifyFontLoadComplete()
-      resolve()
-    }
-    // #endif
-  })
+      fail: (err: any) => {
+        console.warn('[FontLoader] Failed: ' + fontFamily, err)
+        fontsLoading--
+        if (fontsLoading <= 0) notifyFontLoadComplete()
+        resolve()
+      },
+    } as any)
+  } catch (e) {
+    console.warn('[FontLoader] Error: ' + fontFamily, e)
+    fontsLoading--
+    if (fontsLoading <= 0) notifyFontLoadComplete()
+    resolve()
+  }
+  // #endif
 }
 
 /** 从样式中提取主字体名 */

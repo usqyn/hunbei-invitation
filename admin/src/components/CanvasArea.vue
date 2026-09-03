@@ -14,16 +14,28 @@
             class="phone-notch"
             :style="{ width: (40 * zoom) + 'px', height: (6 * zoom) + 'px' }"
           ></div>
-          <canvas
-            ref="canvasRef"
-            class="fabric-canvas"
-            :style="{
-              width: (canvasSize.width * zoom) + 'px',
-              height: (canvasSize.height * zoom) + 'px',
-            }"
-            @dragover="onCanvasDragOver"
-            @drop="onCanvasDrop"
-          ></canvas>
+          <!--
+            缩放通过外层 wrapper 的 CSS transform scale(zoom) 完成：
+            - Fabric 内部使用 getBoundingClientRect() 计算 canvas 坐标，
+              只有当 canvas 的 CSS 显示尺寸 == backing store 尺寸时，指针映射才正确；
+              过去直接把 canvas style.width/height *= zoom 会导致 zoom<1 时右半部分
+              命中判定偏移（历史上反复修不掉的"右边无法编辑"的根因）。
+            - wrapper 的 box 尺寸已经是 zoom 倍，布局/滚动占位保持正确；
+              wrapper 内部再 transform: scale(zoom) 保证视觉缩放。
+            - 注意 transform-origin 要把 wrapper 视觉块对齐到 wrapper 盒子的左上角，
+              避免溢出/滚动条偏差。
+          -->
+          <div
+            class="canvas-zoom-wrapper"
+            :style="canvasWrapperStyle"
+          >
+            <canvas
+              ref="canvasRef"
+              class="fabric-canvas"
+              @dragover="onCanvasDragOver"
+              @drop="onCanvasDrop"
+            ></canvas>
+          </div>
           <div
             class="phone-home"
             :style="{ width: (80 * zoom) + 'px', height: (6 * zoom) + 'px' }"
@@ -39,16 +51,17 @@
           class="viewport-scroll"
           :style="{ height: (667 * zoom) + 'px' }"
         >
-          <canvas
-            ref="canvasRef"
-            class="fabric-canvas"
-            :style="{
-              width: (canvasSize.width * zoom) + 'px',
-              height: (canvasSize.height * zoom) + 'px',
-            }"
-            @dragover="onCanvasDragOver"
-            @drop="onCanvasDrop"
-          ></canvas>
+          <div
+            class="canvas-zoom-wrapper"
+            :style="canvasWrapperStyle"
+          >
+            <canvas
+              ref="canvasRef"
+              class="fabric-canvas"
+              @dragover="onCanvasDragOver"
+              @drop="onCanvasDrop"
+            ></canvas>
+          </div>
         </div>
         <div class="viewport-footer">
           高 {{ canvasSize.height }}px · 区域内滚动查看全页
@@ -67,16 +80,17 @@
               height: (canvasSize.height * zoom) + 'px',
             }"
           >
-            <canvas
-              ref="canvasRef"
-              class="fabric-canvas"
-              :style="{
-                width: (canvasSize.width * zoom) + 'px',
-                height: (canvasSize.height * zoom) + 'px',
-              }"
-              @dragover="onCanvasDragOver"
-              @drop="onCanvasDrop"
-            ></canvas>
+            <div
+              class="canvas-zoom-wrapper"
+              :style="canvasWrapperStyle"
+            >
+              <canvas
+                ref="canvasRef"
+                class="fabric-canvas"
+                @dragover="onCanvasDragOver"
+                @drop="onCanvasDrop"
+              ></canvas>
+            </div>
           </div>
         </div>
         <div class="card-footer">卡片居中展示 · 传统横版贺卡风格</div>
@@ -107,16 +121,17 @@
               height: (canvasSize.height * zoom) + 'px',
             }"
           >
-            <canvas
-              ref="canvasRef"
-              class="fabric-canvas"
-              :style="{
-                width: (canvasSize.width * zoom) + 'px',
-                height: (canvasSize.height * zoom) + 'px',
-              }"
-              @dragover="onCanvasDragOver"
-              @drop="onCanvasDrop"
-            ></canvas>
+            <div
+              class="canvas-zoom-wrapper"
+              :style="canvasWrapperStyle"
+            >
+              <canvas
+                ref="canvasRef"
+                class="fabric-canvas"
+                @dragover="onCanvasDragOver"
+                @drop="onCanvasDrop"
+              ></canvas>
+            </div>
           </div>
         </div>
         <div class="flip-footer">
@@ -151,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { PageMode, CanvasSize, AnyCanvasElement, FlipPage } from '../types/canvas'
 
 const props = defineProps<{
@@ -179,6 +194,23 @@ const emit = defineEmits<{
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+
+// Fabric 内部使用 HTMLCanvasElement.getBoundingClientRect() 做屏幕坐标 → 画布逻辑坐标映射。
+// 历史上直接把 canvas.style.width/height *= zoom 会让 CSS 显示尺寸 ≠ backing store，
+// 导致 zoom<1 时命中判定整体左偏（右半边元素选不中）。
+// 这里改为"外层 wrapper box = 逻辑 W×H，再 transform: scale(zoom)"：
+//   - wrapper 外层（phone-frame / card-frame / flip-frame 等）已经设置 box 尺寸
+//     为 W*zoom × H*zoom，因此视觉占位与滚动条都正确；
+//   - 内部 wrapper 的 layout box 保持 W×H，并以 origin = top-left 做 scale(zoom)，
+//     结果视觉尺寸 = W*zoom × H*zoom，正好落在外层 box 内；
+//   - canvas CSS 尺寸始终是 W×H = backing store，命中坐标在 0.3×~3× 任何 zoom 都精确。
+const canvasWrapperStyle = computed(() => ({
+  width: props.canvasSize.width + 'px',
+  height: props.canvasSize.height + 'px',
+  transform: `scale(${props.zoom})`,
+  transformOrigin: 'top left',
+}))
+
 
 // 暴露 canvasRef 给父组件
 defineExpose({ canvasRef })
@@ -355,6 +387,27 @@ function onCanvasDragOver(e: DragEvent) {
 .fabric-canvas {
   background: #fff;
   display: block;
+  /* Fabric v6 内部依赖 getBoundingClientRect 计算命中坐标：
+     canvas 的 CSS 显示尺寸必须 = backing store，
+     因此缩放由外层 canvas-zoom-wrapper 的 CSS transform 完成，
+     这里禁止任何组件内联或样式对 canvas width/height 的 zoom 倍改写。 */
+  box-sizing: content-box;
+}
+
+.canvas-zoom-wrapper {
+  position: relative;
+  /* flex 容器会被外层 frame 统一居中对齐，
+     wrapper 视觉缩放从 top-left 开始以贴合 frame 的 inner top-left padding */
+  flex-shrink: 0;
+  /* transform 与尺寸在脚本端 canvasWrapperStyle 内联写入 */
+}
+
+/* 外层 frame 统一以 content-box 计，保证 wrapper 视觉 (W*z) 正好落在 padding box 内部；
+   不强制改 box-sizing，仅避免 canvas 的滚动条干扰 */
+.viewport-scroll .canvas-zoom-wrapper,
+.card-frame .canvas-zoom-wrapper,
+.flip-frame .canvas-zoom-wrapper {
+  margin: 0;
 }
 
 .canvas-footer {

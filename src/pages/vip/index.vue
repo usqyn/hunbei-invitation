@@ -153,7 +153,10 @@ onLoad((options: any) => {
   }
 })
 
-// 单次制作支付：创建 usage 订单 → 模拟支付（服务端发放 1 次制作额度）→ 跳编辑器/返回
+// 解锁支付：创建 unlock 订单 → 模拟支付（服务端标记已付，权益即"已付订单含 unlock 项"永久解锁该模板）
+// 修复：此前创建 type='usage'（按次制作）订单，支付后仅 quotaMap+1，分享/导出闸门要求
+// limitless（永久解锁）仍拦截，用户付了钱第二次分享又被要求付费。
+// 闸门弹窗与 FAQ 承诺的均为「¥xx 永久解锁」，故必须创建 unlock 订单。
 async function handleUnlockPay() {
   if (paying.value) return
   if (!userStore.requireLogin()) return
@@ -163,7 +166,7 @@ async function handleUnlockPay() {
   uni.showLoading({ title: '创建订单中...', mask: true })
   try {
     const order = await createOrder({
-      items: [{ type: 'usage', templateId: purchaseTemplateId.value }],
+      items: [{ type: 'unlock', templateId: purchaseTemplateId.value }],
       totalAmount: String(purchasePrice.value),
       status: 'pending',
       contactName: '',

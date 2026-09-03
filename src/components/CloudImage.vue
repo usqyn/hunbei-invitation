@@ -53,6 +53,8 @@ const emit = defineEmits<{
 const displayUrl = ref('')
 const retryCount = ref(0)
 const MAX_RETRY = 2
+// 标记是否已尝试过 cloud.downloadFile 降级（避免重复下载）
+let usedCloudDownload = false
 
 // 解析 URL：如果是 cloud:// 异步换取临时 URL，否则同步处理
 async function refreshDisplayUrl() {
@@ -60,14 +62,18 @@ async function refreshDisplayUrl() {
     displayUrl.value = ''
     return
   }
+  usedCloudDownload = false
   if (isCloudUrl(props.src)) {
     // 先用缓存（同步）快速渲染，再异步刷新
     const cached = resolveCloudUrlSync(props.src)
     if (cached && cached !== props.src) {
-      // 有缓存：直接用缓存 URL
       displayUrl.value = cached
     } else {
-      // 无缓存：先显示 cloud:// 让平台尝试加载，同时异步换取 https URL
+      // 无缓存：首次把原始 cloud:// 直接赋 src 发起加载，
+      // 避免 displayUrl='' 导致 <image src=''> 根本不请求、一直白屏。
+      // <image> 内部无法解析 cloud:// 会立刻触发 error → handleError 走
+      // "invalidate 缓存 + resolveCloudUrl 换取 https + 必要时 cloud.downloadFile 降级" 链路，
+      // 比等待异步 resolveCloudUrl 的数百毫秒白屏体验更稳。
       displayUrl.value = props.src
     }
     try {
@@ -96,28 +102,60 @@ async function refreshDisplayUrl() {
   }
 }
 
+// cloud.downloadFile 降级：https URL 被 <image> 拒绝（域名未加入 downloadFile 合法域名）时，
+// 用 wx.cloud.downloadFile 下载到本地 tempFilePath（绕过域名白名单），再赋给 <image>
+function tryCloudDownload() {
+  // #ifdef MP-WEIXIN
+  const cloudFileID = isCloudUrl(props.src) ? props.src : (() => {
+    const r = resolveUrl(props.src)
+    return isCloudUrl(r) ? r : ''
+  })()
+  if (!cloudFileID || typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.downloadFile !== 'function') return false
+  usedCloudDownload = true
+  wx.cloud.downloadFile({
+    fileID: cloudFileID,
+    success: (res: any) => {
+      if (res.tempFilePath) {
+        console.log('[cloud-image] cloud.downloadFile 降级成功:', props.src.slice(0, 50))
+        displayUrl.value = res.tempFilePath
+      }
+    },
+    fail: (err: any) => {
+      console.warn('[cloud-image] cloud.downloadFile 失败:', props.src.slice(0, 50), err)
+    },
+  })
+  return true
+  // #endif
+  return false
+}
+
 onMounted(refreshDisplayUrl)
 watch(() => props.src, () => {
   retryCount.value = 0
   refreshDisplayUrl()
 })
 
-// 图片加载失败处理：cloud:// URL 清缓存重试
+// 图片加载失败处理：cloud:// URL 清缓存 + 指数退避重试
 function handleError() {
   if (retryCount.value >= MAX_RETRY) {
     console.warn('[cloud-image] 达到最大重试次数, 放弃:', props.src)
     emit('error')
     return
   }
-  if (!isCloudUrl(props.src)) {
+  // 仅对 cloud:// URL 的失败做重试（其他 URL 失败重试无意义）
+  const resolved = resolveUrl(props.src)
+  if (!isCloudUrl(props.src) && !isCloudUrl(resolved)) {
     emit('error')
     return
   }
   retryCount.value++
-  console.warn(`[cloud-image] 加载失败(retry=${retryCount.value}):`, props.src)
-  // 清除缓存后重新换取
+  // 第一次失败时先尝试 cloud.downloadFile 降级（绕过域名白名单），再失败才走指数退避
+  if (!usedCloudDownload && tryCloudDownload()) return
+  // 指数退避：1s → 2s → 4s，避免密集请求不可用的云函数
+  const delay = Math.pow(2, retryCount.value - 1) * 1000
+  console.warn(`[cloud-image] 加载失败(retry=${retryCount.value}/${MAX_RETRY})，${delay}ms 后重试:`, props.src)
   invalidateCloudUrl(props.src)
-  refreshDisplayUrl()
+  setTimeout(refreshDisplayUrl, delay)
 }
 
 function handleLoad() {

@@ -61,6 +61,30 @@
               </button>
             </div>
           </div>
+          <!-- 问题4：已关联模板时，让用户显式选择覆盖更新还是另存新模板 -->
+          <div v-if="currentTemplateId" class="form-field">
+            <label class="field-label">发布方式</label>
+            <div class="publish-mode-chips">
+              <button
+                class="pm-chip"
+                :class="{ active: publishMode === 'update' }"
+                @click="publishMode = 'update'"
+              >
+                <span class="pm-icon">🔄</span>
+                <span class="pm-name">更新当前模板</span>
+                <span class="pm-sub">覆盖「{{ currentTemplateName || '当前模板' }}」{{ currentTemplateId ? `（ID: ${currentTemplateId.slice(0, 8)}…）` : '' }}</span>
+              </button>
+              <button
+                class="pm-chip"
+                :class="{ active: publishMode === 'new' }"
+                @click="publishMode = 'new'"
+              >
+                <span class="pm-icon">✨</span>
+                <span class="pm-name">另存为新模板</span>
+                <span class="pm-sub">保留原模板，创建独立的新模板</span>
+              </button>
+            </div>
+          </div>
         <div class="form-field">
           <label class="field-label">会员等级</label>
           <div class="vip-level-chips">
@@ -135,14 +159,54 @@
 
         <!-- ========== Step 2: 封面生成 ========== -->
         <div v-if="currentStep === 2" class="step-content">
-          <div class="cover-preview">
+          <!-- 调整模式：可拖动平移 + 缩放，手动裁剪封面取景 -->
+          <div
+            v-if="coverSourceImg && !coverPreview"
+            class="cover-preview cover-adjust"
+            :style="coverBoxStyle"
+            @mousedown.prevent="onCoverDragStart"
+            @mousemove="onCoverDragMove"
+            @mouseup="onCoverDragEnd"
+            @mouseleave="onCoverDragEnd"
+            @wheel.prevent="onCoverWheel"
+          >
+            <img :src="coverSourceImg" class="cover-img cover-adjust-img" :style="coverImgStyle" draggable="false" alt="调整封面" />
+          </div>
+          <!-- 最终预览 -->
+          <div v-else class="cover-preview" :style="coverBoxStyle">
             <img v-if="coverPreview" :src="coverPreview" class="cover-img" alt="封面预览" />
             <div v-else class="cover-placeholder">
               <span>📷</span>
               <span>点击「生成封面」获取预览图</span>
             </div>
           </div>
+          <!-- 缩放滑块（调整模式显示） -->
+          <div v-if="coverSourceImg && !coverPreview" class="cover-zoom-row">
+            <span class="zoom-label">缩放</span>
+            <input
+              v-model.number="coverZoom"
+              type="range"
+              class="zoom-slider"
+              min="1"
+              max="4"
+              step="0.05"
+              @input="clampCoverOffsets"
+            />
+            <span class="zoom-value">{{ coverZoom.toFixed(2) }}x</span>
+          </div>
           <div class="cover-actions">
+            <!-- 应用调整 -->
+            <button
+              v-if="coverSourceImg && !coverPreview"
+              class="btn-primary"
+              @click="applyCoverAdjust"
+            >
+              ✓ 应用调整
+            </button>
+            <!-- 已应用 → 可重新调整 -->
+            <button v-if="coverPreview" class="btn-secondary" @click="readjustCover">
+              ✥ 重新调整取景
+            </button>
             <button class="btn-secondary" @click="generateCover" :disabled="generatingCover">
               {{ generatingCover ? '生成中...' : '🔄 生成封面' }}
             </button>
@@ -151,13 +215,21 @@
               <input type="file" accept="image/*" style="display:none" @change="onCoverFile" />
             </label>
           </div>
-          <div class="cover-tip">封面将用于小程序模板列表展示，建议 375×667 比例</div>
+          <div class="cover-tip">
+            {{ coverSourceImg && !coverPreview
+              ? '拖动图片调整位置，滚轮或滑块缩放，点击「应用调整」生成最终封面'
+              : '封面将用于小程序模板列表展示，自动取景可再手动调整' }}
+          </div>
         </div>
 
         <!-- ========== Step 3: 上传发布 ========== -->
         <div v-if="currentStep === 3" class="step-content">
           <div v-if="!publishing && !publishDone" class="publish-ready">
             <div class="publish-summary">
+              <div class="summary-item">
+                <span class="s-label">发布方式</span>
+                <span class="s-value">{{ currentTemplateId ? (publishMode === 'update' ? '🔄 更新当前模板' : '✨ 另存为新模板') : '✨ 新建模板' }}</span>
+              </div>
               <div class="summary-item">
                 <span class="s-label">模板名称</span>
                 <span class="s-value">{{ form.name }}</span>
@@ -187,7 +259,33 @@
           <div v-if="publishDone && publishSuccess" class="publish-result success">
             <div class="result-icon">✅</div>
             <div class="result-title">发布成功！</div>
-            <div class="result-desc">模板已上传到服务器，可在微信小程序中查看</div>
+            <div class="result-desc">模板已保存到服务器{{ currentTemplateId && publishMode === 'update' ? '（已覆盖更新原模板）' : '' }}</div>
+
+            <!-- 问题3：模板 ID + 微信云同步状态，让"是否真的传上去了"一目了然 -->
+            <div v-if="publishedId" class="cloud-id-row">
+              <span class="cloud-id-label">模板 ID</span>
+              <code class="cloud-id-value">{{ publishedId }}</code>
+              <button class="cloud-copy-btn" @click="copyTemplateId">复制</button>
+              <span v-if="publishTip" class="cloud-copy-tip">{{ publishTip }}</span>
+            </div>
+
+            <div class="cloud-status" :class="`cloud-status--${cloudStatus}`">
+              <template v-if="cloudStatus === 'checking'">
+                <span class="cs-dot"></span> 正在核验微信云同步状态…
+              </template>
+              <template v-else-if="cloudStatus === 'ok'">
+                ☁️ 已同步到微信云，小程序端立即可见（进入「模板广场」下拉刷新即可拉取）
+              </template>
+              <template v-else-if="cloudStatus === 'missing'">
+                <div class="cs-main">⚠️ 已保存到服务器，但<b>微信云端没有查到该模板</b> —— 小程序暂时看不到！</div>
+                <div class="cs-sub">{{ cloudSyncHint || '可能是服务器的云同步未启用或失败（需要配置微信云环境）。可点击下方按钮重试同步。' }}</div>
+                <button class="cs-retry-btn" :disabled="cloudStatus === 'checking'" @click="retryCloudSync">🔁 重新同步到微信云</button>
+              </template>
+              <template v-else>
+                ☁️ 云同步状态未知（该部署模式可能直连微信云）
+              </template>
+            </div>
+
             <div class="result-actions">
               <button class="btn-secondary" @click="onClose">继续编辑</button>
               <button class="btn-primary" @click="onViewTemplate">在小程序中查看</button>
@@ -232,7 +330,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { CATEGORIES } from '../types/template'
-import { createTemplate, updateTemplate, fetchVersion, API_BASE, uploadImages } from '../composables/useApi'
+import { createTemplate, updateTemplate, fetchVersion, API_BASE, uploadImages, checkCloudTemplateExists, resyncTemplate } from '../composables/useApi'
 import { serializeElement } from '../utils/element-serializer'
 import { uploadPayloadImages } from '../utils/payload-image-upload'
 import { shapeText, containsRtl } from '../utils/bidi'
@@ -302,6 +400,7 @@ const props = defineProps<{
   getFlipPages?: () => any[]
   saveCurrentFlipPage?: () => void
   currentTemplateId?: string
+  currentTemplateName?: string
 }>()
 
 const emit = defineEmits<{
@@ -349,6 +448,137 @@ const validationResults = ref<Array<{
 }>>([])
 
 const coverPreview = ref('')
+// 封面调整：原始图（画布截图/上传图）→ 拖动平移 + 缩放取景 → 应用后生成最终 coverPreview
+const coverSourceImg = ref('')
+const coverZoom = ref(1)
+const coverOffsetX = ref(0)
+const coverOffsetY = ref(0)
+const COVER_BOX_W = 200 // 预览框宽度（px），与 .cover-preview CSS 一致
+let coverDragging = false
+let coverDragStartX = 0
+let coverDragStartY = 0
+let coverDragStartOffX = 0
+let coverDragStartOffY = 0
+
+// 预览框尺寸按画布比例（横版模板不会变形）
+const coverBoxStyle = computed(() => {
+  const w = props.canvasSize.width || 375
+  const h = props.canvasSize.height || 667
+  return {
+    width: COVER_BOX_W + 'px',
+    height: Math.round(COVER_BOX_W * (h / w)) + 'px',
+  }
+})
+
+// 调整中的图片变换：object-fit: cover 提供基础 cover 缩放，
+// scale(coverZoom) 在此之上叠加用户缩放，translate 为用户平移（box 像素）
+const coverImgStyle = computed(() => ({
+  transform: `translate(${coverOffsetX.value}px, ${coverOffsetY.value}px) scale(${coverZoom.value})`,
+}))
+
+// 约束平移范围：缩放 ≥1 时图片始终铺满取景框，不允许拖出露白
+function clampCoverOffsets() {
+  const maxPanX = ((coverZoom.value - 1) / 2) * COVER_BOX_W
+  const maxPanY = ((coverZoom.value - 1) / 2) * (COVER_BOX_W * ((props.canvasSize.height || 667) / (props.canvasSize.width || 375)))
+  coverOffsetX.value = Math.max(-maxPanX, Math.min(maxPanX, coverOffsetX.value))
+  coverOffsetY.value = Math.max(-maxPanY, Math.min(maxPanY, coverOffsetY.value))
+}
+
+function onCoverDragStart(e: MouseEvent) {
+  coverDragging = true
+  coverDragStartX = e.clientX
+  coverDragStartY = e.clientY
+  coverDragStartOffX = coverOffsetX.value
+  coverDragStartOffY = coverOffsetY.value
+}
+
+function onCoverDragMove(e: MouseEvent) {
+  if (!coverDragging) return
+  coverOffsetX.value = coverDragStartOffX + (e.clientX - coverDragStartX)
+  coverOffsetY.value = coverDragStartOffY + (e.clientY - coverDragStartY)
+  clampCoverOffsets()
+}
+
+function onCoverDragEnd() {
+  coverDragging = false
+}
+
+function onCoverWheel(e: WheelEvent) {
+  coverZoom.value = Math.max(1, Math.min(4, coverZoom.value + (e.deltaY > 0 ? -0.1 : 0.1)))
+  clampCoverOffsets()
+}
+
+// 生成封面：截取画布 → 进入调整模式
+async function generateCover() {
+  generatingCover.value = true
+  try {
+    const canvas = props.getCanvasEl()
+    if (!canvas) throw new Error('Canvas not found')
+    // 生成 2x 分辨率封面
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+    coverSourceImg.value = dataUrl
+    coverPreview.value = ''
+    coverZoom.value = 1
+    coverOffsetX.value = 0
+    coverOffsetY.value = 0
+  } catch (e) {
+    console.error('generateCover error:', e)
+  } finally {
+    generatingCover.value = false
+  }
+}
+
+// 上传自定义封面 → 同样进入调整模式（可裁剪取景后再应用）
+async function onCoverFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    coverSourceImg.value = reader.result as string
+    coverPreview.value = ''
+    coverZoom.value = 1
+    coverOffsetX.value = 0
+    coverOffsetY.value = 0
+  }
+  reader.readAsDataURL(file)
+  input.value = ''
+}
+
+// 应用调整：按预览框中的取景把原图绘制到输出尺寸的离屏 canvas
+function applyCoverAdjust() {
+  const src = coverSourceImg.value
+  if (!src) return
+  const img = new Image()
+  img.onload = () => {
+    const outW = props.canvasSize.width || 375
+    const outH = props.canvasSize.height || 667
+    const boxW = COVER_BOX_W
+    const c = document.createElement('canvas')
+    c.width = outW
+    c.height = outH
+    const ctx = c.getContext('2d')
+    if (!ctx) return
+    // 基础 cover 缩放 × 用户缩放，与 CSS object-fit:cover + scale 完全对应
+    const baseScale = Math.max(outW / img.width, outH / img.height)
+    const s = baseScale * coverZoom.value
+    const dw = img.width * s
+    const dh = img.height * s
+    // 预览框平移 px → 输出像素（等比换算）
+    const k = outW / boxW
+    const x = (outW - dw) / 2 + coverOffsetX.value * k
+    const y = (outH - dh) / 2 + coverOffsetY.value * k
+    ctx.drawImage(img, x, y, dw, dh)
+    coverPreview.value = c.toDataURL('image/jpeg', 0.9)
+  }
+  img.src = src
+}
+
+// 重新调整：回到调整模式（保留当前缩放/平移设置）
+function readjustCover() {
+  if (!coverSourceImg.value) return
+  coverPreview.value = ''
+}
 const generatingCover = ref(false)
 const publishing = ref(false)
 const publishDone = ref(false)
@@ -356,6 +586,50 @@ const publishSuccess = ref(false)
 const publishError = ref('')
 const uploadProgress = ref(0)
 const uploadProgressText = ref('')
+const publishTip = ref('')
+
+// 问题4：当前已关联模板时，允许选择「更新原模板」还是「另存为新模板」。
+// 历史 bug：发布成功后 currentTemplateId 指向刚发布的模板，紧接着导入新 PSD 再发布，
+// 会静默走 updateTemplate 把上一个模板覆盖掉。
+const publishMode = ref<'update' | 'new'>('update')
+
+// 问题3：发布后的云端状态核验。本地服务器保存成功 ≠ 小程序可见
+// （小程序读的是微信云数据库，需要 server 的 cloudSync 把模板写入云端）。
+const publishedId = ref('')
+const cloudStatus = ref<'checking' | 'ok' | 'missing' | 'unknown'>('unknown')
+const cloudSyncHint = ref('')
+
+async function verifyCloudSync(id: string) {
+  if (!id) { cloudStatus.value = 'unknown'; return }
+  cloudStatus.value = 'checking'
+  cloudSyncHint.value = ''
+  const r = await checkCloudTemplateExists(id)
+  cloudStatus.value = r.exists ? 'ok' : 'missing'
+}
+
+async function retryCloudSync() {
+  const id = publishedId.value
+  if (!id) return
+  cloudStatus.value = 'checking'
+  cloudSyncHint.value = ''
+  const r = await resyncTemplate(id)
+  if (r.success) {
+    await verifyCloudSync(id)
+    if (cloudStatus.value !== 'ok') cloudSyncHint.value = '已重试，但云端仍未查询到该模板，请检查服务器的云同步配置'
+  } else {
+    cloudStatus.value = 'missing'
+    cloudSyncHint.value = r.message || '重试失败，请检查服务器的云同步配置'
+  }
+}
+
+function copyTemplateId() {
+  if (!publishedId.value) return
+  try {
+    navigator.clipboard?.writeText(publishedId.value)
+    publishTip.value = '模板 ID 已复制'
+    setTimeout(() => { publishTip.value = '' }, 1500)
+  } catch { /* ignore */ }
+}
 
 const canNext = computed(() => {
   if (currentStep.value === 0) return form.name.trim().length > 0 && form.category
@@ -378,6 +652,10 @@ watch(() => props.visible, (val) => {
     publishing.value = false
     publishSuccess.value = false
     coverPreview.value = ''
+    coverSourceImg.value = ''
+    coverZoom.value = 1
+    coverOffsetX.value = 0
+    coverOffsetY.value = 0
     uploadProgress.value = 0
     form.name = ''
     form.subtitle = ''
@@ -387,6 +665,11 @@ watch(() => props.visible, (val) => {
     form.likes = 1000
     form.vipLevel = 'free'
     form.price = 0
+    publishMode.value = 'update'
+    publishedId.value = ''
+    cloudStatus.value = 'unknown'
+    cloudSyncHint.value = ''
+    publishTip.value = ''
   }
 })
 
@@ -485,30 +768,6 @@ function runValidation() {
   }
 
   validationResults.value = results
-}
-
-async function generateCover() {
-  generatingCover.value = true
-  try {
-    const canvas = props.getCanvasEl()
-    if (!canvas) throw new Error('Canvas not found')
-    // 生成 2x 分辨率封面
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-    coverPreview.value = dataUrl
-  } catch (e) {
-    console.error('generateCover error:', e)
-  } finally {
-    generatingCover.value = false
-  }
-}
-
-async function onCoverFile(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => { coverPreview.value = reader.result as string }
-  reader.readAsDataURL(file)
 }
 
 async function doPublish() {
@@ -671,12 +930,34 @@ async function doPublish() {
     uploadProgress.value = 50
     uploadProgressText.value = '保存到服务器...'
 
-    // 若当前正在编辑已有模板，则更新（PUT），否则新建（POST）
+    // 问题4：发布方式由用户显式选择——
+    // - update：更新当前已关联模板（props.currentTemplateId）
+    // - new：另存为新模板（即使 currentTemplateId 存在也不覆盖）
+    // 未关联模板时永远是新建。
     let result
-    if (props.currentTemplateId) {
+    const isUpdate = !!(props.currentTemplateId && publishMode.value === 'update')
+    if (isUpdate) {
       result = await updateTemplate(props.currentTemplateId, payload)
     } else {
       result = await createTemplate(payload)
+    }
+    publishedId.value = result?.id || ''
+
+    // 问题3：服务器本地保存成功 ≠ 小程序可见。发布完成后核验模板是否已写入微信云，
+    // 并在成功页展示真实状态（防止"本地显示上传成功，小程序却看不到"的静默失败）。
+    // - Express 后端：响应行带 cloud_synced 字段（server 在 POST/PUT 里同步等待云端写入）；
+    //   cloud_synced=1 → 已同步；=0 → 未同步（给出警告 + 重试按钮，并再次核验防止竞态）。
+    // - 直连云函数部署：模板本身就写入了云数据库，响应行没有 cloud_synced 字段 → 视为已同步。
+    {
+      const row: any = result
+      if (row && (row.cloud_synced === 1 || row.cloud_synced === true)) {
+        cloudStatus.value = 'ok'
+      } else if (row && row.cloud_synced !== undefined) {
+        cloudStatus.value = 'missing'
+        verifyCloudSync(publishedId.value)
+      } else {
+        cloudStatus.value = 'ok'
+      }
     }
 
     uploadProgress.value = 90
@@ -984,10 +1265,51 @@ function onViewTemplate() {
   justify-content: center;
 }
 
+/* 调整模式：取景框，支持拖动/滚轮 */
+.cover-preview.cover-adjust {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.cover-preview.cover-adjust:active { cursor: grabbing; }
+
 .cover-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* 调整中的图片：object-fit cover 基础上叠加 translate/scale 变换 */
+.cover-adjust-img {
+  transform-origin: center center;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* 缩放滑块行 */
+.cover-zoom-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 16px;
+  max-width: 320px;
+}
+.zoom-label {
+  font-size: 12px;
+  color: #666;
+  flex-shrink: 0;
+}
+.zoom-slider {
+  flex: 1;
+  accent-color: #1976d2;
+}
+.zoom-value {
+  font-size: 12px;
+  color: #333;
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .cover-placeholder {
@@ -1060,6 +1382,120 @@ function onViewTemplate() {
 .result-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
 .result-desc { font-size: 13px; color: #666; margin-bottom: 24px; }
 .result-actions { display: flex; gap: 12px; justify-content: center; }
+
+/* 问题4：发布方式选择 */
+.publish-mode-chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.pm-chip {
+  text-align: left;
+  padding: 10px 12px;
+  border: 1.5px solid #e0e3e8;
+  border-radius: 8px;
+  background: #fafbfc;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.15s;
+}
+.pm-chip:hover { border-color: #90caf9; }
+.pm-chip.active {
+  border-color: #1976d2;
+  background: #e3f2fd;
+}
+.pm-icon { font-size: 16px; }
+.pm-name { font-size: 13px; font-weight: 600; color: #333; }
+.pm-sub { font-size: 11px; color: #888; line-height: 1.4; word-break: break-all; }
+
+/* 问题3：模板 ID 展示 + 云同步状态 */
+.cloud-id-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.cloud-id-label { font-size: 12px; color: #888; }
+.cloud-id-value {
+  font-size: 12px;
+  background: #f1f3f5;
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: #495057;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-copy-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid #d0d5da;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  color: #555;
+}
+.cloud-copy-btn:hover { background: #f1f3f5; }
+.cloud-copy-tip { font-size: 11px; color: #2e7d32; }
+
+.cloud-status {
+  margin: 0 auto 24px;
+  max-width: 420px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-align: left;
+}
+.cloud-status--checking {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.cloud-status--ok {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+.cloud-status--missing {
+  background: #fff3e0;
+  color: #5d4037;
+  border: 1px solid #ffb74d;
+}
+.cloud-status--unknown {
+  background: #f1f3f5;
+  color: #666;
+}
+.cs-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #1976d2;
+  animation: csPulse 1s infinite;
+}
+@keyframes csPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+.cs-main { font-weight: 600; color: #bf360c; }
+.cs-main b { color: #d84315; }
+.cs-sub { margin: 6px 0 10px; color: #795548; }
+.cs-retry-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border: 1px solid #ef6c00;
+  color: #ef6c00;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cs-retry-btn:hover { background: #fff3e0; }
+.cs-retry-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .cover-tip {
   text-align: center;

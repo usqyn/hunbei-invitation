@@ -125,6 +125,12 @@
       <!-- 横向滚动的精选卡片 -->
       <scroll-view class="card-scroll" scroll-x>
         <view class="card-list stagger-list-horizontal">
+          <!-- 加载骨架：与付费板块骨架样式一致，避免首屏内容跳动 -->
+          <template v-if="loadingFeatured && featuredCards.length === 0">
+            <view v-for="n in 3" :key="'sk-feat-' + n" class="scroll-card skeleton-card-item">
+              <view class="card-image skeleton-shimmer"></view>
+            </view>
+          </template>
           <view
             v-for="card in featuredCards"
             :key="card.id"
@@ -248,15 +254,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
+import { ref, computed, onMounted } from 'vue'
+import { onLoad, onShow, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import { HOME_CATEGORIES, HOME_TABS } from '@/constants/categories'
 import { CATEGORY_LIST } from '@/constants/templates'
 import { HOME_CONFIG } from '@/config'
 import { resolveUrl } from '@/utils/url'
 import CloudImage from '@/components/CloudImage.vue'
 import { request } from '@/utils/request'
-import { useTemplateEntry, TIER_DEFAULT_PRICE } from '@/composables/useTemplateEntry'
+import { useTemplateEntry, resetTemplateEntryNavigation, TIER_DEFAULT_PRICE } from '@/composables/useTemplateEntry'
 import { t } from '@/locales'
 import '@/locales/kk'
 import '@/locales/zh-CN'
@@ -404,6 +410,7 @@ async function loadPaidTemplates() {
     if (Array.isArray(data)) {
       paidTemplates.value = data
       loadErrorPaid.value = false
+      if (featuredTemplates.value.length) writeTemplateCache(featuredTemplates.value, paidTemplates.value)
     }
   } catch (e) {
     console.warn('加载付费模板失败:', e)
@@ -420,29 +427,66 @@ function retryLoadPaid() {
 }
 
 // 精选模板：取已发布的、按 likes 降序的前 8 个
+const loadingFeatured = ref(true)
+// 精选卡片字段映射（API 模板 → 卡片数据）
+function mapFeaturedCard(t: any) {
+  return {
+    id: t.id,
+    name: t.name,
+    subtitle: t.subtitle,
+    cover: t.cover,
+    image: t.image,
+    likes: t.likes,
+    is_paid: t.is_paid,
+    price: t.price,
+    vipLevel: t.vipLevel,
+    is_premium: t.is_premium,
+    vip_free: t.vip_free,
+  }
+}
+
+// ============ 首屏列表缓存（stale-while-revalidate） ============
+// 冷启动先渲染上次缓存的两块列表（秒开），后台再请求刷新；
+// 缓存 10 分钟内直接使用，超期仅作占位仍会刷新。
+const TEMPLATE_CACHE_KEY = 'home_templates_cache_v1'
+const TEMPLATE_CACHE_TTL = 10 * 60 * 1000
+
+function readTemplateCache(): { at: number; featured: any[]; paid: any[] } | null {
+  try {
+    const raw = uni.getStorageSync(TEMPLATE_CACHE_KEY)
+    if (!raw) return null
+    const c = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!c || !Array.isArray(c.featured) || !Array.isArray(c.paid)) return null
+    if (!c.at || Date.now() - c.at > TEMPLATE_CACHE_TTL) return null
+    return c
+  } catch {
+    return null
+  }
+}
+
+function writeTemplateCache(featured: any[], paid: any[]) {
+  try {
+    uni.setStorageSync(TEMPLATE_CACHE_KEY, JSON.stringify({ at: Date.now(), featured, paid }))
+  } catch {
+    // 存储写入失败不影响主流程
+  }
+}
+
 async function loadFeaturedTemplates() {
+  loadingFeatured.value = true
   try {
     // sort=likes 服务端按 likes DESC 排序（云函数 listTemplates 支持）
     // 这里取 published 模板（默认就过滤 published），转成卡片数据
     // 字段裁剪：保留 featuredCards computed 与 useTemplateEntry 实际使用的字段
     const data = await request<any[]>({ url: '/api/templates?sort=likes&page=1&limit=8', hideLoading: true })
     if (Array.isArray(data)) {
-      featuredTemplates.value = data.map(t => ({
-        id: t.id,
-        name: t.name,
-        subtitle: t.subtitle,
-        cover: t.cover,
-        image: t.image,
-        likes: t.likes,
-        is_paid: t.is_paid,
-        price: t.price,
-        vipLevel: t.vipLevel,
-        is_premium: t.is_premium,
-        vip_free: t.vip_free,
-      }))
+      featuredTemplates.value = data.map(mapFeaturedCard)
+      if (paidTemplates.value.length) writeTemplateCache(featuredTemplates.value, paidTemplates.value)
     }
   } catch (e) {
     console.warn('加载精选模板失败:', e)
+  } finally {
+    loadingFeatured.value = false
   }
 }
 
@@ -463,14 +507,19 @@ function goToMall() {
   })
 }
 
-let _delayedLoadTimer: ReturnType<typeof setTimeout> | null = null
-
 onMounted(() => {
-  // 首屏可见的精选模板优先加载，付费模板延迟 1.5 秒避免竞争网络
-  loadFeaturedTemplates()
-  _delayedLoadTimer = setTimeout(() => {
+  // 冷启动先用缓存秒开（10 分钟内有效），后台请求刷新覆盖
+  const cached = readTemplateCache()
+  if (cached) {
+    featuredTemplates.value = cached.featured
+    paidTemplates.value = cached.paid
+    loadingFeatured.value = false
+    loadingPaid.value = false
+  }
+  // 精选优先加载；完成后立即加载付费（避免固定延迟的网络空转，也避免与精选竞争带宽）
+  loadFeaturedTemplates().finally(() => {
     loadPaidTemplates()
-  }, 1500)
+  })
 })
 
 onLoad(() => {
@@ -479,6 +528,12 @@ onLoad(() => {
   preloadRtlFonts().then(() => {
     fontsReady.value = true
   })
+})
+
+// 复位模板入口导航锁：openTemplateEntry 的 navigating 是模块级状态，
+// 从编辑器返回首页时若不复位，精选/付费卡片将永久无法点击（此前只复位了模板列表页）
+onShow(() => {
+  resetTemplateEntryNavigation()
 })
 
 function enableShareMenu() {
@@ -502,14 +557,6 @@ onShareTimeline(() => {
     title: 'TOYtamaxia - 精美婚礼请柬与海报模板',
     query: '',
     imageUrl: featuredTemplates.value[0]?.cover || '',
-  }
-})
-
-onUnmounted(() => {
-  // 清理延迟加载定时器，防止组件卸载后仍触发请求
-  if (_delayedLoadTimer) {
-    clearTimeout(_delayedLoadTimer)
-    _delayedLoadTimer = null
   }
 })
 </script>

@@ -130,6 +130,7 @@ export interface EditableElement {
   borderColor?: string
   borderWidth?: number
   mask?: string
+  maskSrc?: string  // alpha 蒙版原图 URL（换图后仍按原图 alpha 通道裁剪新图）
   // admin 端控制是否允许用户编辑
   editable?: boolean
   // 是否为付费/VIP 专属素材
@@ -183,6 +184,9 @@ export interface PageSection {
   rotation?: number
   opacity?: number
   borderRadius?: number
+  // alpha 蒙版（与 EditableElement 对齐）：'alpha' = 形状烘焙在原图 alpha 通道
+  mask?: string
+  maskSrc?: string  // alpha 蒙版原图 URL（换图后仍按原图 alpha 通道裁剪新图）
   // 图片滤镜（与 EditableElement 对齐，让 page 模式图片 section 也支持滤镜调整）
   brightness?: number
   contrast?: number

@@ -492,6 +492,7 @@ onMounted(async () => {
     const t2 = Date.now()
     console.log(`[template] data loaded: ${t2 - t0}ms, platform=${platform}, network=${_networkType}, count=${templates.length}`)
     safeBuildState(categories, templates)
+    _lastTemplateFetchTs = Date.now()
     console.log(`[template] step3: buildState done, cats=${categoryList.value.length}, temps=${allTemplates.value.length}`)
   } catch (e) {
     const tErr = Date.now()
@@ -535,8 +536,25 @@ function enableShareMenu() {
 }
 
 // 用户从编辑器返回时重置导航锁，避免点击无响应
+// 问题3配套：admin 在小程序停留期间发布了新模板/更新了模板，停留在本页时不会自动感知。
+// onShow 里做一次节流刷新（>20s 且静默，不打断浏览），保证发布后回到模板广场能拉到最新数据。
+let _lastTemplateFetchTs = 0
+let _firstShowDone = false
 onShow(() => {
   resetTemplateEntryNavigation()
+  if (!_firstShowDone) {
+    // 首次 onShow 与 onMounted 的初始加载重叠，跳过避免双请求
+    _firstShowDone = true
+    return
+  }
+  if (Date.now() - _lastTemplateFetchTs < 20_000) return
+  _lastTemplateFetchTs = Date.now()
+  Promise.all([fetchCategories(), fetchTemplates()])
+    .then(([cats, tpls]) => {
+      safeBuildState(cats, tpls)
+      console.log(`[template] onShow 静默刷新完成: templates=${tpls.length}`)
+    })
+    .catch(e => console.warn('[template] onShow 静默刷新失败:', e?.message || e))
 })
 
 onShareAppMessage(() => {

@@ -134,16 +134,24 @@ export async function fetchVersion(): Promise<number> {
 // ============ 文件上传 ============
 
 export async function uploadImages(files: File[]): Promise<string[]> {
-  const formData = new FormData()
-  files.forEach(f => formData.append('images', f))
-  const res = await axios.post(`${API_BASE}/api/upload`, formData, {
-    headers: {
-      Authorization: `Bearer ${getAdminToken()}`,
-    },
-    timeout: 60000,
-  })
-  if (!res.data.success) throw new Error(res.data.error)
-  return res.data.data.map((f: any) => f.url)
+  // 服务器 /api/upload 有单次文件数限制：PSD 导入模板图片层常超过限制，
+  // 分批上传（每批 8 个）并按原顺序拼接，避免整次发布因超限而失败
+  const CHUNK_SIZE = 8
+  const urls: string[] = []
+  for (let i = 0; i < files.length; i += CHUNK_SIZE) {
+    const batch = files.slice(i, i + CHUNK_SIZE)
+    const formData = new FormData()
+    batch.forEach(f => formData.append('images', f))
+    const res = await axios.post(`${API_BASE}/api/upload`, formData, {
+      headers: {
+        Authorization: `Bearer ${getAdminToken()}`,
+      },
+      timeout: 120000,
+    })
+    if (!res.data.success) throw new Error(res.data.error)
+    urls.push(...res.data.data.map((f: any) => f.url))
+  }
+  return urls
 }
 
 export async function uploadImage(file: File): Promise<string> {

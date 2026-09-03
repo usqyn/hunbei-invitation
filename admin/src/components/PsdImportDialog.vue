@@ -15,7 +15,21 @@
             <span v-if="result.resolutionUnit === 'PPI'">（{{ result.resolution }} DPI）</span>
           </div>
 
-          <!-- 缺少字体专区：可折叠面板，默认收起，点击标题展开 -->
+          <!-- ⚠ 突出告警横幅：字体/格式问题一眼可见（历史版本默认折叠导致"没有报错"的错觉） -->
+          <div v-if="result && (missingFonts.length > 0 || totalTips > 0)" class="psd-alert-banner">
+            <span class="psd-alert-icon">⚠️</span>
+            <span class="psd-alert-text">
+              <template v-if="missingFonts.length > 0">
+                本次导入有 <b>{{ missingFonts.length }}</b> 种字体在系统中不存在
+                <template v-if="totalTips > 0">、<b>{{ totalTips }}</b> 条格式提示</template>
+                。缺失字体的文字导入后将用替代字体渲染（<b>与设计稿不一致</b>），请先到「字体管理」上传字体再重新导入：
+                <b class="psd-alert-fonts">{{ missingFonts.map(m => m.name).join('、') }}</b>
+              </template>
+              <template v-else>本次导入有 <b>{{ totalTips }}</b> 条格式提示（样式/行高/混合模式差异），请查看下方「导入提示」</template>
+            </span>
+          </div>
+
+          <!-- 缺少字体专区：默认展开，确保字体问题第一时间被看到 -->
           <div v-if="missingFonts.length > 0" class="psd-report psd-report--fonts" :class="{ collapsed: !sectionOpen.fonts }">
             <div class="psd-report-title" @click="toggleSection('fonts')">
               <span class="psd-report-arrow">{{ sectionOpen.fonts ? '▾' : '▸' }}</span>
@@ -23,8 +37,24 @@
             </div>
             <div v-if="sectionOpen.fonts" class="psd-report-body">
               <div v-for="(m, i) in missingFonts" :key="i" class="psd-report-item">
-                字体「{{ m.name }}」缺少 · {{ m.count }} 个图层使用 —— 请登录管理后台 → 字体上传 上传该字体文件后重新导入；
+                字体「{{ m.name }}」缺少 · {{ m.count }} 个图层使用 ——
                 未上传前导入的文字将以 KazakhSoftAsilya / 默认字体渲染（与设计稿有差异）
+              </div>
+              <!-- 一键上传缺失字体：上传成功后自动重新解析 PSD，无需手动关掉重导 -->
+              <div class="psd-font-upload">
+                <label class="psd-font-upload-btn" :class="{ uploading: fontUploading }">
+                  <template v-if="!fontUploading">📤 上传缺失字体文件（.ttf/.otf/.woff/.woff2，可多选）</template>
+                  <template v-else>⏳ {{ fontUploadMsg }}</template>
+                  <input
+                    type="file"
+                    accept=".ttf,.otf,.woff,.woff2"
+                    multiple
+                    style="display:none"
+                    :disabled="fontUploading"
+                    @change="onFontFilesChosen"
+                  />
+                </label>
+                <span v-if="fontUploadDoneMsg" class="psd-font-upload-msg">{{ fontUploadDoneMsg }}</span>
               </div>
             </div>
           </div>
@@ -65,6 +95,35 @@
             </div>
           </div>
 
+          <!-- ⚡ 批量调整栏：整体字号偏大/偏小时一键 ×N，或把全部文字层统一为某字体 -->
+          <div v-if="textLayerCount > 0" class="psd-batch-bar">
+            <span class="psd-batch-title">⚡ 批量调整（{{ textLayerCount }} 个文字层）</span>
+            <span class="psd-batch-group">
+              <label class="psd-batch-label">字号
+                <input
+                  v-model.number="batchScale"
+                  type="number"
+                  class="psd-num-input sm"
+                  min="0.1"
+                  max="5"
+                  step="0.05"
+                  placeholder="1"
+                />×
+              </label>
+              <button class="psd-btn sm" @click="applyBatchFontSize">应用</button>
+              <button class="psd-btn sm" title="恢复为 PSD 原始字号" @click="resetBatchFontSize">还原</button>
+            </span>
+            <span class="psd-batch-group">
+              <label class="psd-batch-label">统一字体
+                <select v-model="batchFont" class="psd-font-select sm">
+                  <option value="">（不更改）</option>
+                  <option v-for="f in batchFontOptions" :key="f" :value="f">{{ f }}</option>
+                </select>
+              </label>
+              <button class="psd-btn sm" :disabled="!batchFont" @click="applyBatchFont">应用</button>
+            </span>
+          </div>
+
           <!-- 图层列表（倒序：最上层在前） -->
           <div class="psd-layers">
             <div v-for="layer in topDownLayers" :key="layer.id" class="psd-layer" :class="`psd-layer--${layer.type}`">
@@ -82,16 +141,16 @@
                 <!-- 文字层校对区：栅格缩略图 ↔ 提取文本 -->
                 <template v-if="layer.type === 'text'">
                   <!-- 占位符自动识别确认：仅在检测到占位符时展示，用户逐条确认是否替换 -->
-                  <div v-if="layer.detectedKey && layer.detectedToken" class="psd-ph-detect">
+                  <div v-if="layer.detectedKey && layer.detectedToken && !layer.dataKey" class="psd-ph-detect">
                     <div class="psd-ph-detect-row">
                       <span class="psd-ph-detect-label">🤖 识别为占位符</span>
-                      <span class="psd-ph-detect-arrow">「{{ layer.text }}」→ <code>{{ layer.detectedToken }}</code></span>
+                      <span class="psd-ph-detect-arrow">「{{ layer.text }}」→ <code>{{ layer.detectedDisplay || layer.detectedToken }}</code></span>
                     </div>
                     <div class="psd-ph-detect-actions">
                       <button
                         class="psd-ph-btn accept"
                         :class="{ chosen: phConfirmFlags[layer.id] === true }"
-                        @click="phConfirmFlags[layer.id] = true; setEdit(layer, 'text', layer.detectedToken!)"
+                        @click="phConfirmFlags[layer.id] = true; setEdit(layer, 'text', layer.detectedDisplay || layer.detectedToken!)"
                       >✓ 应用</button>
                       <button
                         class="psd-ph-btn reject"
@@ -174,6 +233,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { PsdImportResult, PsdLayerPreview } from '../utils/psd-import'
+import { uploadFonts } from '../composables/useApi'
 
 const props = defineProps<{
   visible: boolean
@@ -184,7 +244,92 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   confirm: [payload: { width: number; height: number; layers: PsdLayerPreview[] }]
+  'fonts-uploaded': []
 }>()
+
+// ============ 缺失字体一键上传（上传后由父组件自动重新解析 PSD） ============
+const fontUploading = ref(false)
+const fontUploadMsg = ref('')
+const fontUploadDoneMsg = ref('')
+
+// 重新解析完成后（result 换新对象）：清理上传状态，missingFonts 由此自动刷新
+watch(
+  () => props.result,
+  () => {
+    if (fontUploading.value) return
+    fontUploadDoneMsg.value = ''
+    fontUploadMsg.value = ''
+  },
+)
+
+async function onFontFilesChosen(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = input.files
+  if (!files?.length) return
+  input.value = ''
+  if (fontUploading.value) return
+  try {
+    fontUploading.value = true
+    fontUploadMsg.value = '字体上传中…'
+    fontUploadDoneMsg.value = ''
+    const uploaded = await uploadFonts(Array.from(files))
+    const names = uploaded.map(u => u.originalName || u.filename).join('、')
+    fontUploadMsg.value = '上传成功，正在重新解析 PSD…'
+    // 通知父组件用新字体列表重新 parse 同一个 PSD 文件；
+    // 解析完成后 props.result 更新，watch 里会清理本状态并刷新 missingFonts
+    fontUploadDoneMsg.value = `✅ ${names} 已上传`
+    emit('fonts-uploaded')
+  } catch (err: any) {
+    fontUploadDoneMsg.value = ''
+    fontUploadMsg.value = ''
+    alert('字体上传失败：' + (err?.message || err))
+  } finally {
+    fontUploading.value = false
+    fontUploadMsg.value = ''
+  }
+}
+
+// ============ 批量字号 / 统一字体（⚡ 整体偏大偏小时不再逐层改） ============
+const batchScale = ref<number | ''>('')
+const batchFont = ref('')
+
+const textLayerCount = computed(() =>
+  (props.result?.layers ?? []).filter(l => l.type === 'text').length,
+)
+
+// 可选字体 = 管理端可用字体列表 + 哈萨克默认字体（保证哈语层可统一）
+const batchFontOptions = computed(() => {
+  const set = new Set<string>(['KazakhSoftAsilya'])
+  for (const f of props.availableFonts || []) set.add(f)
+  return [...set]
+})
+
+function applyBatchFontSize() {
+  const s = Number(batchScale.value)
+  if (!s || s <= 0) return
+  for (const layer of props.result?.layers ?? []) {
+    if (layer.type !== 'text') continue
+    // 以 PSD 原始字号为基准缩放（而非叠加当前值），连点多次不会指数放大
+    const base = layer.fontSize || 24
+    setEdit(layer, 'fontSize', Math.round(base * s * 10) / 10)
+  }
+}
+
+function resetBatchFontSize() {
+  for (const layer of props.result?.layers ?? []) {
+    if (layer.type !== 'text') continue
+    setEdit(layer, 'fontSize', layer.fontSize || 24)
+  }
+  batchScale.value = ''
+}
+
+function applyBatchFont() {
+  if (!batchFont.value) return
+  for (const layer of props.result?.layers ?? []) {
+    if (layer.type !== 'text') continue
+    setEdit(layer, 'fontName', batchFont.value)
+  }
+}
 
 // 文字层可编辑字段（text / fontSize / fontName）
 interface TextEdit {
@@ -306,10 +451,12 @@ function toggleGroup(i: number) {
 
 const reportGroups = computed(() => props.result?.warningGroups ?? [])
 
-// 顶部报告区折叠状态（默认全部收起，点击标题展开；避免长内容挤压图层列表）
+// 顶部报告区折叠状态：
+// 字体缺失 / 导入提示默认【展开】——修复"字体不一样时没有报错"的反馈：
+// 这些信息历史版本默认收起，用户几乎不会点开，导致导入后才发现字形/排版与设计稿不一致。
 const sectionOpen = ref<Record<'fonts' | 'tips' | 'skipped', boolean>>({
-  fonts: false,
-  tips: false,
+  fonts: true,
+  tips: true,
   skipped: false,
 })
 function toggleSection(key: 'fonts' | 'tips' | 'skipped') {
@@ -358,6 +505,9 @@ function onConfirm() {
     const edit = edits.value[layer.id]
     if (!edit) return { ...layer, editable }
     const rejected = phConfirmFlags.value[layer.id] === false
+    // 部分命中的占位符：用户点「应用」后绑定 dataKey（整行命中已在导入时自动绑定）
+    const applied = phConfirmFlags.value[layer.id] === true
+    const boundKey = rejected ? undefined : (layer.dataKey || (applied ? layer.detectedKey : undefined))
     return {
       ...layer,
       editable,
@@ -366,8 +516,10 @@ function onConfirm() {
       fontName: edit.fontName,
       mappedFont: edit.fontName,
       // 用户忽略识别时，清除占位符元数据，避免画布/小程序端错误回填
-      dataKey: rejected ? undefined : layer.dataKey,
+      dataKey: boundKey,
+      detectedKey: rejected ? undefined : layer.detectedKey,
       detectedToken: rejected ? undefined : layer.detectedToken,
+      detectedDisplay: rejected ? undefined : layer.detectedDisplay,
       defaults: rejected ? undefined : layer.defaults,
     }
   })
@@ -428,6 +580,74 @@ function onConfirm() {
   border-radius: 8px;
   font-size: 12px;
 }
+/* 一键上传缺失字体 */
+.psd-font-upload {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.psd-font-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: #e64a19;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.psd-font-upload-btn:hover { background: #d84315; }
+.psd-font-upload-btn.uploading { background: #9e9e9e; cursor: wait; }
+.psd-font-upload-msg { font-size: 12px; color: #2e7d32; font-weight: 600; }
+
+/* ⚡ 批量调整栏 */
+.psd-batch-bar {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: #e8f0fe;
+  border: 1px solid #c5d8f7;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.psd-batch-title { font-weight: 700; color: #1a56b0; white-space: nowrap; }
+.psd-batch-group { display: inline-flex; align-items: center; gap: 6px; }
+.psd-batch-label { display: inline-flex; align-items: center; gap: 5px; color: #333; white-space: nowrap; }
+.psd-num-input.sm { width: 60px; }
+.psd-font-select.sm { max-width: 170px; }
+.psd-btn.sm { padding: 4px 10px; font-size: 12px; }
+/* ⚠ 顶部告警横幅：醒目提示字体缺失/格式差异 */
+.psd-alert-banner {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #fff3e0;
+  border: 1px solid #ffb74d;
+  border-left: 4px solid #ef6c00;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #5d4037;
+}
+.psd-alert-icon { font-size: 16px; line-height: 1.4; }
+.psd-alert-text b { color: #d84315; }
+.psd-alert-fonts { word-break: break-all; }
+/* 字体缺失专区：更醒目的橙红描边 */
+.psd-report--fonts {
+  border-color: #ffab91;
+  border-left: 4px solid #e64a19;
+  background: #fbe9e7;
+}
+.psd-report--fonts .psd-report-title { color: #bf360c; }
 .psd-report-title {
   padding: 6px 10px;
   font-weight: 600;

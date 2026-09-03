@@ -263,7 +263,7 @@ describe('parseLayerEffects', () => {
   const DPI = 72
   const UNIT = 'PPI' as const
 
-  it('dropShadow：角度/距离/模糊 → offsetX/offsetY/blur（0° = 正右）', () => {
+  it('dropShadow：角度 = 光源方向（0° = 光源正右 → 阴影向左）', () => {
     const r = parseLayerEffects({
       dropShadow: [{
         enabled: true,
@@ -277,14 +277,14 @@ describe('parseLayerEffects', () => {
     expect(r.dropShadow).toEqual({
       color: '#000000',
       opacity: 0.5,
-      offsetX: 10,
+      offsetX: -10,
       offsetY: 0,
       blur: 4,
     })
     expect(r.lost).toEqual([])
   })
 
-  it('dropShadow：90° = 正上（y 取负）', () => {
+  it('dropShadow：90° = 光源正上 → 阴影向下（背光侧）', () => {
     const r = parseLayerEffects({
       dropShadow: [{
         enabled: true,
@@ -295,7 +295,7 @@ describe('parseLayerEffects', () => {
         size: { value: 0, units: 'Pixels' },
       }],
     }, DPI, UNIT, 100, 100)
-    expect(r.dropShadow?.offsetY).toBe(-6)
+    expect(r.dropShadow?.offsetY).toBe(6)
   })
 
   it('dropShadow：Points 单位按分辨率换算', () => {
@@ -309,7 +309,7 @@ describe('parseLayerEffects', () => {
         size: { value: 2, units: 'Points' },
       }],
     }, 144, UNIT, 100, 100)
-    expect(r.dropShadow?.offsetX).toBe(2)
+    expect(r.dropShadow?.offsetX).toBe(-2)
     expect(r.dropShadow?.blur).toBe(4)
   })
 
@@ -345,7 +345,7 @@ describe('parseLayerEffects', () => {
     const r = parseLayerEffects({
       innerShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }],
     }, DPI, UNIT, 100, 100)
-    expect(r.innerShadow).toEqual({ color: '#000000', opacity: 1, offsetX: 0, offsetY: -2, size: 2 })
+    expect(r.innerShadow).toEqual({ color: '#000000', opacity: 1, offsetX: 0, offsetY: 2, size: 2 })
     expect(r.lost).not.toContain('内阴影')
   })
 
@@ -366,7 +366,26 @@ describe('parseLayerEffects', () => {
     expect(normal.satin?.blendMode).toBe('normal')
   })
 
-  it('不支持的效果（发光/斜面等）→ lost', () => {
+  it('外发光/内发光/斜面浮雕：完整参数 → 解析为字段（canvas 近似合成）', () => {
+    const r = parseLayerEffects({
+      outerGlow: { enabled: true, color: { r: 255, g: 215, b: 0 }, opacity: 0.7, size: { value: 8, units: 'Pixels' } },
+      innerGlow: { enabled: true, color: { r: 255, g: 255, b: 255 }, opacity: 0.5, size: { value: 4, units: 'Pixels' } },
+      bevel: { enabled: true, highlightColor: { r: 255, g: 255, b: 255 }, highlightOpacity: 0.8, shadowColor: { r: 0, g: 0, b: 0 }, shadowOpacity: 0.6, size: { value: 5, units: 'Pixels' }, angle: 120 },
+    }, DPI, UNIT, 100, 100)
+    expect(r.outerGlow).toEqual({ color: '#ffd700', opacity: 0.7, blur: 8 })
+    expect(r.innerGlow).toEqual({ color: '#ffffff', opacity: 0.5, blur: 4 })
+    expect(r.bevelEmboss).toEqual({
+      highlightColor: '#ffffff',
+      highlightOpacity: 0.8,
+      shadowColor: '#000000',
+      shadowOpacity: 0.6,
+      depth: 5,
+      angle: 120,
+    })
+    expect(r.lost).toEqual([])
+  })
+
+  it('不支持的效果（渐变/图案叠加等）→ lost；发光/浮雕缺参数时也记入 lost', () => {
     const r = parseLayerEffects({
       innerShadow: [{ enabled: true, color: { r: 0, g: 0, b: 0 }, opacity: 1, distance: { value: 2, units: 'Pixels' }, angle: 90, size: { value: 2, units: 'Pixels' } }],
       outerGlow: { enabled: true },

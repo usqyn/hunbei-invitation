@@ -218,7 +218,7 @@
             <input
               type="color"
               class="form-input color"
-              :value="selectedElement.color"
+              :value="toColorInputValue(selectedElement.color)"
               @change="$emit('updateSelected', { color: ($event.target as HTMLInputElement).value })"
             />
           </div>
@@ -248,7 +248,7 @@
             <input
               type="color"
               class="form-input color"
-              :value="selectedElement.strokeColor || '#000000'"
+              :value="toColorInputValue(selectedElement.strokeColor)"
               @change="$emit('updateSelected', { strokeColor: ($event.target as HTMLInputElement).value })"
             />
           </div>
@@ -280,7 +280,7 @@
             <input
               type="color"
               class="form-input color"
-              :value="selectedElement.shadowColor || '#000000'"
+              :value="toColorInputValue(selectedElement.shadowColor)"
               @change="$emit('updateSelected', { shadowColor: ($event.target as HTMLInputElement).value })"
             />
           </div>
@@ -495,7 +495,7 @@
             <label>颜色</label>
             <input
               type="color" class="form-input color-input"
-              :value="selectedElement.borderColor || '#ffffff'"
+              :value="toColorInputValue(selectedElement.borderColor, '#ffffff')"
               @change="$emit('updateSelected', { borderColor: ($event.target as HTMLInputElement).value })"
             />
           </div>
@@ -636,6 +636,7 @@
 import type { AnyCanvasElement, TextElement, CanvasSize, CanvasBackground } from '../types/canvas'
 import { CANVAS_PRESETS } from '../types/canvas'
 import { TEMPLATE_DATA_KEYS } from '../constants/config-data'
+import { toColorInputValue } from '../utils/common'
 
 defineProps<{
   selectedElement: AnyCanvasElement | null

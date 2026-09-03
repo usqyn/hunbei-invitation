@@ -115,7 +115,16 @@
                 <text class="empty-decor-dot"></text>
               </view>
             </view>
-            <view v-else class="preview-card preview-card--canvas animate-fade-in-scale" :style="[canvasCardStyle, canvasBackgroundStyle]">
+            <view v-else class="preview-card preview-card--canvas animate-fade-in-scale" :style="[canvasCardStyle, canvasBgBaseStyle]">
+              <!-- 独立背景图：<image> 原生组件支持 cloud:// 直连解析，不再有 WXSS url(cloud://) 的降级空白 -->
+              <CloudImage
+                v-if="canvasBgImageUrl"
+                :style="canvasBgImageHostStyle"
+                :custom-style="canvasBgImageCustomStyle"
+                :src="canvasBgImageUrl"
+                :mode="canvasBgImageScale"
+                :fade-show="false"
+              />
               <view
                 v-for="(el, idx) in editorStore.editableElements" :key="el.id || ('el-' + idx)"
                 class="canvas-element"
@@ -137,8 +146,8 @@
                   v-if="el.type === 'image'"
                   class="canvas-image"
                   custom-class="canvas-image"
-                  :style="canvasImageFillStyle"
-                  :custom-style="canvasImageFillStyle"
+                  :style="getImageFillStyle(el)"
+                  :custom-style="getImageFillStyle(el)"
                   :src="el.text"
                   :mode="imageMode(el)"
                   :fade-show="false"
@@ -155,8 +164,8 @@
                   v-else-if="el.type === 'sticker'"
                   class="canvas-image canvas-sticker"
                   custom-class="canvas-image canvas-sticker"
-                  :style="canvasImageFillStyle"
-                  :custom-style="canvasImageFillStyle"
+                  :style="getImageFillStyle(el)"
+                  :custom-style="getImageFillStyle(el)"
                   :src="el.text"
                   mode="aspectFit"
                   :fade-show="false"
@@ -193,26 +202,41 @@
     <view class="editor-footer">
       <!-- 上下文工具栏：选中元素时显示快捷操作 -->
       <view v-if="editorStore.selectedElement !== null" class="context-toolbar context-toolbar--glass">
-        <view class="ctx-btn" @click="handleEditText">
-          <text class="ctx-icon ctx-icon--bounce">✏️</text>
-          <text class="ctx-label">编辑</text>
-        </view>
-        <view class="ctx-divider"></view>
-        <view v-if="selectedElType === 'image'" class="ctx-btn" @click="handleReplaceImage">
+        <!--
+          问题 3/5 守卫：所有"会改变元素内容"的入口必须先判断选中元素的 editable !== false。
+          即便上层 overlay 已通过 @touchstart/@click 的三元拦截把非 editable 元素点不亮，
+          这里再做一次防御（避免通过底部 Tab / 外部脚本跳过来）。
+          - editable === false / undefined（false 严格）时：
+              - 文字：不显示「编辑」「样式」（文字直接编辑入口已整体移除，统一走「信息」面板占位符）
+              - 图片：不显示「换图」「调整」
+        -->
+        <view
+          v-if="isSelectedEditable && selectedElType === 'image'"
+          class="ctx-btn"
+          @click="handleReplaceImage"
+        >
           <text class="ctx-icon ctx-icon--bounce">🖼️</text>
           <text class="ctx-label">换图</text>
         </view>
-        <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
-        <view v-if="selectedElType === 'image'" class="ctx-btn" @click="showImagePanel = true">
+        <view v-if="isSelectedEditable && selectedElType === 'image'" class="ctx-divider"></view>
+        <view
+          v-if="isSelectedEditable && selectedElType === 'image'"
+          class="ctx-btn"
+          @click="showImagePanel = true"
+        >
           <text class="ctx-icon ctx-icon--bounce">⚙️</text>
           <text class="ctx-label">调整</text>
         </view>
-        <view v-if="selectedElType === 'image'" class="ctx-divider"></view>
-        <view v-if="selectedElType === 'text' || selectedElType === 'basic'" class="ctx-btn" @click="showTextStylePanel = true">
+        <view v-if="isSelectedEditable && selectedElType === 'image'" class="ctx-divider"></view>
+        <view
+          v-if="isSelectedEditable && (selectedElType === 'text' || selectedElType === 'basic')"
+          class="ctx-btn"
+          @click="showTextStylePanel = true"
+        >
           <text class="ctx-icon ctx-icon--bounce">🎨</text>
           <text class="ctx-label">样式</text>
         </view>
-        <view v-if="selectedElType === 'text' || selectedElType === 'basic'" class="ctx-divider"></view>
+        <view v-if="isSelectedEditable && (selectedElType === 'text' || selectedElType === 'basic')" class="ctx-divider"></view>
         <view class="ctx-btn ctx-btn--danger" @click="deselectElement">
           <text class="ctx-icon ctx-icon--bounce">✕</text>
           <text class="ctx-label">取消</text>
@@ -237,16 +261,12 @@
           <text class="quick-label">去水印</text>
         </view>
       </view>
-      <!-- 底部 Tab + 操作区 -->
+      <!-- 底部 Tab + 操作区（文字直接编辑入口已移除：原文只能通过「信息」面板占位符修改） -->
       <view class="footer-main footer-stagger-anim">
         <view class="footer-tabs">
           <view class="footer-tab footer-tab--item" @click="openUnifiedEdit">
             <text class="tab-icon tab-icon--hover">📋</text>
             <text class="tab-label">信息</text>
-          </view>
-          <view class="footer-tab footer-tab--item" @click="handleEditText">
-            <text class="tab-icon tab-icon--hover">✏️</text>
-            <text class="tab-label">文字</text>
           </view>
           <view class="footer-tab footer-tab--item" @click="handleReplaceImage">
             <text class="tab-icon tab-icon--hover">🖼️</text>
@@ -385,14 +405,14 @@ import { useUserStore } from '@/stores/user'
 import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
-import { resolveTextPlaceholders, extractTokenKeys } from '@/utils/resolveTextPlaceholders'
+import { resolveTextPlaceholders } from '@/utils/resolveTextPlaceholders'
+import { compositeImageWithMask } from '@/utils/imageFilter'
 import { useCanvasRender } from '@/composables/useCanvasRender'
 import { usePinchGesture } from './composables/usePinchGesture'
 import { useFrameThrottle } from './composables/useFrameThrottle'
 import { useGoBack } from '@/composables/useGoBack'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { getTierPrice, getTemplateTier } from '@/composables/useTemplateEntry'
 import { runWithExportGate, exportGate } from '@/composables/useTemplateEntry'
 import { exportInvitation, uploadImage, fetchTemplateQuota, fetchRecommendProducts } from '@/api'
 import { showRewardedAd } from '@/utils/rewarded-ad'
@@ -432,16 +452,30 @@ const {
   isCanvasMode,
   isLandscape,
   canvasCardStyle,
+  canvasBgBaseStyle,
+  canvasBgImageUrl,
+  canvasBgImageScale,
+  canvasBgImageOpacity,
   canvasBackgroundStyle,
   updateCardHeight,
   getCanvasElementStyle,
   getTextStyle,
   getShapeStyle,
+  getImageFillStyle,
   resolveImageMode,
 } = useCanvasRender({
   getElements: () => editorStore.editableElements,
   getCanvasSize: () => editorStore.canvasSize,
   getBackground: () => editorStore.background as any,
+})
+
+// 背景图 inline style：穿透 CloudImage 组件隔离，确保 <image> 拿到定位/尺寸
+const BG_IMAGE_BASE_STYLE = 'position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;pointer-events:none;z-index:0'
+const canvasBgImageHostStyle = computed(() => ({ opacity: canvasBgImageOpacity.value < 1 ? String(canvasBgImageOpacity.value) : undefined }))
+const canvasBgImageCustomStyle = computed(() => {
+  let s = BG_IMAGE_BASE_STYLE
+  if (canvasBgImageOpacity.value < 1) s += `;opacity:${canvasBgImageOpacity.value}`
+  return s
 })
 
 // renderedImage 实际显示尺寸（由 @load 事件回调更新）
@@ -573,23 +607,8 @@ const showTextStylePanel = ref(false)
 let textStyleTimer: ReturnType<typeof setTimeout> | null = null
 
 // 收集模板中所有元素的 dataKey（跨 canvas/page/flip 三种模式），用于 UnifiedEditForm 按需显示字段
-const allTemplateDataKeys = computed(() => {
-  const keys = new Set<string>()
-  editorStore.editableElements.forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
-  editorStore.pageSections.forEach(sec => { if (sec.dataKey) keys.add(sec.dataKey) })
-  editorStore.flipPages.forEach(page => {
-    (page.elements || []).forEach(el => { if (el.dataKey) keys.add(el.dataKey) })
-  })
-  // 新增：占位符 token 收集（token 化元素无 dataKey，扫描文本补齐表单字段）
-  ;[
-    ...editorStore.editableElements,
-    ...editorStore.pageSections,
-    ...editorStore.flipPages.flatMap(page => page.elements || []),
-  ].forEach(el => {
-    extractTokenKeys((el as { text?: string }).text || '').forEach(k => keys.add(k))
-  })
-  return Array.from(keys)
-})
+// 已上移至 editorStore.allTemplateDataKeys（含 token 被替换后的字段保底，修复填写后字段行消失）
+const allTemplateDataKeys = computed(() => editorStore.allTemplateDataKeys)
 
 // 当前选中的图片元素（用于 ImagePropertyPanel）
 const selectedImageElement = computed(() => {
@@ -733,7 +752,8 @@ function onElementLongPress(idx: number) {
   if (!el || el.editable === false) return
   editorStore.selectedElement = idx
   haptic('medium')
-  const items: string[] = ['编辑']
+  // 文字直接编辑入口已移除（统一走「信息」面板占位符）：长按菜单对文字仅保留删除
+  const items: string[] = []
   if (el.type === 'image') {
     items.push('换图')
     items.push('调整')
@@ -743,13 +763,6 @@ function onElementLongPress(idx: number) {
     itemList: items,
     success: (res: any) => {
       let offset = 0
-      if (items[offset] === '编辑') {
-        if (res.tapIndex === offset) {
-          onOpenEditor(idx)
-          return
-        }
-        offset++
-      }
       if (el.type === 'image' && items[offset] === '换图') {
         if (res.tapIndex === offset) {
           handleReplaceImage()
@@ -1058,8 +1071,8 @@ function handleReset() {
 function handleRemoveWatermark() {
   if (isExporting) return
   const templateId = editorStore.currentTemplateId
-  const tpl = (editorStore as any).currentTemplate || null
-  const tier = templateId ? getTemplateTier(tpl) : 'limited'
+  // 档位取自 store（loadTemplateById 时写入）；此前误用不存在的 (editorStore as any).currentTemplate 恒得 free
+  const tier = templateId ? editorStore.currentTemplateVipLevel : 'limited'
   // 去水印本质是「付费解锁后无水印导出」，走导出闸门（removeWatermark 动作直接付费解锁）
   runWithExportGate(templateId, tier, 'removeWatermark', async () => {
     let unlocked = false
@@ -1087,6 +1100,15 @@ const selectedElType = computed(() => {
   if (editorStore.selectedElement === null) return null
   const el = editorStore.editableElements[editorStore.selectedElement]
   return el?.type || null
+})
+
+// 选中元素的"最终用户可否编辑"标志（问题 3/5 统一守卫）：
+// - 仅当元素存在 && 元素.editable !== false 时返回 true
+// - editable 缺省视为可编辑（与 admin element-serializer.ts: L60 `editable: el.editable !== false` 一致）
+const isSelectedEditable = computed(() => {
+  if (editorStore.selectedElement === null) return false
+  const el = editorStore.editableElements[editorStore.selectedElement]
+  return !!el && el.editable !== false
 })
 
 // 取消选中元素
@@ -1291,14 +1313,11 @@ function onOpenEditor(idx: number) {
       chooseLocalImage(idx)
     }
   } else if (el.type === 'text') {
-    // 哈语日期/星期/时间段字段：禁止直接编辑（含固定哈语单位）
+    // 文字内容统一通过「信息」面板占位符修改，不再开放原文直接编辑（避免用户改动原文）
     if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzWeekdayParen' || el.dataKey === 'kzTime') {
       uni.showToast({ title: '请在「信息」面板修改', icon: 'none' })
-      openUnifiedEdit()
-      return
     }
-    editorStore.editingText = el.text
-    editorStore.showTextEditor = true
+    openUnifiedEdit()
   }
 }
 
@@ -1321,9 +1340,25 @@ async function onAdjusterConfirm(tempPath: string) {
   const idx = adjusterElementIndex
   adjusterVisible.value = false
   if (idx < 0 || !tempPath) return
+  // alpha 蒙版：首次换图时把原图（形状烘焙在 alpha 通道）记为蒙版源
+  const el = editorStore.editableElements[idx]
+  const mask = el ? ((el as any).mask ?? (el as any).style?.mask) : ''
+  if (mask === 'alpha' && el && !(el as any).maskSrc) {
+    ;(el as any).maskSrc = el.text
+  }
   uni.showLoading({ title: '上传中 0%' })
   try {
-    const permanentUrl = await uploadImage(tempPath, (progress: number) => {
+    // alpha 蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
+    let pathToUpload = tempPath
+    if (mask === 'alpha' && (el as any)?.maskSrc) {
+      try {
+        uni.showLoading({ title: '处理蒙版...' })
+        pathToUpload = await compositeImageWithMask(tempPath, (el as any).maskSrc)
+      } catch (e) {
+        console.warn('[editor] 蒙版合成失败，退回原图上传（渲染时仍有 CSS mask 兜底）:', e)
+      }
+    }
+    const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
     if (!_isMounted) return
@@ -1405,30 +1440,13 @@ function openUnifiedEdit() {
   editorStore.showBasicInfoEditor = true
 }
 
-// 编辑选中文字元素
-function handleEditText() {
-  if (editorStore.selectedElement === null) {
-    uni.showToast({ title: '请先点击画布上的文字', icon: 'none' })
-    return
-  }
-  const el = editorStore.editableElements[editorStore.selectedElement]
-  if (!el || el.type !== 'text') {
-    uni.showToast({ title: '请选择文字元素', icon: 'none' })
-    return
-  }
-  // 哈语日期/星期/时间段字段：文字含固定哈语单位，禁止直接编辑文本
-  // 引导用户去「信息」面板用选择器改（只改数字，不动单位）
-  if (el.dataKey === 'kzDate' || el.dataKey === 'kzWeekday' || el.dataKey === 'kzWeekdayParen' || el.dataKey === 'kzTime') {
-    uni.showToast({ title: '请在「信息」面板修改日期', icon: 'none' })
-    openUnifiedEdit()
-    return
-  }
-  editorStore.editingText = el.text
-  editorStore.showTextEditor = true
-}
-
 // 替换选中图片元素
 function handleReplaceImage() {
+  // 问题 3/5：选中元素 admin 标记为"不可编辑"时，拒绝换图（小程序端按 admin 的授权生效）
+  if (!isSelectedEditable.value) {
+    uni.showToast({ title: '当前图片不可替换', icon: 'none' })
+    return
+  }
   if (editorStore.selectedElement === null) {
     uni.showToast({ title: '请先点击画布上的图片', icon: 'none' })
     return
@@ -1658,8 +1676,8 @@ function handleExport() {
   isExporting = true
   track('click_export')
   const templateId = editorStore.currentTemplateId
-  const tpl = (editorStore as any).currentTemplate || null
-  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  // 档位取自 store（loadTemplateById 时写入）；此前误用不存在的 (editorStore as any).currentTemplate 恒得 free
+  const tier = templateId ? editorStore.currentTemplateVipLevel : 'free'
   // 导出闸门：已解锁→直接导出高清无水印；未解锁→弹窗付费/看广告带水印
   runWithExportGate(templateId, tier, 'export', async () => {
     // run 被调用时：若已解锁（付费回跳或永久解锁）导出无水印高清；否则看广告带水印普通画质
@@ -1754,8 +1772,9 @@ async function handleShare() {
   if (sharingLoading.value) return
   haptic('medium')
   const templateId = editorStore.currentTemplateId
-  const tpl = (editorStore as any).currentTemplate || null
-  const tier = templateId ? getTemplateTier(tpl) : 'free'
+  // 档位取自 store（loadTemplateById 时写入）；此前误用不存在的 (editorStore as any).currentTemplate 恒得 free，
+  // 导致付费模板分享弹窗显示 ¥0 并按错误档位下单
+  const tier = templateId ? editorStore.currentTemplateVipLevel : 'free'
   // 分享闸门：已解锁直接跳分享页；未解锁弹窗付费/看广告（带水印也可分享）
   await runWithExportGate(templateId, tier, 'share', async () => {
     await runShare(async () => {
@@ -2316,6 +2335,8 @@ onUnmounted(() => {
   box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.08), 0 4rpx 16rpx rgba(232, 74, 110, 0.04);
   border: 2rpx solid rgba(255, 255, 255, 0.9);
 }
+
+/* 画布背景图：<CloudImage> 通过 inline style (custom-style) 定位，不走 scoped CSS */
 
 /* ===== 空模板提示 ===== */
 .empty-template-hint {

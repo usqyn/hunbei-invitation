@@ -1,10 +1,11 @@
-﻿// PSD 文件解析与导入工具
+// PSD 文件解析与导入工具
 // 基于 ag-psd（Photopea 同款解析库）在浏览器端解析 Photoshop 源文件：
 //  - 安全校验（先读结构、拒绝超大尺寸，防 DoS）
 //  - 图层树展平（跳过隐藏层 / 调整层）
 //  - 文字层提取：文本 NFKC 归一化（处理已成形/视觉序字符）、字号换算、样式映射
 //  - 字体模糊匹配到系统字体表（哈萨克阿拉伯文 RTL 文本由现有链路兜底 KazakhSoftAsilya）
-//  - 图层样式部分还原：文字层投影/描边 → 元素字段；图片层投影/描边 → canvas 合成近似
+//  - 图层样式还原：投影/描边/颜色叠加/外发光/内阴影/内发光/光泽/斜面浮雕 canvas 近似合成；
+//    非占位符文字层携带无法编辑还原的效果时整层栅格化保留视觉（占位符保持可编辑并明确告警）
 //  - 智能对象嵌入文件提取（外链/无栅格数据无法恢复）
 import { readPsd } from 'ag-psd'
 import type { Psd, Layer, LayerTextData, TextStyle, Color, Justification, ImageResources } from 'ag-psd'
@@ -14,7 +15,11 @@ import { PLACEHOLDER_DEFS, type PlaceholderDef } from '../constants/placeholder-
 /**
  * 占位符自动识别：遍历注册表里的 contentDetect 正则，命中文本则返回 token 形态。
  * - 命中片段替换为 {key}（保留其它无关文字，如「婚礼时间：2026...」→「婚礼时间：{kzDate}」）
- * - defaults 保留原文，供画布预览 / 小程序回填使用
+ * - defaults 仅存「命中的片段」（如「2026年10月1日」），供画布预览 / 小程序回填使用，
+ *   不能存整行原文（否则整行会被当作字段值回填，换日期时整行内容被覆盖）
+ * - fullMatch：命中片段是否覆盖整行文本。仅整行命中时才自动绑定 dataKey；
+ *   部分命中只弹出确认，由设计师在导入对话框中逐条决定（防止「男方/女方婚礼时间」等
+ *   混合内容行被误绑为日期字段，换日期时整行内容全变）
  * - registry 驱动：新增占位符只需在 placeholder-defs.ts 追加一行，此处零改动
  */
 export interface DetectedPlaceholder {
@@ -22,6 +27,8 @@ export interface DetectedPlaceholder {
   token: string
   defaults: Record<string, string>
   displayText: string
+  /** 命中片段是否覆盖整行文本（决定是否自动绑定 dataKey） */
+  fullMatch: boolean
 }
 
 export function detectPlaceholder(raw: string): DetectedPlaceholder | null {
@@ -29,10 +36,18 @@ export function detectPlaceholder(raw: string): DetectedPlaceholder | null {
   for (const def of PLACEHOLDER_DEFS as PlaceholderDef[]) {
     const re = def.contentDetect
     if (!re) continue
-    if (re.test(raw)) {
+    const m = re.exec(raw)
+    if (m) {
       const token = `{${def.key}}`
+      const matched = m[0]
       const displayText = raw.replace(re, token)
-      return { key: def.key, token, defaults: { [def.key]: raw }, displayText }
+      return {
+        key: def.key,
+        token,
+        defaults: { [def.key]: matched },
+        displayText,
+        fullMatch: matched === raw.trim(),
+      }
     }
   }
   return null
@@ -84,16 +99,22 @@ export interface PsdLayerPreview {
   editable?: boolean
   /** 自动识别出的占位符 key（如 kzDate）；未识别为 undefined */
   dataKey?: string
+  /** 部分命中的占位符 key（整行未命中，由导入对话框逐条确认后再绑定） */
+  detectedKey?: string
   /** 占位符 token（如 {date}）；与 dataKey 配对，供导入对话框展示 */
   detectedToken?: string
+  /** 原文仅把命中片段替换为 token 后的文本（部分命中确认「应用」时使用，避免整行被覆盖） */
+  detectedDisplay?: string
   /** 占位符默认值（保留 PSD 原文，供画布预览 / 小程序回填） */
   defaults?: Record<string, string>
   /** 所属组 id（由 importPsdLayers 生成），用于画布端按组整体锁定/拖动 */
   groupId?: string
   /** 是否为组容器占位条目（组本身不入画布，仅作分组信息） */
   isGroupContainer?: boolean
-  /** 检测到的蒙版类型（由 vectorMask 路径分析得出：圆形/椭圆/反相圆） */
+  /** 检测到的蒙版类型（由 vectorMask 路径分析得出：圆形/椭圆/圆角矩形/反相圆，或像素蒙版烘焙后的 alpha） */
   mask?: 'circle' | 'rounded' | 'circle-invert' | 'alpha'
+  /** 圆角矩形蒙版的圆角半径（px，随图层宽度缩放；仅 mask='rounded' 时有值） */
+  borderRadius?: number
 }
 
 export interface PsdImportResult {
@@ -121,6 +142,7 @@ export interface PsdWarningGroup {
 }
 
 const STYLE_LOST_RE = /图层样式「([^」]+)」无法还原/
+const TEXT_LOST_RE = /文字层「([^」]+)」未还原/
 
 /**
  * 将扁平告警列表按类别聚合：
@@ -152,10 +174,21 @@ export function groupPsdWarnings(warnings: string[]): PsdWarningGroup[] {
       }
       continue
     }
-    if (w.includes('行高')) getGroup('line-height', '行高已调整至可渲染范围').items.push(w)
+    const tm = w.match(TEXT_LOST_RE)
+    if (tm) {
+      // 文字层未还原的效果与图片层按同名效果合并计数（「内阴影」×N 图层）
+      const effects = tm[1].split('、')
+      for (const e of effects) {
+        if (!styleLost.has(e)) styleLost.set(e, [])
+        styleLost.get(e)!.push(w)
+      }
+      continue
+    }
+    if (w.includes('文字层已栅格化')) getGroup('style-approx', '文字层已栅格化保留样式（逐层明细含原文字）').items.push(w)
+    else if (w.includes('已还原图层样式') || w.includes('已近似还原')) getGroup('style-approx', '图层样式已还原/近似还原').items.push(w)
+    else if (w.includes('行高')) getGroup('line-height', '行高已调整至可渲染范围').items.push(w)
     else if (w.includes('混合模式')) getGroup('blend-mode', '混合模式无法还原（按普通模式显示）').items.push(w)
     else if (w.includes('映射为')) getGroup('font-mapped', '字体已映射到系统字体').items.push(w)
-    else if (w.includes('已近似还原')) getGroup('style-approx', '图层样式已近似还原').items.push(w)
     else getGroup('other', '其他提示').items.push(w)
   }
 
@@ -254,6 +287,60 @@ export function dominantRunFontSize(
     }
   }
   return best
+}
+
+/**
+ * 多样式段落（styleRuns）的主体样式兜底：取最长 run 的字体/填充色/描边色。
+ * textData.style 是图层默认样式，混合样式的文字层（如金色标题+白色正文共用一层）里
+ * 常与正文主体不一致，导致导入后字体/颜色与设计稿不符。
+ */
+export function dominantRunTextStyle(
+  styleRuns: Array<{ length?: number; style?: TextStyle }> | undefined,
+  text?: string,
+): { fontName?: string; fillColor?: Color; strokeColor?: Color; style?: TextStyle } {
+  if (!styleRuns || styleRuns.length === 0) return {}
+  let best: TextStyle | undefined
+  let bestLen = -1
+  let cursor = 0
+  for (const run of styleRuns) {
+    const len = run?.length ?? 0
+    // 权重按非空白字符数计算：尾随换行/空格的 run 常带默认样式，避免抢正文主体
+    const slice = text ? text.slice(cursor, cursor + len) : ''
+    cursor += len
+    const weight = text ? slice.replace(/\s+/g, '').length : len
+    if (weight > bestLen && run?.style) {
+      best = run.style
+      bestLen = weight
+    }
+  }
+  if (!best) return {}
+  return {
+    fontName: best.font?.name,
+    fillColor: best.fillColor,
+    strokeColor: best.strokeColor,
+    style: best,
+  }
+}
+
+/**
+ * 两层文字样式合并：主体 run 样式优先，图层默认样式补缺（字段级，null/undefined 不覆盖）。
+ * 多样式段落里 Photoshop 的 textData.style 是「默认样式」，与正文主体常不一致。
+ */
+export function mergeTextStyles(primary: TextStyle | undefined, fallback: TextStyle | undefined): TextStyle | undefined {
+  if (!primary) return fallback
+  if (!fallback) return primary
+  const out: any = { ...fallback }
+  for (const [k, v] of Object.entries(primary)) {
+    if (v != null) out[k] = v
+  }
+  return out as TextStyle
+}
+
+/** 8 位 hex（#rrggbbaa）→ 6 位 hex。编辑器颜色输入框只接受 #rrggbb，
+ *  PSD 文字填充色带 alpha 时（fillOpacity）直接截断，避免 <input type=color> 解析失败 */
+export function toHex6(hex: string | undefined): string | undefined {
+  if (!hex) return undefined
+  return /^#[0-9a-fA-F]{8}$/.test(hex) ? hex.slice(0, 7) : hex
 }
 
 /** PSD 段落对齐 → 编辑器 textAlign */
@@ -398,14 +485,26 @@ export interface ParsedLayerEffects {
   innerShadow?: { color: string; opacity: number; offsetX: number; offsetY: number; size: number }
   /** 光泽：形状内部双向渐变折痕（图片层 canvas 近似合成，忽略 contour 细节） */
   satin?: { color: string; opacity: number; angle: number; blendMode: string }
+  /** 外发光：主体外部彩色光晕（canvas 近似 = 无偏移投影，忽略等高线/噪声） */
+  outerGlow?: { color: string; opacity: number; blur: number }
+  /** 内发光：主体边缘均匀亮/暗环（canvas 近似 = 无偏移内阴影） */
+  innerGlow?: { color: string; opacity: number; blur: number }
+  /** 斜面浮雕：朝光源边缘高光带 + 背光边缘阴影带（内嵌近似，忽略等高线/纹理/高度图） */
+  bevelEmboss?: {
+    highlightColor: string
+    highlightOpacity: number
+    shadowColor: string
+    shadowOpacity: number
+    /** 边缘带宽 px */
+    depth: number
+    /** 光源角度（度） */
+    angle: number
+  }
   /** 无法还原的效果名（中文） */
   lost: string[]
 }
 
 const UNSUPPORTED_EFFECT_NAMES: Record<string, string> = {
-  outerGlow: '外发光',
-  innerGlow: '内发光',
-  bevel: '斜面浮雕',
   gradientOverlay: '渐变叠加',
   patternOverlay: '图案叠加',
 }
@@ -442,9 +541,9 @@ export function parseLayerEffects(
       out.dropShadow = {
         color,
         opacity: Math.max(0, Math.min(1, drop.opacity ?? 1)),
-        // Photoshop 角度 0° = 正右，90° = 正上（canvas y 轴向下，故取负）
-        offsetX: Math.round(distance * Math.cos(angle) * scale * 100) / 100 + 0,
-        offsetY: Math.round(-distance * Math.sin(angle) * scale * 100) / 100 + 0,
+        // Photoshop 角度 = 光源方向（0°=正右，90°=正上，逆时针），阴影投向背光侧（canvas y 轴向下）
+        offsetX: Math.round(-distance * Math.cos(angle) * scale * 100) / 100 + 0,
+        offsetY: Math.round(distance * Math.sin(angle) * scale * 100) / 100 + 0,
         blur: Math.max(0, Math.round(blur * scale * 100) / 100),
       }
     }
@@ -480,8 +579,9 @@ export function parseLayerEffects(
       out.innerShadow = {
         color,
         opacity: Math.max(0, Math.min(1, inner.opacity ?? 1)),
-        offsetX: Math.round(distance * Math.cos(angle) * scale * 100) / 100,
-        offsetY: Math.round(-distance * Math.sin(angle) * scale * 100) / 100,
+        // 偏移方向与投影一致（背光侧），合成时用于挖空主体、露出朝光边缘的暗带
+        offsetX: Math.round(-distance * Math.cos(angle) * scale * 100) / 100 + 0,
+        offsetY: Math.round(distance * Math.sin(angle) * scale * 100) / 100 + 0,
         size: Math.max(0, Math.round(size * scale * 100) / 100),
       }
     }
@@ -498,6 +598,62 @@ export function parseLayerEffects(
         angle: satinE.angle ?? 0,
         blendMode: (satinE.blendMode || 'multiply').toLowerCase(),
       }
+    }
+  }
+
+  // 外发光：主体外部彩色光晕（无偏移投影近似）
+  const glow = Array.isArray(effects.outerGlow) ? effects.outerGlow[0] : effects.outerGlow
+  if (glow && glow.enabled !== false) {
+    const color = colorToHex(glow.color)
+    const blurRaw = glow.size ?? glow.blur
+    const blur = effectUnitsToPx(blurRaw, resolution, unit, percentBase)
+    if (color && color !== '#00000000' && glow.opacity != null && glow.opacity > 0) {
+      out.outerGlow = {
+        color,
+        opacity: Math.max(0, Math.min(1, glow.opacity ?? 1)),
+        blur: Math.max(0, Math.round(blur * scale * 100) / 100),
+      }
+    } else if (!out.outerGlow) {
+      out.lost.push('外发光')
+    }
+  }
+
+  // 内发光：主体边缘均匀亮/暗环（无偏移内阴影近似）
+  const iglow = Array.isArray(effects.innerGlow) ? effects.innerGlow[0] : effects.innerGlow
+  if (iglow && iglow.enabled !== false) {
+    const color = colorToHex(iglow.color)
+    const blurRaw = iglow.size ?? iglow.blur
+    const blur = effectUnitsToPx(blurRaw, resolution, unit, percentBase)
+    if (color && color !== '#00000000' && iglow.opacity != null && iglow.opacity > 0) {
+      out.innerGlow = {
+        color,
+        opacity: Math.max(0, Math.min(1, iglow.opacity ?? 1)),
+        blur: Math.max(0, Math.round(blur * scale * 100) / 100),
+      }
+    } else if (!out.innerGlow) {
+      out.lost.push('内发光')
+    }
+  }
+
+  // 斜面浮雕：朝光源边缘高光带 + 背光边缘阴影带（内嵌近似）
+  const bevelE = Array.isArray(effects.bevel) ? effects.bevel[0] : effects.bevel
+  if (bevelE && bevelE.enabled !== false) {
+    const depthRaw = bevelE.size ?? bevelE.depth
+    const depth = effectUnitsToPx(depthRaw, resolution, unit, percentBase)
+    const hl = colorToHex(bevelE.highlightColor)
+    const sh = colorToHex(bevelE.shadowColor)
+    if (depth > 0 && (hl || sh)) {
+      out.bevelEmboss = {
+        highlightColor: !hl || hl === '#00000000' ? '#ffffff' : hl,
+        highlightOpacity: Math.max(0, Math.min(1, bevelE.highlightOpacity ?? 1)),
+        shadowColor: !sh || sh === '#00000000' ? '#000000' : sh,
+        shadowOpacity: Math.max(0, Math.min(1, bevelE.shadowOpacity ?? 1)),
+        // 带宽钳制到图层短边的 20%：部分 PSD 缺 size 时 depth 回退值过大，防止浮雕带吞没整个图层
+        depth: Math.max(1, Math.round(Math.min(depth * scale, Math.min(layerW, layerH) * 0.2 || depth * scale))),
+        angle: bevelE.angle ?? 120,
+      }
+    } else if (!out.bevelEmboss) {
+      out.lost.push('斜面浮雕')
     }
   }
 
@@ -544,13 +700,16 @@ export function mapBlendMode(mode: string): GlobalCompositeOperation {
 }
 
 /**
- * 把投影/描边/颜色叠加/内阴影/光泽合成进图层栅格（canvas 2D 近似）：
- * - 投影：alpha 模糊 + 上色 + 偏移
+ * 把图层样式合成进图层栅格（canvas 2D 近似）：
+ * - 投影：alpha 模糊 + 上色 + 偏移（背光侧）
  * - 描边：8 方向轮廓并集 + 上色（外部描边近似，位置/圆角与 PS 有细微差异）
- * - 颜色叠加（solidFill）：按源形状 alpha 替换为叠加色（source-in），
- *   解决 PSD 中「黑图 + 金色/红色叠加」图标导入后颜色与原稿不一致的问题
- * - 内阴影：偏移 + 模糊 + 上色的阴影层裁剪进形状内部，主体覆盖后边缘露出暗环
- * - 光泽：沿角度方向的双向渐变带（色→透明→色），裁剪进形状内部后按混合模式叠加
+ * - 颜色叠加（solidFill）：按源形状 alpha 替换为叠加色（source-in）
+ * - 外发光：无偏移投影近似（最底层）
+ * - 内阴影：模糊上色剪影裁剪进形状内部，再挖掉偏移后的主体 → 朝光边缘露出暗带；
+ *   距离 0 时退化为均匀内环（同内发光方式）
+ * - 内发光：上色形状 − 模糊侵蚀形状 → 边缘均匀环带
+ * - 斜面浮雕：朝光边缘高光带 + 背光边缘阴影带（主体减去平移主体得到边缘带）
+ * - 光泽：沿角度方向的双向渐变带，裁剪进形状内部后按混合模式叠加
  * 返回带 padding 的画布与 padding 值（调用方需同步调整元素位置/尺寸）。
  */
 export function compositeLayerEffects(
@@ -561,22 +720,32 @@ export function compositeLayerEffects(
     solidFill?: ParsedLayerEffects['solidFill']
     innerShadow?: ParsedLayerEffects['innerShadow']
     satin?: ParsedLayerEffects['satin']
+    outerGlow?: ParsedLayerEffects['outerGlow']
+    innerGlow?: ParsedLayerEffects['innerGlow']
+    bevelEmboss?: ParsedLayerEffects['bevelEmboss']
   },
 ): { canvas: HTMLCanvasElement; pad: number } {
   const drop = effects.dropShadow
+  const glow = effects.outerGlow
   const stroke = effects.stroke
   const solidFill = effects.solidFill
   const innerShadow = effects.innerShadow
+  const innerGlow = effects.innerGlow
+  const bevel = effects.bevelEmboss
   const satin = effects.satin
-  const needPad = (drop ? drop.blur + Math.max(Math.abs(drop.offsetX), Math.abs(drop.offsetY)) : 0) + (stroke ? stroke.size : 0)
-  const pad = Math.max(2, Math.ceil(needPad + 4))
+  // 只有无偏移外扩的效果（投影/外发光/描边）需要 padding；内阴影/内发光/浮雕/光泽都在形状内部
+  const outerExtent =
+    (drop ? drop.blur + Math.max(Math.abs(drop.offsetX), Math.abs(drop.offsetY)) : 0) +
+    (glow ? glow.blur : 0) +
+    (stroke ? stroke.size : 0)
+  const pad = Math.max(2, Math.ceil(outerExtent + 4))
   const w = src.width
   const h = src.height
   const out = makeCanvas(w + pad * 2, h + pad * 2)
   const octx = out.getContext('2d')
   if (!octx) return { canvas: src, pad: 0 }
 
-  // 颜色叠加：替换图层形状颜色（保留 alpha），后续投影/描边/主体均使用着色后的画布
+  // 颜色叠加：替换图层形状颜色（保留 alpha），后续所有效果均使用着色后的画布
   let base = src
   if (solidFill && solidFill.color) {
     const tinted = makeCanvas(w, h)
@@ -591,28 +760,64 @@ export function compositeLayerEffects(
     }
   }
 
-  // 投影
-  if (drop) {
-    const blurred = makeCanvas(w, h)
-    const bctx = blurred.getContext('2d')
-    if (!bctx) return { canvas: src, pad: 0 }
-    bctx.drawImage(base, 0, 0)
-    if ('filter' in bctx) {
-      bctx.filter = `blur(${Math.max(0.1, drop.blur)}px)`
-      bctx.drawImage(blurred, 0, 0)
-      bctx.filter = 'none'
+  /** 模糊 + 上色的形状剪影（可带偏移）；blur=0 时保留锐利边缘 */
+  const tintedBlurSilhouette = (color: string, blur: number, dx: number, dy: number): HTMLCanvasElement | null => {
+    const c = makeCanvas(w, h)
+    const cctx = c.getContext('2d')
+    if (!cctx) return null
+    cctx.drawImage(base, dx, dy)
+    if (blur > 0 && 'filter' in cctx) {
+      cctx.filter = `blur(${Math.max(0.1, blur)}px)`
+      cctx.drawImage(c, 0, 0)
+      cctx.filter = 'none'
     }
-    // 用源形状 alpha 上色为投影颜色
-    bctx.globalCompositeOperation = 'source-in'
-    bctx.fillStyle = drop.color
-    bctx.fillRect(0, 0, w, h)
-    bctx.globalCompositeOperation = 'source-over'
-    octx.globalAlpha = drop.opacity
-    octx.drawImage(blurred, pad + drop.offsetX, pad + drop.offsetY)
-    octx.globalAlpha = 1
+    cctx.globalCompositeOperation = 'source-in'
+    cctx.fillStyle = color
+    cctx.fillRect(0, 0, w, h)
+    cctx.globalCompositeOperation = 'source-over'
+    return c
   }
 
-  // 描边（8 方向并集 → 源形状外扩轮廓）
+  /** 内部环带：上色形状 − 模糊侵蚀形状（用于内发光 / 距离 0 的内阴影） */
+  const innerRing = (color: string, blur: number): HTMLCanvasElement | null => {
+    const c = makeCanvas(w, h)
+    const cctx = c.getContext('2d')
+    if (!cctx) return null
+    cctx.drawImage(base, 0, 0)
+    cctx.globalCompositeOperation = 'source-in'
+    cctx.fillStyle = color
+    cctx.fillRect(0, 0, w, h)
+    if (blur > 0 && 'filter' in cctx) {
+      cctx.globalCompositeOperation = 'destination-out'
+      cctx.filter = `blur(${Math.max(0.1, blur)}px)`
+      cctx.drawImage(base, 0, 0)
+      cctx.filter = 'none'
+    }
+    cctx.globalCompositeOperation = 'source-over'
+    return c
+  }
+
+  // 外发光（无偏移投影近似，位于最底层）
+  if (glow) {
+    const g = tintedBlurSilhouette(glow.color, glow.blur, 0, 0)
+    if (g) {
+      octx.globalAlpha = glow.opacity
+      octx.drawImage(g, pad, pad)
+      octx.globalAlpha = 1
+    }
+  }
+
+  // 投影（背光侧偏移）
+  if (drop) {
+    const s = tintedBlurSilhouette(drop.color, drop.blur, drop.offsetX, drop.offsetY)
+    if (s) {
+      octx.globalAlpha = drop.opacity
+      octx.drawImage(s, pad, pad)
+      octx.globalAlpha = 1
+    }
+  }
+
+  // 描边（8 方向并集 → 源形状外扩轮廓，主体覆盖后仅外圈露出）
   if (stroke && stroke.size > 0) {
     const s = stroke.size
     const sil = makeCanvas(w + s * 2, h + s * 2)
@@ -635,33 +840,76 @@ export function compositeLayerEffects(
     }
   }
 
-  // 内阴影（形状内部边缘暗环：主体之下，主体覆盖后仅边缘露出）
+  // 主体
+  octx.drawImage(base, pad, pad)
+
+  // 内阴影（主体之上：模糊上色剪影 ∩ 主体 − 偏移后主体 → 朝光边缘暗带；距离 0 → 均匀内环）
   if (innerShadow) {
-    const inner = makeCanvas(w, h)
-    const ictx = inner.getContext('2d')
-    if (ictx) {
-      ictx.drawImage(base, innerShadow.offsetX, innerShadow.offsetY)
-      ictx.globalCompositeOperation = 'source-in'
-      ictx.fillStyle = innerShadow.color
-      ictx.fillRect(0, 0, w, h)
-      ictx.globalCompositeOperation = 'source-over'
-      if (innerShadow.size > 0 && 'filter' in ictx) {
-        ictx.filter = `blur(${Math.max(0.1, innerShadow.size)}px)`
-        ictx.drawImage(inner, 0, 0)
-        ictx.filter = 'none'
+    const dist = Math.hypot(innerShadow.offsetX, innerShadow.offsetY)
+    if (dist >= 1) {
+      const s = tintedBlurSilhouette(innerShadow.color, innerShadow.size, 0, 0)
+      if (s) {
+        const sctx = s.getContext('2d')
+        if (sctx) {
+          sctx.globalCompositeOperation = 'destination-in'
+          sctx.drawImage(base, 0, 0)
+          sctx.globalCompositeOperation = 'destination-out'
+          sctx.drawImage(base, innerShadow.offsetX, innerShadow.offsetY)
+          sctx.globalCompositeOperation = 'source-over'
+          octx.globalAlpha = innerShadow.opacity
+          octx.drawImage(s, pad, pad)
+          octx.globalAlpha = 1
+        }
       }
-      ictx.globalCompositeOperation = 'destination-in'
-      ictx.drawImage(base, 0, 0)
-      ictx.globalCompositeOperation = 'source-over'
-      octx.globalAlpha = innerShadow.opacity
-      octx.drawImage(inner, pad, pad)
+    } else {
+      const ring = innerRing(innerShadow.color, innerShadow.size)
+      if (ring) {
+        octx.globalAlpha = innerShadow.opacity
+        octx.drawImage(ring, pad, pad)
+        octx.globalAlpha = 1
+      }
+    }
+  }
+
+  // 内发光（主体之上：边缘均匀环带）
+  if (innerGlow) {
+    const ring = innerRing(innerGlow.color, innerGlow.blur)
+    if (ring) {
+      octx.globalAlpha = innerGlow.opacity
+      octx.drawImage(ring, pad, pad)
       octx.globalAlpha = 1
     }
   }
 
-  octx.drawImage(base, pad, pad)
+  // 斜面浮雕（主体之上：主体 − 平移主体 = 边缘带）
+  if (bevel) {
+    const rad = (bevel.angle * Math.PI) / 180
+    // 朝光源方向（canvas y 向下；PS 角度 0°=右、90°=上、逆时针）
+    const lx = Math.cos(rad)
+    const ly = -Math.sin(rad)
+    const d = bevel.depth
+    const drawBand = (color: string, opacity: number, ox: number, oy: number) => {
+      const c = makeCanvas(w, h)
+      const cctx = c.getContext('2d')
+      if (!cctx) return
+      cctx.drawImage(base, 0, 0)
+      cctx.globalCompositeOperation = 'destination-out'
+      cctx.drawImage(base, ox, oy)
+      cctx.globalCompositeOperation = 'source-in'
+      cctx.fillStyle = color
+      cctx.fillRect(0, 0, w, h)
+      cctx.globalCompositeOperation = 'source-over'
+      octx.globalAlpha = opacity
+      octx.drawImage(c, pad, pad)
+      octx.globalAlpha = 1
+    }
+    // 高光带：挖掉远离光源平移的主体 → 露出朝光边缘
+    drawBand(bevel.highlightColor, bevel.highlightOpacity, -lx * d, -ly * d)
+    // 阴影带：挖掉朝光源平移的主体 → 露出背光边缘
+    drawBand(bevel.shadowColor, bevel.shadowOpacity, lx * d, ly * d)
+  }
 
-  // 光泽（形状内部双向渐变带：主体之上按混合模式叠加）
+  // 光泽（形状内部双向渐变带：按混合模式叠加）
   if (satin) {
     const sat = makeCanvas(w, h)
     const sctx = sat.getContext('2d')
@@ -709,49 +957,109 @@ export function compositeLayerEffects(
  * - vectorMask.invert：反相蒙版（如圆环头像框）返回 'circle-invert'，
  *   由 useCanvas 暂回退为 circle 并告警，待小程序端支持挖洞再细做
  */
-export function detectMaskFromVectorMask(
-  vectorMask: { disable?: boolean; invert?: boolean; paths: Array<{ open: boolean; knots: Array<{ linked: boolean; points: number[] }> }> } | undefined,
+export interface VectorMaskShape {
+  mask: 'circle' | 'circle-invert' | 'rounded' | null
+  /** 圆角矩形：圆角半径 / 路径包围盒宽度（0~0.5）；仅 mask='rounded' 时有值 */
+  radiusRatio?: number
+}
+
+/**
+ * 矢量蒙版形状分析（detectMaskFromVectorMask 的完整版，附带圆角半径）。
+ *
+ * 通过锚点控制柄形态区分形状：
+ * - 椭圆/圆：每个锚点两侧控制柄均非零 → 'circle'
+ * - 圆角矩形：锚点一半为直线侧（单侧零柄）、一半在圆弧上 → 'rounded'，半径由圆弧柄长反推
+ * - 直角矩形/多边形：所有控制柄长度为 0 → 无需蒙版（null）
+ *
+ * 修复历史误判：直角矩形（4 锚点全角点）此前会被误判为 'circle'，
+ * 导致矩形照片框被裁成椭圆；现返回 null（rect 不需要蒙版）。
+ */
+export function analyzeVectorMaskShape(
+  vectorMask: { disable?: boolean; disabled?: boolean; invert?: boolean; paths: Array<{ open: boolean; knots: Array<{ linked: boolean; points: number[] }> }> } | undefined,
   layerWidth: number,
   layerHeight: number,
-): 'circle' | 'circle-invert' | null {
-  if (!vectorMask?.paths?.length) return null
-  if (vectorMask.disable) return null // 蒙版被禁用 → 忽略（ag-psd 字段）
+): VectorMaskShape {
+  if (!vectorMask?.paths?.length) return { mask: null }
+  if (vectorMask.disable || (vectorMask as any).disabled) return { mask: null } // 蒙版被禁用 → 忽略
   // 只处理简单形状：1 条闭合路径、≤12 个节点
   const path = vectorMask.paths[0]
-  if (path.open || vectorMask.paths.length > 1 || path.knots.length > 12) return null
+  if (path.open || vectorMask.paths.length > 1 || path.knots.length > 12) return { mask: null }
 
   // 图层宽高比需合理（容差 0.3~3.0），覆盖椭圆/胶囊形等常见形状
-  if (layerWidth < 1 || layerHeight < 1) return null
+  if (layerWidth < 1 || layerHeight < 1) return { mask: null }
   const layerAspect = layerWidth / layerHeight
-  if (layerAspect < 0.3 || layerAspect > 3.0) return null
+  if (layerAspect < 0.3 || layerAspect > 3.0) return { mask: null }
 
-  // 允许少量角点（≤4个）：椭圆起止点可能表现为角点，路径简化也可能产生额外角点
-  let cornerCount = 0
-  for (const knot of path.knots) {
-    const [ax, ay, px, py, nx, ny] = knot.points
-    const isCorner = ax === px && ay === py && ax === nx && ay === ny
-    if (isCorner) cornerCount++
-  }
-  if (cornerCount > 4) return null
-
-  // 计算路径包围盒（ag-psd 路径坐标为图层本地 0..width / 0..height）
+  // 统计锚点控制柄形态 + 路径包围盒
+  // ag-psd Knot.points 格式为 [beforeX, beforeY, anchorX, anchorY, afterX, afterY]，
+  // points[2..3] 才是锚点本体（readBezierKnot 按 PSD 规范先读 before 再读 anchor 再读 after）
+  let zeroHandleAnchors = 0
+  let twoZeroKnots = 0
+  let maxHandle = 0
+  let handleSum = 0
+  let handleCount = 0
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const knot of path.knots) {
-    const [x, y] = knot.points
-    minX = Math.min(minX, x); minY = Math.min(minY, y)
-    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y)
+    const [bx, by, ax, ay, fx, fy] = knot.points
+    const hBefore = Math.hypot(ax - bx, ay - by)
+    const hAfter = Math.hypot(ax - fx, ay - fy)
+    const zeros = (hBefore === 0 ? 1 : 0) + (hAfter === 0 ? 1 : 0)
+    zeroHandleAnchors += zeros
+    if (zeros === 2) twoZeroKnots++
+    if (hBefore > 0) { maxHandle = Math.max(maxHandle, hBefore); handleSum += hBefore; handleCount++ }
+    if (hAfter > 0) { maxHandle = Math.max(maxHandle, hAfter); handleSum += hAfter; handleCount++ }
+    minX = Math.min(minX, ax); minY = Math.min(minY, ay)
+    maxX = Math.max(maxX, ax); maxY = Math.max(maxY, ay)
   }
   const pathW = maxX - minX
   const pathH = maxY - minY
-  if (pathW < 1 || pathH < 1) return null
+  if (pathW < 1 || pathH < 1) return { mask: null }
 
   // 包围盒需接近图层尺寸（容差 35%）
   const wRatio = pathW / layerWidth
   const hRatio = pathH / layerHeight
-  if (wRatio < 0.65 || wRatio > 1.35 || hRatio < 0.65 || hRatio > 1.35) return null
+  if (wRatio < 0.65 || wRatio > 1.35 || hRatio < 0.65 || hRatio > 1.35) return { mask: null }
 
-  // 圆 / 椭圆 → 都映射到 'circle'；反相蒙版标记 'circle-invert'（小程序端暂回退为圆）
-  return vectorMask.invert ? 'circle-invert' : 'circle'
+  // 所有锚点均有曲线控制柄 → 椭圆/圆
+  if (zeroHandleAnchors === 0) {
+    return { mask: vectorMask.invert ? 'circle-invert' : 'circle' }
+  }
+  // 圆角矩形（含胶囊形）：每个锚点恰好 1 个零柄（直线侧）+ 1 个等长弧柄。
+  // PS 标准 8 锚点圆角矩形每段 90° 圆弧 = 1 段 Bezier，弧柄长 ≈ r × 0.5523；
+  // 全零柄 → 直角矩形，无需蒙版（rect 裁剪是恒等变换）。
+  if (maxHandle === 0) return { mask: null }
+  if (zeroHandleAnchors === path.knots.length && twoZeroKnots === 0) {
+    // 非零弧柄需近似等长，排除不规则圆角（混合半径）
+    const avgHandle = handleSum / Math.max(1, handleCount)
+    if (maxHandle / avgHandle > 1.25) return { mask: null }
+    const radius = avgHandle / 0.5523
+    const rRatio = radius / Math.max(pathW, 1)
+    if (rRatio > 0.01 && rRatio <= 0.5) {
+      return { mask: 'rounded', radiusRatio: rRatio }
+    }
+    return { mask: null }
+  }
+  return { mask: null }
+}
+
+/**
+ * 由图层矢量蒙版路径分析出简单蒙版类型（参考 ag-psd LayerVectorMask 结构）。
+ * 仅处理「单一闭合路径、≤12 个节点、路径填满图层、宽高比合理」的形状，
+ * 圆/椭圆统一映射为 'circle'（小程序端 border-radius:50% 对非正方元素自动产生椭圆）。
+ * 圆角矩形返回 'rounded'（配合 borderRadius 半径）。
+ * 任意复杂形状（布尔运算/多路径）返回 null，由 ag-psd 已烘焙的栅格效果兜底。
+ *
+ * 对照 ag-psd 官方字段补充两点安全帽：
+ * - disable/disabled：蒙版被禁用时不识别（返回 null）
+ * - invert：反相蒙版（如圆环头像框）返回 'circle-invert'，
+ *   由 useCanvas 暂回退为 circle 并告警，待小程序端支持挖洞再细做
+ */
+export function detectMaskFromVectorMask(
+  vectorMask: { disable?: boolean; disabled?: boolean; invert?: boolean; paths: Array<{ open: boolean; knots: Array<{ linked: boolean; points: number[] }> }> } | undefined,
+  layerWidth: number,
+  layerHeight: number,
+): 'circle' | 'circle-invert' | 'rounded' | null {
+  return analyzeVectorMaskShape(vectorMask, layerWidth, layerHeight).mask
 }
 
 /**
@@ -805,6 +1113,153 @@ export function detectAlphaMaskFromCanvas(canvas: HTMLCanvasElement): 'alpha' | 
   return 'alpha'
 }
 
+// ============ 像素蒙版（图层蒙版/组蒙版）烘焙 ============
+
+/** ag-psd 图层像素蒙版结构（仅用到烘焙所需字段；v31 字段名为 disabled / positionRelativeToLayer） */
+export interface PixelMaskInfo {
+  canvas?: HTMLCanvasElement
+  left?: number
+  top?: number
+  right?: number
+  bottom?: number
+  disabled?: boolean
+  positionRelativeToLayer?: boolean
+  /** 蒙版矩形外的默认亮度（255=白=显示，0=黑=隐藏） */
+  defaultColor?: number
+}
+
+/**
+ * 将 PSD 像素蒙版（灰度位图）烘焙进图层 canvas：白=显示、黑=隐藏（luminance → alpha）。
+ *
+ * - mask.canvas 尺寸 = 蒙版矩形 (right-left)×(bottom-top)，坐标系为文档坐标
+ *   （positionRelativeToLayer 时为图层本地坐标）
+ * - 蒙版矩形外区域按 defaultColor 填充（本工程 PSD 均为 255=保留）
+ * - 返回烘焙后的新 canvas；蒙版缺失/禁用/尺寸非法时返回 null（调用方沿用原图）
+ */
+export function applyPixelMaskToCanvas(
+  src: HTMLCanvasElement,
+  mask: PixelMaskInfo | undefined,
+  layerLeft: number,
+  layerTop: number,
+): HTMLCanvasElement | null {
+  if (!mask || mask.disabled || !mask.canvas) return null
+  const maskW = (mask.right ?? 0) - (mask.left ?? 0)
+  const maskH = (mask.bottom ?? 0) - (mask.top ?? 0)
+  if (maskW <= 0 || maskH <= 0 || src.width <= 0 || src.height <= 0) return null
+
+  // 蒙版位图在图层画布内的偏移
+  const offsetX = mask.positionRelativeToLayer ? (mask.left ?? 0) : (mask.left ?? 0) - layerLeft
+  const offsetY = mask.positionRelativeToLayer ? (mask.top ?? 0) : (mask.top ?? 0) - layerTop
+
+  // 1) 灰度蒙版 → alpha 蒙版
+  const maskAlpha = document.createElement('canvas')
+  maskAlpha.width = src.width
+  maskAlpha.height = src.height
+  const mctx = maskAlpha.getContext('2d')
+  if (!mctx) return null
+  const dc = (mask.defaultColor ?? 255) & 0xff
+  mctx.fillStyle = `rgb(${dc},${dc},${dc})`
+  mctx.fillRect(0, 0, src.width, src.height)
+  mctx.drawImage(mask.canvas, offsetX, offsetY)
+  const mdata = mctx.getImageData(0, 0, src.width, src.height)
+  const md = mdata.data
+  for (let i = 0; i < md.length; i += 4) {
+    const lum = md[i] // setupGrayscale 后 RGB 相等，取 R 即亮度
+    md[i] = 0
+    md[i + 1] = 0
+    md[i + 2] = 0
+    md[i + 3] = lum
+  }
+  mctx.putImageData(mdata, 0, 0)
+
+  // 2) destination-in 合成：图层像素 × 蒙版 alpha
+  const out = document.createElement('canvas')
+  out.width = src.width
+  out.height = src.height
+  const octx = out.getContext('2d')
+  if (!octx) return null
+  octx.drawImage(src, 0, 0)
+  octx.globalCompositeOperation = 'destination-in'
+  octx.drawImage(maskAlpha, 0, 0)
+  return out
+}
+
+/** 剪贴蒙版 base 上下文：bottom→top 遍历中「紧邻 clip 层下方」的第一个非 clipping 图层 */
+export interface ClipBaseInfo {
+  /** base 条目几何（文档坐标，含效果 pad 偏移） */
+  left: number
+  top: number
+  width: number
+  height: number
+  /** base 栅格（alpha 通道即形状，任意形状通用：矢量形状/文字/带蒙版图片） */
+  canvas?: HTMLCanvasElement
+  /** base 无栅格时的几何蒙版兜底（简单矢量形状） */
+  shape?: VectorMaskShape
+}
+
+/**
+ * 将剪贴蒙版 base 的形状烘焙进 clipping 图层 canvas（destination-in）。
+ * base 有栅格时用其 alpha 精确裁剪；否则退化为圆/圆角矩形几何蒙版。
+ * clipCanvas 的文档坐标原点为 (clipLeft, clipTop)。
+ * 返回是否成功烘焙。
+ */
+export function bakeClipMask(
+  clipCanvas: HTMLCanvasElement,
+  base: ClipBaseInfo,
+  clipLeft: number,
+  clipTop: number,
+): boolean {
+  if (!clipCanvas || clipCanvas.width < 1 || clipCanvas.height < 1) return false
+  const octx = clipCanvas.getContext('2d')
+  if (!octx) return false
+  if (!base.canvas && !base.shape?.mask) return false
+
+  // 1) 构造 base 形状的 alpha 蒙版（clip 画布同尺寸）
+  const maskCv = makeCanvas(clipCanvas.width, clipCanvas.height)
+  const mctx = maskCv.getContext('2d')
+  if (!mctx) return false
+  if (base.canvas) {
+    mctx.drawImage(base.canvas, Math.round(base.left - clipLeft), Math.round(base.top - clipTop))
+  } else {
+    const shape = base.shape!
+    const bx = base.left - clipLeft
+    const by = base.top - clipTop
+    mctx.fillStyle = '#ffffff'
+    if (shape.mask === 'circle') {
+      mctx.beginPath()
+      mctx.ellipse(bx + base.width / 2, by + base.height / 2, base.width / 2, base.height / 2, 0, 0, Math.PI * 2)
+      mctx.fill()
+    } else if (shape.mask === 'circle-invert') {
+      // 反相：矩形填充 + 挖去椭圆
+      mctx.fillRect(0, 0, clipCanvas.width, clipCanvas.height)
+      mctx.globalCompositeOperation = 'destination-out'
+      mctx.beginPath()
+      mctx.ellipse(bx + base.width / 2, by + base.height / 2, base.width / 2, base.height / 2, 0, 0, Math.PI * 2)
+      mctx.fill()
+      mctx.globalCompositeOperation = 'source-over'
+    } else if (shape.mask === 'rounded' && shape.radiusRatio) {
+      const r = Math.min(shape.radiusRatio * base.width, base.width / 2, base.height / 2)
+      mctx.beginPath()
+      mctx.moveTo(bx + r, by)
+      mctx.arcTo(bx + base.width, by, bx + base.width, by + base.height, r)
+      mctx.arcTo(bx + base.width, by + base.height, bx, by + base.height, r)
+      mctx.arcTo(bx, by + base.height, bx, by, r)
+      mctx.arcTo(bx, by, bx + base.width, by, r)
+      mctx.closePath()
+      mctx.fill()
+    } else {
+      return false
+    }
+  }
+
+  // 2) destination-in：clip 像素 × base 形状 alpha
+  octx.save()
+  octx.globalCompositeOperation = 'destination-in'
+  octx.drawImage(maskCv, 0, 0)
+  octx.restore()
+  return true
+}
+
 // ============ 智能对象嵌入文件提取 ============
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -851,14 +1306,18 @@ export async function flattenPsdLayers(
   const skipped: { name: string; reason: string }[] = []
   const warnings: string[] = []
 
-  // 收集尚未关联 base 形状的 clipping 图片层。
-  // PSD 剪贴蒙版规则：clipping 图层裁剪到其「下方」第一个非 clipping 图层（base 形状层）的形状上。
-  // walk 为 top-to-bottom 遍历，base 层在 clipping 层之后才出现，故先收集、遇到 base 时再统一补蒙版。
-  const pendingClips: PsdLayerPreview[] = []
+  // 剪贴蒙版 base 追踪。
+  // PSD 剪贴蒙版规则：clipping=1 的图层被裁剪到「图层面板中紧邻其下」的第一个非 clipping 图层（base），
+  // 连续多个 clipping 图层共享同一 base；组边界会打断剪贴链；base 隐藏则整组 clip 均不可见。
+  // ag-psd children 实测为 bottom→top（最底层在前，已用合成图像素比对验证），walk 顺序即 bottom→top，
+  // 因此处理 clipping 层时其 base 一定已处理完毕，记录为 lastBase 即可（作用域 = 每个组层级）。
 
   // 记录每次递归的组 id，使子层继承所属组，便于画布端按组整体锁定/拖动
-  const walk = async (children: Layer[] | undefined, depth: number, groupId?: string) => {
+  // groupMasks：祖先组的像素蒙版栈（外层在前），组内每个图层栅格需依次烘焙这些蒙版
+  const walk = async (children: Layer[] | undefined, depth: number, groupId?: string, groupMasks: PixelMaskInfo[] = []) => {
     if (!children || depth > 50) return
+    // 当前组层级内最近处理过的非 clipping 图层（潜在剪贴 base）；进入子组/离开时各自独立
+    let lastBase: ClipBaseInfo | null = null
     for (const layer of children) {
       // 组节点：生成一个组 id，递归子层时传入；组本身也作为占位条目保留（type: 'group'）
       if (layer.children && layer.children.length > 0) {
@@ -868,6 +1327,8 @@ export async function flattenPsdLayers(
           continue
         }
         const gid = `grp_${layer.name || 'group'}_${depth}_${layers.length}`
+        // 组自带像素蒙版（如人物组按蒙版显隐）：烘焙到组内每个图层的栅格中
+        const ownGroupMask = (layer.mask && !layer.mask.disabled && (layer.mask as any).canvas) ? (layer.mask as PixelMaskInfo) : null
         layers.push({
           type: 'group',
           name: layer.name || '组',
@@ -882,39 +1343,35 @@ export async function flattenPsdLayers(
           blendMode: layer.blendMode || 'normal',
           dataUrl: '',
           hasEffects: false,
-          warnings: [],
+          warnings: ownGroupMask ? ['组像素蒙版已烘焙到组内图层'] : [],
         } as any)
-        await walk(layer.children, depth + 1, gid)
+        await walk(layer.children, depth + 1, gid, ownGroupMask ? [...groupMasks, ownGroupMask] : groupMasks)
+        // 组边界打断剪贴蒙版链：组后的 clipping 层其 base 不可能跨组（PS 规则）
+        lastBase = null
         continue
       }
       const name = (containsRtl(layer.name) && SHAPED_RTL_RE.test(layer.name)) ? visualToLogicalRtl(layer.name) : (layer.name || '未命名图层')
       if (layer.hidden) {
         skipped.push({ name, reason: '隐藏图层' })
+        // 隐藏的非 clipping 层本可作为后续 clip 的 base；PS 中 base 隐藏则整组 clip 不可见，
+        // 此处置空使后续 clip 层按「base 缺失」跳过（非 clipping 层才可能是 base）
+        if (!layer.clipping) lastBase = null
         continue
       }
       // 调整层：无栅格内容，效果在合成图中，无法按层导入
       if (layer.adjustment) {
         skipped.push({ name, reason: '调整层（色阶/曲线等）效果无法单独导入' })
+        if (!layer.clipping) lastBase = null
         continue
       }
 
       const hasEffects = !!(layer.effects && Object.keys(layer.effects).some(k => (layer.effects as any)[k] != null && (layer.effects as any)[k].enabled !== false))
       const effects = parseLayerEffects(layer.effects, resolution, resolutionUnit, layer.right - (layer.left ?? 0), layer.bottom - (layer.top ?? 0))
       const layerWarnings: string[] = []
-      if (hasEffects) {
-        const applied: string[] = []
-        if (effects.dropShadow) applied.push('投影')
-        if (effects.stroke) applied.push('描边')
-        if (effects.innerShadow) applied.push('内阴影')
-        if (effects.satin) applied.push('光泽')
-        if (applied.length) {
-          layerWarnings.push(`已近似还原图层样式（${applied.join('、')}）`)
-          warnings.push(`图层「${name}」图层样式已近似还原（${applied.join('、')}）`)
-        }
-        if (effects.lost.length) {
-          layerWarnings.push(`图层样式「${effects.lost.join('、')}」无法还原，栅格图中不包含这些效果`)
-          warnings.push(`图层「${name}」图层样式「${effects.lost.join('、')}」无法还原（建议在 Photoshop 中先栅格化图层样式）`)
-        }
+      // 无法还原的效果对文字/图片层一致（渐变/图案叠加等）；「已近似还原」清单按分支分别声明
+      if (effects.lost.length) {
+        layerWarnings.push(`图层样式「${effects.lost.join('、')}」无法还原，栅格图中不包含这些效果`)
+        warnings.push(`图层「${name}」图层样式「${effects.lost.join('、')}」无法还原（建议在 Photoshop 中先栅格化图层样式）`)
       }
       if (layer.blendMode && layer.blendMode !== 'normal' && layer.blendMode !== 'pass through') {
         layerWarnings.push(`混合模式「${layer.blendMode}」：编辑器画布已支持，小程序端暂不支持`)
@@ -935,10 +1392,27 @@ export async function flattenPsdLayers(
         width = canvas.width
         height = canvas.height
         if (isTextLayer && textData?.transform) {
-          // 文字层 bounds 缺失时，用 transform 平移量定位（pt → px）
-          const pxPerPt = resolutionUnit === 'PPCM' ? (resolution * 2.54) / 72 : resolution / 72
-          left = (textData.transform[4] || 0) * pxPerPt
-          top = (textData.transform[5] || 0) * pxPerPt
+          // 文字层 bounds 缺失（ag-psd #251）：transform[4/5] 是 PS 文字原点坐标（第一行基线左端，单位 pt），
+          // 不是 bounds 左上角。若直接当 left/top 用，位置会偏上偏左（基线左端比左上少 ascender 高）。
+          // 实际校准：用栅格 canvas 的左上在 PSD 文档中的真实位置反推更稳——
+          // canvas 是 ag-psd 将该层栅格化后在文档坐标系下的像素位图，其 origin 相对
+          // layer.left/top（即文档内 bounds 左上），所以直接用 (layer.left, layer.top) 兜底；
+          // 当 layer.left/top 也无效时才用 transform 并加上估算 ascender 偏移（≈ 0.8*fontSize），
+          // 避免文字比 PSD 稿高出一截。
+          const baselineX = (textData.transform[4] || 0) * pxPerPt
+          const baselineY = (textData.transform[5] || 0) * pxPerPt
+          if (layer.left != null && layer.left >= 0 && layer.top != null && layer.top >= 0) {
+            // bounds 数值存在但 width/height=0：保留 layer.left/top（文档内栅格对齐位置），仅替换尺寸
+            left = layer.left
+            top = layer.top
+          } else {
+            // style/mergeTextStyles 在后面才赋值，这里直接从 textData 取原始 fontSize 估算字号
+            const rawFontPt: number | undefined = (textData.style as any)?.fontSize ?? dominantRunFontSize(textData.styleRuns as any)
+            const scaled = (rawFontPt ?? 0) * transformScale(textData.transform)
+            const fontSizeEstimatePx = resolveFontSizePx(scaled || 0, resolution, resolutionUnit) || 24
+            left = Math.max(0, baselineX - 2) // 基线左端 x≈文字左边界(通常带一点 left-bearing，-2px 做宽松容忍)
+            top = Math.max(0, baselineY - fontSizeEstimatePx * 0.8) // 基线 y - ascender(≈0.8×字号) ≈ 文字顶部
+          }
         }
       }
 
@@ -947,13 +1421,11 @@ export async function flattenPsdLayers(
       const blendMode = layer.blendMode || 'normal'
 
       if (isTextLayer) {
-        // 内阴影/光泽仅图片层近似还原；文字层保留可编辑性，效果不还原（明确提示避免静默丢失）
-        if (effects.innerShadow || effects.satin) {
-          const names = [effects.innerShadow && '内阴影', effects.satin && '光泽'].filter(Boolean).join('、')
-          layerWarnings.push(`文字层「${names}」未还原（保留文字可编辑性，仅图片层近似还原）`)
-          warnings.push(`图层「${name}」文字层「${names}」未还原（保留文字可编辑性，仅图片层近似还原）`)
+        // 剪贴蒙版层且 base 缺失（base 被隐藏/组外/无内容）：PS 中该组 clip 均不可见 → 跳过
+        if (layer.clipping && !lastBase) {
+          skipped.push({ name, reason: '剪贴蒙版 base 缺失或被隐藏，整组跳过' })
+          continue
         }
-        const style: TextStyle | undefined = textData.style
         const rawText = textData.text || ''
         // 1) NFKC 还原预成形字形（视觉序存储的文本字形是已连写形式）
         // 2) 若为 RTL 且含成形字形（视觉顺序存储）：视觉顺序 → 逻辑顺序（不转换会导致画布/小程序渲染时
@@ -962,9 +1434,35 @@ export async function flattenPsdLayers(
         if (containsRtl(text) && SHAPED_RTL_RE.test(rawText)) {
           text = visualToLogicalRtl(text)
         }
+        // 占位符自动识别（前移）：整行命中才自动绑定 dataKey；
+        // 部分命中（如「女方婚礼时间：2026年10月1日 20:00」）仅记录 detectedKey，
+        // 由导入对话框逐条确认后再绑定，避免混合内容行被字段值整行覆盖
+        const detected = detectPlaceholder(text)
+        const dataKey = detected?.fullMatch ? detected.key : undefined
+
+        // 保留可编辑性的前提下无法还原的效果（Fabric/小程序文字只支持投影与描边）
+        const unrestorableFx = [
+          effects.innerShadow && '内阴影',
+          effects.innerGlow && '内发光',
+          effects.satin && '光泽',
+          effects.bevelEmboss && '斜面浮雕',
+        ].filter(Boolean) as string[]
+
+        // 文字层一律保留可编辑文本（不再整层栅格化为图片）：
+        // 内阴影/光泽/斜面浮雕等效果无法在画布文字上还原，以告警提示设计师在 PS 中栅格化图层样式；
+        // 误栅格化会导致「新郎名/地址」等需要编辑的文字变成图片（已回归修复）
+        if (unrestorableFx.length > 0) {
+          const suffix = dataKey ? '，占位符文字需保留可编辑性' : ''
+          layerWarnings.push(`文字层「${unrestorableFx.join('、')}」效果未还原（保留文字可编辑性；如需保留效果请先在 PS 中栅格化该层样式${suffix}）`)
+          warnings.push(`图层「${name}」文字层「${unrestorableFx.join('、')}」效果未还原（保留文字可编辑性；如需保留效果请先在 PS 中栅格化该层样式${suffix}）`)
+        }
+
+        // 主体样式：多样式段落取「非空白字符最多」的 run 样式，图层默认样式补缺。
+        // textData.style 是 PS 的默认样式，混合样式的文字层（金色标题+白色正文共用一层）常与主体不一致
+        const dom = dominantRunTextStyle(textData.styleRuns as any, rawText)
+        const style: TextStyle | undefined = mergeTextStyles(dom.style, textData.style)
         const fontName = style?.font?.name
         const mapped = mapFontName(fontName, availableFonts)
-        // 多样式段落（styleRuns）时 style.fontSize 缺失，用正文主体 run 的字号兜底；
         // 自由变换缩放过的文字层实际渲染大小 = fontSize × scale（如升学宴 PSD 标题 1.28 倍）
         const effectiveFontSizePt = style?.fontSize ?? dominantRunFontSize(textData.styleRuns as any)
         const textScale = transformScale(textData.transform)
@@ -980,8 +1478,8 @@ export async function flattenPsdLayers(
         // PSD 文字样式 → 编辑器文字样式
         // 颜色叠加效果优先于 fillColor：Photoshop 文字层启用 solidFill 时 fillColor 可能不是
         // 实际显示色（如升学宴 PSD 金色标题，fillColor 为黑色、solidFill 为金色）
-        const color = effects.solidFill?.color || colorToHex(style?.fillColor) || '#333333'
-        const strokeColor = colorToHex(style?.strokeColor) || 'transparent'
+        const color = effects.solidFill?.color || toHex6(colorToHex(style?.fillColor)) || '#333333'
+        const strokeColor = toHex6(colorToHex(style?.strokeColor)) || 'transparent'
         const strokeWidth = style?.outlineWidth ? Math.round(style.outlineWidth) : 0
         const justification = mapJustification(textData.paragraphStyle?.justification)
         // tracking 单位 1/1000 em，与编辑器 letterSpacing 语义一致（RTL 由现有链路强制 0）
@@ -993,22 +1491,39 @@ export async function flattenPsdLayers(
           layerWarnings.push(`行高 ${original} 超出可渲染范围，调整为 ${lineHeight}`)
           warnings.push(`图层「${name}」行高 ${original} 超出可渲染范围，调整为 ${lineHeight}`)
         }
-        // 图层样式效果：描边效果优先于文字内描边；投影映射为 shadow 字段
+        // 图层样式效果：描边效果优先于文字内描边；投影优先；无投影时外发光映射为无偏移投影近似
         const effectStroke = effects.stroke
         const effStrokeColor = effectStroke ? effectStroke.color : undefined
         const effStrokeWidth = effectStroke ? effectStroke.size : undefined
         const drop = effects.dropShadow
+        const textShadow = drop ?? (effects.outerGlow
+          ? { color: effects.outerGlow.color, offsetX: 0, offsetY: 0, blur: effects.outerGlow.blur }
+          : undefined)
+        if (!drop && effects.outerGlow) {
+          layerWarnings.push('外发光已用无偏移投影近似还原')
+          warnings.push(`图层「${name}」外发光已用无偏移投影近似还原`)
+        } else if (drop && effects.outerGlow) {
+          layerWarnings.push('外发光与投影并存，仅保留投影')
+          warnings.push(`图层「${name}」外发光与投影并存，仅保留投影`)
+        }
+        // 可编辑文字链路上实际已还原的效果（其余效果已在上方「未还原」告警中说明）
+        const textAppliedFx: string[] = []
+        if (drop) textAppliedFx.push('投影')
+        if (effectStroke) textAppliedFx.push('描边')
+        if (!drop && effects.outerGlow) textAppliedFx.push('外发光')
+        if (textAppliedFx.length) {
+          layerWarnings.push(`已还原图层样式（${textAppliedFx.join('、')}）`)
+          warnings.push(`图层「${name}」已还原图层样式（${textAppliedFx.join('、')}）`)
+        }
 
         // 文字方向需按识别前的原始文本判定（哈语原文含 RTL 字符；识别后的 {key} token 已无 RTL 特征）
         const direction: 'ltr' | 'rtl' = containsRtl(text) ? 'rtl' : 'ltr'
-        // 占位符自动识别（中文 + 哈萨克语，registry 驱动）：命中后存入检测结果，
-        // text 保持原始文本不变，由导入对话框展示给用户确认后再决定是否替换为 token
-        const detected = detectPlaceholder(text)
-        const dataKey = detected?.key
+        const detectedKey = detected?.key
         const detectedToken = detected?.token
+        const detectedDisplay = detected?.displayText
         const defaults = detected?.defaults
 
-        layers.push({
+        const textEntry: PsdLayerPreview = {
           id: `psd_${layers.length}`,
           name,
           type: 'text',
@@ -1031,40 +1546,49 @@ export async function flattenPsdLayers(
           letterSpacing: tracking || 0,
           strokeColor: effStrokeColor || (strokeColor !== '#00000000' ? strokeColor : 'transparent'),
           strokeWidth: effStrokeWidth != null && effStrokeWidth > 0 ? Math.round(effStrokeWidth * 100) / 100 : strokeWidth > 0 ? strokeWidth : 0,
-          shadowColor: drop?.color || 'transparent',
-          shadowOffsetX: drop?.offsetX ?? 0,
-          shadowOffsetY: drop?.offsetY ?? 0,
-          shadowBlur: drop?.blur ?? 0,
+          shadowColor: textShadow?.color || 'transparent',
+          shadowOffsetX: textShadow?.offsetX ?? 0,
+          shadowOffsetY: textShadow?.offsetY ?? 0,
+          shadowBlur: textShadow?.blur ?? 0,
           hasEffects,
           warnings: layerWarnings,
           direction,
           dataKey,
+          detectedKey,
           detectedToken,
+          detectedDisplay,
           defaults,
           groupId,
-        })
-        // 文字层也可作为 clipping 的 base（Photoshop 允许以文字作为剪贴蒙版形状）
-        if (!layer.clipping && pendingClips.length > 0) {
-          const baseMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
-          if (baseMask) {
-            for (const clip of pendingClips) clip.mask = baseMask
-          }
-          pendingClips.length = 0
         }
+        // 剪贴蒙版文字层：可编辑文字无法烘焙像素裁剪，退化为 base 的简单几何蒙版
+        if (layer.clipping) {
+          if (lastBase?.shape?.mask) {
+            textEntry.mask = lastBase.shape.mask
+            if (lastBase.shape.mask === 'rounded' && lastBase.shape.radiusRatio) {
+              textEntry.borderRadius = Math.round(lastBase.shape.radiusRatio * Math.max(1, textEntry.width))
+            }
+          } else {
+            layerWarnings.push('剪贴蒙版 base 缺失或形状复杂，未应用裁剪')
+          }
+          layers.push(textEntry)
+          continue
+        }
+        // 非 clip 文字层成为后续 clip 层的 base（文字栅格 alpha 即形状）
+        const textOwnShape = analyzeVectorMaskShape(layer.vectorMask as any, width, height)
+        lastBase = {
+          left: textEntry.left,
+          top: textEntry.top,
+          width: textEntry.width,
+          height: textEntry.height,
+          canvas,
+          shape: textOwnShape.mask ? textOwnShape : undefined,
+        }
+        layers.push(textEntry)
         continue
       }
 
       // 图片类图层（含智能对象/矢量层，均有栅格预览）
       if (!canvas) {
-        // 无栅格层（矢量形状层等）即使无法作为图片导入，仍可能是下方 clipping 图层的 base 形状
-        // （如圆形头像框的圆形路径层）。先尝试作为 base 关联，再走原有智能对象/跳过逻辑。
-        if (!layer.clipping && pendingClips.length > 0) {
-          const baseMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
-          if (baseMask) {
-            for (const clip of pendingClips) clip.mask = baseMask
-          }
-          pendingClips.length = 0
-        }
         const placed = layer.placedLayer as any
         // ag-psd：linkedFiles[].id 为 PascalString，placedLayer.id 来自 descriptor（数值），统一转字符串比较
         const linkedFile = placed?.id != null ? psd.linkedFiles?.find(f => String(f.id) === String(placed.id)) : undefined
@@ -1080,23 +1604,86 @@ export async function flattenPsdLayers(
             warnings.push(`图层「${name}」智能对象已从嵌入文件提取`)
           } else {
             skipped.push({ name, reason: '智能对象嵌入文件解析失败' })
+            if (!layer.clipping) lastBase = null
             continue
           }
         } else {
+          // 无栅格层（矢量形状层等）无法导入本体：若带简单矢量蒙版形状（圆/圆角矩形），
+          // 可记录为后续 clipping 层的 base（几何蒙版兜底），如圆形头像框的圆形路径层
+          if (!layer.clipping) {
+            const baseShape = analyzeVectorMaskShape(layer.vectorMask as any, width, height)
+            lastBase = baseShape.mask ? { left, top, width, height, shape: baseShape } : null
+          }
           skipped.push({ name, reason: placed ? '智能对象无嵌入文件（外链智能对象，无法导入）' : '无栅格数据（无法导入）' })
           continue
         }
       }
+      // 剪贴蒙版层且 base 缺失：PS 中该组 clip 均不可见 → 跳过（与文字分支一致）
+      if (layer.clipping && !lastBase) {
+        skipped.push({ name, reason: '剪贴蒙版 base 缺失或被隐藏，整组跳过' })
+        continue
+      }
+      // ---- 剪贴蒙版：裁剪到下方 base 的形状（bottom→top 遍历中 base 已处理完毕）----
+      // base 有栅格 → 用其 alpha 通道精确裁剪（矢量形状/文字/任意形状通用）；
+      // 无栅格但有简单矢量形状 → 几何蒙版兜底。此处烘焙在像素蒙版/效果合成之前（乘法 alpha 与顺序无关）。
+      let clipMaskApplied = false
+      if (layer.clipping) {
+        clipMaskApplied = bakeClipMask(canvas, lastBase!, left, top)
+        if (clipMaskApplied) {
+          layerWarnings.push('已按剪贴蒙版 base 形状裁剪')
+        } else {
+          layerWarnings.push('剪贴蒙版 base 形状无法还原，按原始图片导入')
+        }
+      }
+      // ---- 像素蒙版烘焙（图层自身蒙版 + 祖先组蒙版），在效果合成前应用 ----
+      // 烘焙后形状已含在像素 alpha 中：无需再做 alpha 蒙版检测，剪贴蒙版检测不受影响
+      let pixelMaskApplied = false
+      {
+        const ownMask = (layer.mask && !layer.mask.disabled && (layer.mask as any).canvas) ? (layer.mask as PixelMaskInfo) : null
+        const masksToApply = ownMask ? [ownMask, ...groupMasks] : groupMasks
+        let working = canvas
+        for (const m of masksToApply) {
+          const masked = applyPixelMaskToCanvas(working, m, left, top)
+          if (masked) {
+            working = masked
+            pixelMaskApplied = true
+          }
+        }
+        if (pixelMaskApplied) {
+          canvas = working
+          layerWarnings.push('像素蒙版已烘焙进图片')
+        }
+      }
+
       let dataUrl: string
       let pad = 0
+      // 图片层实际近似的全部效果（合成进栅格）
+      if (hasEffects) {
+        const applied: string[] = []
+        if (effects.dropShadow) applied.push('投影')
+        if (effects.stroke) applied.push('描边')
+        if (effects.solidFill) applied.push('颜色叠加')
+        if (effects.innerShadow) applied.push('内阴影')
+        if (effects.satin) applied.push('光泽')
+        if (effects.outerGlow) applied.push('外发光')
+        if (effects.innerGlow) applied.push('内发光')
+        if (effects.bevelEmboss) applied.push('斜面浮雕')
+        if (applied.length) {
+          layerWarnings.push(`已近似还原图层样式（${applied.join('、')}）`)
+          warnings.push(`图层「${name}」图层样式已近似还原（${applied.join('、')}）`)
+        }
+      }
       try {
-        if (effects.dropShadow || effects.stroke || effects.solidFill || effects.innerShadow || effects.satin) {
+        if (effects.dropShadow || effects.stroke || effects.solidFill || effects.innerShadow || effects.satin || effects.outerGlow || effects.innerGlow || effects.bevelEmboss) {
           const composed = compositeLayerEffects(canvas, {
             dropShadow: effects.dropShadow,
             stroke: effects.stroke,
             solidFill: effects.solidFill,
             innerShadow: effects.innerShadow,
             satin: effects.satin,
+            outerGlow: effects.outerGlow,
+            innerGlow: effects.innerGlow,
+            bevelEmboss: effects.bevelEmboss,
           })
           canvas = composed.canvas
           pad = composed.pad
@@ -1107,14 +1694,13 @@ export async function flattenPsdLayers(
         continue
       }
 
-      // 蒙版检测：只检测图层自身 vectorMask；clipping 层收集到 pendingClips，
-      // 等下方第一个非 clipping 层（base 形状层）出现时统一关联其 vectorMask
-      // （PSD 剪贴蒙版规则：clipping 图层裁剪到其下方第一个非 clipping 图层的形状上）
-      const detectedMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
+      // 蒙版检测：只检测图层自身 vectorMask（clipping 的 base 裁剪已在上方烘焙进像素）
+      const detectedShape = analyzeVectorMaskShape(layer.vectorMask as any, width, height)
+      const detectedMask = detectedShape.mask
 
-      // alpha 通道检测：若无矢量蒙版，则分析像素透明度识别非规则形状
+      // alpha 通道检测：若无矢量蒙版/像素蒙版/剪贴裁剪，则分析像素透明度识别非规则形状
       let alphaMask: 'alpha' | null = null
-      if (!detectedMask && canvas) {
+      if (!detectedMask && !pixelMaskApplied && !clipMaskApplied && canvas) {
         alphaMask = detectAlphaMaskFromCanvas(canvas)
       }
 
@@ -1134,29 +1720,31 @@ export async function flattenPsdLayers(
         warnings: layerWarnings,
         groupId,
         mask: detectedMask || alphaMask || undefined,
+        borderRadius: detectedMask === 'rounded' && detectedShape.radiusRatio
+          ? Math.round(detectedShape.radiusRatio * Math.max(1, width))
+          : undefined,
       }
       layers.push(entry)
 
-      // clipping 层：收集起来等待下方 base 形状层关联蒙版；
-      // 非 clipping 层：作为 base 为已收集的 clipping 层补蒙版（裁剪到其形状上）
-      if (layer.clipping) {
-        pendingClips.push(entry)
-      } else {
-        if (pendingClips.length > 0) {
-          const baseMask = detectMaskFromVectorMask(layer.vectorMask as any, width, height)
-          if (baseMask) {
-            for (const clip of pendingClips) clip.mask = baseMask
-          }
-          pendingClips.length = 0
+      // clipping 层不作为 base（连续 clip 链共享同一 base）；
+      // 非 clipping 层成为后续 clip 层的 base（栅格 alpha 即形状，矢量形状作几何兜底）
+      if (!layer.clipping) {
+        lastBase = {
+          left: entry.left,
+          top: entry.top,
+          width: entry.width,
+          height: entry.height,
+          canvas,
+          shape: detectedShape.mask ? detectedShape : undefined,
         }
       }
     }
   }
 
   await walk(psd.children, 0)
-  // ag-psd walk traverses children top-to-bottom (Photoshop topmost layer first).
-  // Reverse to bottom-to-top so the array order matches canvas z-index (0 = bottom).
-  layers.reverse()
+  // walk 按 ag-psd children 顺序遍历，实测为 bottom→top（最底层在前，与合成图像素比对验证），
+  // 与画布 z-index 顺序（数组序 = 0 在底）一致，保持原序返回。
+  // 注意：ag-psd 自带 README_PSD.md 声称 children 为 top→bottom，与本库实际行为不符，勿按文档反转。
 
   return { layers, skipped, warnings, warningGroups: groupPsdWarnings(warnings) }
 }

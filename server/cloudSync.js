@@ -130,15 +130,16 @@ async function uploadFileToCloud(fileUrl, cloudPath) {
   // 跳过已有的 cloud:// URL
   if (fileUrl.startsWith('cloud://')) return fileUrl
 
-  try {
-    let fileBuffer
+  // 读取文件内容（本地磁盘优先，网络下载兜底）
+  async function readFileBuffer() {
+    let fileBuffer = null
     if (fileUrl.startsWith('data:')) {
-      // data: URI → 解析 base64
       const base64 = fileUrl.split(',')[1]
-      if (!base64) return ''
-      fileBuffer = Buffer.from(base64, 'base64')
-    } else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') ||
-               fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
+      if (!base64) return null
+      return Buffer.from(base64, 'base64')
+    }
+    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') ||
+        fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
       // 1) 本地磁盘优先：admin 上传的图片就存在 server/uploads，直接读文件
       const localPath = localUrlToFilePath(fileUrl)
       if (localPath) {
@@ -151,27 +152,31 @@ async function uploadFileToCloud(fileUrl, cloudPath) {
       if (!fileBuffer && (fileUrl.startsWith('http://') || fileUrl.startsWith('https://'))) {
         fileBuffer = await downloadFile(fileUrl)
       }
-      if (!fileBuffer || !fileBuffer.length) {
+    }
+    return fileBuffer && fileBuffer.length ? fileBuffer : null
+  }
+
+  // 最多 3 次尝试（网络抖动/大文件超时重试），指数退避 500ms → 1500ms
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const fileBuffer = await readFileBuffer()
+      if (!fileBuffer) {
         console.warn(`[cloudSync] 资源不可用(本地无文件且网络下载失败): ${fileUrl.slice(0, 80)}`)
         return ''
       }
-    } else {
-      return ''
+      const uploadRes = await app.uploadFile({
+        cloudPath,
+        fileContent: fileBuffer,
+      })
+      if (uploadRes && uploadRes.fileID) {
+        console.log(`[cloudSync] ☁️  文件已上传到云存储: ${cloudPath} -> ${uploadRes.fileID}`)
+        return uploadRes.fileID
+      }
+      console.warn(`[cloudSync] 上传响应无 fileID（第 ${attempt}/3 次）: ${cloudPath}`)
+    } catch (e) {
+      console.warn(`[cloudSync] 上传失败（第 ${attempt}/3 次）: ${fileUrl.slice(0, 80)}... -> ${cloudPath}:`, e.message)
     }
-
-    if (!fileBuffer || !fileBuffer.length) return ''
-
-    // 上传到云存储
-    const uploadRes = await app.uploadFile({
-      cloudPath,
-      fileContent: fileBuffer,
-    })
-    if (uploadRes && uploadRes.fileID) {
-      console.log(`[cloudSync] ☁️  文件已上传到云存储: ${cloudPath} -> ${uploadRes.fileID}`)
-      return uploadRes.fileID
-    }
-  } catch (e) {
-    console.warn(`[cloudSync] 文件上传到云存储失败: ${fileUrl.slice(0, 80)}... -> ${cloudPath}:`, e.message)
+    if (attempt < 3) await new Promise(r => setTimeout(r, 500 * attempt * 3))
   }
   return ''
 }
@@ -181,6 +186,9 @@ async function uploadFileToCloud(fileUrl, cloudPath) {
  * @param {*} obj 模板数据对象（data/elements/pages/background 等）
  * @param {string} prefix 云存储路径前缀
  */
+// 本次同步的上传统计（由 syncTemplateToCloud 在每次同步前重置）
+let _syncUploadStats = { ok: 0, failed: 0, failedUrls: [] }
+
 async function migrateLocalUrlsDeep(obj, prefix) {
   if (!obj || typeof obj !== 'object') return obj
   if (Array.isArray(obj)) {
@@ -198,10 +206,13 @@ async function migrateLocalUrlsDeep(obj, prefix) {
         const fileID = await uploadFileToCloud(value, cloudPath)
         if (fileID) {
           obj[key] = fileID
+          _syncUploadStats.ok++
         } else {
-          // 上传失败：本地资源在云端无意义，置空避免假域名/本地地址残留
-          console.warn(`[cloudSync] 嵌套图片上传失败，置空: ${value.slice(0, 60)}`)
-          obj[key] = ''
+          // 上传失败：保留原值（置空会永久丢失资源引用导致小程序背景/图片缺失），
+          // 仅统计失败并告警；本地 /uploads/ 值在云端虽不可直接加载，但可通过重新同步修复
+          _syncUploadStats.failed++
+          _syncUploadStats.failedUrls.push(value.slice(0, 100))
+          console.warn(`[cloudSync] ⚠️ 嵌套图片上传失败，保留原值待重试: ${value.slice(0, 60)}`)
         }
       }
     } else if (value && typeof value === 'object') {
@@ -255,6 +266,9 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
 
   try {
     const normalized = normalizeTemplateData(templateData)
+
+    // 重置上传统计
+    _syncUploadStats = { ok: 0, failed: 0, failedUrls: [] }
 
     // 嵌套字段（data/elements/pages/background）里的本地图片 → 先上传云存储替换为 cloud://
     const ts = Date.now()
@@ -314,6 +328,10 @@ async function syncTemplateToCloud(id, templateData, action = 'create') {
 
     console.log(`[cloudSync] ✅ 模板同步成功: ${action} ${id} (${payload.name})`)
     console.log(`[cloudSync]    耗时: ${elapsed}ms`)
+    console.log(`[cloudSync]    资源上传: 成功 ${_syncUploadStats.ok} 个${_syncUploadStats.failed ? `，失败 ${_syncUploadStats.failed} 个 ⚠️` : ''}`)
+    if (_syncUploadStats.failed) {
+      console.warn(`[cloudSync]    失败资源(保留原值，可通过重新同步修复):`, _syncUploadStats.failedUrls)
+    }
     console.log(`[cloudSync]    云返回:`, JSON.stringify(result).slice(0, 200))
     console.log(`[cloudSync] ────────────────────────────────────────`)
     return true
@@ -508,6 +526,57 @@ async function migrateCloudUrlsDeep(obj) {
   return obj
 }
 
+/**
+ * 同步单个字体文件到云存储，并合并写入云数据库 settings.font_map
+ * （小程序云函数模式 GET /api/fonts 从 settings.font_map 读取 {字体名: cloud://fileID}）
+ * @param {string} name - 字体名（与本地 font-map.json 的 key 一致）
+ * @param {string} localPath - 字体文件在本地磁盘的绝对路径
+ * @returns {Promise<boolean>} 是否成功
+ */
+async function syncFontToCloud(name, localPath) {
+  if (!syncEnabled || !app || !db) return false
+  try {
+    if (!fs.existsSync(localPath)) {
+      console.warn(`[cloudSync] 字体文件不存在，跳过: ${localPath}`)
+      return false
+    }
+    const buffer = fs.readFileSync(localPath)
+    // cloudPath 用稳定路径（字体名+扩展名），重复同步覆盖同一路径，不产生冗余文件
+    const ext = path.extname(localPath).toLowerCase()
+    const cloudPath = `uploads/fonts/${name}${ext}`
+    const uploadRes = await app.uploadFile({ cloudPath, fileContent: buffer })
+    if (!uploadRes || !uploadRes.fileID) {
+      console.warn(`[cloudSync] 字体上传云存储失败: ${name}`)
+      return false
+    }
+
+    // 合并现有 font_map（避免覆盖其他字体），再 upsert 写回
+    // 注意：@cloudbase/node-sdk 的 set/add 接收文档内容本身（无 data 包装），与 wx-server-sdk 不同
+    const col = db.collection('settings')
+    let fontMap = {}
+    try {
+      const res = await col.doc('font_map').get()
+      const docData = res && res.data
+      const doc0 = Array.isArray(docData) ? docData[0] : docData
+      const v = doc0 && doc0.value
+      if (typeof v === 'string') { try { fontMap = JSON.parse(v) } catch (_) { fontMap = {} } }
+      else if (v && typeof v === 'object') fontMap = v
+    } catch (_) { /* 文档不存在 → 从空 map 开始 */ }
+    fontMap[name] = uploadRes.fileID
+
+    try {
+      await col.doc('font_map').set({ value: fontMap })
+    } catch (_) {
+      await col.add({ _id: 'font_map', value: fontMap })
+    }
+    console.log(`[cloudSync] ☁️  字体已同步: ${name} -> ${uploadRes.fileID}（font_map 共 ${Object.keys(fontMap).length} 个）`)
+    return true
+  } catch (e) {
+    console.warn(`[cloudSync] 字体云同步失败: ${name}:`, e.message)
+    return false
+  }
+}
+
 module.exports = {
   isEnabled,
   syncTemplateToCloud,
@@ -517,4 +586,5 @@ module.exports = {
   fetchFullCloudTemplates,
   downloadCloudFileToLocal,
   migrateCloudUrlsDeep,
+  syncFontToCloud,
 }

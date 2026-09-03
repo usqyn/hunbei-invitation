@@ -209,9 +209,31 @@
             <input class="tpl-name-input" v-model="currentTemplateName" placeholder="输入模板名称…" @blur="onTemplateNameBlur" />
           </div>
           <div v-if="layers.length === 0" class="empty-hint">画布暂无元素<br/>点击「添加文字/图片」开始</div>
+          <!-- PS 风格图层：缩略图 + 名称（对应问题2：原列表只有类型图标+名称，元素多了找不到） -->
           <div v-for="el in layers" :key="el.id" class="layer-row" :class="{ active: selectedId === el.id }">
-            <span class="layer-icon" @click="selectElement(el.id)">{{ el.type === 'text' ? 'T' : el.type === 'image' ? '🖼' : '✦' }}</span>
-            <span class="layer-name" @click="selectElement(el.id)">{{ el.name }}</span>
+            <div class="layer-thumb" @click="selectElement(el.id)">
+              <img
+                v-if="el.type === 'image' && (el as any).src"
+                :src="(el as any).src"
+                alt=""
+                draggable="false"
+              />
+              <div
+                v-else-if="el.type === 'text'"
+                class="layer-thumb-text"
+                :style="{ color: (el as any).color || '#333', fontFamily: (el as any).fontFamily || 'inherit' }"
+              >{{ (el as any).content || '空文本' }}</div>
+              <div
+                v-else-if="el.type === 'sticker' && (el as any).svgContent"
+                class="layer-thumb-svg"
+                v-html="(el as any).svgContent"
+              ></div>
+              <span v-else class="layer-thumb-fallback">{{ el.type === 'text' ? 'T' : el.type === 'image' ? '🖼' : '✦' }}</span>
+            </div>
+            <div class="layer-main" @click="selectElement(el.id)">
+              <span class="layer-name" :title="layerDisplayName(el)">{{ layerDisplayName(el) }}</span>
+              <span class="layer-type-chip" :class="`chip--${el.type}`">{{ el.type === 'text' ? '文字' : el.type === 'image' ? '图片' : '贴纸' }}</span>
+            </div>
             <button class="layer-btn" :class="{ off: !el.visible }" @click="toggleVisibility(el.id)" :title="el.visible ? '隐藏' : '显示'">👁</button>
             <button class="layer-btn" :class="{ off: !el.locked }" @click="toggleLock(el.id)" :title="el.locked ? '解锁' : '锁定'">🔒</button>
             <button class="layer-btn" @click="bringForward(el.id)" title="上移一层">⬆</button>
@@ -315,16 +337,14 @@
         <!-- 单页模式：页面画布 -->
         <template v-if="pageMode === 'single'">
           <div ref="canvasScrollRef" class="canvas-scroll" @wheel="onWheel">
-            <canvas
-              ref="canvasRef"
-              class="fabric-canvas page-canvas"
-              :style="{
-                width: (canvasSize.width * zoom) + 'px',
-                height: (canvasSize.height * zoom) + 'px',
-              }"
-              @dragover="onCanvasDragOver"
-              @drop="onCanvasDrop"
-            ></canvas>
+            <div class="canvas-zoom-wrapper" :style="canvasWrapperStyle">
+              <canvas
+                ref="canvasRef"
+                class="fabric-canvas page-canvas"
+                @dragover="onCanvasDragOver"
+                @drop="onCanvasDrop"
+              ></canvas>
+            </div>
           </div>
         </template>
         <!-- 长页面模式：滚动视口 -->
@@ -336,16 +356,14 @@
               class="viewport-scroll"
               :style="{ height: (667 * zoom) + 'px' }"
             >
-              <canvas
-                ref="canvasRef"
-                class="fabric-canvas"
-                :style="{
-                  width: (canvasSize.width * zoom) + 'px',
-                  height: (canvasSize.height * zoom) + 'px',
-                }"
-                @dragover="onCanvasDragOver"
-                @drop="onCanvasDrop"
-              ></canvas>
+              <div class="canvas-zoom-wrapper" :style="canvasWrapperStyle">
+                <canvas
+                  ref="canvasRef"
+                  class="fabric-canvas"
+                  @dragover="onCanvasDragOver"
+                  @drop="onCanvasDrop"
+                ></canvas>
+              </div>
             </div>
             <div class="viewport-footer">
               高 {{ canvasSize.height }}px · 区域内滚动查看全页
@@ -364,16 +382,14 @@
                   height: (canvasSize.height * zoom) + 'px',
                 }"
               >
-                <canvas
-                  ref="canvasRef"
-                  class="fabric-canvas"
-                  :style="{
-                    width: (canvasSize.width * zoom) + 'px',
-                    height: (canvasSize.height * zoom) + 'px',
-                  }"
-                  @dragover="onCanvasDragOver"
-                  @drop="onCanvasDrop"
-                ></canvas>
+                <div class="canvas-zoom-wrapper" :style="canvasWrapperStyle">
+                  <canvas
+                    ref="canvasRef"
+                    class="fabric-canvas"
+                    @dragover="onCanvasDragOver"
+                    @drop="onCanvasDrop"
+                  ></canvas>
+                </div>
               </div>
             </div>
             <div class="card-footer">卡片居中展示 · 传统横版贺卡风格</div>
@@ -406,16 +422,14 @@
                 <span class="flip-thumb-name">{{ p.name }}</span>
               </div>
             </div>
-            <canvas
-              ref="canvasRef"
-              class="fabric-canvas page-canvas"
-              :style="{
-                width: (canvasSize.width * zoom) + 'px',
-                height: (canvasSize.height * zoom) + 'px',
-              }"
-              @dragover="onCanvasDragOver"
-              @drop="onCanvasDrop"
-            ></canvas>
+            <div class="canvas-zoom-wrapper" :style="canvasWrapperStyle">
+              <canvas
+                ref="canvasRef"
+                class="fabric-canvas page-canvas"
+                @dragover="onCanvasDragOver"
+                @drop="onCanvasDrop"
+              ></canvas>
+            </div>
             <div class="flip-hint">翻页模式：每页独立设计，切换前会自动保存当前页内容</div>
           </div>
         </template>
@@ -656,7 +670,7 @@
                 <input
                   type="color"
                   class="form-input color"
-                  :value="(selectedElement as any).color"
+                  :value="toColorInputValue((selectedElement as any).color)"
                   @change="e => updateSelected({ color: (e.target as HTMLInputElement).value })"
                 />
               </div>
@@ -677,7 +691,7 @@
                 <input
                   type="color"
                   class="form-input color"
-                  :value="(selectedElement as any).strokeColor || '#000000'"
+                  :value="toColorInputValue((selectedElement as any).strokeColor)"
                   @change="e => updateSelected({ strokeColor: (e.target as HTMLInputElement).value })"
                 />
               </div>
@@ -700,7 +714,7 @@
                 <input
                   type="color"
                   class="form-input color"
-                  :value="(selectedElement as any).shadowColor || '#000000'"
+                  :value="toColorInputValue((selectedElement as any).shadowColor)"
                   @change="e => updateSelected({ shadowColor: (e.target as HTMLInputElement).value })"
                 />
               </div>
@@ -861,7 +875,7 @@
                 <label>颜色</label>
                 <input
                   type="color" class="form-input color-input"
-                  :value="(selectedElement as any).borderColor || '#ffffff'"
+                  :value="toColorInputValue((selectedElement as any).borderColor, '#ffffff')"
                   @change="e => updateSelected({ borderColor: (e.target as HTMLInputElement).value } as any)"
                 />
               </div>
@@ -988,6 +1002,7 @@
       :saveCurrentFlipPage="saveCurrentFlipPage"
       :pageMode="pageMode"
       :currentTemplateId="currentTemplateId || ''"
+      :currentTemplateName="currentTemplateName"
       @close="showPublishWizard = false"
       @published="onTemplatePublished"
     />
@@ -999,6 +1014,7 @@
       :available-fonts="fontList"
       @close="showPsdDialog = false"
       @confirm="onPsdImportConfirm"
+      @fonts-uploaded="onPsdFontsUploaded"
     />
     </template>
   </div>
@@ -1049,7 +1065,7 @@ import { useFlipPages } from './composables/useFlipPages'
 import { shapeText, containsRtl } from './utils/bidi'
 import { fontListBase } from './constants/config-data'
 import { ensureFontLoaded, preloadBaseFonts } from './utils/font-loader'
-import { sanitizeSvg, formatTime, fileToDataURL, getLuminance } from './utils/common'
+import { sanitizeSvg, formatTime, fileToDataURL, getLuminance, toColorInputValue } from './utils/common'
 
 /**
  * 等待浏览器 @font-face 加载完成（特别是哈萨克字体 KazakhSoftAsilya）
@@ -1291,9 +1307,15 @@ function initEditorAfterAuth() {
     loadUploadedFonts()
     // 预加载本地基础字体（哈萨克等），就绪后重绘画布：避免 canvas 首次渲染
     // 时字体未下载完成而回退默认字体（@font-face 为懒加载，且字体就绪后 fabric 不会自动重绘）
-    preloadBaseFonts().then(() => fabricCanvas.value?.renderAll())
+    preloadBaseFonts().then(() => {
+      recalcTextDimensions()
+      fabricCanvas.value?.renderAll()
+    })
     if (typeof document !== 'undefined' && (document as any).fonts) {
-      ;(document as any).fonts.ready.then(() => fabricCanvas.value?.renderAll())
+      ;(document as any).fonts.ready.then(() => {
+        recalcTextDimensions()
+        fabricCanvas.value?.renderAll()
+      })
     }
     setTimeout(() => appRootRef.value?.focus(), 50)
   })
@@ -1599,6 +1621,7 @@ const {
   clearCanvas,
   dispose,
   refreshAllPlaceholders,
+  recalcTextDimensions,
   fabricCanvas,
 } = useCanvas({
   canvasRef,
@@ -1616,6 +1639,18 @@ const {
     if (bg.imageOpacity !== undefined) bgOpacity.value = bg.imageOpacity * 100
   },
 })
+
+// 画布缩放包装样式：把 CSS transform 缩放放到 canvas 的外层 wrapper 上，
+// 永远保留 canvas 自身 CSS 尺寸 === backing store（逻辑 canvasSize），
+// 这样 Fabric 内部通过 getBoundingClientRect() 算出来的命中坐标在任意 zoom 下都精确。
+// wrapper 的 layout box = canvasSize * zoom（与视觉尺寸一致），
+// 避免 transform 缩放后 layout box 仍为原始尺寸导致外层容器产生多余滚动条。
+const canvasWrapperStyle = computed(() => ({
+  width: (canvasSize.value.width * zoom.value) + 'px',
+  height: (canvasSize.value.height * zoom.value) + 'px',
+  transform: `scale(${zoom.value})`,
+  transformOrigin: 'top left',
+}))
 
 // ============ 翻页模式：接入 useFlipPages ============
 // 提供翻页切换、保存当前页、加载目标页、增删/排序页面等能力
@@ -1899,78 +1934,92 @@ async function loadTemplateList() {
   }
 }
 
+// 服务器元素 → 画布模型元素映射。
+// 服务器存储的是左上角坐标（serializeElement 转换过），Fabric 使用中心原点，需转回中心坐标。
+// 提取为独立函数：单页 elements 与 flip 模板 pages[].elements 共用，保证历史模板加载显示与小程序一致。
+function mapServerElementToDraft(el: any, idx: number, tpl: any) {
+  const w = el.width ?? 240
+  const h = el.height ?? 60
+  const centerX = (el.x ?? 187) + w / 2
+  const centerY = (el.y ?? (200 + idx * 80)) + h / 2
+  // 序列化时 fontSize/spacing/borderRadius 等做了 px→rpx 转换（因子 750/canvasWidth），
+  // admin 画布用 px，加载时必须反向 rpx→px 还原，
+  // 否则历史模板在 admin 的字号/字距/圆角与小程序显示不一致（小程序端直接按 rpx 渲染）。
+  const rpx2px = tpl?.canvasSize?.width ? tpl.canvasSize.width / 750 : 1
+  const sx = (v: number | undefined | null, dflt: number) =>
+    v == null ? dflt : v * rpx2px
+  return {
+    id: el.id || `el_${idx}`,
+    type: el.type,
+    name: el.label || (el.type === 'text' ? '文字' : '图片'),
+    x: centerX,
+    y: centerY,
+    width: w,
+    height: h,
+    rotation: el.rotation ?? 0,
+    opacity: el.opacity ?? 1,
+    locked: false,
+    visible: true,
+    zIndex: el.zIndex ?? idx,
+    content: el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '',
+    dataKey: el.dataKey,
+    defaults: el.defaults || undefined,
+    fontFamily: el.style?.font || '思源宋体, serif',
+    fontSize: sx(el.style?.fontSize, 24),
+    fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
+    fontStyle: el.style?.fontStyle || 'normal',
+    color: el.style?.color || '#333333',
+    textAlign: el.style?.textAlign || 'center',
+    lineHeight: el.style?.lineHeight || 1.5,
+    letterSpacing: sx(el.style?.spacing, 2),
+    // ---- 文字特效：补齐序列化时已保存的字段，避免历史模板加载后特效丢失 ----
+    // 键名兼容：序列化写 longShadowEnabled/neonGlowEnabled/neonGlowColor，
+    // admin 画布模型用 longShadow/neonGlow/neonColor，读取时两者都兜底
+    strokeColor: el.style?.strokeColor || 'transparent',
+    strokeWidth: sx(el.style?.strokeWidth, 0),
+    gradientFill: el.style?.gradientFill || false,
+    gradientFillType: el.style?.gradientFillType || 'linear',
+    gradientStart: el.style?.gradientStart || '#ffffff',
+    gradientEnd: el.style?.gradientEnd || '#000000',
+    gradientAngle: el.style?.gradientAngle ?? 0,
+    neonGlow: !!(el.style?.neonGlow || el.style?.neonGlowEnabled),
+    neonColor: el.style?.neonColor || el.style?.neonGlowColor || el.style?.color || '#ffffff',
+    longShadow: !!(el.style?.longShadow || el.style?.longShadowEnabled),
+    longShadowColor: el.style?.longShadowColor || el.style?.color || '#000000',
+    longShadowBlur: el.style?.longShadowBlur ?? 0,
+    longShadowLength: el.style?.longShadowLength ?? 8,
+    shadowColor: el.style?.shadowColor || 'transparent',
+    shadowOffsetX: sx(el.style?.shadowOffsetX, 0),
+    shadowOffsetY: sx(el.style?.shadowOffsetY, 0),
+    shadowBlur: sx(el.style?.shadowBlur, 0),
+    direction: el.style?.direction || 'auto',
+    textDecoration: el.style?.textDecoration || 'none',
+    // ---- 图片：src 在 base 层（el.src），scale/mask 也在 base 层；其余滤镜/边框在 style 层 ----
+    src: el.type === 'image' ? (el.src || el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '') : '',
+    scale: el.scale || el.style?.scale || 'cover',
+    mask: el.mask || el.style?.mask || 'rect',
+    borderRadius: sx(el.style?.borderRadius, 0),
+    borderColor: el.style?.borderColor || 'transparent',
+    borderWidth: sx(el.style?.borderWidth, 0),
+    brightness: el.style?.brightness ?? 100,
+    contrast: el.style?.contrast ?? 100,
+    blur: el.style?.blur ?? 0,
+    grayscale: el.style?.grayscale ?? 0,
+    saturate: el.style?.saturate ?? 100,
+    imageOffsetX: el.style?.imageOffsetX ?? 0,
+    imageOffsetY: el.style?.imageOffsetY ?? 0,
+    blendMode: el.blendMode || undefined,
+    editable: el.editable !== false,
+  }
+}
+
 async function onLoadTemplate(id: string) {
   try {
     const tpl = await fetchTemplate(id)
     const draft = {
       canvasSize: tpl.canvasSize || { width: 375, height: 667 },
       background: tpl.background || { type: 'solid', color1: '#ffffff' },
-      elements: (tpl.elements || []).map((el: any, idx: number) => {
-        const w = el.width ?? 240
-        const h = el.height ?? 60
-        // 服务器存储的是左上角坐标，Fabric 使用中心原点，需转换
-        const centerX = (el.x ?? 187) + w / 2
-        const centerY = (el.y ?? (200 + idx * 80)) + h / 2
-        return {
-          id: el.id || `el_${idx}`,
-          type: el.type,
-          name: el.label || (el.type === 'text' ? '文字' : '图片'),
-          x: centerX,
-          y: centerY,
-          width: w,
-          height: h,
-        rotation: el.rotation ?? 0,
-        opacity: el.opacity ?? 1,
-        locked: false,
-        visible: true,
-        zIndex: el.zIndex ?? idx,
-        content: el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '',
-        dataKey: el.dataKey,
-        defaults: el.defaults || undefined,
-        fontFamily: el.style?.font || '思源宋体, serif',
-        fontSize: el.style?.fontSize ?? 24,
-        fontWeight: el.style?.fontWeight === 'bold' ? 'bold' : 'normal',
-        fontStyle: el.style?.fontStyle || 'normal',
-        color: el.style?.color || '#333333',
-        textAlign: el.style?.textAlign || 'center',
-        lineHeight: el.style?.lineHeight || 1.5,
-        letterSpacing: el.style?.spacing || 2,
-        // ---- 文字特效：补齐序列化时已保存的字段，避免历史模板加载后特效丢失 ----
-        strokeColor: el.style?.strokeColor || 'transparent',
-        strokeWidth: el.style?.strokeWidth ?? 0,
-        gradientFill: el.style?.gradientFill || false,
-        gradientFillType: el.style?.gradientFillType || 'linear',
-        gradientStart: el.style?.gradientStart || '#ffffff',
-        gradientEnd: el.style?.gradientEnd || '#000000',
-        gradientAngle: el.style?.gradientAngle ?? 0,
-        neonGlow: el.style?.neonGlow || false,
-        neonColor: el.style?.neonColor || el.style?.color || '#ffffff',
-        longShadow: el.style?.longShadow || false,
-        longShadowColor: el.style?.longShadowColor || el.style?.color || '#000000',
-        longShadowBlur: el.style?.longShadowBlur ?? 0,
-        longShadowLength: el.style?.longShadowLength ?? 8,
-        shadowColor: el.style?.shadowColor || 'transparent',
-        shadowOffsetX: el.style?.shadowOffsetX ?? 0,
-        shadowOffsetY: el.style?.shadowOffsetY ?? 0,
-        shadowBlur: el.style?.shadowBlur ?? 0,
-        direction: el.style?.direction || 'auto',
-        textDecoration: el.style?.textDecoration || 'none',
-        // ---- 图片：src 在 base 层（el.src），scale/mask 也在 base 层；其余滤镜/边框在 style 层 ----
-        src: el.type === 'image' ? (el.src || el.text || (el.dataKey ? (tpl.data as any)?.[el.dataKey] : '') || '') : '',
-        scale: el.scale || el.style?.scale || 'cover',
-        mask: el.mask || el.style?.mask || 'rect',
-        borderRadius: el.style?.borderRadius ?? 0,
-        borderColor: el.style?.borderColor || 'transparent',
-        borderWidth: el.style?.borderWidth ?? 0,
-        brightness: el.style?.brightness ?? 100,
-        contrast: el.style?.contrast ?? 100,
-        blur: el.style?.blur ?? 0,
-        grayscale: el.style?.grayscale ?? 0,
-        saturate: el.style?.saturate ?? 100,
-        imageOffsetX: el.style?.imageOffsetX ?? 0,
-        imageOffsetY: el.style?.imageOffsetY ?? 0,
-        }
-      }),
+      elements: (tpl.elements || []).map((el: any, idx: number) => mapServerElementToDraft(el, idx, tpl)),
     }
     loadDraft(draft)
     refreshAllPlaceholders(dateValues)
@@ -1979,14 +2028,18 @@ async function onLoadTemplate(id: string) {
     currentTemplateCategory.value = tpl.category || 'wedding'
     currentTemplateSubtitle.value = tpl.subtitle || ''
 
-    // 翻页模板：恢复 pages 数据并切换到翻页模式
+    // 翻页模板：恢复 pages 数据并切换到翻页模式。
+    // 每页 elements 同样要走 mapServerElementToDraft：此前直接透传服务器原始数据
+    // （左上角坐标 + style 子对象），导致历史翻页模板在 admin 中显示错位、样式丢失。
     if (tpl.templateType === 'flip' && Array.isArray(tpl.pages) && tpl.pages.length > 0) {
       flipPages.value = tpl.pages.map((p: any, idx: number) => ({
         id: p.id || `page_${idx}_${Date.now().toString(36)}`,
         name: p.name || `第 ${idx + 1} 页`,
         pageType: p.pageType || 'custom',
         background: p.background || { type: 'solid', color1: '#ffffff' },
-        elements: Array.isArray(p.elements) ? p.elements : [],
+        elements: Array.isArray(p.elements)
+          ? p.elements.map((el: any, elIdx: number) => mapServerElementToDraft(el, elIdx, tpl))
+          : [],
       }))
       if (pageMode.value !== 'flip') {
         pageMode.value = 'flip'
@@ -2037,6 +2090,19 @@ async function onDeleteTemplate(tpl: any) {
 
 function getCategoryName(catId: string): string {
   return CATEGORIES.find(c => c.id === catId)?.name || catId
+}
+
+// PS 风格图层的显示名：
+// - 文字层：名称是自动生成的「文本 N」时，优先展示文字内容（PS 的文字图层名默认就是文字内容）
+// - 图片/贴纸：用 PSD 导入带来的原始图层名或系统名
+function layerDisplayName(el: any): string {
+  if (!el) return ''
+  if (el.type === 'text') {
+    const generic = !el.name || /^文本\s*\d*$/.test(el.name)
+    const content = (el.content || '').trim().replace(/\s+/g, ' ')
+    if (generic && content) return content.length > 24 ? content.slice(0, 24) + '…' : content
+  }
+  return el.name || (el.type === 'text' ? '文本' : el.type === 'image' ? '图片' : '贴纸')
 }
 
 function vipLevelLabel(level?: string): string {
@@ -2403,6 +2469,9 @@ function addSmartField(sf: SmartFieldConfig) {
 }
 
 // PSD 导入
+// 最近一次选择的 PSD 文件引用：字体上传后免重新选文件、直接自动重新解析（优化2）
+let lastPsdFile: File | null = null
+
 function triggerPsdImport() {
   psdInput.value?.click()
 }
@@ -2413,6 +2482,7 @@ async function onPsdFile(e: Event) {
   if (!file) return
   input.value = ''
   if (psdImporting.value) return
+  lastPsdFile = file
   try {
     psdImporting.value = true
     showToast('PSD 解析中…（大文件可能需要几秒）')
@@ -2433,9 +2503,32 @@ async function onPsdFile(e: Event) {
   }
 }
 
+// 对话框内上传缺失字体后：刷新字体列表（含 FontFace 注入）→ 用同一文件自动重新解析，
+// 无需用户取消对话框重新选文件（优化2）
+async function onPsdFontsUploaded() {
+  if (!lastPsdFile || psdImporting.value) return
+  try {
+    psdImporting.value = true
+    await loadUploadedFonts()
+    const result = await parsePsdFile(lastPsdFile, fontList.value)
+    psdImportResult.value = result
+    showToast(`重新解析完成：${result.layers.length} 层可导入`)
+  } catch (err) {
+    alert('重新解析 PSD 失败：' + (err as Error).message)
+  } finally {
+    psdImporting.value = false
+  }
+}
+
 // 用户确认导入：清空画布 → 设置 PSD 尺寸 → 按图层导入
 async function onPsdImportConfirm(payload: { width: number; height: number; layers: PsdLayerPreview[] }) {
   showPsdDialog.value = false
+  // 修复问题4：导入新 PSD 意味着一份新设计。
+  // 历史上 currentTemplateId 仍指向上一个已发布模板，此时直接发布会走 updateTemplate
+  // 把上一个模板【覆盖掉】。这里在导入时重置为"新模板"，下次发布将创建独立新模板。
+  currentTemplateId.value = null
+  currentTemplateName.value = ''
+  currentTemplateSubtitle.value = ''
   // 切回单页画布模式（PSD 是单画布源文件）；切模式会重建 Fabric 画布（watch pageMode → dispose/init），需等重建完成
   if (pageMode.value !== 'single') {
     onPageModeChange('single')
@@ -2453,6 +2546,14 @@ async function onPsdImportConfirm(payload: { width: number; height: number; laye
   psdImportResult.value = null
   await nextTick()
   fitCanvasToViewport()
+  // PSD 导入可能引入新字体，字体就绪后重新计算文字尺寸
+  //（Fabric IText 创建时字体可能未加载，width 用默认字体计算导致偏小、文字被裁剪）
+  if (typeof document !== 'undefined' && (document as any).fonts) {
+    ;(document as any).fonts.ready.then(() => {
+      recalcTextDimensions()
+      fabricCanvas.value?.renderAll()
+    })
+  }
 }
 
 async function onImageFile(e: Event) {
@@ -3077,11 +3178,11 @@ onMounted(() => {
   line-height: 1.8;
 }
 
-/* 图层 */
+/* 图层（PS 风格：缩略图 + 名称） */
 .layer-row {
   display: flex;
   align-items: center;
-  padding: 8px 10px;
+  padding: 6px 8px;
   margin-bottom: 4px;
   border-radius: 6px;
   gap: 8px;
@@ -3093,27 +3194,90 @@ onMounted(() => {
 .layer-row:hover { background: #f5f7fa; }
 .layer-row.active { background: #e3f2fd; border-color: #90caf9; }
 
-.layer-icon {
-  width: 24px;
-  height: 24px;
+/* 缩略图：图片层显示真实内容，文字层显示文字预览，贴纸层渲染 SVG */
+.layer-thumb {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid #e0e3e8;
+  background:
+    linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 75%, #f0f0f0 75%),
+    linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 75%, #f0f0f0 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+  background-color: #fff;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eee;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #555;
+}
+
+.layer-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.layer-thumb-text {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 9px;
+  line-height: 1.15;
+  padding: 2px;
+  overflow: hidden;
+  word-break: break-all;
+  background: #fff;
+}
+
+.layer-thumb-svg,
+.layer-thumb-svg :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+
+.layer-thumb-fallback {
+  font-size: 14px;
+  color: #999;
+}
+
+.layer-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
 }
 
 .layer-name {
   flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: #333;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+.layer-type-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 3px;
+  color: #fff;
+  opacity: 0.85;
+}
+.chip--text { background: #7986cb; }
+.chip--image { background: #4caf50; }
+.chip--sticker { background: #ffa726; }
 
 .layer-btn {
   padding: 2px 6px;
@@ -3254,8 +3418,23 @@ onMounted(() => {
   background: #fff;
   display: block;
   flex-shrink: 0;
-  margin: auto;
-  /* 由外层容器设置实际尺寸 */
+  /* 禁止 CSS 改写 canvas width/height：Fabric v6 使用 getBoundingClientRect()
+     做屏幕到画布的坐标映射，只有当 CSS 尺寸 = backing store 时命中才正确。
+     缩放统一由外层 .canvas-zoom-wrapper 的 transform: scale(zoom) 完成。 */
+  box-sizing: content-box;
+}
+
+/* 外层 canvas 缩放 wrapper：
+   - layout box = 逻辑 canvas 尺寸（W×H）
+   - transform: scale(zoom) + origin = top-left
+   这样视觉尺寸 = W*zoom × H*zoom，而命中坐标（来自 canvas element 自身的
+   getBoundingClientRect）经由 CSS transform 仍然精确（因为 wrapper 是 canvas
+   的祖先，而 getBoundingClientRect() 返回的是经过所有 ancestor transform
+   之后的值）。*/
+.canvas-zoom-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  margin: 0 auto;
 }
 
 /* 单页/翻页模式：页面卡片样式 */
