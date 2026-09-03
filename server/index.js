@@ -1166,7 +1166,7 @@ const fontUpload = multer({
   },
 })
 
-app.post('/api/fonts/upload', uploadLimiter, requireAuth, fontUpload.array('fonts', 10), (req, res) => {
+app.post('/api/fonts/upload', uploadLimiter, requireAuth, fontUpload.array('fonts', 10), async (req, res) => {
   try {
     const protocol = req.protocol
     const host = req.get('host')
@@ -2501,22 +2501,35 @@ app.post('/api/quota/consume', createLimiter, requireAuth, (req, res) => {
   }
 })
 
-// 分享奖励：POST /api/share/reward { templateId, phone }
-// 公开访问（无登录态的分享落地页触发），但 phone 必须属于当前请求者（由 auth 中间件注入 req.user.phone 替代 body.phone）。
-// 修复：原 Express 版无 requireAuth → 任何人 POST 自己手机号即可刷配额。改为强制 requireAuth + 忽略 body.phone。
+// 分享奖励：POST /api/share/reward { templateId, workId? }
+// 语义（修复）：浏览者打开作品分享落地页 → 给「作品创建者」的限数模板剩余次数 +1。
+// 旧注释约定"给分享者（作品创建者 phone）+1"，但此前实现误把奖励加给浏览者自己（req.user.phone），
+// 创建者永远拿不到奖励。现改为：有 workId 时反查 works.phone 归属创建者；无 workId 时回退奖励
+// 当前登录用户自己（与云函数版「分享者点我已分享给自己 +1」语义对齐）。
+// 防刷：requireAuth + 忽略 body.phone；每日奖励名额记录在浏览者头上（同人同模板每日 1 次 + payLimiter）；
+// 奖励上限 SHARE_REWARD_QUOTA_CAP 作用于创建者的 remaining。
 app.post('/api/share/reward', payLimiter, requireAuth, (req, res) => {
   try {
-    const { templateId } = req.body
-    const phone = req.user.phone
+    const { templateId, workId } = req.body
+    const viewerPhone = req.user.phone
     if (!templateId) return res.status(400).json({ success: false, error: '缺少 templateId' })
-    const remaining = getTemplateQuota(phone, templateId)
+    // workId 反查作品创建者；作品不存在/缺 phone 时回退给浏览者自己（兼容旧客户端）
+    let rewardPhone = viewerPhone
+    if (workId) {
+      const w = db.exec("SELECT phone FROM works WHERE id = ?", [workId])
+      if (w.length && w[0].values.length && w[0].values[0][0]) {
+        rewardPhone = w[0].values[0][0]
+      }
+    }
+    const remaining = getTemplateQuota(rewardPhone, templateId)
     if (remaining === null) return res.status(404).json({ success: false, error: '模板不存在' })
     if (remaining === QUOTA_LIMITLESS) {
       return res.json({ success: true, data: { remaining: QUOTA_LIMITLESS, rewarded: false, reason: 'unlimited' } })
     }
     const date = new Date().toISOString().slice(0, 10)
     const now = new Date().toISOString()
-    const cntResult = db.exec("SELECT count FROM share_rewards WHERE phone = ? AND template_id = ? AND date = ?", [phone, templateId, date])
+    // 每日名额按浏览者计（防同一人反复打开刷奖励）
+    const cntResult = db.exec("SELECT count FROM share_rewards WHERE phone = ? AND template_id = ? AND date = ?", [viewerPhone, templateId, date])
     const todayCount = cntResult.length && cntResult[0].values.length ? parseInt(cntResult[0].values[0][0], 10) || 0 : 0
     if (todayCount >= 1) {
       return res.status(429).json({ success: false, error: 'DAILY_LIMIT', message: '该模板今日分享奖励已达上限' })
@@ -2525,12 +2538,18 @@ app.post('/api/share/reward', payLimiter, requireAuth, (req, res) => {
       return res.json({ success: true, data: { remaining, rewarded: false, reason: 'capped' } })
     }
     if (cntResult.length && cntResult[0].values.length) {
-      db.run("UPDATE share_rewards SET count = count + 1, updatedAt = ? WHERE phone = ? AND template_id = ? AND date = ?", [now, phone, templateId, date])
+      db.run("UPDATE share_rewards SET count = count + 1, updatedAt = ? WHERE phone = ? AND template_id = ? AND date = ?", [now, viewerPhone, templateId, date])
     } else {
-      db.run("INSERT INTO share_rewards (phone, template_id, date, count, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)", [phone, templateId, date, now, now])
+      db.run("INSERT INTO share_rewards (phone, template_id, date, count, createdAt, updatedAt) VALUES (?, ?, ?, 1, ?, ?)", [viewerPhone, templateId, date, now, now])
     }
-    db.run("UPDATE template_quota SET remaining = remaining + 1, updatedAt = ? WHERE phone = ? AND template_id = ?", [now, phone, templateId])
-    const afterResult = db.exec("SELECT remaining FROM template_quota WHERE phone = ? AND template_id = ?", [phone, templateId])
+    // 奖励加到创建者：优先 UPDATE；无配额行（创建者从未进入编辑器）时按默认 remaining+1 INSERT
+    db.run("UPDATE template_quota SET remaining = remaining + 1, updatedAt = ? WHERE phone = ? AND template_id = ?", [now, rewardPhone, templateId])
+    const rewardChanges = db.exec("SELECT changes() AS c")[0].values[0][0]
+    if (rewardChanges === 0) {
+      db.run("INSERT INTO template_quota (phone, template_id, remaining, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)",
+        [rewardPhone, templateId, remaining + 1, now, now])
+    }
+    const afterResult = db.exec("SELECT remaining FROM template_quota WHERE phone = ? AND template_id = ?", [rewardPhone, templateId])
     const afterRemaining = afterResult.length && afterResult[0].values.length ? parseInt(afterResult[0].values[0][0], 10) : remaining + 1
     saveDatabaseDebounced()
     res.json({ success: true, data: { remaining: afterRemaining, rewarded: true } })

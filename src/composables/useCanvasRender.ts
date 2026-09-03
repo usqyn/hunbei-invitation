@@ -56,29 +56,21 @@ export function resolveBackgroundImageUrl(url: string | undefined | null): strin
   return ''
 }
 
-// ---- alpha 蒙版兜底样式（Record 形式，供 FlipEditor/PageEditor/ImageAdjuster 复用）----
+// ---- alpha 蒙版兜底（供 FlipEditor/PageEditor/ImageAdjuster 复用）----
 // 用 maskSrc（原模板图，形状烘焙在 alpha 通道）裁剪换过的新图。
 // cloud:// 先同步查缓存（含持久化冷启动加载）命中立即渲染；未命中异步换取后响应式刷新。
-function buildMaskStyle(httpsUrl: string): Record<string, string> {
-  return {
-    WebkitMaskImage: `url(${httpsUrl})`,
-    maskImage: `url(${httpsUrl})`,
-    WebkitMaskSize: 'contain',
-    maskSize: 'contain',
-    WebkitMaskRepeat: 'no-repeat',
-    maskRepeat: 'no-repeat',
-    WebkitMaskPosition: 'center',
-    maskPosition: 'center',
-  }
-}
 
-export function getMaskOverlayStyle(maskSrc: string | undefined | null): Record<string, string> {
-  if (!maskSrc) return {}
+/**
+ * alpha 蒙版 URL 解析（单一实现，供 getMaskOverlayStyle 与 getImageFillStyle 复用）：
+ * cloud:// 查缓存（组件映射 → url.ts 同步缓存）→ 未命中异步换取并写缓存触发刷新；
+ * https 直接可用；wxfile://tmp 等本地路径在 WXSS mask-image 中不可靠，返回空。
+ */
+function resolveMaskRenderUrl(maskSrc: string | undefined | null): string {
+  if (!maskSrc) return ''
   const resolved = resolveUrl(maskSrc)
-  if (!resolved) return {}
+  if (!resolved) return ''
   if (!isCloudUrl(resolved)) {
-    // https 可直接用；wxfile://tmp 等本地路径在 WXSS mask-image 中不可靠，不作为蒙版
-    return resolved.startsWith('http') ? buildMaskStyle(resolved) : {}
+    return resolved.startsWith('http') ? resolved : ''
   }
   let httpsUrl = cloudBgUrlMap.value[resolved] || ''
   if (!httpsUrl) {
@@ -94,6 +86,24 @@ export function getMaskOverlayStyle(maskSrc: string | undefined | null): Record<
       }).catch(() => {})
     }
   }
+  return httpsUrl
+}
+
+function buildMaskStyle(httpsUrl: string): Record<string, string> {
+  return {
+    WebkitMaskImage: `url(${httpsUrl})`,
+    maskImage: `url(${httpsUrl})`,
+    WebkitMaskSize: 'contain',
+    maskSize: 'contain',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskPosition: 'center',
+    maskPosition: 'center',
+  }
+}
+
+export function getMaskOverlayStyle(maskSrc: string | undefined | null): Record<string, string> {
+  const httpsUrl = resolveMaskRenderUrl(maskSrc)
   return httpsUrl ? buildMaskStyle(httpsUrl) : {}
 }
 
@@ -454,50 +464,14 @@ export function useCanvasRender(options: {
     // alpha 蒙版：仅在换过图（有 maskSrc）时用原图 alpha 作为 CSS mask 兜底。
     // 未换图的元素形状烘焙在图片自身 alpha 通道，无需 mask（避免重复加载同一张图）。
     // 正常路径换图时已在 image-mask.ts 中离屏合成（蒙版烘焙进新图像素），此兜底很少触发。
+    // URL 解析复用 resolveMaskRenderUrl（与 getMaskOverlayStyle 同一实现，避免三处逻辑漂移）
     if (mask === 'alpha') {
-      const maskUrl = el.maskSrc || ''
-      if (maskUrl) {
-        let resolved = ''
-        if (isCloudUrl(maskUrl)) {
-          resolved = cloudBgUrlMap.value[maskUrl] || ''
-          if (!resolved) {
-            const syncCached = resolveCloudUrlSync(maskUrl)
-            if (syncCached && !isCloudUrl(syncCached)) {
-              resolved = syncCached
-              setCloudBgUrl(maskUrl, syncCached)
-            } else {
-              resolveCloudUrl(maskUrl).then(u => {
-                if (u) setCloudBgUrl(maskUrl, u)
-              }).catch(() => {})
-            }
-          }
-        } else if (maskUrl.startsWith('http')) {
-          resolved = maskUrl
-        } else {
-          const r = resolveUrl(maskUrl)
-          if (isCloudUrl(r)) {
-            resolved = cloudBgUrlMap.value[r] || ''
-            if (!resolved) {
-              const syncCached = resolveCloudUrlSync(r)
-              if (syncCached && !isCloudUrl(syncCached)) {
-                resolved = syncCached
-                setCloudBgUrl(r, syncCached)
-              } else {
-                resolveCloudUrl(r).then(u => {
-                  if (u) setCloudBgUrl(r, u)
-                }).catch(() => {})
-              }
-            }
-          } else if (r.startsWith('http')) {
-            resolved = r
-          }
-        }
-        if (resolved) {
-          s += `;-webkit-mask-image:url(${resolved});mask-image:url(${resolved})`
-          s += ';-webkit-mask-size:contain;mask-size:contain'
-          s += ';-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat'
-          s += ';-webkit-mask-position:center;mask-position:center'
-        }
+      const resolved = resolveMaskRenderUrl(el.maskSrc)
+      if (resolved) {
+        s += `;-webkit-mask-image:url(${resolved});mask-image:url(${resolved})`
+        s += ';-webkit-mask-size:contain;mask-size:contain'
+        s += ';-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat'
+        s += ';-webkit-mask-position:center;mask-position:center'
       }
     }
 

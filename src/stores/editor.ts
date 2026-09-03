@@ -842,6 +842,10 @@ export const useEditorStore = defineStore('editor', () => {
     const basicInfoFieldMap: Record<string, keyof typeof templateStore.basicInfo> = {
       groomName: 'groomName',
       brideName: 'brideName',
+      // admin 端 PSD 导入把新人姓名绑为 inviter/invitee（见 admin placeholder-defs），
+      // 小程序语义为 groomName/brideName（share 页 t.data.inviter→groomName 亦为此映射），两者同义
+      inviter: 'groomName',
+      invitee: 'brideName',
       date: 'weddingDate',
       location: 'location',
       address: 'detailAddress',
@@ -858,6 +862,10 @@ export const useEditorStore = defineStore('editor', () => {
     const fieldMap: Record<string, string> = {
       groomName: info.groomName || '',
       brideName: info.brideName || '',
+      // inviter/invitee 是 admin PSD 模板里新人姓名的实际 dataKey（与 groomName/brideName 同义），
+      // 双写保证两种 token 形态都能被替换（无对应 token 时为空操作）
+      inviter: info.groomName || '',
+      invitee: info.brideName || '',
       date: info.weddingDate || '',
       location: info.location || '',
       address: info.detailAddress || '',

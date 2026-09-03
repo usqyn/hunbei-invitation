@@ -261,8 +261,10 @@ function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () =>
     // 仅用 info 级日志，避免与真实报错混淆。
     loadViaUrl(fullUrl, () => {
       console.info('[FontLoader] https 直连未生效（未配置 downloadFile 合法域名或临时链接过期），降级 cloud.downloadFile + data URL: ' + fontFamily)
+      // 真机 loadFontFace 不支持本地 tempFilePath（只支持 https / data URL），
+      // data URL 加载失败后不要再回退 loadFontFace(本地路径)——必然失败，直接终止
       downloadToLocal(
-        (p) => loadViaDataUrl(p, () => loadViaUrl(p, () => finish(false))),
+        (p) => loadViaDataUrl(p, () => finish(false)),
         () => finish(false),
       )
     })

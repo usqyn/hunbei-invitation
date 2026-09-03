@@ -71,7 +71,7 @@
       <!-- 画布模式：全屏画布（去除右侧面板，最大化预览区） -->
       <view class="preview-area" :class="{ 'preview-area--landscape': isLandscape }">
         <scroll-view class="preview-scroll" scroll-y>
-          <view class="preview-scroll__inner">
+          <view class="preview-scroll__inner" :style="scrollInnerMinHeight > 0 ? { minHeight: scrollInnerMinHeight + 'px' } : undefined">
           <!-- 有 renderedImage 且未过期：图片渲染 + 透明交互层 -->
           <template v-if="editorStore.renderedImage && !renderedImageStale">
             <view class="rendered-image-container animate-fade-in-scale">
@@ -680,6 +680,8 @@ function onSmartFieldUpdate(key: string, value: string) {
 
 // ============ 元素拖拽 / 缩放（touch 事件） ============
 const canvasDisplayRect = ref({ width: 0, height: 0, left: 0, top: 0 })
+// scroll-view 实测高度（px）：供 .preview-scroll__inner 设置 min-height，实现画布垂直居中
+const scrollInnerMinHeight = ref(0)
 
 function updateCanvasDisplayRect() {
   const query = uni.createSelectorQuery()
@@ -1241,6 +1243,16 @@ function updateCardSize() {
         .boundingClientRect((rect: any) => {
           if (rect && rect.width > 0) {
             updateCardHeight(rect.width)
+          }
+        })
+        // 实测 scroll-view 可视高度：scroll-view 内容容器高度为 auto，
+        // .preview-scroll__inner 的 CSS min-height:100% 无法解析（百分比依赖确定的父级高度），
+        // 导致 justify-content:center 失效、近方形画布（如 1888×2048）顶到左上、下方大片空白。
+        // 用 px 级 min-height 让 flex 居中真正生效。
+        .select('.preview-scroll')
+        .boundingClientRect((rect: any) => {
+          if (rect && rect.height > 0) {
+            scrollInnerMinHeight.value = Math.round(rect.height)
           }
         })
         .exec()

@@ -20,7 +20,7 @@
               <text class="title-text">新人信息</text>
             </view>
 
-            <view v-if="hasField('groomName')" class="form-item">
+            <view v-if="hasBasicField('groomName')" class="form-item">
               <view class="form-label">
                 <text class="required">*</text>
                 <text class="label-name">新郎姓名</text>
@@ -31,7 +31,7 @@
                   :class="{ 'rtl-input': groomNameRtl.isRtl.value }"
                   placeholder="请输入新郎真实姓名"
                   :value="basicInfo.groomName"
-                  @input="(e: any) => onInput('groomName', e.detail.value)"
+                  @input="(e: any) => onInput(realFieldKey('groomName'), e.detail.value)"
                   maxlength="20"
                   placeholder-class="input-placeholder"
                 />
@@ -39,7 +39,7 @@
               </view>
             </view>
 
-            <view v-if="hasField('brideName')" class="form-item">
+            <view v-if="hasBasicField('brideName')" class="form-item">
               <view class="form-label">
                 <text class="required">*</text>
                 <text class="label-name">新娘姓名</text>
@@ -50,7 +50,7 @@
                   :class="{ 'rtl-input': brideNameRtl.isRtl.value }"
                   placeholder="请输入新娘真实姓名"
                   :value="basicInfo.brideName"
-                  @input="(e: any) => onInput('brideName', e.detail.value)"
+                  @input="(e: any) => onInput(realFieldKey('brideName'), e.detail.value)"
                   maxlength="20"
                   placeholder-class="input-placeholder"
                 />
@@ -325,9 +325,28 @@ function hasField(key: string): boolean {
   return allAvailableKeys.value.has(key)
 }
 
+// admin 端 PSD 导入把新人姓名绑为 inviter/invitee（"邀请者/受邀者"），与小程序语义 key
+// groomName/brideName（新郎/新娘）同义（share 页 inviter→groomName 亦为此映射）。
+// 模板里实际 dataKey 可能是任一形态：显示走语义 key，提交用模板里的真实 key
+const BASIC_KEY_ALIAS: Record<string, string> = { groomName: 'inviter', brideName: 'invitee' }
+
+/** 新人字段是否存在（兼容 inviter/invitee 形态） */
+function hasBasicField(key: 'groomName' | 'brideName'): boolean {
+  if (allAvailableKeys.value.has(key)) return true
+  const alias = BASIC_KEY_ALIAS[key]
+  return !!alias && allAvailableKeys.value.has(alias)
+}
+
+/** 模板里新人字段的真实 dataKey：优先语义 key，其次 alias */
+function realFieldKey(key: 'groomName' | 'brideName'): string {
+  if (allAvailableKeys.value.has(key)) return key
+  const alias = BASIC_KEY_ALIAS[key]
+  return alias && allAvailableKeys.value.has(alias) ? alias : key
+}
+
 /** 新人信息区块是否至少有一个字段需要显示 */
 const hasBasicInfoFields = computed(() => {
-  return hasField('groomName') || hasField('brideName')
+  return hasBasicField('groomName') || hasBasicField('brideName')
 })
 
 /** 婚礼信息区块是否至少有一个字段需要显示 */
@@ -337,7 +356,8 @@ const hasWeddingInfoFields = computed(() => {
 
 // 额外字段（从 elements 的 dataKey 收集，排除基础字段和哈语拆分字段）
 const extraFields = computed(() => {
-  const seen = new Set([...BASIC_FIELD_KEYS, ...KZ_FIELD_KEYS])
+  // inviter/invitee 已归入「新人信息」区块显示（与 groomName/brideName 同义），不再作为通用额外字段
+  const seen = new Set<string>([...BASIC_FIELD_KEYS, ...KZ_FIELD_KEYS, 'inviter', 'invitee'])
   const result: Array<{ key: string; label: string; icon: string; placeholder: string; value: string }> = []
 
   props.elements.forEach(el => {
@@ -517,11 +537,11 @@ onMounted(() => {
 
 function onConfirm() {
   // 仅验证当前显示的必填字段
-  if (hasField('groomName') && !props.basicInfo.groomName?.trim()) {
+  if (hasBasicField('groomName') && !props.basicInfo.groomName?.trim()) {
     showToast('请输入新郎姓名', 'warning')
     return
   }
-  if (hasField('brideName') && !props.basicInfo.brideName?.trim()) {
+  if (hasBasicField('brideName') && !props.basicInfo.brideName?.trim()) {
     showToast('请输入新娘姓名', 'warning')
     return
   }
