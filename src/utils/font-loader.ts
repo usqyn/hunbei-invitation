@@ -1,6 +1,6 @@
 import { API_BASE, USE_CLOUD_FUNCTIONS, getFunctionName } from '@/config'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
-import { isCloudUrl, resolveCloudUrl } from '@/utils/url'
+import { isCloudUrl, resolveCloudUrl, tempHttpsToCloudFileId } from '@/utils/url'
 
 // ============ 字体加载 ============
 // 系统字体白名单（不需下载，直接跳过）。包含华文系列和思源系列别名
@@ -18,6 +18,12 @@ let fontMap: Record<string, string> | null = null
 let fontMapPromise: Promise<void> | null = null
 let fontLoadCallbacks: Array<() => void> = []
 let fontsLoading = 0
+
+// 真机 https 直连 loadFontFace 的会话级探测结果：
+// 云存储临时链接（tcb.qcloud.la 主机）必须在「downloadFile 合法域名」白名单内才能直连成功，
+// 未配置时每款字体都会先失败一次再降级。探测一次：首次云存储字体直连失败 → 标记 broken，
+// 后续字体直接走 cloud.downloadFile + data URL（免白名单），避免 N 次必败等待和刷屏日志。
+let directHttpsState: 'unknown' | 'ok' | 'broken' = 'unknown'
 
 /** 字体别名映射：当 fontMap 中找不到原名时，尝试用别名查找 */
 const FONT_ALIASES: Record<string, string> = {
@@ -111,10 +117,10 @@ function loadCustomFont(fontFamily: string): Promise<void> {
     // cloud:// fileID（云数据库 font_map 存的是云存储 fileID）→ 先异步换取 https 临时 URL
     if (isCloudUrl(rawFontUrl)) {
       resolveCloudUrl(rawFontUrl)
-        .then((httpsUrl) => { downloadAndLoadFont(fontFamily, httpsUrl || rawFontUrl, resolve, rawFontUrl) })
+        .then((httpsUrl) => downloadAndLoadFont(fontFamily, httpsUrl || rawFontUrl, resolve, rawFontUrl))
         .catch(() => {
-          if (USE_CLOUD_FUNCTIONS) console.warn(`[FontLoader] cloud:// 字体换取失败: ${fontFamily}`)
-          resolve()
+          // 换取失败也把 fileID 传下去：cloud.downloadFile 不依赖临时链接，仍可下载
+          downloadAndLoadFont(fontFamily, rawFontUrl, resolve, rawFontUrl)
         })
       return
     }
@@ -123,8 +129,11 @@ function loadCustomFont(fontFamily: string): Promise<void> {
     if (fullUrl.startsWith('http://') && !fullUrl.includes('127.0.0.1') && !fullUrl.includes('localhost')) {
       fullUrl = fullUrl.replace('http://', 'https://')
     }
+    // GET /api/fonts 返回的是已签名 https 临时链接（非 cloud://），fileID 需由链接反推，
+    // 否则真机 loadFontFace 直连失败后降级拿不到 fileID，cloud.downloadFile 无从调用 → 字体彻底失败
+    const derivedFileId = tempHttpsToCloudFileId(fullUrl) || undefined
 
-    downloadAndLoadFont(fontFamily, fullUrl, resolve)
+    downloadAndLoadFont(fontFamily, fullUrl, resolve, derivedFileId)
   })
 }
 
@@ -149,7 +158,7 @@ function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () =>
     if (fontsLoading <= 0) notifyFontLoadComplete()
     resolve()
   }
-  const loadViaUrl = (url: string, onFail: () => void) => {
+  const loadViaUrl = (url: string, onFail: () => void, onOk?: () => void) => {
     if (typeof wx === 'undefined' || typeof wx.loadFontFace !== 'function') {
       console.warn(`[FontLoader] wx.loadFontFace not available, skip: ${fontFamily}`)
       finish(false)
@@ -162,6 +171,7 @@ function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () =>
       scopes: ['webview', 'canvas'],
       success: () => {
         console.log('[FontLoader] Loaded: ' + fontFamily)
+        onOk?.()
         finish(true)
       },
       fail: onFail,
@@ -169,17 +179,32 @@ function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () =>
   }
 
   // 下载字体到本地临时文件（cloud:// 走 cloud.downloadFile 免域名；https 走 downloadFile）
+  let httpUrl = fullUrl
   const downloadToLocal = (onOk: (p: string) => void, onFail: () => void) => {
+    let cloudRetried = false
+    let httpRefreshed = false
     const tryHttp = () => {
-      if (typeof wx === 'undefined' || typeof wx.downloadFile !== 'function' || !/^https?:\/\//.test(fullUrl)) {
+      if (typeof wx === 'undefined' || typeof wx.downloadFile !== 'function' || !/^https?:\/\//.test(httpUrl)) {
         onFail()
         return
       }
       wx.downloadFile({
-        url: fullUrl,
+        url: httpUrl,
         success: (r: any) => {
           if (r.statusCode === 200 && r.tempFilePath) onOk(r.tempFilePath)
-          else {
+          else if ((r.statusCode === 403 || r.statusCode === 401) && cloudFileID && !httpRefreshed) {
+            // 临时链接过期：有 fileID 时换取新链接重试一次
+            httpRefreshed = true
+            resolveCloudUrl(cloudFileID).then((fresh) => {
+              if (fresh && /^https?:\/\//.test(fresh)) {
+                httpUrl = fresh
+                tryHttp()
+              } else {
+                console.warn('[FontLoader] downloadFile failed: ' + fontFamily + ', status: ' + r.statusCode)
+                onFail()
+              }
+            }).catch(() => { onFail() })
+          } else {
             console.warn('[FontLoader] downloadFile failed: ' + fontFamily + ', status: ' + r.statusCode)
             onFail()
           }
@@ -190,18 +215,28 @@ function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () =>
         },
       })
     }
-    if (cloudFileID && wx.cloud && typeof wx.cloud.downloadFile === 'function') {
+    const cloudDownload = (fileId: string) => {
       wx.cloud.downloadFile({
-        fileID: cloudFileID,
+        fileID: fileId,
         success: (r: any) => {
           if (r.tempFilePath) onOk(r.tempFilePath)
           else tryHttp()
         },
         fail: (err: any) => {
-          console.warn('[FontLoader] cloud.downloadFile failed: ' + fontFamily, err)
-          tryHttp()
+          // cloud.downloadFile 偶发网络抖动，延迟 300ms 重试一次再回退 https
+          if (!cloudRetried) {
+            cloudRetried = true
+            console.warn('[FontLoader] cloud.downloadFile failed, retry once: ' + fontFamily, err)
+            setTimeout(() => cloudDownload(fileId), 300)
+          } else {
+            console.warn('[FontLoader] cloud.downloadFile failed: ' + fontFamily, err)
+            tryHttp()
+          }
         },
       })
+    }
+    if (cloudFileID && wx.cloud && typeof wx.cloud.downloadFile === 'function') {
+      cloudDownload(cloudFileID)
     } else {
       tryHttp()
     }
@@ -214,9 +249,10 @@ function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () =>
         filePath: localPath,
         encoding: 'base64',
         success: (r: any) => {
-          const src = cloudFileID || fullUrl
+          const src = cloudFileID || httpUrl
           const ext = src.includes('.woff2') ? 'font/woff2'
             : src.includes('.woff') ? 'font/woff'
+            : src.includes('.otf') ? 'font/otf'
             : 'font/ttf'
           loadViaUrl(`data:${ext};charset=utf-8;base64,${r.data}`, onFail)
         },
@@ -252,22 +288,47 @@ function downloadAndLoadFont(fontFamily: string, fullUrl: string, resolve: () =>
   })()
 
   if (isDevtools) {
-    // 开发者工具：wx.loadFontFace(https) 有已知 ERR_CACHE_MISS bug，直接 downloadFile→本地 tempPath→loadFontFace
-    downloadToLocal((p) => loadViaUrl(p, () => finish(false)), () => finish(false))
+    // 开发者工具：wx.loadFontFace(https) 有已知 ERR_CACHE_MISS bug，直接 downloadFile→本地 tempPath→loadFontFace；
+    // 本地路径也失败时（工具版本差异）再兜底 data URL（工具同样支持）
+    downloadToLocal(
+      (p) => loadViaUrl(p, () => loadViaDataUrl(p, () => finish(false))),
+      () => finish(false),
+    )
   } else {
     // 真机：wx.loadFontFace(https URL) 需要域名在「downloadFile 合法域名」白名单（mp 控制台配置）。
-    // 生产域名 636c-cloud1-d4gyvmo1d9a1e148a-1459215386.tcb.qcloud.la 未配置白名单时会失败，
-    // 然后自动降级为 cloud.downloadFile（免白名单）+ base64 data URL 加载。该降级属于正常流程，
-    // 仅用 info 级日志，避免与真实报错混淆。
-    loadViaUrl(fullUrl, () => {
-      console.info('[FontLoader] https 直连未生效（未配置 downloadFile 合法域名或临时链接过期），降级 cloud.downloadFile + data URL: ' + fontFamily)
+    // 云存储临时链接主机 636c-cloud1-...tcb.qcloud.la 未配置白名单时直连必失败，
+    // 降级 cloud.downloadFile（fileID 由 cloud:// 原值或 https 临时链接反推，免白名单）+ base64 data URL。
+    // 会话级探测：首个云存储字体直连失败即标记 broken，后续字体直接走下载通道，
+    // 避免每款字体都先白等一次失败（domain 拒绝虽快，但 403/网络错误有往返延迟）。
+    const cloudSourced = !!cloudFileID
+    const goDownloadPath = () => {
+      console.info('[FontLoader] 走 cloud.downloadFile + data URL 通道（免域名白名单）: ' + fontFamily)
       // 真机 loadFontFace 不支持本地 tempFilePath（只支持 https / data URL），
       // data URL 加载失败后不要再回退 loadFontFace(本地路径)——必然失败，直接终止
       downloadToLocal(
         (p) => loadViaDataUrl(p, () => finish(false)),
         () => finish(false),
       )
-    })
+    }
+    const onDirectFail = () => {
+      if (!cloudSourced) {
+        // 非云存储字体（自有 CDN/服务器）无 fileID 可用，无法降级
+        finish(false)
+        return
+      }
+      if (directHttpsState !== 'ok') {
+        directHttpsState = 'broken'
+        console.info('[FontLoader] https 直连未生效（未配置 downloadFile 合法域名或临时链接过期）: ' + fontFamily)
+      }
+      goDownloadPath()
+    }
+    if (cloudSourced && directHttpsState === 'broken') {
+      goDownloadPath()
+    } else {
+      loadViaUrl(fullUrl, onDirectFail, () => {
+        if (cloudSourced && directHttpsState === 'unknown') directHttpsState = 'ok'
+      })
+    }
   }
   // #endif
 
