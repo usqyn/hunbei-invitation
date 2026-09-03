@@ -178,6 +178,25 @@ export function isCloudUrl(url: string): boolean {
   return typeof url === 'string' && url.startsWith('cloud://')
 }
 
+/**
+ * 从云存储 https 临时链接反推 cloud:// fileID：
+ *   https://<bucket>.tcb.qcloud.la/<path>?sign=...&t=...
+ *   → cloud://<envId>.<bucket>/<path>
+ * 服务端接口可能直接下发已签名的 https 链接（而非 cloud://），链接过期 403 后
+ * 可用反推出的 fileID 走 wx.cloud.downloadFile 免白名单降级。
+ * 非 tcb.qcloud.la 主机（普通网络图/本地资源）返回空串。
+ */
+export function tempHttpsToCloudFileId(url: string): string {
+  if (!url || !CLOUD_ENV_ID || !url.startsWith('https://')) return ''
+  const m = /^https:\/\/([^/]+)\/([^?]+)/.exec(url)
+  if (!m) return ''
+  const host = m[1]
+  const path = m[2]
+  const bucket = host.endsWith('.tcb.qcloud.la') ? host.slice(0, -'.tcb.qcloud.la'.length) : ''
+  if (!bucket) return ''
+  return `cloud://${CLOUD_ENV_ID}.${bucket}/${path}`
+}
+
 // 内存缓存读写（避免短时间内重复请求后端）
 function getCachedCloudUrl(fileID: string): string | null {
   const entry = cloudUrlCache.get(fileID)
@@ -195,8 +214,31 @@ function getCachedCloudUrl(fileID: string): string | null {
   return null
 }
 
+// 从临时链接的 ?t=<秒级时间戳> 解析链接自身的过期时间。
+// 云存储签名 URL 形如 https://<bucket>.tcb.qcloud.la/<path>?sign=...&t=<expireSec>，
+// t 是签发方写入的过期时刻（不同签发方有效期不同：客户端 getTempFileURL 约 2h，
+// node-sdk/云函数路由可能更短）。本地缓存 TTL 不能假设链接活 2h，必须以 t 为准，
+// 否则持久化缓存会把已 403 的死链接当有效链接反复渲染。
+function parseTempUrlExpireAt(url: string): number | null {
+  try {
+    const m = /[?&]t=(\d{10})(?:&|$)/.exec(url)
+    if (!m) return null
+    const sec = parseInt(m[1], 10)
+    return sec > 1_000_000_000 ? sec * 1000 : null
+  } catch {
+    return null
+  }
+}
+
 function setCachedCloudUrl(fileID: string, url: string): void {
-  cloudUrlCache.set(fileID, { url, expireAt: Date.now() + CACHE_TTL })
+  const ttlExpireAt = Date.now() + CACHE_TTL
+  const urlExpireAt = parseTempUrlExpireAt(url)
+  // 以链接签名过期时间为准（预留 60s 安全余量），同时不超过本地 TTL；
+  // 解析不到 t 时回退默认 TTL
+  const expireAt = urlExpireAt
+    ? Math.max(Date.now() + 30_000, Math.min(ttlExpireAt, urlExpireAt - 60_000))
+    : ttlExpireAt
+  cloudUrlCache.set(fileID, { url, expireAt })
   // LRU：超过上限删除最早插入的条目（Map 保持插入顺序）
   if (cloudUrlCache.size > PERSIST_MAX_ENTRIES) {
     const firstKey = cloudUrlCache.keys().next().value

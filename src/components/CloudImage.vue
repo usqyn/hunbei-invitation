@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, useAttrs, computed } from 'vue'
-import { resolveUrl, isCloudUrl, resolveCloudUrl, resolveCloudUrlSync, invalidateCloudUrl } from '@/utils/url'
+import { resolveUrl, isCloudUrl, resolveCloudUrl, resolveCloudUrlSync, invalidateCloudUrl, tempHttpsToCloudFileId } from '@/utils/url'
 
 const props = withDefaults(defineProps<{
   src: string
@@ -102,14 +102,19 @@ async function refreshDisplayUrl() {
   }
 }
 
-// cloud.downloadFile 降级：https URL 被 <image> 拒绝（域名未加入 downloadFile 合法域名）时，
-// 用 wx.cloud.downloadFile 下载到本地 tempFilePath（绕过域名白名单），再赋给 <image>
-function tryCloudDownload() {
+// cloud.downloadFile 降级：https URL 被 <image> 拒绝（域名未加入 downloadFile 合法域名）或
+// 临时链接过期 403 时，用 wx.cloud.downloadFile 下载到本地 tempFilePath（绕过域名白名单）
+function tryCloudDownload(fileIdOverride?: string) {
   // #ifdef MP-WEIXIN
-  const cloudFileID = isCloudUrl(props.src) ? props.src : (() => {
-    const r = resolveUrl(props.src)
-    return isCloudUrl(r) ? r : ''
-  })()
+  const cloudFileID = fileIdOverride || (
+    isCloudUrl(props.src)
+      ? props.src
+      : (() => {
+          const r = resolveUrl(props.src)
+          // cloud:// 直接用；https 临时链接可反推出 cloud:// fileID
+          return isCloudUrl(r) ? r : tempHttpsToCloudFileId(r)
+        })()
+  )
   if (!cloudFileID || typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.downloadFile !== 'function') return false
   usedCloudDownload = true
   wx.cloud.downloadFile({
@@ -135,26 +140,38 @@ watch(() => props.src, () => {
   refreshDisplayUrl()
 })
 
-// 图片加载失败处理：cloud:// URL 清缓存 + 指数退避重试
+/** 解析当前 src 对应的 cloud:// fileID（cloud:// 直接用；/uploads/ 经 resolveUrl；https 临时链接反推） */
+function resolveCloudFileId(): string {
+  if (isCloudUrl(props.src)) return props.src
+  const r = resolveUrl(props.src)
+  if (isCloudUrl(r)) return r
+  // 服务端直接下发的 https 临时链接过期(403)：由链接反推 fileID 走 downloadFile 降级
+  return tempHttpsToCloudFileId(props.src) || tempHttpsToCloudFileId(r)
+}
+
+// 图片加载失败处理：cloud:// 清缓存 + 指数退避重试
 function handleError() {
   if (retryCount.value >= MAX_RETRY) {
     console.warn('[cloud-image] 达到最大重试次数, 放弃:', props.src)
     emit('error')
     return
   }
-  // 仅对 cloud:// URL 的失败做重试（其他 URL 失败重试无意义）
-  const resolved = resolveUrl(props.src)
-  if (!isCloudUrl(props.src) && !isCloudUrl(resolved)) {
+  const cloudId = resolveCloudFileId()
+  if (!cloudId) {
+    // 普通网络图/本地资源失败，重试无意义
     emit('error')
     return
   }
   retryCount.value++
-  // 第一次失败时先尝试 cloud.downloadFile 降级（绕过域名白名单），再失败才走指数退避
-  if (!usedCloudDownload && tryCloudDownload()) return
-  // 指数退避：1s → 2s → 4s，避免密集请求不可用的云函数
+  // 403 多为临时链接已过期：先淘汰缓存（/uploads/ 形态要用解析后的 cloudId，
+  // 以前 invalidateCloudUrl(props.src) 清的是原始路径，缓存条目根本删不掉），
+  // 否则后续渲染/onShow 仍取到死链接，表现为同一批图反复 403
+  invalidateCloudUrl(cloudId)
+  // 第一次失败时先尝试 cloud.downloadFile 降级（绕过域名白名单/过期签名），再失败才走指数退避
+  if (!usedCloudDownload && tryCloudDownload(cloudId)) return
+  // 指数退避：1s → 2s → 4s，缓存已淘汰，refreshDisplayUrl 会重新换取新链接
   const delay = Math.pow(2, retryCount.value - 1) * 1000
-  console.warn(`[cloud-image] 加载失败(retry=${retryCount.value}/${MAX_RETRY})，${delay}ms 后重试:`, props.src)
-  invalidateCloudUrl(props.src)
+  console.warn(`[cloud-image] 加载失败(retry=${retryCount.value}/${MAX_RETRY})，${delay}ms 后重取链接重试:`, props.src)
   setTimeout(refreshDisplayUrl, delay)
 }
 
