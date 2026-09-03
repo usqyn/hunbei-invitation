@@ -55,6 +55,30 @@ const retryCount = ref(0)
 const MAX_RETRY = 2
 // 标记是否已尝试过 cloud.downloadFile 降级（避免重复下载）
 let usedCloudDownload = false
+// cloud.downloadFile 失败重试次数（偶发网络抖动，重试 1 次再放弃）
+let downloadRetries = 0
+// 本地路径锁定：cloud.downloadFile 拿到的 wxfile:// 本地路径一旦加载成功即为终态，
+// 不允许异步 https 刷新覆盖（真机 https 临时链接受域名白名单限制，覆盖必失败 → 空白）
+let localLocked = false
+
+// 真机判定：真机 <image> 加载云存储 https 临时链接要求 tcb 主机在「downloadFile 合法域名」
+// 白名单内（未配置则必失败）；开发者工具不校验白名单。wx.cloud.downloadFile 按 fileID
+// 下载免白名单，本地 tempFilePath 在 <image> 上必定可用，因此真机云存储图直接走下载通道。
+const isRealDevice = (() => {
+  // #ifdef MP-WEIXIN
+  try {
+    if (typeof uni.getDeviceInfo === 'function') {
+      const p = (uni as any).getDeviceInfo()?.platform
+      if (p) return p !== 'devtools'
+    }
+    const info = (uni as any).getSystemInfoSync?.()
+    return info?.platform ? info.platform !== 'devtools' : true
+  } catch { return true }
+  // #endif
+  // #ifndef MP-WEIXIN
+  return false
+  // #endif
+})()
 
 // 解析 URL：如果是 cloud:// 异步换取临时 URL，否则同步处理
 async function refreshDisplayUrl() {
@@ -63,6 +87,20 @@ async function refreshDisplayUrl() {
     return
   }
   usedCloudDownload = false
+  downloadRetries = 0
+  localLocked = false
+  const cloudId = resolveCloudFileId()
+
+  // #ifdef MP-WEIXIN
+  // 真机 + 云存储图：直接 cloud.downloadFile 拿本地路径（免白名单、必定可用），
+  // 不走 https 临时链接（未配置白名单时 <image> 必失败，且会与下载结果竞态覆盖）
+  if (isRealDevice && cloudId) {
+    displayUrl.value = cloudId
+    tryCloudDownload(cloudId)
+    return
+  }
+  // #endif
+
   if (isCloudUrl(props.src)) {
     // 先用缓存（同步）快速渲染，再异步刷新
     const cached = resolveCloudUrlSync(props.src)
@@ -78,7 +116,8 @@ async function refreshDisplayUrl() {
     }
     try {
       const fresh = await resolveCloudUrl(props.src)
-      if (fresh && fresh !== displayUrl.value) {
+      // 本地路径已锁定（downloadFile 抢先成功）时不得用 https 覆盖
+      if (fresh && fresh !== displayUrl.value && !localLocked) {
         displayUrl.value = fresh
       }
     } catch (e) {
@@ -92,7 +131,7 @@ async function refreshDisplayUrl() {
     if (isCloudUrl(resolved)) {
       try {
         const fresh = await resolveCloudUrl(resolved)
-        if (fresh && fresh !== displayUrl.value) {
+        if (fresh && fresh !== displayUrl.value && !localLocked) {
           displayUrl.value = fresh
         }
       } catch (e) {
@@ -106,6 +145,7 @@ async function refreshDisplayUrl() {
 // 临时链接过期 403 时，用 wx.cloud.downloadFile 下载到本地 tempFilePath（绕过域名白名单）
 function tryCloudDownload(fileIdOverride?: string) {
   // #ifdef MP-WEIXIN
+  const targetSrc = props.src
   const cloudFileID = fileIdOverride || (
     isCloudUrl(props.src)
       ? props.src
@@ -120,13 +160,25 @@ function tryCloudDownload(fileIdOverride?: string) {
   wx.cloud.downloadFile({
     fileID: cloudFileID,
     success: (res: any) => {
+      // src 已切换（列表复用等）时丢弃过期回调，避免覆盖新图
+      if (targetSrc !== props.src) return
       if (res.tempFilePath) {
         console.log('[cloud-image] cloud.downloadFile 降级成功:', props.src.slice(0, 50))
+        localLocked = true
         displayUrl.value = res.tempFilePath
       }
     },
     fail: (err: any) => {
-      console.warn('[cloud-image] cloud.downloadFile 失败:', props.src.slice(0, 50), err)
+      if (targetSrc !== props.src) return
+      // 偶发网络抖动：延迟 500ms 重试一次，仍失败则放弃（真机云存储图无其他可用通道）
+      if (downloadRetries < 1) {
+        downloadRetries++
+        console.warn('[cloud-image] cloud.downloadFile 失败，500ms 后重试:', props.src.slice(0, 50), err)
+        setTimeout(() => { if (targetSrc === props.src) tryCloudDownload(cloudFileID) }, 500)
+      } else {
+        console.warn('[cloud-image] cloud.downloadFile 重试后仍失败，放弃:', props.src.slice(0, 50), err)
+        emit('error')
+      }
     },
   })
   return true
@@ -137,6 +189,7 @@ function tryCloudDownload(fileIdOverride?: string) {
 onMounted(refreshDisplayUrl)
 watch(() => props.src, () => {
   retryCount.value = 0
+  localLocked = false
   refreshDisplayUrl()
 })
 
@@ -149,14 +202,25 @@ function resolveCloudFileId(): string {
   return tempHttpsToCloudFileId(props.src) || tempHttpsToCloudFileId(r)
 }
 
-// 图片加载失败处理：cloud:// 清缓存 + 指数退避重试
+// 图片加载失败处理
 function handleError() {
+  const cloudId = resolveCloudFileId()
+
+  // #ifdef MP-WEIXIN
+  // 真机云存储图：唯一可靠通道是 cloud.downloadFile 本地路径。
+  // cloud:// 直连失败、https 白名单拦截都会触发 error，这里统一兜底，不走退避/放弃逻辑
+  // （downloadFile 成功后 localLocked，displayUrl 切换为本地路径即恢复；失败由其 fail 回调处理）
+  if (isRealDevice && cloudId) {
+    if (!usedCloudDownload) tryCloudDownload(cloudId)
+    return
+  }
+  // #endif
+
   if (retryCount.value >= MAX_RETRY) {
     console.warn('[cloud-image] 达到最大重试次数, 放弃:', props.src)
     emit('error')
     return
   }
-  const cloudId = resolveCloudFileId()
   if (!cloudId) {
     // 普通网络图/本地资源失败，重试无意义
     emit('error')
@@ -170,6 +234,8 @@ function handleError() {
   // 第一次失败时先尝试 cloud.downloadFile 降级（绕过域名白名单/过期签名），再失败才走指数退避
   if (!usedCloudDownload && tryCloudDownload(cloudId)) return
   // 指数退避：1s → 2s → 4s，缓存已淘汰，refreshDisplayUrl 会重新换取新链接
+  // localLocked 时（本地路径已加载成功）不应再有 error，防御性跳过
+  if (localLocked) return
   const delay = Math.pow(2, retryCount.value - 1) * 1000
   console.warn(`[cloud-image] 加载失败(retry=${retryCount.value}/${MAX_RETRY})，${delay}ms 后重取链接重试:`, props.src)
   setTimeout(refreshDisplayUrl, delay)

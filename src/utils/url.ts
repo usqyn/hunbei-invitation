@@ -53,7 +53,13 @@ function resolveUrlInternal(url: string | undefined | null): string {
     const isLocalhost = url.includes('127.0.0.1') || url.includes('localhost')
     // 非 localhost HTTP → 自动升级 HTTPS
     if (!isLocalhost) {
-      return url.replace('http://', 'https://')
+      const upgraded = url.replace('http://', 'https://')
+      // 历史脏数据兜底：「云网关域名 + /uploads/ 路径」（网关无此路由必然 404）→ cloud:// fileID
+      if (USE_CLOUD_FUNCTIONS && CLOUD_ENV_ID && upgraded.startsWith(CLOUD_FALLBACK_ASSETS_BASE)) {
+        const p = upgraded.substring(CLOUD_FALLBACK_ASSETS_BASE.length)
+        if (p.startsWith('/uploads/')) return `cloud://${CLOUD_ENV_ID}${p}`
+      }
+      return upgraded
     }
     // localhost HTTP → 云函数模式下映射为云存储文件 ID（/uploads/ 路径）
     if (USE_CLOUD_FUNCTIONS) {
@@ -75,6 +81,13 @@ function resolveUrlInternal(url: string | undefined | null): string {
   ) {
     // https://tmp/ 是微信临时文件的错误编码格式，不是合法域名，直接丢弃
     if (url.startsWith('https://tmp/')) return ''
+    // 历史脏数据兜底：「云网关域名 + /uploads/ 路径」在网关无此路由（trial/release 必然 404；
+    // devtools 因 rewriteDevAssets 重写到本地后端而"看起来正常"）。反推为 cloud:// fileID，
+    // 交由 resolveCloudUrl 换临时链接 / cloud.downloadFile 免白名单加载。
+    if (USE_CLOUD_FUNCTIONS && CLOUD_ENV_ID && url.startsWith(CLOUD_FALLBACK_ASSETS_BASE)) {
+      const p = url.substring(CLOUD_FALLBACK_ASSETS_BASE.length)
+      if (p.startsWith('/uploads/')) return `cloud://${CLOUD_ENV_ID}${p}`
+    }
     return url
   }
   // 云函数模式下：/uploads/ 相对路径直接映射为云存储文件 ID（避免拼网关 404）
