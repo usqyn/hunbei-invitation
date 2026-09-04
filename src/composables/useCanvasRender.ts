@@ -275,10 +275,14 @@ export function useCanvasRender(options: {
       if (mask === 'circle') {
         style.borderRadius = '50%'
       } else if (mask === 'alpha') {
-        const imgSrc = (el as any).text || (el as any).src || ''
-        if (imgSrc) {
-          style.WebkitMaskImage = `url(${imgSrc})`
-          style.maskImage = `url(${imgSrc})`
+        // WXSS mask-image 不支持 cloud:// 协议：真机上 mask 加载失败会把整个元素渲染成
+        // 全透明（占位在、可点击、但不可见）。未换图的元素形状已烘焙在图片自身 alpha 通道，
+        // 无需 CSS mask；仅换过图（有 maskSrc）时用原图 alpha 兜底，且必须解析为 https。
+        const maskSrc = (el as any).maskSrc
+        const httpsUrl = maskSrc ? resolveMaskRenderUrl(maskSrc) : ''
+        if (httpsUrl) {
+          style.WebkitMaskImage = `url(${httpsUrl})`
+          style.maskImage = `url(${httpsUrl})`
           style.WebkitMaskSize = 'contain'
           style.maskSize = 'contain'
           style.WebkitMaskRepeat = 'no-repeat'

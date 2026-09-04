@@ -402,6 +402,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
 import { useWorksStore } from '@/stores/works'
 import { useUserStore } from '@/stores/user'
+import { resolveUrl, isCloudUrl, resolveCloudUrl, resolveCloudUrlSync } from '@/utils/url'
 import { loadFontsForElements, formatBiDi } from '@/utils/font-loader'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { track } from '@/utils/track'
@@ -1341,7 +1342,21 @@ function openImageAdjuster(idx: number, imageUrl: string) {
   const el = editorStore.editableElements[idx]
   if (!el || el.type !== 'image') return
   adjusterElementIndex = idx
-  adjusterImageUrl.value = imageUrl || ''
+  // 调节浮层的 <image> 与 alpha mask 都用不了 cloud://（真机 mask 加载失败会整体透明）。
+  // cloud:// 先取同步缓存，未命中异步换取后回写 ref 触发刷新。
+  const raw = imageUrl || ''
+  const resolved = resolveUrl(raw)
+  if (isCloudUrl(resolved)) {
+    const cached = resolveCloudUrlSync(resolved)
+    adjusterImageUrl.value = cached && !isCloudUrl(cached) ? cached : ''
+    if (!adjusterImageUrl.value) {
+      void resolveCloudUrl(resolved).then(u => {
+        if (u && !isCloudUrl(u)) adjusterImageUrl.value = u
+      }).catch(() => {})
+    }
+  } else {
+    adjusterImageUrl.value = resolved || raw
+  }
   const w = el.width || 300
   const h = el.height || 300
   adjusterTargetRatio.value = w / h

@@ -113,7 +113,9 @@ const cropStyle = computed(() => {
     width: viewW.value + 'px',
     height: viewH.value + 'px',
   }
-  if (props.targetMask === 'alpha' && props.imageUrl) {
+  // mask-image 仅接受 http(s) URL：cloud:// / wxfile:// 在真机加载失败会把预览渲染成
+  // 全透明。非 http(s) 时跳过 mask，显示图片自身 alpha（未换图元素形状烘焙在 alpha 中）。
+  if (props.targetMask === 'alpha' && /^https?:\/\//.test(props.imageUrl || '')) {
     base.WebkitMaskImage = `url(${props.imageUrl})`
     base.maskImage = `url(${props.imageUrl})`
     base.WebkitMaskSize = 'contain'
