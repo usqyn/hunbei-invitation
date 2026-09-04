@@ -67,6 +67,8 @@ let localLocked = false
 let localPath = ''
 // data URL 兜底是否已尝试（防止 <image> 报错死循环）
 let dataUrlTried = false
+// 下载已重试耗尽、彻底失败（用于与"下载进行中"区分，避免 handleError 死等）
+let downloadFailed = false
 
 // 真机判定：真机 <image> 加载云存储 https 临时链接要求 tcb 主机在「downloadFile 合法域名」
 // 白名单内（未配置则必失败）；开发者工具不校验白名单。wx.cloud.downloadFile 按 fileID
@@ -98,6 +100,7 @@ async function refreshDisplayUrl() {
   localLocked = false
   localPath = ''
   dataUrlTried = false
+  downloadFailed = false
   const cloudId = resolveCloudFileId()
 
   // 真机不再强制走 downloadFile：downloadFile 返回的 wxfile 临时路径在部分真机上
@@ -121,8 +124,9 @@ async function refreshDisplayUrl() {
     }
     try {
       const fresh = await resolveCloudUrl(props.src)
-      // 本地路径已锁定（downloadFile 抢先成功）时不得用 https 覆盖
-      if (fresh && fresh !== displayUrl.value && !localLocked) {
+      // 终态已锁定，或真机已发起 downloadFile 降级（https 已被白名单拦截）时不得再用 https 覆盖：
+      // 否则 https 再次失败的延迟 error 会误杀正在转 data URL 的下载链路
+      if (fresh && fresh !== displayUrl.value && !localLocked && !(isRealDevice && usedCloudDownload)) {
         displayUrl.value = fresh
       }
     } catch (e) {
@@ -136,7 +140,7 @@ async function refreshDisplayUrl() {
     if (isCloudUrl(resolved)) {
       try {
         const fresh = await resolveCloudUrl(resolved)
-        if (fresh && fresh !== displayUrl.value && !localLocked) {
+        if (fresh && fresh !== displayUrl.value && !localLocked && !(isRealDevice && usedCloudDownload)) {
           displayUrl.value = fresh
         }
       } catch (e) {
@@ -184,6 +188,7 @@ function tryCloudDownload(fileIdOverride?: string) {
         setTimeout(() => { if (targetSrc === props.src) tryCloudDownload(cloudFileID) }, 500)
       } else {
         console.warn('[cloud-image] cloud.downloadFile 重试后仍失败，放弃:', props.src.slice(0, 50), err)
+        downloadFailed = true
         emit('error')
       }
     },
@@ -206,6 +211,17 @@ function renderDownloadedAsDataUrl(fileIdForMime: string) {
       : extSrc.includes('.gif') ? 'image/gif'
       : extSrc.includes('.webp') ? 'image/webp'
       : 'image/jpeg'
+    // 大图（如 4.4MB 婚礼背景 PNG）转 base64 后达 ~6MB，超出 <image> data URL
+    // 渲染上限（约 2MB）会空白；这类图只能靠 https 直连（downloadFile 白名单）。
+    // 预判文件大小：小图才转 data URL，大图直接用 wxfile 本地路径，不做无效 base64。
+    let fileSize = 0
+    try { fileSize = wx.getFileSystemManager().statSync(localPath).size || 0 } catch { fileSize = 0 }
+    if (fileSize > 1.5 * 1024 * 1024) {
+      console.warn('[cloud-image] 文件过大(' + Math.round(fileSize / 1024) + 'KB)，data URL 超限，用本地路径(大图建议配 downloadFile 白名单走 https):', props.src.slice(0, 44))
+      localLocked = true
+      displayUrl.value = localPath
+      return
+    }
     wx.getFileSystemManager().readFile({
       filePath: localPath,
       encoding: 'base64',
@@ -234,6 +250,7 @@ watch(() => props.src, () => {
   localLocked = false
   localPath = ''
   dataUrlTried = false
+  downloadFailed = false
   refreshDisplayUrl()
 })
 
@@ -256,10 +273,20 @@ function handleError() {
   //   → data URL 也失败才放弃。wxfile 本地路径在部分真机解码成功但像素不渲染，不作为展示通道。
   if (isRealDevice && cloudId) {
     if (!usedCloudDownload) {
+      // 首次失败（cloud:// 不可直连 / https 被白名单拦截）：发起下载，转 data URL
       tryCloudDownload(cloudId)
       return
     }
-    // 已走过下载：data URL 渲染仍报错 → 终态
+    // 下载已重试耗尽：终态失败
+    if (downloadFailed) {
+      console.warn('[cloud-image] 下载失败，放弃:', props.src.slice(0, 50))
+      emit('error')
+      return
+    }
+    // 已发起下载但终态(data URL/wxfile)尚未设置：下载/转码进行中，
+    // 期间 cloud:// 或 https 的延迟 error 一律忽略，等下载回调设置终态，切勿提前放弃
+    if (!localLocked) return
+    // localLocked：data URL/wxfile 终态已设置仍 error → 真失败
     console.warn('[cloud-image] 所有加载通道均失败，放弃:', props.src.slice(0, 50))
     emit('error')
     return
