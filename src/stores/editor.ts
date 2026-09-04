@@ -290,7 +290,7 @@ export const useEditorStore = defineStore('editor', () => {
       borderColor: el.borderColor ?? style?.borderColor,
       borderWidth: el.borderWidth ?? style?.borderWidth,
       mask: el.mask ?? style?.mask,
-      maskSrc: el.maskSrc,
+      maskSrc: el.maskSrc ?? style?.maskSrc,
     } as EditableElement
   }
 
@@ -883,8 +883,10 @@ export const useEditorStore = defineStore('editor', () => {
    *  支持两种调用方式：
    *  1. selectMaterial({ url, name }) -- 原素材库调用
    *  2. selectMaterial(idx, url)       -- 原本地图/预览页调用（作为 applyImageToElement 别名）
+   *  options.skipMaskComposite: 调用方已自行完成蒙版离屏合成（如 onAdjusterConfirm）时跳过，
+   *  避免对已烘焙形状的图重复合成+上传（产生孤儿文件）
    */
-  function selectMaterial(materialOrIdx: { url: string; name: string } | number, url?: string) {
+  function selectMaterial(materialOrIdx: { url: string; name: string } | number, url?: string, options?: { skipMaskComposite?: boolean }) {
     let idx: number
     let imageUrl: string
 
@@ -917,7 +919,7 @@ export const useEditorStore = defineStore('editor', () => {
     pushHistory()
     // 形状蒙版：异步把新图与原图形状离屏合成并上传永久 URL（与 adjuster 确认路径一致）。
     // 合成前 UI 先显示原图 URL，不阻塞；完成后若元素未被再次替换则更新为合成结果。
-    if (shapeMasked && el.maskSrc) {
+    if (shapeMasked && el.maskSrc && !options?.skipMaskComposite) {
       void (async () => {
         try {
           const localNew = await downloadToTemp(imageUrl)
@@ -931,6 +933,7 @@ export const useEditorStore = defineStore('editor', () => {
           }
         } catch (e) {
           console.warn('[editor] 素材换图蒙版合成失败，保留原图渲染兜底:', e)
+          uni.showToast({ title: '蒙版处理失败，图片可能不带形状，请重试', icon: 'none' })
         }
       })()
     }

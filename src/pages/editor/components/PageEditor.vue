@@ -691,6 +691,7 @@ function chooseImage(sectionId: string) {
           pathToUpload = await compositeImageWithMask(tempPath, sec.maskSrc)
         } catch (e) {
           console.warn('[page-editor] 蒙版合成失败，退回原图上传（渲染时仍有 CSS mask 兜底）:', e)
+          uni.showToast({ title: '蒙版处理失败，图片可能不带形状，请重试', icon: 'none' })
         }
       }
       const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {

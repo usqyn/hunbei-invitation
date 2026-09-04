@@ -1395,13 +1395,15 @@ async function onAdjusterConfirm(tempPath: string) {
         pathToUpload = await compositeImageWithMask(tempPath, (el as any).maskSrc)
       } catch (e) {
         console.warn('[editor] 蒙版合成失败，退回原图上传（渲染时仍有 CSS mask 兜底）:', e)
+        uni.showToast({ title: '蒙版处理失败，图片可能不带形状，请重试', icon: 'none' })
       }
     }
     const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
     if (!_isMounted) return
-    editorStore.applyImageToElement(idx, permanentUrl)
+    // 已在此处完成蒙版离屏合成+上传，跳过 selectMaterial 内部的重复合成
+    editorStore.applyImageToElement(idx, permanentUrl, { skipMaskComposite: true })
     renderedImageStale.value = true
     hasUnsavedChanges.value = true
   } catch (e) {
