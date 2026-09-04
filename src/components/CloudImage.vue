@@ -32,6 +32,9 @@ const props = withDefaults(defineProps<{
 })
 
 const attrs = useAttrs()
+// 组件实例：createSelectorQuery().in() 需要。必须在 setup 同步阶段取，
+// 事件回调里再调 getCurrentInstance() 会返回 null（$scope undefined 崩溃）
+const compInstance = getCurrentInstance()
 
 // 将父级通过 class/style 透传的属性与 props.customClass/customStyle 合并，
 // 确保外部 <CloudImage class="xxx" /> 的样式能作用到内部 <image>。
@@ -312,9 +315,10 @@ function handleLoad(e: any) {
     // 盒模型 0/极小 → 父容器高度塌陷（布局问题）；尺寸正常但画面不可见 → 像素/层叠问题
     if (isRealDevice) {
       try {
-        const inst = getCurrentInstance()
+        // mp-weixin Vue3：.in() 取 proxy（公开实例）；个别版本需内部实例，做兜底
+        const scope = (compInstance as any)?.proxy || compInstance
         uni.createSelectorQuery()
-          .in(inst?.proxy as any)
+          .in(scope as any)
           .select('.cloud-image__root')
           .boundingClientRect((rect: any) => {
             console.log('[cloud-image] 盒模型:', rect ? Math.round(rect.width) + 'x' + Math.round(rect.height) + ' @' + Math.round(rect.top) : 'null', '| src:', props.src.slice(0, 44))
