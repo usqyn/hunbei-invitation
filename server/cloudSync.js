@@ -12,6 +12,7 @@ const https = require('https')
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
+const { compressImageBuffer } = require('./lib/compressImage')
 
 const ENV_ID = 'cloud1-d4gyvmo1d9a1e148a'
 const API_KEY = process.env.CLOUDBASE_APIKEY || ''
@@ -164,12 +165,18 @@ async function uploadFileToCloud(fileUrl, cloudPath) {
         console.warn(`[cloudSync] 资源不可用(本地无文件且网络下载失败): ${fileUrl.slice(0, 80)}`)
         return ''
       }
+      // 上云前压缩（照片型大 PNG→JPEG、带透明 PNG 无损、JPEG mozjpeg 重压缩）。
+      // 只在确实变小时替换；cloudPath 扩展名可能随之改变（.png→.jpg）。
+      const compressed = await compressImageBuffer(fileBuffer, cloudPath)
+      if (compressed.changed) {
+        console.log(`[cloudSync] 🗜️  压缩: ${path.basename(cloudPath)} ${(fileBuffer.length / 1024).toFixed(0)}KB → ${(compressed.buffer.length / 1024).toFixed(0)}KB (${compressed.from}→${compressed.to}, 省 ${compressed.savedKB}KB)`)
+      }
       const uploadRes = await app.uploadFile({
-        cloudPath,
-        fileContent: fileBuffer,
+        cloudPath: compressed.cloudPath,
+        fileContent: compressed.buffer,
       })
       if (uploadRes && uploadRes.fileID) {
-        console.log(`[cloudSync] ☁️  文件已上传到云存储: ${cloudPath} -> ${uploadRes.fileID}`)
+        console.log(`[cloudSync] ☁️  文件已上传到云存储: ${compressed.cloudPath} -> ${uploadRes.fileID}`)
         return uploadRes.fileID
       }
       console.warn(`[cloudSync] 上传响应无 fileID（第 ${attempt}/3 次）: ${cloudPath}`)
