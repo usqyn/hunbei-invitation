@@ -1360,8 +1360,11 @@ function openImageAdjuster(idx: number, imageUrl: string) {
   const w = el.width || 300
   const h = el.height || 300
   adjusterTargetRatio.value = w / h
-  adjusterTargetRadius.value = el.borderRadius || 0
-  adjusterTargetMask.value = (el as any).mask || ''
+  // borderRadius 存的是 canvas px（与图层同坐标系），换算成 rpx 供 ImageAdjuster 预览
+  const brCanvas = ((el as any).borderRadius ?? (el as any).style?.borderRadius) || 0
+  const cw = editorStore.canvasSize?.width || 750
+  adjusterTargetRadius.value = Math.round((brCanvas * 750) / cw)
+  adjusterTargetMask.value = ((el as any).mask ?? (el as any).style?.mask) || ''
   adjusterVisible.value = true
 }
 
@@ -1370,17 +1373,17 @@ async function onAdjusterConfirm(tempPath: string) {
   const idx = adjusterElementIndex
   adjusterVisible.value = false
   if (idx < 0 || !tempPath) return
-  // alpha 蒙版：首次换图时把原图（形状烘焙在 alpha 通道）记为蒙版源
+  // alpha / rounded 蒙版：首次换图时把原图（形状烘焙在 alpha 通道，含圆角与内缩边距）记为蒙版源
   const el = editorStore.editableElements[idx]
   const mask = el ? ((el as any).mask ?? (el as any).style?.mask) : ''
-  if (mask === 'alpha' && el && !(el as any).maskSrc) {
+  if ((mask === 'alpha' || mask === 'rounded') && el && !(el as any).maskSrc) {
     ;(el as any).maskSrc = el.text
   }
   uni.showLoading({ title: '上传中 0%' })
   try {
-    // alpha 蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
+    // 形状蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
     let pathToUpload = tempPath
-    if (mask === 'alpha' && (el as any)?.maskSrc) {
+    if ((mask === 'alpha' || mask === 'rounded') && (el as any)?.maskSrc) {
       try {
         uni.showLoading({ title: '处理蒙版...' })
         pathToUpload = await compositeImageWithMask(tempPath, (el as any).maskSrc)

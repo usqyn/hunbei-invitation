@@ -10,6 +10,8 @@ import { extractTokenKeys } from '@/utils/resolveTextPlaceholders'
 import { PLACEHOLDER_DEFS } from '@/constants/placeholder-defs'
 import { getStorage, setStorage } from '@/utils/storage'
 import { loadFontsForElements } from '@/utils/font-loader'
+import { compositeImageWithMask, downloadToTemp } from '@/utils/imageFilter'
+import { uploadImage } from '@/api'
 import { deepClone } from '@/utils/common'
 import { showToast } from '@/composables/useFeedback'
 
@@ -901,9 +903,10 @@ export const useEditorStore = defineStore('editor', () => {
     if (idx === null || idx < 0 || idx >= editableElements.length) return
     const el = editableElements[idx]
     if (!el || el.type !== 'image') return
-    // alpha 蒙版换图：保留原图 URL 作为蒙版源，使新图仍按原形状显示
+    // alpha / rounded（圆角矩形形状烘焙在原 PNG alpha）蒙版换图：保留原图 URL 作为形状源
     const mask = el.mask ?? el.style?.mask
-    if (mask === 'alpha' && !el.maskSrc) {
+    const shapeMasked = mask === 'alpha' || mask === 'rounded'
+    if (shapeMasked && !el.maskSrc) {
       el.maskSrc = el.text
     }
     el.text = imageUrl
@@ -912,6 +915,25 @@ export const useEditorStore = defineStore('editor', () => {
       syncFieldToAllModes(el.dataKey, imageUrl)
     }
     pushHistory()
+    // 形状蒙版：异步把新图与原图形状离屏合成并上传永久 URL（与 adjuster 确认路径一致）。
+    // 合成前 UI 先显示原图 URL，不阻塞；完成后若元素未被再次替换则更新为合成结果。
+    if (shapeMasked && el.maskSrc) {
+      void (async () => {
+        try {
+          const localNew = await downloadToTemp(imageUrl)
+          const baked = await compositeImageWithMask(localNew, el.maskSrc as string)
+          const permanentUrl = await uploadImage(baked)
+          if (editableElements[idx] === el && el.text === imageUrl) {
+            el.text = permanentUrl
+            if (el.dataKey) {
+              syncFieldToAllModes(el.dataKey, permanentUrl)
+            }
+          }
+        } catch (e) {
+          console.warn('[editor] 素材换图蒙版合成失败，保留原图渲染兜底:', e)
+        }
+      })()
+    }
     // 保留选中状态，避免换图后用户需重新点击图片才能继续调整
     // （与 FlipEditor.applySelectedImage 行为对齐）
   }

@@ -855,14 +855,15 @@ async function onAdjusterConfirm(tempPath: string) {
   if (!targetElement || targetElement.type !== 'image' || !tempPath) return
   // alpha 蒙版：首次换图时把原图（形状烘焙在 alpha 通道）记为蒙版源
   const elMask = targetElement.mask ?? targetElement.style?.mask
-  if (elMask === 'alpha' && !targetElement.maskSrc) {
+  // rounded（圆角矩形，形状烘焙在原 PNG alpha）与 alpha 一样需要离屏合成
+  if ((elMask === 'alpha' || elMask === 'rounded') && !targetElement.maskSrc) {
     targetElement.maskSrc = targetElement.text
   }
   uni.showLoading({ title: '上传中 0%' })
   try {
-    // alpha 蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
+    // 形状蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
     let pathToUpload = tempPath
-    if (elMask === 'alpha' && targetElement.maskSrc) {
+    if ((elMask === 'alpha' || elMask === 'rounded') && targetElement.maskSrc) {
       try {
         uni.showLoading({ title: '处理蒙版...' })
         pathToUpload = await compositeImageWithMask(tempPath, targetElement.maskSrc)

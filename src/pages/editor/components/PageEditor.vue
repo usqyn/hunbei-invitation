@@ -677,14 +677,15 @@ function chooseImage(sectionId: string) {
     // alpha 蒙版：首次换图时把原图（形状烘焙在 alpha 通道）记为蒙版源
     const sec = editorStore.pageSections.find(s => s.id === sectionId)
     const secMask = sec ? (sec.mask ?? (sec as any).style?.mask) : ''
-    if (secMask === 'alpha' && sec && !sec.maskSrc) {
+    // rounded（圆角矩形，形状烘焙在原 PNG alpha）与 alpha 一样需要离屏合成
+    if ((secMask === 'alpha' || secMask === 'rounded') && sec && !sec.maskSrc) {
       sec.maskSrc = sec.image || sec.text || ''
     }
     uni.showLoading({ title: '上传中 0%' })
     try {
-      // alpha 蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
+      // 形状蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
       let pathToUpload = tempPath
-      if (secMask === 'alpha' && sec?.maskSrc) {
+      if ((secMask === 'alpha' || secMask === 'rounded') && sec?.maskSrc) {
         try {
           uni.showLoading({ title: '处理蒙版...' })
           pathToUpload = await compositeImageWithMask(tempPath, sec.maskSrc)
