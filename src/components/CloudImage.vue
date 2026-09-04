@@ -100,15 +100,11 @@ async function refreshDisplayUrl() {
   dataUrlTried = false
   const cloudId = resolveCloudFileId()
 
-  // #ifdef MP-WEIXIN
-  // 真机 + 云存储图：直接 cloud.downloadFile 拿本地路径（免白名单、必定可用），
-  // 不走 https 临时链接（未配置白名单时 <image> 必失败，且会与下载结果竞态覆盖）
-  if (isRealDevice && cloudId) {
-    displayUrl.value = cloudId
-    tryCloudDownload(cloudId)
-    return
-  }
-  // #endif
+  // 真机不再强制走 downloadFile：downloadFile 返回的 wxfile 临时路径在部分真机上
+  // <image> 解码成功（@load、natural 尺寸正确、盒模型正常）但像素不渲染（空白）。
+  // 已配置 downloadFile 白名单后，真机与 devtools 一样优先走 https 临时链接直连；
+  // https 失败（白名单未生效/链接过期）由 handleError 降级 downloadFile → data URL。
+  void cloudId
 
   if (isCloudUrl(props.src)) {
     // 先用缓存（同步）快速渲染，再异步刷新
@@ -172,10 +168,11 @@ function tryCloudDownload(fileIdOverride?: string) {
       // src 已切换（列表复用等）时丢弃过期回调，避免覆盖新图
       if (targetSrc !== props.src) return
       if (res.tempFilePath) {
-        console.log('[cloud-image] cloud.downloadFile 降级成功:', props.src.slice(0, 50))
-        localLocked = true
+        console.log('[cloud-image] cloud.downloadFile 成功，转 data URL 渲染:', props.src.slice(0, 50))
         localPath = res.tempFilePath
-        displayUrl.value = res.tempFilePath
+        // 真机 wxfile 临时路径 <image> 解码成功但像素不渲染（空白），
+        // 下载后直接读成 base64 data URL 内联渲染（不受本地路径/域名限制），最可靠。
+        renderDownloadedAsDataUrl(cloudFileID)
       }
     },
     fail: (err: any) => {
@@ -196,15 +193,15 @@ function tryCloudDownload(fileIdOverride?: string) {
   return false
 }
 
-// 本地 tempFilePath 在 <image> 上仍渲染失败（个别真机/基础库对 wxfile 临时路径不渲染）时，
-// 读取文件转 base64 data URL —— data URL 不受域名/本地路径限制，真机 <image> 必定可渲染。
-function escalateToDataUrl(): boolean {
+// 下载到本地的 tempFilePath 在真机 <image> 上「解码成功但像素不渲染（空白）」，
+// 故下载后直接读成 base64 data URL 内联渲染（data URL 不受本地路径/域名限制，真机必出像素）。
+// readFile 失败（极大图等）才退回 wxfile 本地路径作为最后手段。
+function renderDownloadedAsDataUrl(fileIdForMime: string) {
   // #ifdef MP-WEIXIN
-  if (dataUrlTried || !localPath) return false
+  if (dataUrlTried || !localPath) return
   dataUrlTried = true
   try {
-    // 临时路径可能无扩展名，从原始 src/fileID 推断 MIME
-    const extSrc = (resolveCloudFileId() || props.src).toLowerCase()
+    const extSrc = (fileIdForMime || resolveCloudFileId() || props.src).toLowerCase()
     const mime = extSrc.includes('.png') ? 'image/png'
       : extSrc.includes('.gif') ? 'image/gif'
       : extSrc.includes('.webp') ? 'image/webp'
@@ -213,20 +210,22 @@ function escalateToDataUrl(): boolean {
       filePath: localPath,
       encoding: 'base64',
       success: (r: any) => {
-        console.log('[cloud-image] 升级为 data URL 渲染:', props.src.slice(0, 50))
+        localLocked = true
+        console.log('[cloud-image] data URL 渲染:', props.src.slice(0, 50), '(' + Math.round((r.data || '').length / 1024) + 'KB)')
         displayUrl.value = `data:${mime};base64,${r.data}`
       },
       fail: (err: any) => {
-        console.warn('[cloud-image] data URL 转换失败，放弃:', props.src.slice(0, 50), err)
-        emit('error')
+        // data URL 失败（多见于超大图 base64 超限）：退回 wxfile 本地路径最后一搏
+        console.warn('[cloud-image] data URL 转换失败，退回本地路径:', props.src.slice(0, 50), err)
+        localLocked = true
+        displayUrl.value = localPath
       },
     })
-    return true
   } catch {
-    return false
+    localLocked = true
+    displayUrl.value = localPath
   }
   // #endif
-  return false
 }
 
 onMounted(refreshDisplayUrl)
@@ -252,26 +251,17 @@ function handleError() {
   const cloudId = resolveCloudFileId()
 
   // #ifdef MP-WEIXIN
-  // 真机云存储图：唯一可靠通道是 cloud.downloadFile 本地路径。
-  // cloud:// 直连失败、https 白名单拦截都会触发 error，这里统一兜底，不走退避/放弃逻辑
-  // （downloadFile 成功后 localLocked，displayUrl 切换为本地路径；本地路径个别机型不渲染
-  //  时再升级 base64 data URL——data URL 真机 <image> 必定可渲染）
+  // 真机云存储图加载链路：https 临时链接直连（白名单已配，与 devtools 同路径）
+  //   → 失败(白名单未生效/链接过期)则 cloud.downloadFile 下载后转 data URL 内联渲染
+  //   → data URL 也失败才放弃。wxfile 本地路径在部分真机解码成功但像素不渲染，不作为展示通道。
   if (isRealDevice && cloudId) {
     if (!usedCloudDownload) {
       tryCloudDownload(cloudId)
       return
     }
-    if (localLocked && localPath) {
-      if (!dataUrlTried) {
-        console.warn('[cloud-image] 本地路径渲染失败，升级 data URL:', props.src.slice(0, 50))
-        escalateToDataUrl()
-      } else {
-        console.warn('[cloud-image] 所有加载通道均失败，放弃:', props.src.slice(0, 50))
-        emit('error')
-      }
-      return
-    }
-    // 下载仍在进行 / 下载失败终态由 tryCloudDownload 的 fail 回调处理
+    // 已走过下载：data URL 渲染仍报错 → 终态
+    console.warn('[cloud-image] 所有加载通道均失败，放弃:', props.src.slice(0, 50))
+    emit('error')
     return
   }
   // #endif
@@ -291,12 +281,11 @@ function handleError() {
   // 以前 invalidateCloudUrl(props.src) 清的是原始路径，缓存条目根本删不掉），
   // 否则后续渲染/onShow 仍取到死链接，表现为同一批图反复 403
   invalidateCloudUrl(cloudId)
-  // 第一次失败时先尝试 cloud.downloadFile 降级（绕过域名白名单/过期签名），再失败才走指数退避
+  // 第一次失败时先尝试 cloud.downloadFile 降级（绕过域名白名单/过期签名），再失败才走指数退避。
+  // 下载成功后 renderDownloadedAsDataUrl 会自动转 data URL 渲染，无需在此再升级。
   if (!usedCloudDownload && tryCloudDownload(cloudId)) return
-  // 下载拿到本地路径后若仍报错（个别机型 wxfile 不渲染），升级 base64 data URL
-  if (localLocked && localPath && !dataUrlTried && escalateToDataUrl()) return
   // 指数退避：1s → 2s → 4s，缓存已淘汰，refreshDisplayUrl 会重新换取新链接
-  // localLocked 时（本地路径已加载成功）不应再有 error，防御性跳过
+  // localLocked 时（data URL/本地路径已加载成功）不应再有 error，防御性跳过
   if (localLocked) return
   const delay = Math.pow(2, retryCount.value - 1) * 1000
   console.warn(`[cloud-image] 加载失败(retry=${retryCount.value}/${MAX_RETRY})，${delay}ms 后重取链接重试:`, props.src)
