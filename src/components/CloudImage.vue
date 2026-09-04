@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, useAttrs, computed } from 'vue'
+import { ref, watch, onMounted, useAttrs, computed, getCurrentInstance } from 'vue'
 import { resolveUrl, isCloudUrl, resolveCloudUrl, resolveCloudUrlSync, invalidateCloudUrl, tempHttpsToCloudFileId } from '@/utils/url'
 
 const props = withDefaults(defineProps<{
@@ -35,7 +35,7 @@ const attrs = useAttrs()
 
 // 将父级通过 class/style 透传的属性与 props.customClass/customStyle 合并，
 // 确保外部 <CloudImage class="xxx" /> 的样式能作用到内部 <image>。
-const finalClass = computed(() => [attrs.class, props.customClass].filter(Boolean).join(' '))
+const finalClass = computed(() => ['cloud-image__root', attrs.class, props.customClass].filter(Boolean).join(' '))
 // 统一归一化为单条 CSS 字符串（对象/数组形式在 mp-weixin 的 WXML style 绑定上不可靠，
 // 会导致内部 <image> 拿不到宽高等内联样式、按默认尺寸渲染造成错位/偏移）
 const toCssText = (s: string | Record<string, any> | undefined): string => {
@@ -300,11 +300,30 @@ function handleError() {
   setTimeout(refreshDisplayUrl, delay)
 }
 
-function handleLoad() {
+function handleLoad(e: any) {
   // 加载成功重置重试计数
   retryCount.value = 0
   // 诊断日志：确认走下载通道的图片最终渲染成功（若只有"降级成功"没有此条，说明本地路径未渲染）
-  if (localLocked || dataUrlTried) console.log('[cloud-image] 渲染成功(' + (dataUrlTried ? 'dataUrl' : '本地路径') + '):', props.src.slice(0, 50))
+  if (localLocked || dataUrlTried) {
+    const nw = e?.detail?.width, nh = e?.detail?.height
+    console.log('[cloud-image] 渲染成功(' + (dataUrlTried ? 'dataUrl' : '本地路径') + ') natural=' + nw + 'x' + nh + ':', props.src.slice(0, 50))
+    // #ifdef MP-WEIXIN
+    // 真机专属诊断：@load 只代表解码成功，不代表可见。实测 <image> 盒模型尺寸：
+    // 盒模型 0/极小 → 父容器高度塌陷（布局问题）；尺寸正常但画面不可见 → 像素/层叠问题
+    if (isRealDevice) {
+      try {
+        const inst = getCurrentInstance()
+        uni.createSelectorQuery()
+          .in(inst?.proxy as any)
+          .select('.cloud-image__root')
+          .boundingClientRect((rect: any) => {
+            console.log('[cloud-image] 盒模型:', rect ? Math.round(rect.width) + 'x' + Math.round(rect.height) + ' @' + Math.round(rect.top) : 'null', '| src:', props.src.slice(0, 44))
+          })
+          .exec()
+      } catch (err) { console.warn('[cloud-image] 盒模型测量失败', err) }
+    }
+    // #endif
+  }
   emit('load')
 }
 </script>

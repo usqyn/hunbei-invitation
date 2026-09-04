@@ -1243,6 +1243,9 @@ function updateCardSize() {
         .boundingClientRect((rect: any) => {
           if (rect && rect.width > 0) {
             updateCardHeight(rect.width)
+            console.log('[card-size] 卡片实测:', Math.round(rect.width) + 'x' + Math.round(rect.height), ' canvas=', editorStore.canvasSize?.width + 'x' + editorStore.canvasSize?.height)
+          } else {
+            console.warn('[card-size] 卡片节点未测到尺寸(rect=', rect, ')')
           }
         })
         // 实测 scroll-view 可视高度：scroll-view 内容容器高度为 auto，
