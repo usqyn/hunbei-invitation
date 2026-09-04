@@ -103,11 +103,19 @@ async function refreshDisplayUrl() {
   downloadFailed = false
   const cloudId = resolveCloudFileId()
 
-  // 真机不再强制走 downloadFile：downloadFile 返回的 wxfile 临时路径在部分真机上
-  // <image> 解码成功（@load、natural 尺寸正确、盒模型正常）但像素不渲染（空白）。
-  // 已配置 downloadFile 白名单后，真机与 devtools 一样优先走 https 临时链接直连；
-  // https 失败（白名单未生效/链接过期）由 handleError 降级 downloadFile → data URL。
-  void cloudId
+  // 真机策略：downloadFile + data URL 是最可靠通道（免白名单、不受 https 静默失败影响）。
+  // 图片已在上云前压缩到 <1.5MB，data URL 不会超限。不再依赖 https 直连作为主通道——
+  // 实测真机 <image> 加载 https 失败时不一定触发 @error，导致降级链路完全不启动。
+  // 同时保留 https 作为快速路径（有缓存时先渲染），downloadFile 完成后用 data URL 兜底。
+  if (isRealDevice && cloudId) {
+    // 快速路径：有 https 缓存就先渲染（如果真机能加载，立即可见）
+    const cached = isCloudUrl(props.src) ? resolveCloudUrlSync(props.src) : ''
+    displayUrl.value = cached || props.src
+    // 主动启动 downloadFile，不等 @error（真机 https 失败可能静默，不触发 error）
+    console.log('[cloud-image] 真机主动下载:', props.src.slice(0, 50))
+    tryCloudDownload(cloudId)
+    return
+  }
 
   if (isCloudUrl(props.src)) {
     // 先用缓存（同步）快速渲染，再异步刷新
@@ -266,6 +274,7 @@ function resolveCloudFileId(): string {
 // 图片加载失败处理
 function handleError() {
   const cloudId = resolveCloudFileId()
+  console.log('[cloud-image] @error 触发, cloudId=' + (cloudId ? '有' : '无') + ', usedCloudDownload=' + usedCloudDownload + ', localLocked=' + localLocked + ', downloadFailed=' + downloadFailed + ':', props.src.slice(0, 50))
 
   // #ifdef MP-WEIXIN
   // 真机云存储图加载链路：https 临时链接直连（白名单已配，与 devtools 同路径）
@@ -322,10 +331,11 @@ function handleError() {
 function handleLoad(e: any) {
   // 加载成功重置重试计数
   retryCount.value = 0
-  // 诊断日志：确认走下载通道的图片最终渲染成功（若只有"降级成功"没有此条，说明本地路径未渲染）
+  // 诊断日志：所有加载路径都记录（https 直连 / data URL / 本地路径）
+  const nw = e?.detail?.width, nh = e?.detail?.height
+  const channel = dataUrlTried ? 'dataUrl' : (localLocked ? '本地路径' : 'https直连')
+  console.log('[cloud-image] 渲染成功(' + channel + ') natural=' + nw + 'x' + nh + ':', props.src.slice(0, 50))
   if (localLocked || dataUrlTried) {
-    const nw = e?.detail?.width, nh = e?.detail?.height
-    console.log('[cloud-image] 渲染成功(' + (dataUrlTried ? 'dataUrl' : '本地路径') + ') natural=' + nw + 'x' + nh + ':', props.src.slice(0, 50))
     // #ifdef MP-WEIXIN
     // 真机专属诊断：@load 只代表解码成功，不代表可见。实测 <image> 盒模型尺寸：
     // 盒模型 0/极小 → 父容器高度塌陷（布局问题）；尺寸正常但画面不可见 → 像素/层叠问题
