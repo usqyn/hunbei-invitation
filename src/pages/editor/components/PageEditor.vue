@@ -224,6 +224,17 @@
       @preview="onTextStylePreview"
       @reset="onTextStyleReset"
     />
+
+    <!-- 图片裁剪调整器：换图时先裁剪再上传，所见即所得 -->
+    <ImageAdjuster
+      :visible="adjusterVisible"
+      :image-url="adjusterImageUrl"
+      :target-ratio="adjusterTargetRatio"
+      :target-border-radius="adjusterTargetRadius"
+      :target-mask="adjusterTargetMask"
+      @confirm="onAdjusterConfirm"
+      @cancel="onAdjusterCancel"
+    />
   </view>
 </template>
 
@@ -243,6 +254,7 @@ import { buildImageCssFilterFromElement, compositeImageWithMask } from '@/utils/
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
 import ImagePropertyPanel from './ImagePropertyPanel.vue'
+import ImageAdjuster from './ImageAdjuster.vue'
 import TextStylePanel from './TextStylePanel.vue'
 import CloudImage from '@/components/CloudImage.vue'
 import type { PageSection, Work } from '@/types'
@@ -263,6 +275,14 @@ const showImagePanel = ref(false)
 const showTextStylePanel = ref(false)
 const savingLoading = ref(false)
 const hasUnsavedChanges = ref(false)
+
+// 图片裁剪调整器（换图时先裁剪再上传，保证裁剪框外像素真正被剔除）
+const adjusterVisible = ref(false)
+const adjusterImageUrl = ref('')
+const adjusterTargetRatio = ref(3 / 4) // page 模式图片 section 固定 3:4
+const adjusterTargetRadius = ref(0)
+const adjusterTargetMask = ref('')
+let adjusterSectionId: string | null = null
 
 // 收集模板中所有元素的 dataKey（跨 canvas/page/flip 三种模式），用于 UnifiedEditForm 按需显示字段
 // 已上移至 editorStore.allTemplateDataKeys（含 token 被替换后的字段保底，修复填写后字段行消失）
@@ -672,43 +692,16 @@ function handleReplaceImage() {
 
 function chooseImage(sectionId: string) {
   editorStore.activeSectionId = sectionId
+  adjusterSectionId = sectionId
+  const sec = editorStore.pageSections.find(s => s.id === sectionId)
+  // 设置裁剪目标参数：page 模式图片 section 固定 3:4，圆角/蒙版跟随 section
+  adjusterTargetRatio.value = 3 / 4
+  adjusterTargetRadius.value = (sec?.borderRadius ?? (sec as any)?.style?.borderRadius) || 0
+  adjusterTargetMask.value = (sec?.mask ?? (sec as any)?.style?.mask) || ''
 
-  const applyImage = async (tempPath: string) => {
-    // alpha 蒙版：首次换图时把原图（形状烘焙在 alpha 通道）记为蒙版源
-    const sec = editorStore.pageSections.find(s => s.id === sectionId)
-    const secMask = sec ? (sec.mask ?? (sec as any).style?.mask) : ''
-    // rounded（圆角矩形，形状烘焙在原 PNG alpha）与 alpha 一样需要离屏合成
-    if ((secMask === 'alpha' || secMask === 'rounded') && sec && !sec.maskSrc) {
-      sec.maskSrc = sec.image || sec.text || ''
-    }
-    uni.showLoading({ title: '上传中 0%' })
-    try {
-      // 形状蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）
-      let pathToUpload = tempPath
-      if ((secMask === 'alpha' || secMask === 'rounded') && sec?.maskSrc) {
-        try {
-          uni.showLoading({ title: '处理蒙版...' })
-          pathToUpload = await compositeImageWithMask(tempPath, sec.maskSrc)
-        } catch (e) {
-          console.warn('[page-editor] 蒙版合成失败，退回原图上传（渲染时仍有 CSS mask 兜底）:', e)
-          uni.showToast({ title: '蒙版处理失败，图片可能不带形状，请重试', icon: 'none' })
-        }
-      }
-      const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {
-        uni.showLoading({ title: `上传中 ${progress}%` })
-      })
-      editorStore.updatePageSectionImage(sectionId, permanentUrl)
-      editorStore.pushHistory()
-      hasUnsavedChanges.value = true
-    } catch (e) {
-      console.warn('图片上传失败:', e)
-      editorStore.updatePageSectionImage(sectionId, tempPath)
-      editorStore.pushHistory()
-      hasUnsavedChanges.value = true
-      if (_isMounted) uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
-    } finally {
-      if (_isMounted) uni.hideLoading({ fail: () => {} })
-    }
+  const openAdjuster = (tempPath: string) => {
+    adjusterImageUrl.value = tempPath
+    adjusterVisible.value = true
   }
 
   // #ifdef MP-WEIXIN
@@ -718,7 +711,7 @@ function chooseImage(sectionId: string) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0) {
-        applyImage(res.tempFiles[0].tempFilePath)
+        openAdjuster(res.tempFiles[0].tempFilePath)
       }
     },
     fail: (err) => {
@@ -736,7 +729,7 @@ function chooseImage(sectionId: string) {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
-        applyImage(res.tempFilePaths[0])
+        openAdjuster(res.tempFilePaths[0])
       }
     },
     fail: (err) => {
@@ -746,6 +739,53 @@ function chooseImage(sectionId: string) {
     },
   })
   // #endif
+}
+
+// 裁剪确认：上传裁剪后的图片（带蒙版合成）并回填到 section
+async function onAdjusterConfirm(tempPath: string) {
+  const sectionId = adjusterSectionId
+  adjusterVisible.value = false
+  adjusterSectionId = null
+  if (!sectionId || !tempPath) return
+  const sec = editorStore.pageSections.find(s => s.id === sectionId)
+  if (!sec) return
+  const secMask = sec.mask ?? (sec as any).style?.mask
+  // alpha / rounded 蒙版：首次换图时把原图记为蒙版源
+  if ((secMask === 'alpha' || secMask === 'rounded') && !sec.maskSrc) {
+    sec.maskSrc = sec.image || sec.text || ''
+  }
+  uni.showLoading({ title: '上传中 0%' })
+  try {
+    let pathToUpload = tempPath
+    if ((secMask === 'alpha' || secMask === 'rounded') && sec.maskSrc) {
+      try {
+        uni.showLoading({ title: '处理蒙版...' })
+        pathToUpload = await compositeImageWithMask(tempPath, sec.maskSrc)
+      } catch (e) {
+        console.warn('[page-editor] 蒙版合成失败，退回裁剪图上传:', e)
+        uni.showToast({ title: '蒙版处理失败，图片可能不带形状，请重试', icon: 'none' })
+      }
+    }
+    const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {
+      uni.showLoading({ title: `上传中 ${progress}%` })
+    })
+    editorStore.updatePageSectionImage(sectionId, permanentUrl)
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+  } catch (e) {
+    console.warn('[page-editor] 图片上传失败:', e)
+    editorStore.updatePageSectionImage(sectionId, tempPath)
+    editorStore.pushHistory()
+    hasUnsavedChanges.value = true
+    uni.showToast({ title: '图片上传失败，本地图片重启后可能丢失，请稍后重试', icon: 'none' })
+  } finally {
+    if (_isMounted) uni.hideLoading({ fail: () => {} })
+  }
+}
+
+function onAdjusterCancel() {
+  adjusterVisible.value = false
+  adjusterSectionId = null
 }
 
 function onTextEditorConfirm() {

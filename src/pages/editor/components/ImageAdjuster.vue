@@ -393,10 +393,23 @@ function renderCrop(): Promise<string> {
         const imgTop = viewH.value / 2 + offsetY.value - drawH.value / 2
         // 换算为原图像素：窗口内的可见区域
         const k = imgInfo.value.w / drawW.value
-        const sx = Math.max(0, -imgLeft) * k
-        const sy = Math.max(0, -imgTop) * k
-        const sw = viewW.value * k
-        const sh = viewH.value * k
+        let sx = Math.max(0, -imgLeft) * k
+        let sy = Math.max(0, -imgTop) * k
+        let sw = viewW.value * k
+        let sh = viewH.value * k
+        // 防御性夹紧：源矩形不得超出原图边界（正常 cover+clamp 下不会越界，这里保底）
+        const iw = imgInfo.value.w
+        const ih = imgInfo.value.h
+        if (sx < 0) { sw += sx; sx = 0 }
+        if (sy < 0) { sh += sy; sy = 0 }
+        if (sx + sw > iw) sw = iw - sx
+        if (sy + sh > ih) sh = ih - sy
+        if (sw <= 0 || sh <= 0) {
+          console.warn('[ImageAdjuster] 裁剪区域无效，sx,sy,sw,sh=', sx, sy, sw, sh, 'img=', iw, ih)
+          resolve('')
+          return
+        }
+        console.log('[ImageAdjuster] 裁剪参数 sx,sy,sw,sh=', Math.round(sx), Math.round(sy), Math.round(sw), Math.round(sh), 'canvas=', Math.round(viewW.value * 3), 'x', Math.round(viewH.value * 3))
 
         const loadImg = (src: string) =>
           new Promise<any>((ok, fail) => {
