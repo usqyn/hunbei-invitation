@@ -1345,17 +1345,23 @@ function openImageAdjuster(idx: number, imageUrl: string) {
   // 调节浮层的 <image> 与 alpha mask 都用不了 cloud://（真机 mask 加载失败会整体透明）。
   // cloud:// 先取同步缓存，未命中异步换取后回写 ref 触发刷新。
   const raw = imageUrl || ''
-  const resolved = resolveUrl(raw)
-  if (isCloudUrl(resolved)) {
-    const cached = resolveCloudUrlSync(resolved)
-    adjusterImageUrl.value = cached && !isCloudUrl(cached) ? cached : ''
-    if (!adjusterImageUrl.value) {
-      void resolveCloudUrl(resolved).then(u => {
-        if (u && !isCloudUrl(u)) adjusterImageUrl.value = u
-      }).catch(() => {})
-    }
+  // 本地临时路径（chooseMedia 返回 wxfile://tmp / http://tmp 等）直接透传，
+  // 不能走 resolveUrl（会升级成非法的 https://tmp）
+  if (/^wxfile:\/\//i.test(raw) || /^file:\/\//i.test(raw) || /^http:\/\/tmp\//i.test(raw)) {
+    adjusterImageUrl.value = raw
   } else {
-    adjusterImageUrl.value = resolved || raw
+    const resolved = resolveUrl(raw)
+    if (isCloudUrl(resolved)) {
+      const cached = resolveCloudUrlSync(resolved)
+      adjusterImageUrl.value = cached && !isCloudUrl(cached) ? cached : ''
+      if (!adjusterImageUrl.value) {
+        void resolveCloudUrl(resolved).then(u => {
+          if (u && !isCloudUrl(u)) adjusterImageUrl.value = u
+        }).catch(() => {})
+      }
+    } else {
+      adjusterImageUrl.value = resolved || raw
+    }
   }
   const w = el.width || 300
   const h = el.height || 300

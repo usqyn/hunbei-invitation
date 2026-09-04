@@ -49,6 +49,11 @@ export function resolveUrl(url: string | undefined | null): string {
 
 function resolveUrlInternal(url: string | undefined | null): string {
   if (!url) return ''
+  // 微信本地临时文件（wxfile:// / http://tmp/ / file://）原样返回：
+  // 绝不能走 http→https 升级，否则变成非法的 https://tmp/（DNS 解析必失败）
+  if (url.startsWith('wxfile://') || url.startsWith('file://') || /^http:\/\/tmp\//.test(url)) {
+    return url
+  }
   if (url.startsWith('http://')) {
     const isLocalhost = url.includes('127.0.0.1') || url.includes('localhost')
     // 非 localhost HTTP → 自动升级 HTTPS
