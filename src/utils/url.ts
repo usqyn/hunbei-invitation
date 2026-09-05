@@ -155,9 +155,9 @@ function ensurePersistLoaded(): void {
   try {
     const stored = uni.getStorageSync(PERSIST_KEY)
     if (stored && typeof stored === 'object') {
-      const now = Date.now()
       for (const [fileID, entry] of Object.entries(stored) as [string, CloudUrlEntry][]) {
-        if (entry && typeof entry.expireAt === 'number' && now < entry.expireAt) {
+        // 必须用 isEntryValid 校验（含 URL 签名 t），否则旧版残留的死链接会被当有效加载
+        if (isEntryValid(entry)) {
           cloudUrlCache.set(fileID, entry)
         }
       }
@@ -179,9 +179,9 @@ export function flushCloudUrlCache(): void {
   }
   const snapshot: Record<string, CloudUrlEntry> = {}
   let count = 0
-  const now = Date.now()
   for (const [fileID, entry] of cloudUrlCache) {
-    if (now < entry.expireAt) {
+    // 用 isEntryValid 过滤（含 URL 签名 t），避免把死链接写回持久化存储
+    if (isEntryValid(entry)) {
       snapshot[fileID] = entry
       if (++count >= PERSIST_MAX_ENTRIES) break
     }
@@ -215,20 +215,28 @@ export function tempHttpsToCloudFileId(url: string): string {
   return `cloud://${CLOUD_ENV_ID}.${bucket}/${path}`
 }
 
+// 判断缓存条目是否仍然有效：既要 expireAt 未到，也要 URL 自身签名 t 未过期。
+// 历史脏数据：旧版缓存只按 TTL（缓存时刻+1.5h）记 expireAt，没看 URL 签名 t，
+// 持久化存储里可能残留 expireAt 在未来但 t 已过期的死链接，重启加载后反复 403。
+function isEntryValid(entry: CloudUrlEntry): boolean {
+  if (!entry || !entry.url || typeof entry.expireAt !== 'number') return false
+  if (Date.now() >= entry.expireAt) return false
+  const urlExpireAt = parseTempUrlExpireAt(entry.url)
+  if (urlExpireAt && Date.now() >= urlExpireAt) return false
+  return true
+}
+
 // 内存缓存读写（避免短时间内重复请求后端）
 function getCachedCloudUrl(fileID: string): string | null {
   const entry = cloudUrlCache.get(fileID)
-  if (entry && Date.now() < entry.expireAt) {
-    return entry.url
-  }
+  if (isEntryValid(entry)) return entry!.url
   if (entry) cloudUrlCache.delete(fileID)
   // 持久化缓存回填（仅加载一次，同步）
   ensurePersistLoaded()
   // 回填后再查一次内存
   const fromPersist = cloudUrlCache.get(fileID)
-  if (fromPersist && Date.now() < fromPersist.expireAt) {
-    return fromPersist.url
-  }
+  if (isEntryValid(fromPersist)) return fromPersist!.url
+  if (fromPersist) cloudUrlCache.delete(fileID)
   return null
 }
 
