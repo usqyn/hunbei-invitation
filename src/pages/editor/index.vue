@@ -1411,15 +1411,19 @@ async function compositeWithPageCanvas(newImagePath: string, maskSrcUrl: string)
 
   canvas.width = W
   canvas.height = H
+  // 显式重置合成模式（设置 width 理论上会重置，但真机上保险起见显式设回 source-over）
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.clearRect(0, 0, W, H)
   const scale = Math.max(W / newImg.width, H / newImg.height)
   const dw = newImg.width * scale
   const dh = newImg.height * scale
-  ctx.clearRect(0, 0, W, H)
   ctx.drawImage(newImg, (W - dw) / 2, (H - dh) / 2, dw, dh)
   ctx.globalCompositeOperation = 'destination-in'
   ctx.drawImage(maskImg, 0, 0, W, H)
+  // 合成后立即设回 source-over，避免下次使用时残留 destination-in
+  ctx.globalCompositeOperation = 'source-over'
 
-  const tempFilePath = await new Promise<string>((resolve, reject) => {
+  let tempFilePath = await new Promise<string>((resolve, reject) => {
     uni.canvasToTempFilePath({
       canvas,
       fileType: 'png',
@@ -1427,6 +1431,26 @@ async function compositeWithPageCanvas(newImagePath: string, maskSrcUrl: string)
       fail: (e: any) => reject(e),
     } as any)
   })
+  // 确保返回路径带 .png 扩展名，否则 uploadImage 会走 compressImage 转 JPEG 丢 alpha → 变黑
+  if (!/\.png$/i.test(tempFilePath)) {
+    const fp = `${wx.env.USER_DATA_PATH}/masked_${Date.now()}_${Math.floor(Math.random() * 1e4)}.png`
+    const buf = await new Promise<ArrayBuffer>((resolve, reject) => {
+      wx.getFileSystemManager().readFile({
+        filePath: tempFilePath,
+        success: (r: any) => resolve(r.data),
+        fail: reject,
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      wx.getFileSystemManager().writeFile({
+        filePath: fp,
+        data: buf,
+        success: () => resolve(),
+        fail: reject,
+      })
+    })
+    tempFilePath = fp
+  }
   console.log('[composite-page] 导出成功', tempFilePath)
   return tempFilePath
 }
