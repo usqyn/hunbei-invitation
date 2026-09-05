@@ -82,6 +82,18 @@ export function resolveDatePlaceholders(text: string, data: Partial<TemplateData
   if (result.includes('{kzInvitee}') && data.kzInvitee) {
     result = result.replace(/\{kzInvitee\}/g, data.kzInvitee)
   }
+  if (result.includes('{kzInviterMale}') && data.kzInviterMale) {
+    result = result.replace(/\{kzInviterMale\}/g, data.kzInviterMale)
+  }
+  if (result.includes('{kzInviterFemale}') && data.kzInviterFemale) {
+    result = result.replace(/\{kzInviterFemale\}/g, data.kzInviterFemale)
+  }
+  if (result.includes('{kzInviterFather}') && data.kzInviterFather) {
+    result = result.replace(/\{kzInviterFather\}/g, data.kzInviterFather)
+  }
+  if (result.includes('{kzInviterMother}') && data.kzInviterMother) {
+    result = result.replace(/\{kzInviterMother\}/g, data.kzInviterMother)
+  }
   if (result.includes('{kzClockTime}') && data.kzClockTime) {
     result = result.replace(/\{kzClockTime\}/g, data.kzClockTime)
   }
@@ -101,5 +113,5 @@ export function resolveDatePlaceholders(text: string, data: Partial<TemplateData
  * 检测文本是否包含日期占位符
  */
 export function hasDatePlaceholders(text: string): boolean {
-  return /\{year\}|\{month\}|\{day\}|\{kzDate\}|\{kzWeekday\}|\{kzWeekdayParen\}|\{kzTime\}|\{kzGroomName\}|\{kzBrideName\}|\{kzGroomFullName\}|\{kzBrideFullName\}|\{kzFatherName\}|\{kzMotherName\}|\{kzWitnessName\}|\{kzGroomsmanName\}|\{kzBridesmaidName\}|\{childName\}|\{kzChildName\}|\{kzInviter\}|\{kzInvitee\}|\{kzClockTime\}|\{kzLocation\}|\{kzPhone\}|\{kzAddress\}/.test(text)
+  return /\{year\}|\{month\}|\{day\}|\{kzDate\}|\{kzWeekday\}|\{kzWeekdayParen\}|\{kzTime\}|\{kzGroomName\}|\{kzBrideName\}|\{kzGroomFullName\}|\{kzBrideFullName\}|\{kzFatherName\}|\{kzMotherName\}|\{kzWitnessName\}|\{kzGroomsmanName\}|\{kzBridesmaidName\}|\{childName\}|\{kzChildName\}|\{kzInviter\}|\{kzInvitee\}|\{kzInviterMale\}|\{kzInviterFemale\}|\{kzInviterFather\}|\{kzInviterMother\}|\{kzClockTime\}|\{kzLocation\}|\{kzPhone\}|\{kzAddress\}/.test(text)
 }

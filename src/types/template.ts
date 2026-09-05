@@ -55,6 +55,10 @@ export interface TemplateData {
   kzChildName?: string
   kzInviter?: string
   kzInvitee?: string
+  kzInviterMale?: string
+  kzInviterFemale?: string
+  kzInviterFather?: string
+  kzInviterMother?: string
   kzClockTime?: string
   kzLocation?: string
   kzPhone?: string

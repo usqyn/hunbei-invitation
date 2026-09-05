@@ -1,4 +1,4 @@
-﻿import type { TemplateData, BasicInfo, TemplateSettings, EditableElement, Material, ElementStyle } from '@/types'
+import type { TemplateData, BasicInfo, TemplateSettings, EditableElement, Material, ElementStyle } from '@/types'
 
 export const DEFAULT_CANVAS_WIDTH = 375
 export const DEFAULT_CANVAS_HEIGHT = 667
@@ -69,6 +69,10 @@ export const DEFAULT_TEMPLATE_DATA: TemplateData = {
   kzChildName: '',
   kzInviter: '',
   kzInvitee: '',
+  kzInviterMale: '',
+  kzInviterFemale: '',
+  kzInviterFather: '',
+  kzInviterMother: '',
   kzClockTime: '',
   kzLocation: '',
   kzPhone: '',

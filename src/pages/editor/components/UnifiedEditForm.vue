@@ -13,23 +13,23 @@
 
       <scroll-view class="popup-scroll" scroll-y>
         <view class="form-container">
-          <!-- 新人信息（仅当模板包含对应字段时显示） -->
+          <!-- 新人/邀请信息（仅当模板包含对应字段时显示，标签按模板场景变化） -->
           <view v-if="hasBasicInfoFields" class="form-section">
             <view class="section-title">
               <text class="title-icon">💑</text>
-              <text class="title-text">新人信息</text>
+              <text class="title-text">{{ scene.basicSection }}</text>
             </view>
 
             <view v-if="hasBasicField('groomName')" class="form-item">
               <view class="form-label">
                 <text class="required">*</text>
-                <text class="label-name">新郎姓名</text>
+                <text class="label-name">{{ scene.inviter }}</text>
               </view>
               <view class="input-wrapper">
                 <input
                   class="form-input"
                   :class="{ 'rtl-input': groomNameRtl.isRtl.value }"
-                  placeholder="请输入新郎真实姓名"
+                  :placeholder="scene.inviterPlaceholder"
                   :value="basicInfo.groomName"
                   @input="(e: any) => onInput(realFieldKey('groomName'), e.detail.value)"
                   maxlength="20"
@@ -42,13 +42,13 @@
             <view v-if="hasBasicField('brideName')" class="form-item">
               <view class="form-label">
                 <text class="required">*</text>
-                <text class="label-name">新娘姓名</text>
+                <text class="label-name">{{ scene.invitee }}</text>
               </view>
               <view class="input-wrapper">
                 <input
                   class="form-input"
                   :class="{ 'rtl-input': brideNameRtl.isRtl.value }"
-                  placeholder="请输入新娘真实姓名"
+                  :placeholder="scene.inviteePlaceholder"
                   :value="basicInfo.brideName"
                   @input="(e: any) => onInput(realFieldKey('brideName'), e.detail.value)"
                   maxlength="20"
@@ -59,21 +59,21 @@
             </view>
           </view>
 
-          <!-- 婚礼信息（仅当模板包含对应字段时显示） -->
+          <!-- 婚礼/宴会信息（仅当模板包含对应字段时显示，标签按模板场景变化） -->
           <view v-if="hasWeddingInfoFields" class="form-section">
             <view class="section-title">
               <text class="title-icon">📅</text>
-              <text class="title-text">婚礼信息</text>
+              <text class="title-text">{{ scene.infoSection }}</text>
             </view>
 
             <view v-if="hasField('date')" class="form-item">
               <view class="form-label">
-                <text class="label-name">婚礼时间</text>
+                <text class="label-name">{{ scene.date }}</text>
               </view>
               <picker mode="date" :value="basicInfo.weddingDate" @change="onDateChange">
                 <view class="input-wrapper clickable">
                   <text v-if="basicInfo.weddingDate" class="form-value">{{ basicInfo.weddingDate }}</text>
-                  <text v-else class="input-placeholder">选择婚礼时间</text>
+                  <text v-else class="input-placeholder">选择{{ scene.date }}</text>
                   <text class="input-arrow">›</text>
                 </view>
               </picker>
@@ -81,7 +81,7 @@
 
             <view v-if="hasField('location')" class="form-item" @click="$emit('location')">
               <view class="form-label">
-                <text class="label-name">婚礼地点</text>
+                <text class="label-name">{{ scene.location }}</text>
               </view>
               <view class="input-wrapper clickable">
                 <text v-if="basicInfo.location" class="form-value">{{ basicInfo.location }}</text>
@@ -272,6 +272,12 @@ import { useRtl } from '@/composables/useRtl'
 import { RTL_CHAR_REGEX } from '@/constants/editor'
 import { toKazakhDate, getKzWeekdayOptions, getTimePeriodOptions } from '@/utils/kz-date'
 import { PLACEHOLDER_DEFS } from '@/constants/placeholder-defs'
+import { getSceneLabels } from '@/constants/scene-labels'
+import { useEditorStore } from '@/stores/editor'
+
+// 表单标签按模板分类场景化：婚礼=新郎/婚礼时间，升学宴等=邀请人/宴会时间
+const editorStore = useEditorStore()
+const scene = computed(() => getSceneLabels(editorStore.currentTemplateCategory))
 
 // 字段元数据由占位符注册表派生（单一事实来源）：
 // 注册表新增占位符后表单输入项自动可用，无需手动同步（曾因漏写 kzWeekdayParen 导致无法编辑）
@@ -538,11 +544,11 @@ onMounted(() => {
 function onConfirm() {
   // 仅验证当前显示的必填字段
   if (hasBasicField('groomName') && !props.basicInfo.groomName?.trim()) {
-    showToast('请输入新郎姓名', 'warning')
+    showToast(`请输入${scene.value.inviter}`, 'warning')
     return
   }
   if (hasBasicField('brideName') && !props.basicInfo.brideName?.trim()) {
-    showToast('请输入新娘姓名', 'warning')
+    showToast(`请输入${scene.value.invitee}`, 'warning')
     return
   }
   emit('confirm')
