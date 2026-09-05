@@ -1066,7 +1066,11 @@ export function detectMaskFromVectorMask(
  * 检测 canvas 是否有显著的 alpha 透明通道，用于识别非规则形状（星形、花形等）。
  * 降采样扫描，阈值：>5% 全透明 + >0.3% 半透明 + 透明区域深度 >10%。
  */
-export function detectAlphaMaskFromCanvas(canvas: HTMLCanvasElement): 'alpha' | null {
+export function detectAlphaMaskFromCanvas(
+  canvas: HTMLCanvasElement,
+  opts?: { relaxed?: boolean },
+): 'alpha' | null {
+  const relaxed = !!opts?.relaxed
   const w = canvas.width
   const h = canvas.height
   if (w < 10 || h < 10) return null
@@ -1102,11 +1106,14 @@ export function detectAlphaMaskFromCanvas(canvas: HTMLCanvasElement): 'alpha' | 
   const total = transparentCount + semiTransparentCount + opaqueCount
   if (total === 0) return null
 
-  // 条件1：透明像素 > 5%
+  if (relaxed) {
+    // 剪贴蒙版放宽模式：只要有显著透明区域（>2%）即认定为 alpha 蒙版
+    return transparentCount / total >= 0.02 ? 'alpha' : null
+  }
+
+  // 严格模式：非规则形状（星形、花形等）
   if (transparentCount / total < 0.05) return null
-  // 条件2：半透明像素 > 0.3%（排除简单圆形的抗锯齿边缘）
   if (semiTransparentCount / total < 0.003) return null
-  // 条件3：透明区域深度 > 10%（排除圆角侵蚀）
   const depthRatio = Math.max((maxX - minX) / w, (maxY - minY) / h)
   if (depthRatio < 0.10) return null
 
@@ -1698,10 +1705,18 @@ export async function flattenPsdLayers(
       const detectedShape = analyzeVectorMaskShape(layer.vectorMask as any, width, height)
       const detectedMask = detectedShape.mask
 
-      // alpha 通道检测：若无矢量蒙版/像素蒙版/剪贴裁剪，则分析像素透明度识别非规则形状
+      // alpha 通道检测：识别非规则形状（星形/花形/剪贴蒙版烘焙后的异形）。
+      // 关键：剪贴蒙版（clipMaskApplied）的形状已烘焙进 PNG alpha，但此前因为
+      // !clipMaskApplied 条件被跳过，导致 mask 字段为 rect，换图时不做蒙版合成。
+      // 修复：剪贴蒙版层也必须检测 alpha，有透明像素即标记为 alpha，确保换图时合成。
       let alphaMask: 'alpha' | null = null
-      if (!detectedMask && !pixelMaskApplied && !clipMaskApplied && canvas) {
+      if (!detectedMask && !pixelMaskApplied && canvas) {
         alphaMask = detectAlphaMaskFromCanvas(canvas)
+      }
+      // 剪贴蒙版：形状一定在 alpha 里（base 形状已 destination-in 烘焙），
+      // 若严格阈值未命中（如大面积透明但边缘锐利），放宽为「有任意透明像素即 alpha」
+      if (!detectedMask && !alphaMask && clipMaskApplied && canvas) {
+        alphaMask = detectAlphaMaskFromCanvas(canvas, { relaxed: true })
       }
 
       const entry: PsdLayerPreview = {
