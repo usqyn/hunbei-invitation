@@ -1,0 +1,11 @@
+start
+automator keys: launcher,Element,CustomElement,InputElement,ScrollViewElement,SwiperElement,MovableViewElement,SwitchElement,SliderElement,ContextElement
+connected
+miniProgram keys: _events,_eventsCount,_maxListeners,pageMap,onLogAdded,onBindingCalled,onExceptionThrown,connection,appBindings
+miniProgram proto: constructor,pageStack,navigateTo,redirectTo,navigateBack,reLaunch,switchTab,currentPage,systemInfo,callWxMethod,mockWxMethod,restoreWxMethod,callPluginWxMethod,mockPluginWxMethod,restorePluginWxMethod,evaluate,pageScrollTo,close,remote,disconnect,on,exposeFunction,checkVersion,screenshot,testAccounts,stopAudits,getTicket,setTicket,refreshTicket,native,changeRoute,send
+routes: [{"route":"pages/index/index","url":"pages/index/index"}]
+current page keys: path,query,elementMap,connection,id
+page error: Cannot read properties of undefined (reading 'slice')
+--- console logs (0) ---
+
+done

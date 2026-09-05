@@ -353,6 +353,7 @@
       :target-ratio="adjusterTargetRatio"
       :target-border-radius="adjusterTargetRadius"
       :target-mask="adjusterTargetMask"
+      :mask-src="adjusterMaskSrc"
       @confirm="onAdjusterConfirm"
       @cancel="onAdjusterCancel"
     />
@@ -607,6 +608,7 @@ const adjusterImageUrl = ref('')
 const adjusterTargetRatio = ref(1)
 const adjusterTargetRadius = ref(0)
 const adjusterTargetMask = ref('')
+const adjusterMaskSrc = ref('')
 let adjusterElementIndex = -1
 // 文字样式面板显示控制
 const showTextStylePanel = ref(false)
@@ -1359,8 +1361,14 @@ function openImageAdjuster(idx: number, imageUrl: string) {
     const resolved = resolveUrl(raw)
     if (isCloudUrl(resolved)) {
       const cached = resolveCloudUrlSync(resolved)
-      adjusterImageUrl.value = cached && !isCloudUrl(cached) ? cached : ''
-      if (!adjusterImageUrl.value) {
+      if (cached && !isCloudUrl(cached)) {
+        adjusterImageUrl.value = cached
+      } else {
+        // 缓存未命中：传 cloud:// 本身，而不是空串。
+        // ImageAdjuster 内部会先 resolveCloudUrl 换取 https，失败再走 wx.cloud.downloadFile
+        // 兜底；若传空串则绕过该兜底，浮层只剩黑色背景，表现为「点开一片黑」。
+        // （真机新上传的文件 getTempFileURL 可能延迟可用，异步换取失败就会永久空白）
+        adjusterImageUrl.value = resolved
         void resolveCloudUrl(resolved).then(u => {
           if (u && !isCloudUrl(u)) adjusterImageUrl.value = u
         }).catch(() => {})
@@ -1377,6 +1385,8 @@ function openImageAdjuster(idx: number, imageUrl: string) {
   const cw = editorStore.canvasSize?.width || 750
   adjusterTargetRadius.value = Math.round((brCanvas * 750) / cw)
   adjusterTargetMask.value = ((el as any).mask ?? (el as any).style?.mask) || ''
+  // 蒙板形状图：首次换图时 maskSrc 尚未设置，回退到 el.text（原模板图，形状烘焙在 alpha）
+  adjusterMaskSrc.value = (el as any).maskSrc || (el as any).text || ''
   adjusterVisible.value = true
 }
 
@@ -1484,6 +1494,11 @@ async function onAdjusterConfirm(tempPath: string) {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
     if (!_isMounted) return
+    // 预热：新上传的 cloud:// 换取 https 并写缓存，下次打开换图页面时
+    // resolveCloudUrlSync 立即命中（蒙版预览 mask-image 依赖 https URL）
+    if (isCloudUrl(permanentUrl)) {
+      void resolveCloudUrl(permanentUrl).catch(() => {})
+    }
     // 已在此处完成蒙版离屏合成+上传，跳过 selectMaterial 内部的重复合成
     editorStore.applyImageToElement(idx, permanentUrl, { skipMaskComposite: true })
     renderedImageStale.value = true

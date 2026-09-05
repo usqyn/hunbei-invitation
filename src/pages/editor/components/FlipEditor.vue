@@ -227,6 +227,7 @@
       :target-ratio="adjusterTargetRatio"
       :target-border-radius="adjusterTargetRadius"
       :target-mask="adjusterTargetMask"
+      :mask-src="adjusterMaskSrc"
       @confirm="onAdjusterConfirm"
       @cancel="onAdjusterCancel"
     />
@@ -247,7 +248,7 @@ import { runWithExportGate } from '@/composables/useTemplateEntry'
 import { resolveTextPlaceholders } from '@/utils/resolveTextPlaceholders'
 import { formatBiDi } from '@/utils/font-loader'
 import { buildImageCssFilterFromElement, compositeImageWithMask } from '@/utils/imageFilter'
-import { resolveUrl } from '@/utils/url'
+import { resolveUrl, resolveCloudUrl, isCloudUrl } from '@/utils/url'
 import { uploadImage } from '@/api'
 import TextEditorPopup from './TextEditorPopup.vue'
 import UnifiedEditForm from './UnifiedEditForm.vue'
@@ -306,6 +307,8 @@ const adjusterImageUrl = ref('')
 const adjusterTargetRatio = ref(1)
 const adjusterTargetRadius = ref(0)
 const adjusterTargetMask = ref('')
+// 蒙板形状源（模板原图，形状烘焙在 alpha）：ImageAdjuster 预览时裁出最终形状
+const adjusterMaskSrc = ref('')
 const showTextStylePanel = ref(false)
 const savingLoading = ref(false)
 const hasUnsavedChanges = ref(false)
@@ -845,6 +848,8 @@ function openImageAdjuster(el: any) {
   adjusterTargetRatio.value = w / h
   adjusterTargetRadius.value = el.borderRadius || el.style?.borderRadius || 0
   adjusterTargetMask.value = el.mask || el.style?.mask || ''
+  // 蒙板形状源：优先已记录的 maskSrc，否则当前图（形状烘焙在 alpha）
+  adjusterMaskSrc.value = el.maskSrc || el.text || ''
   adjusterVisible.value = true
 }
 
@@ -875,6 +880,10 @@ async function onAdjusterConfirm(tempPath: string) {
     const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
+    // 预热：新上传的 cloud:// 换取 https 写缓存（下次换图预览 mask-image 依赖）
+    if (isCloudUrl(permanentUrl)) {
+      void resolveCloudUrl(permanentUrl).catch(() => {})
+    }
     if (_isMounted && targetElement) {
       targetElement.text = permanentUrl
       if (targetElement.dataKey) {
@@ -913,6 +922,8 @@ function onImageUpload() {
     adjusterTargetRatio.value = w / h
     adjusterTargetRadius.value = el.borderRadius || el.style?.borderRadius || 0
     adjusterTargetMask.value = el.mask || el.style?.mask || ''
+    // 蒙板形状源：优先已记录的 maskSrc，否则当前图（形状烘焙在 alpha）
+    adjusterMaskSrc.value = el.maskSrc || el.text || ''
     adjusterVisible.value = true
   }
   // #ifdef MP-WEIXIN

@@ -7,7 +7,8 @@
     "build:h5": "uni build",
     "dev:mp-weixin": "uni -p mp-weixin",
     "build:mp-weixin": "uni build -p mp-weixin",
-    "sync-cloud": "node scripts/copy-cloudfunctions.js"
+    "sync-cloud": "node scripts/copy-cloudfunctions.js",
+    "upload:mp": "node scripts/upload-mp.js"
   },
   "dependencies": {
     "@cloudbase/node-sdk": "^3.18.3",

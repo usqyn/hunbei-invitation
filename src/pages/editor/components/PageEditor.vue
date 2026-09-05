@@ -232,6 +232,7 @@
       :target-ratio="adjusterTargetRatio"
       :target-border-radius="adjusterTargetRadius"
       :target-mask="adjusterTargetMask"
+      :mask-src="adjusterMaskSrc"
       @confirm="onAdjusterConfirm"
       @cancel="onAdjusterCancel"
     />
@@ -249,6 +250,7 @@ import { useGoBack } from '@/composables/useGoBack'
 import { runWithExportGate } from '@/composables/useTemplateEntry'
 import { useFeedback } from '@/composables/useFeedback'
 import { uploadImage } from '@/api'
+import { resolveCloudUrl, isCloudUrl } from '@/utils/url'
 import { formatBiDi } from '@/utils/font-loader'
 import { buildImageCssFilterFromElement, compositeImageWithMask } from '@/utils/imageFilter'
 import TextEditorPopup from './TextEditorPopup.vue'
@@ -282,6 +284,8 @@ const adjusterImageUrl = ref('')
 const adjusterTargetRatio = ref(3 / 4) // page 模式图片 section 固定 3:4
 const adjusterTargetRadius = ref(0)
 const adjusterTargetMask = ref('')
+// 蒙板形状源（模板原图，形状烘焙在 alpha）：ImageAdjuster 预览时裁出最终形状
+const adjusterMaskSrc = ref('')
 let adjusterSectionId: string | null = null
 
 // 收集模板中所有元素的 dataKey（跨 canvas/page/flip 三种模式），用于 UnifiedEditForm 按需显示字段
@@ -698,6 +702,8 @@ function chooseImage(sectionId: string) {
   adjusterTargetRatio.value = 3 / 4
   adjusterTargetRadius.value = (sec?.borderRadius ?? (sec as any)?.style?.borderRadius) || 0
   adjusterTargetMask.value = (sec?.mask ?? (sec as any)?.style?.mask) || ''
+  // 蒙板形状源：优先已记录的 maskSrc，否则当前 section 图（形状烘焙在 alpha）
+  adjusterMaskSrc.value = sec?.maskSrc || sec?.image || (sec as any)?.text || ''
 
   const openAdjuster = (tempPath: string) => {
     adjusterImageUrl.value = tempPath
@@ -769,6 +775,10 @@ async function onAdjusterConfirm(tempPath: string) {
     const permanentUrl = await uploadImage(pathToUpload, (progress: number) => {
       uni.showLoading({ title: `上传中 ${progress}%` })
     })
+    // 预热：新上传的 cloud:// 换取 https 写缓存（下次换图预览 mask-image 依赖）
+    if (isCloudUrl(permanentUrl)) {
+      void resolveCloudUrl(permanentUrl).catch(() => {})
+    }
     editorStore.updatePageSectionImage(sectionId, permanentUrl)
     editorStore.pushHistory()
     hasUnsavedChanges.value = true

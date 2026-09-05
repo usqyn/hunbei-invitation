@@ -34,12 +34,16 @@ const uuid = () => uuidv4()
 // ============ 配置 ============
 const ADMIN_PHONE = process.env.ADMIN_PHONE || ''
 const DEV_CODE = process.env.DEV_CODE || ''
-const JWT_SECRET = process.env.JWT_SECRET || ''
+// JWT_SECRET：优先读环境变量；未配置时用 fallback，避免 jwt.sign 抛
+// 'secretOrPrivateKey must have a value' 导致登录/鉴权全线崩坏。
+// 注意：fallback 值需与 cloudfunctions/cloudbaserc.json 中的一致，
+// 以保证本地与云端签发的 token 可互相校验。生产建议通过控制台显式注入。
+const JWT_SECRET = process.env.JWT_SECRET || 'TOYtamaxia-test-secret'
 const IS_DEV = process.env.NODE_ENV !== 'production'
 
 // 安全检查：生产环境必须配置必要密钥
-if (!JWT_SECRET) {
-  console.warn('[shared] ⚠️ JWT_SECRET 未配置，鉴权功能不可用')
+if (!process.env.JWT_SECRET) {
+  console.warn('[shared] ⚠️ JWT_SECRET 未通过环境变量配置，已使用代码 fallback，请尽快在云函数控制台注入 JWT_SECRET')
 }
 
 // ============ 鉴权 ============

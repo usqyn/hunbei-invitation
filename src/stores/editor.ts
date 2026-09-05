@@ -925,6 +925,11 @@ export const useEditorStore = defineStore('editor', () => {
           const localNew = await downloadToTemp(imageUrl)
           const baked = await compositeImageWithMask(localNew, el.maskSrc as string)
           const permanentUrl = await uploadImage(baked)
+          // 预热：新上传的 cloud:// 换取 https 写缓存，下次打开换图页面时
+          // 蒙版预览的 mask-image 依赖 resolveCloudUrlSync 立即命中
+          if (isCloudUrl(permanentUrl)) {
+            void resolveCloudUrl(permanentUrl).catch(() => {})
+          }
           if (editableElements[idx] === el && el.text === imageUrl) {
             el.text = permanentUrl
             if (el.dataKey) {

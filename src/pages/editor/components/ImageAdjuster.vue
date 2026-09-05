@@ -55,11 +55,13 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
-import { resolveUrl, resolveCloudUrl, isCloudUrl } from '@/utils/url'
+import { resolveUrl, resolveCloudUrl, resolveCloudUrlSync, isCloudUrl } from '@/utils/url'
 
 const props = defineProps<{
   visible: boolean
   imageUrl: string
+  /** 蒙板形状图 URL（alpha 蒙板时用于预览裁切，形状烘焙在 alpha 通道） */
+  maskSrc?: string
   /** 裁剪窗口宽高比（宽/高），锁定为元素宽高比 */
   targetRatio: number
   /** 元素圆角（rpx），仅影响裁剪窗口预览圆角，导出仍为矩形 */
@@ -71,6 +73,31 @@ const emit = defineEmits<{
   (e: 'confirm', tempPath: string): void
   (e: 'cancel'): void
 }>()
+
+// 蒙板形状图解析为 http(s)：CSS mask-image 仅接受 http(s)，cloud:// / wxfile:// 真机加载
+// 失败会把预览渲染成全透明。解析结果写入 resolvedMaskSrc 触发 cropStyle 重算。
+const resolvedMaskSrc = ref('')
+watch(
+  () => props.maskSrc,
+  async (src: string) => {
+    if (!src) { resolvedMaskSrc.value = ''; return }
+    if (/^https?:\/\//.test(src)) { resolvedMaskSrc.value = src; return }
+    if (isCloudUrl(src)) {
+      const cached = resolveCloudUrlSync(src)
+      if (cached && !isCloudUrl(cached)) { resolvedMaskSrc.value = cached; return }
+      try {
+        const u = await resolveCloudUrl(src)
+        resolvedMaskSrc.value = u && !isCloudUrl(u) ? u : ''
+      } catch {
+        resolvedMaskSrc.value = ''
+      }
+      return
+    }
+    // 其它协议（如 wxfile://）直接透传，成败由浏览器决定
+    resolvedMaskSrc.value = src
+  },
+  { immediate: true }
+)
 
 const instance = getCurrentInstance()
 
@@ -113,11 +140,11 @@ const cropStyle = computed(() => {
     width: viewW.value + 'px',
     height: viewH.value + 'px',
   }
-  // mask-image 仅接受 http(s) URL：cloud:// / wxfile:// 在真机加载失败会把预览渲染成
-  // 全透明。非 http(s) 时跳过 mask，显示图片自身 alpha（未换图元素形状烘焙在 alpha 中）。
-  if (props.targetMask === 'alpha' && /^https?:\/\//.test(props.imageUrl || '')) {
-    base.WebkitMaskImage = `url(${props.imageUrl})`
-    base.maskImage = `url(${props.imageUrl})`
+  // alpha 蒙板：用蒙板形状图（maskSrc，已解析为 http(s)）裁切预览，让用户实时看到
+  // 最终形状；非 alpha 时回落到圆角 / 圆形。
+  if (props.targetMask === 'alpha' && resolvedMaskSrc.value) {
+    base.WebkitMaskImage = `url(${resolvedMaskSrc.value})`
+    base.maskImage = `url(${resolvedMaskSrc.value})`
     base.WebkitMaskSize = 'contain'
     base.maskSize = 'contain'
     base.WebkitMaskRepeat = 'no-repeat'

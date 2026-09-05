@@ -139,6 +139,17 @@ export function downloadToTemp(url: string): Promise<string> {
   })
 }
 
+// 离屏 canvas 单例：真机上 wx.createOffscreenCanvas 第二次调用会返回异常 canvas，
+// 合成结果全黑（表现为「第一次换图正常、第二次开始变黑且再也换不掉」）。
+// 此处复用同一实例规避，并在每次绘制前显式清空 + 重置合成模式（与 compositeWithPageCanvas 一致）。
+let _offscreenCanvas: any = null
+function getOffscreenCanvas(): any {
+  if (!_offscreenCanvas) {
+    _offscreenCanvas = wx.createOffscreenCanvas({ type: '2d' })
+  }
+  return _offscreenCanvas
+}
+
 /**
  * 合成蒙版图：
  * 1. 以原模板图（蒙版源）的原始尺寸建离屏 canvas
@@ -153,7 +164,7 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
   }
   const maskPath = await downloadToTemp(maskSrcUrl)
   console.log('[composite] maskSrc=', maskSrcUrl.slice(0, 60), 'maskLocal=', maskPath)
-  const canvas = wx.createOffscreenCanvas({ type: '2d' })
+  const canvas = getOffscreenCanvas()
   const ctx = canvas.getContext('2d') as any
   const loadImg = (src: string) => new Promise<any>((resolve, reject) => {
     const img = canvas.createImage()
@@ -169,6 +180,11 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
 
   canvas.width = W
   canvas.height = H
+  // 显式重置：设置 width 理论上会重置画布，但复用单例时真机可能残留上一次的像素与
+  // destination-in 合成模式，不清空会导致第二次合成得到黑图。
+  // 与 compositeWithPageCanvas 的处理保持一致。
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.clearRect(0, 0, W, H)
   // 新图 cover 填充整个画布
   const scale = Math.max(W / newImg.width, H / newImg.height)
   const dw = newImg.width * scale
@@ -177,6 +193,8 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
   // 原图 alpha 裁剪（保留形状内像素）
   ctx.globalCompositeOperation = 'destination-in'
   ctx.drawImage(maskImg, 0, 0, W, H)
+  // 合成后立即设回 source-over，避免下次复用时残留 destination-in
+  ctx.globalCompositeOperation = 'source-over'
 
   // 导出：优先 toDataURL（同步，能立即拿到像素），失败再用 canvasToTempFilePath。
   // 真机上 canvasToTempFilePath 对 offscreen canvas 偶发黑图，故 toDataURL 优先。
