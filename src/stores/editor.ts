@@ -736,6 +736,8 @@ export const useEditorStore = defineStore('editor', () => {
         if (el.dataKey) {
           templateStore.updateField(el.dataKey, editingText.value)
         }
+        // canvas 模式：文字修改后 renderedImage 快照过期，清空让预览重渲染
+        if (templateType.value === 'canvas') renderedImage.value = ''
       }
     }
     // page 模式
@@ -912,6 +914,9 @@ export const useEditorStore = defineStore('editor', () => {
       el.maskSrc = el.text
     }
     el.text = imageUrl
+    // canvas 模式：换图后 renderedImage（模板原始合成快照）已过期，
+    // 必须清空，否则预览/分享页优先显示旧快照，用户改好的照片被盖住
+    if (templateType.value === 'canvas') renderedImage.value = ''
     // 同步到所有模式（canvas/page/flip），而非仅更新 templateData
     if (el.dataKey) {
       syncFieldToAllModes(el.dataKey, imageUrl)
