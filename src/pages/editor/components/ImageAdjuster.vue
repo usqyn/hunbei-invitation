@@ -55,7 +55,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
-import { resolveUrl, resolveCloudUrl, resolveCloudUrlSync, isCloudUrl } from '@/utils/url'
+import { resolveUrl, resolveCloudUrl, resolveCloudUrlSync, isCloudUrl, tempHttpsToCloudFileId } from '@/utils/url'
 
 const props = defineProps<{
   visible: boolean
@@ -272,10 +272,13 @@ async function loadImageInfo(url: string) {
     imgInfo.value = await getInfo(src)
     return
   } catch {
-    // https 临时链接过期或换取失败：cloud:// 走 downloadFile 兜底
-    if (isCloudUrl(url)) {
+    // 真机上 uni.getImageInfo 加载云存储 https 需要下载域名白名单，未配置必失败；
+    // 临时签名 https 过期同样失败。两者都反推 fileID 走 wx.cloud.downloadFile
+    // 云通道兜底（免白名单，与 CloudImage 的 data URL 降级同源）
+    const fileId = isCloudUrl(src) ? src : tempHttpsToCloudFileId(src)
+    if (fileId) {
       try {
-        const tempUrl = await downloadCloudToTemp(url)
+        const tempUrl = await downloadCloudToTemp(fileId)
         currentUrl.value = tempUrl
         imgInfo.value = await getInfo(tempUrl)
         return
@@ -286,6 +289,7 @@ async function loadImageInfo(url: string) {
   }
   // 全部失败：清空 imgInfo，避免用过期的旧 path 裁剪出黑图
   imgInfo.value = { w: 0, h: 0, path: '' }
+  console.warn('[adjuster] loadImageInfo 全部失败: src=', String(src).slice(0, 80))
   uni.showToast({ title: '图片加载失败，请重试', icon: 'none' })
 }
 
