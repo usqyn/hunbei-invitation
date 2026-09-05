@@ -178,39 +178,52 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
   ctx.globalCompositeOperation = 'destination-in'
   ctx.drawImage(maskImg, 0, 0, W, H)
 
-  // 用 wx.canvasToTempFilePath 导出（比 toDataURL+writeFile 在真机更可靠，alpha 不会丢失）
-  const filePath = await new Promise<string>((resolve, reject) => {
-    wx.canvasToTempFilePath({
-      canvas,
-      fileType: 'png',
-      success: (r: any) => {
-        console.log('[composite] 导出成功', r.tempFilePath)
-        resolve(r.tempFilePath)
-      },
-      fail: (e: any) => {
-        console.warn('[composite] canvasToTempFilePath 失败，尝试 toDataURL 兜底:', e)
-        // 兜底：toDataURL + writeFile
-        try {
-          const dataUrl = canvas.toDataURL('image/png')
-          if (!dataUrl || dataUrl.length < 100) {
-            reject(new Error('toDataURL 也失败，导出为空'))
-            return
-          }
-          const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
-          const fp = `${wx.env.USER_DATA_PATH}/masked_${Date.now()}_${Math.floor(Math.random() * 1e4)}.png`
+  // 导出：优先 toDataURL（同步，能立即拿到像素），失败再用 canvasToTempFilePath。
+  // 真机上 canvasToTempFilePath 对 offscreen canvas 偶发黑图，故 toDataURL 优先。
+  let filePath: string | null = null
+  try {
+    const dataUrl = canvas.toDataURL('image/png')
+    if (dataUrl && dataUrl.length > 100 && dataUrl.startsWith('data:image/png')) {
+      const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+      // 校验：base64 至少几 KB 才算有效（避免空/黑图）
+      if (base64.length > 2048) {
+        const fp = `${wx.env.USER_DATA_PATH}/masked_${Date.now()}_${Math.floor(Math.random() * 1e4)}.png`
+        await new Promise<void>((resolve, reject) => {
           wx.getFileSystemManager().writeFile({
             filePath: fp,
             data: base64,
             encoding: 'base64',
-            success: () => resolve(fp),
-            fail: (e2: any) => reject(e2),
+            success: () => resolve(),
+            fail: (e: any) => reject(e),
           })
-        } catch (e2) {
-          reject(e2)
-        }
-      },
-    } as any)
-  })
+        })
+        filePath = fp
+        console.log('[composite] toDataURL 导出成功', fp, 'base64长度', base64.length)
+      } else {
+        console.warn('[composite] toDataURL 结果过小，疑似黑图，长度=', base64.length)
+      }
+    } else {
+      console.warn('[composite] toDataURL 无效:', dataUrl ? dataUrl.slice(0, 60) : '空')
+    }
+  } catch (e) {
+    console.warn('[composite] toDataURL 异常:', e)
+  }
+
+  // toDataURL 失败时回退 canvasToTempFilePath
+  if (!filePath) {
+    filePath = await new Promise<string>((resolve, reject) => {
+      wx.canvasToTempFilePath({
+        canvas,
+        fileType: 'png',
+        success: (r: any) => {
+          console.log('[composite] canvasToTempFilePath 导出成功', r.tempFilePath)
+          resolve(r.tempFilePath)
+        },
+        fail: (e: any) => reject(new Error('导出失败: ' + JSON.stringify(e))),
+      } as any)
+    })
+  }
+
   return filePath
   // #endif
   // #ifndef MP-WEIXIN
