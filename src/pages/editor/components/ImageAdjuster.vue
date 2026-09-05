@@ -199,30 +199,67 @@ function clampOffset(x: number, y: number) {
   }
 }
 
+// cloud:// 图片下载到本地临时路径（与 CloudImage 兜底通道一致）
+function downloadCloudToTemp(cloudUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.downloadFile !== 'function') {
+      reject(new Error('wx.cloud.downloadFile 不可用'))
+      return
+    }
+    wx.cloud.downloadFile({
+      fileID: cloudUrl,
+      success: (res: any) => {
+        if (res.tempFilePath) resolve(res.tempFilePath)
+        else reject(new Error('downloadFile 无 tempFilePath'))
+      },
+      fail: reject,
+    })
+  })
+}
+
 async function loadImageInfo(url: string) {
   if (!url) {
     imgInfo.value = { w: 0, h: 0, path: '' }
     return
   }
-  // 与 CloudImage 组件一致：相对路径/cloud:// 先解析为可加载的 URL
+  // 与 CloudImage 组件一致：相对路径/cloud:// 先解析为可加载的 URL，
+  // https 临时链接可能过期，失败时走 wx.cloud.downloadFile 兜底
   let src = resolveUrl(url)
   if (isCloudUrl(src)) {
     try {
       src = await resolveCloudUrl(src)
     } catch {
-      /* 保留原值 */
+      /* 保留原值，走 downloadFile 兜底 */
     }
   }
   currentUrl.value = src
-  uni.getImageInfo({
-    src,
-    success: (res: any) => {
-      imgInfo.value = { w: res.width || 0, h: res.height || 0, path: res.path || src }
-    },
-    fail: () => {
-      uni.showToast({ title: '图片加载失败', icon: 'none' })
-    },
-  })
+  const getInfo = (s: string) =>
+    new Promise<{ w: number; h: number; path: string }>((resolve, reject) => {
+      uni.getImageInfo({
+        src: s,
+        success: (res: any) => resolve({ w: res.width || 0, h: res.height || 0, path: res.path || s }),
+        fail: reject,
+      })
+    })
+  try {
+    imgInfo.value = await getInfo(src)
+    return
+  } catch {
+    // https 临时链接过期或换取失败：cloud:// 走 downloadFile 兜底
+    if (isCloudUrl(url)) {
+      try {
+        const tempUrl = await downloadCloudToTemp(url)
+        currentUrl.value = tempUrl
+        imgInfo.value = await getInfo(tempUrl)
+        return
+      } catch {
+        /* 兜底也失败 */
+      }
+    }
+  }
+  // 全部失败：清空 imgInfo，避免用过期的旧 path 裁剪出黑图
+  imgInfo.value = { w: 0, h: 0, path: '' }
+  uni.showToast({ title: '图片加载失败，请重试', icon: 'none' })
 }
 
 function reset() {
