@@ -98,6 +98,10 @@ export function serializeElement(el: any, options?: SerializeOptions): Serialize
       fontSize: fontSize ?? 28,
       spacing,
       lineHeight: el.lineHeight ?? 1.5,
+      // PS horizontalScale（0-1，横向压缩）：序列化保留，小程序端渲染 scaleX 还原
+      horizontalScale: el.horizontalScale != null && el.horizontalScale !== 1
+        ? Math.round(el.horizontalScale * 1000) / 1000
+        : undefined,
       fontWeight: el.fontWeight === 'bold' ? 'bold' : 'normal',
       fontStyle: el.fontStyle ?? 'normal',
       textAlign,

@@ -1972,6 +1972,8 @@ function mapServerElementToDraft(el: any, idx: number, tpl: any) {
     textAlign: el.style?.textAlign || 'center',
     lineHeight: el.style?.lineHeight || 1.5,
     letterSpacing: sx(el.style?.spacing, 2),
+    // PS 文字横向压缩（horizontalScale 0-1），重新打开模板时恢复画布 scaleX
+    horizontalScale: el.style?.horizontalScale || 1,
     // ---- 文字特效：补齐序列化时已保存的字段，避免历史模板加载后特效丢失 ----
     // 键名兼容：序列化写 longShadowEnabled/neonGlowEnabled/neonGlowColor，
     // admin 画布模型用 longShadow/neonGlow/neonColor，读取时两者都兜底

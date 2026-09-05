@@ -353,6 +353,14 @@ export function useCanvasRender(options: {
       writingMode: 'horizontal-tb',
       textDecoration: style.textDecoration || 'none',
     }
+    // PS horizontalScale（文字横向压缩，如 0.876）：整体 scaleX 还原。
+    // transform-origin 与 textAlign 对齐（居中文字绕中心压、左对齐绕左边压），
+    // 与 admin Fabric scaleX（originX=center）及 PSD 排版观感一致
+    const hs = style.horizontalScale
+    if (hs != null && hs !== 1) {
+      result.transform = `scaleX(${hs})`
+      result.transformOrigin = textAlign === 'left' ? 'left center' : textAlign === 'right' ? 'right center' : 'center center'
+    }
 
     if (direction === 'rtl') {
       result.unicodeBidi = 'isolate'

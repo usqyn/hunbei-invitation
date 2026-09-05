@@ -59,6 +59,8 @@ export interface TextElement extends BaseElement {
   direction: 'ltr' | 'rtl' | 'auto'
   lineHeight: number
   letterSpacing: number
+  /** 文字水平缩放（PS horizontalScale，0-1；1 = 不缩放省略）。画布用 Fabric scaleX 还原 */
+  horizontalScale?: number
   strokeColor: string
   strokeWidth: number
   shadowColor: string

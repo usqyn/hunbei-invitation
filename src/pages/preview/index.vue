@@ -1007,6 +1007,9 @@ function getFlipTextStyle(el: any): Record<string, string> {
   // RTL 文本：用户所选字体渲染 + FONT_FAMILY_BASE 哈萨克兜底（中文用所选字体、
   // 哈萨克字符回退哈萨克字体连写），不再强制替换用户选择（与 useCanvasRender.getTextStyle 对齐）
   const fontFamily = style.font ? `"${style.font}", ${FONT_FAMILY_BASE}` : FONT_FAMILY_BASE
+  const textAlign = isRtl ? (style.textAlign || 'right') : (style.textAlign || 'center')
+  // PS horizontalScale 文字横向压缩（与 useCanvasRender.getTextStyle 对齐）
+  const hs = style.horizontalScale
   return {
     fontFamily,
     fontSize: (style.fontSize || 28) + 'rpx',
@@ -1015,13 +1018,19 @@ function getFlipTextStyle(el: any): Record<string, string> {
     lineHeight: style.lineHeight || 1.5,
     fontWeight: style.fontWeight || 'normal',
     fontStyle: style.fontStyle || 'normal',
-    textAlign: isRtl ? (style.textAlign || 'right') : (style.textAlign || 'center'),
+    textAlign,
     direction: isRtl ? 'rtl' : 'ltr',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     writingMode: 'horizontal-tb',
     unicodeBidi: isRtl ? 'isolate' : 'normal',
     textDecoration: style.textDecoration || 'none',
+    ...(hs != null && hs !== 1
+      ? {
+          transform: `scaleX(${hs})`,
+          transformOrigin: textAlign === 'left' ? 'left center' : textAlign === 'right' ? 'right center' : 'center center',
+        }
+      : {}),
   }
 }
 

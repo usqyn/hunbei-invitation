@@ -83,6 +83,10 @@ export interface PsdLayerPreview {
   textAlign?: 'left' | 'center' | 'right' | 'justify'
   lineHeight?: number
   letterSpacing?: number
+  /** PSD horizontalScale：文字水平缩放（0-1，如 0.876 = 横向压扁 87.6%），1 或未设置省略 */
+  horizontalScale?: number
+  /** 伪粗体（PS fauxBold，字体本身不含 Bold 字重）→ bold 近似 */
+  fontWeight?: 'normal' | 'bold'
   strokeColor?: string
   strokeWidth?: number
   /** 图层样式投影（文字层：从 dropShadow 效果映射） */
@@ -1489,8 +1493,12 @@ export async function flattenPsdLayers(
         const strokeColor = toHex6(colorToHex(style?.strokeColor)) || 'transparent'
         const strokeWidth = style?.outlineWidth ? Math.round(style.outlineWidth) : 0
         const justification = mapJustification(textData.paragraphStyle?.justification)
-        // tracking 单位 1/1000 em，与编辑器 letterSpacing 语义一致（RTL 由现有链路强制 0）
-        const tracking = style?.tracking != null ? Math.round(style.tracking) : 0
+        // tracking 单位 1/1000 em。编辑器 letterSpacing 语义 = 0.01em（默认 2 = 0.02em，
+        // admin 画布渲染时 ×10 转 Fabric charSpacing 的 1/1000 em 单位）。
+        // 因此必须除以 10 换算：PSD tracking -20（-0.02em）→ letterSpacing -2。
+        // 直接透传会被解读成 -0.2em，字间距比 PSD 紧 10 倍，中文挤成一团（已修复）。
+        // RTL 由现有链路强制 0（哈语连写脚本加字间距会断开连字）
+        const tracking = style?.tracking != null ? Math.round(style.tracking / 10) : 0
         // leading → lineHeight 比值（行高钳制到可渲染范围；单行文本行高不影响渲染，钳制但不告警）
         const { value: lineHeight, clamped } = resolveLineHeight(style?.leading, effectiveFontSizePt, style?.autoLeading)
         if (clamped && text.includes('\n')) {
@@ -1551,6 +1559,13 @@ export async function flattenPsdLayers(
           textAlign: justification,
           lineHeight,
           letterSpacing: tracking || 0,
+          // 文字水平缩放（如 0.876 = 横向压扁 12.4%），admin 预览用 Fabric scaleX 还原
+          horizontalScale:
+            style?.horizontalScale != null && style.horizontalScale !== 1
+              ? Math.round(style.horizontalScale * 1000) / 1000
+              : undefined,
+          // PS 伪粗体：字体无 Bold 字重时的加粗描边，用 bold 近似
+          fontWeight: style?.fauxBold ? 'bold' : undefined,
           strokeColor: effStrokeColor || (strokeColor !== '#00000000' ? strokeColor : 'transparent'),
           strokeWidth: effStrokeWidth != null && effStrokeWidth > 0 ? Math.round(effStrokeWidth * 100) / 100 : strokeWidth > 0 ? strokeWidth : 0,
           shadowColor: textShadow?.color || 'transparent',

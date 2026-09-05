@@ -92,6 +92,8 @@ export interface ElementStyle {
   fontSize: number
   spacing: number
   lineHeight: number
+  /** PS 文字水平缩放（0-1，如 0.876 = 横向压扁 87.6%）；1 或缺省不缩放 */
+  horizontalScale?: number
   fontWeight?: 'normal' | 'bold'
   fontStyle?: 'normal' | 'italic'
   textAlign?: 'left' | 'center' | 'right'
