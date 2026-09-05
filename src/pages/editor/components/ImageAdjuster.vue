@@ -55,7 +55,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
-import { resolveUrl, resolveCloudUrl, resolveCloudUrlSync, isCloudUrl, tempHttpsToCloudFileId } from '@/utils/url'
+import { resolveCloudUrl, resolveCloudUrlSync, isCloudUrl, tempHttpsToCloudFileId } from '@/utils/url'
 
 const props = defineProps<{
   visible: boolean
@@ -74,28 +74,60 @@ const emit = defineEmits<{
   (e: 'cancel'): void
 }>()
 
-// 蒙板形状图解析为 http(s)：CSS mask-image 仅接受 http(s)，cloud:// / wxfile:// 真机加载
-// 失败会把预览渲染成全透明。解析结果写入 resolvedMaskSrc 触发 cropStyle 重算。
+// 蒙板形状图 → data URL。
+// 关键：CSS mask-image 在真机上加载网络 https 同样受 downloadFile 白名单限制，
+// 且 mask 图加载失败时按 CSS 规范元素被「全遮」（alpha=0）→ 预览全黑。
+// 唯一可靠通道与 CloudImage 一致：cloud://（或 tcb https 反推 fileID）走
+// wx.cloud.downloadFile 下载 → readFile 转 base64 data URL 内联（免白名单）。
+// 解析失败/未就绪时 resolvedMaskSrc 保持空串，cropStyle 不应用遮罩（矩形显示，
+// 图片始终可见），成品合成不受影响（合成走页面 canvas，不依赖这里的预览 mask）。
 const resolvedMaskSrc = ref('')
-watch(
-  () => props.maskSrc,
-  async (src: string) => {
-    if (!src) { resolvedMaskSrc.value = ''; return }
-    if (/^https?:\/\//.test(src)) { resolvedMaskSrc.value = src; return }
-    if (isCloudUrl(src)) {
-      const cached = resolveCloudUrlSync(src)
-      if (cached && !isCloudUrl(cached)) { resolvedMaskSrc.value = cached; return }
-      try {
-        const u = await resolveCloudUrl(src)
-        resolvedMaskSrc.value = u && !isCloudUrl(u) ? u : ''
-      } catch {
-        resolvedMaskSrc.value = ''
-      }
+async function resolveMaskSrc(src: string) {
+  resolvedMaskSrc.value = ''
+  if (!src) return
+  try {
+    if (src.startsWith('data:')) {
+      resolvedMaskSrc.value = src
       return
     }
-    // 其它协议（如 wxfile://）直接透传，成败由浏览器决定
-    resolvedMaskSrc.value = src
-  },
+    // 1) 拿到本地临时路径
+    let localPath = ''
+    if (/^(wxfile|file):\/\//i.test(src) || /^http:\/\/tmp\//i.test(src)) {
+      localPath = src
+    } else {
+      const fileId = isCloudUrl(src) ? src : tempHttpsToCloudFileId(src)
+      if (fileId) localPath = await downloadCloudToTemp(fileId)
+    }
+    if (!localPath) return
+    // #ifdef MP-WEIXIN
+    // 超大蒙版图 base64 会超限，预判放弃遮罩（矩形显示），不做无效转换
+    let fileSize = 0
+    try { fileSize = wx.getFileSystemManager().statSync(localPath).size || 0 } catch { fileSize = 0 }
+    if (fileSize > 3 * 1024 * 1024) {
+      console.warn('[adjuster] 蒙版图过大(' + Math.round(fileSize / 1024) + 'KB)，预览不遮罩')
+      return
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      wx.getFileSystemManager().readFile({
+        filePath: localPath,
+        encoding: 'base64',
+        success: (r: any) => resolve(`data:image/png;base64,${r.data}`),
+        fail: reject,
+      })
+    })
+    resolvedMaskSrc.value = dataUrl
+    // #endif
+    // #ifndef MP-WEIXIN
+    resolvedMaskSrc.value = localPath
+    // #endif
+  } catch (e) {
+    console.warn('[adjuster] 蒙版形状图加载失败，预览降级为矩形（成品不受影响）:', String(src).slice(0, 60), e)
+    resolvedMaskSrc.value = ''
+  }
+}
+watch(
+  () => props.maskSrc,
+  (src: string) => { void resolveMaskSrc(src) },
   { immediate: true }
 )
 
@@ -249,17 +281,6 @@ async function loadImageInfo(url: string) {
     imgInfo.value = { w: 0, h: 0, path: '' }
     return
   }
-  // 与 CloudImage 组件一致：相对路径/cloud:// 先解析为可加载的 URL，
-  // https 临时链接可能过期，失败时走 wx.cloud.downloadFile 兜底
-  let src = resolveUrl(url)
-  if (isCloudUrl(src)) {
-    try {
-      src = await resolveCloudUrl(src)
-    } catch {
-      /* 保留原值，走 downloadFile 兜底 */
-    }
-  }
-  currentUrl.value = src
   const getInfo = (s: string) =>
     new Promise<{ w: number; h: number; path: string }>((resolve, reject) => {
       uni.getImageInfo({
@@ -268,37 +289,67 @@ async function loadImageInfo(url: string) {
         fail: reject,
       })
     })
-  try {
-    imgInfo.value = await getInfo(src)
-    return
-  } catch {
-    // 真机上 uni.getImageInfo 加载云存储 https 需要下载域名白名单，未配置必失败；
-    // 临时签名 https 过期同样失败。两者都反推 fileID 走 wx.cloud.downloadFile
-    // 云通道兜底（免白名单，与 CloudImage 的 data URL 降级同源）
-    const fileId = isCloudUrl(src) ? src : tempHttpsToCloudFileId(src)
-    if (fileId) {
-      try {
-        const tempUrl = await downloadCloudToTemp(fileId)
-        currentUrl.value = tempUrl
-        imgInfo.value = await getInfo(tempUrl)
-        return
-      } catch {
-        /* 兜底也失败 */
+
+  // 通道按可靠性/速度排序，逐个尝试，任一成功即返回：
+  //   ① 本地临时路径 / data URL（chooseMedia 选的新照片，必可用）
+  //   ② https 签名链接（有缓存时的快路径；真机无 downloadFile 白名单会失败）
+  //   ③ wx.cloud.downloadFile 云通道（免白名单，与 CloudImage 同源，真机兜底）
+  // cloud:// 绝不直接塞给 <image>（image 组件不支持该协议，只会渲染失败黑块）
+  const isLocal = (u: string) =>
+    /^(wxfile|file):\/\//i.test(u) || /^http:\/\/tmp\//i.test(u) || u.startsWith('data:')
+  const channels: Array<{ kind: 'direct' | 'cloud'; src: string }> = []
+
+  if (isLocal(url)) {
+    channels.push({ kind: 'direct', src: url })
+  } else {
+    const fileId = isCloudUrl(url) ? url : tempHttpsToCloudFileId(url)
+    if (isCloudUrl(url)) {
+      // cloud://：先试缓存/换取的 https 快路径，再试云通道
+      let https = ''
+      const cached = resolveCloudUrlSync(url)
+      if (cached && !isCloudUrl(cached)) https = cached
+      if (!https) {
+        try {
+          const u = await resolveCloudUrl(url)
+          if (u && !isCloudUrl(u)) https = u
+        } catch { /* 换取失败，走云通道 */ }
       }
+      if (https) channels.push({ kind: 'direct', src: https })
+      if (fileId) channels.push({ kind: 'cloud', src: fileId })
+    } else if (/^https?:\/\//.test(url)) {
+      channels.push({ kind: 'direct', src: url })
+      if (fileId) channels.push({ kind: 'cloud', src: fileId })
+    } else {
+      channels.push({ kind: 'direct', src: url })
+    }
+  }
+
+  for (const ch of channels) {
+    try {
+      const renderSrc = ch.kind === 'cloud' ? await downloadCloudToTemp(ch.src) : ch.src
+      const info = await getInfo(renderSrc)
+      currentUrl.value = renderSrc
+      imgInfo.value = info
+      return
+    } catch (e) {
+      console.warn('[adjuster] 图片通道失败:', ch.kind, String(ch.src).slice(0, 60), e)
     }
   }
   // 全部失败：清空 imgInfo，避免用过期的旧 path 裁剪出黑图
   imgInfo.value = { w: 0, h: 0, path: '' }
-  console.warn('[adjuster] loadImageInfo 全部失败: src=', String(src).slice(0, 80))
+  console.warn('[adjuster] loadImageInfo 全部失败: url=', String(url).slice(0, 80))
   uni.showToast({ title: '图片加载失败，请重试', icon: 'none' })
 }
 
 function reset() {
-  currentUrl.value = props.imageUrl || ''
+  const url = props.imageUrl || ''
+  // cloud:// 不能直接给 <image>（协议不支持，渲染失败黑块）；先清空，
+  // loadImageInfo 拿到 https/本地路径后再赋值
+  currentUrl.value = isCloudUrl(url) ? '' : url
   scale.value = 1
   offsetX.value = 0
   offsetY.value = 0
-  loadImageInfo(currentUrl.value)
+  loadImageInfo(url)
 }
 
 watch(
