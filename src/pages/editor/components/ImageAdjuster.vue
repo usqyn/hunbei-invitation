@@ -274,6 +274,8 @@ function onTouchStart(e: any) {
       type: 'pinch',
       dist,
       scale: scale.value,
+      midX,
+      midY,
       relX: (midX - (viewW.value / 2 + offsetX.value)) / drawW.value,
       relY: (midY - (viewH.value / 2 + offsetY.value)) / drawH.value,
     }
@@ -409,7 +411,16 @@ function renderCrop(): Promise<string> {
           resolve('')
           return
         }
-        console.log('[ImageAdjuster] 裁剪参数 sx,sy,sw,sh=', Math.round(sx), Math.round(sy), Math.round(sw), Math.round(sh), 'canvas=', Math.round(viewW.value * 3), 'x', Math.round(viewH.value * 3))
+        console.log('[ImageAdjuster] 裁剪诊断',
+          '原图', imgInfo.value.w + 'x' + imgInfo.value.h,
+          '窗口', Math.round(viewW.value) + 'x' + Math.round(viewH.value),
+          'scale', scale.value.toFixed(2),
+          'offset', Math.round(offsetX.value) + ',' + Math.round(offsetY.value),
+          'cover', coverScale.value.toFixed(3),
+          'draw', Math.round(drawW.value) + 'x' + Math.round(drawH.value),
+          'imgLeft/Top', Math.round(imgLeft) + ',' + Math.round(imgTop),
+          '→ sx,sy,sw,sh=', Math.round(sx), Math.round(sy), Math.round(sw), Math.round(sh),
+          'canvas', Math.round(viewW.value * 3) + 'x' + Math.round(viewH.value * 3))
 
         const loadImg = (src: string) =>
           new Promise<any>((ok, fail) => {
