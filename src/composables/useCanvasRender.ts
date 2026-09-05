@@ -274,6 +274,15 @@ export function useCanvasRender(options: {
       const mask = el.mask ?? el.style?.mask
       if (mask === 'circle') {
         style.borderRadius = '50%'
+      } else if (mask === 'rounded') {
+        // rounded：形状本应烘焙在合成后的 PNG alpha 通道；此处加 CSS border-radius 兜底，
+        // 即使真机合成失败也能显示圆角（不保证原模板的内缩边距，但至少是圆角）。
+        // borderRadius 存的是 canvas px，按 canvas 宽度换算为 rpx（与 adjusterTargetRadius 一致）。
+        const br = el.borderRadius ?? el.style?.borderRadius
+        if (br) {
+          const cw = Math.max(canvasWidth.value, 1)
+          style.borderRadius = Math.round((br * 750) / cw) + 'rpx'
+        }
       } else if (mask === 'alpha') {
         // WXSS mask-image 不支持 cloud:// 协议：真机上 mask 加载失败会把整个元素渲染成
         // 全透明（占位在、可点击、但不可见）。未换图的元素形状已烘焙在图片自身 alpha 通道，
@@ -462,7 +471,8 @@ export function useCanvasRender(options: {
     if (mask === 'circle') {
       s += ';border-radius:50%;overflow:hidden'
     } else if (br) {
-      s += `;border-radius:${br}rpx;overflow:hidden`
+      const cw = Math.max(canvasWidth.value, 1)
+      s += `;border-radius:${Math.round((br * 750) / cw)}rpx;overflow:hidden`
     }
 
     // alpha 蒙版：仅在换过图（有 maskSrc）时用原图 alpha 作为 CSS mask 兜底。

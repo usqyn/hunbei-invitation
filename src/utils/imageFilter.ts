@@ -152,18 +152,20 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
     throw new Error('offscreen canvas 不可用')
   }
   const maskPath = await downloadToTemp(maskSrcUrl)
+  console.log('[composite] maskSrc=', maskSrcUrl.slice(0, 60), 'maskLocal=', maskPath)
   const canvas = wx.createOffscreenCanvas({ type: '2d' })
   const ctx = canvas.getContext('2d') as any
   const loadImg = (src: string) => new Promise<any>((resolve, reject) => {
     const img = canvas.createImage()
     img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('图片加载失败: ' + String(src).slice(0, 60)))
+    img.onerror = (e: any) => reject(new Error('图片加载失败: ' + String(src).slice(0, 60) + ' ' + JSON.stringify(e)))
     img.src = src
   })
   const [newImg, maskImg] = await Promise.all([loadImg(newImagePath), loadImg(maskPath)])
   const W = maskImg.width
   const H = maskImg.height
   if (!W || !H) throw new Error('蒙版图尺寸异常')
+  console.log('[composite] 新图', newImg.width + 'x' + newImg.height, '蒙版', W + 'x' + H)
 
   canvas.width = W
   canvas.height = H
@@ -176,17 +178,38 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
   ctx.globalCompositeOperation = 'destination-in'
   ctx.drawImage(maskImg, 0, 0, W, H)
 
-  const dataUrl = canvas.toDataURL('image/png')
-  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
-  const filePath = `${wx.env.USER_DATA_PATH}/masked_${Date.now()}_${Math.floor(Math.random() * 1e4)}.png`
-  await new Promise<void>((resolve, reject) => {
-    wx.getFileSystemManager().writeFile({
-      filePath,
-      data: base64,
-      encoding: 'base64',
-      success: () => resolve(),
-      fail: (e: any) => reject(e),
-    })
+  // 用 wx.canvasToTempFilePath 导出（比 toDataURL+writeFile 在真机更可靠，alpha 不会丢失）
+  const filePath = await new Promise<string>((resolve, reject) => {
+    wx.canvasToTempFilePath({
+      canvas,
+      fileType: 'png',
+      success: (r: any) => {
+        console.log('[composite] 导出成功', r.tempFilePath)
+        resolve(r.tempFilePath)
+      },
+      fail: (e: any) => {
+        console.warn('[composite] canvasToTempFilePath 失败，尝试 toDataURL 兜底:', e)
+        // 兜底：toDataURL + writeFile
+        try {
+          const dataUrl = canvas.toDataURL('image/png')
+          if (!dataUrl || dataUrl.length < 100) {
+            reject(new Error('toDataURL 也失败，导出为空'))
+            return
+          }
+          const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+          const fp = `${wx.env.USER_DATA_PATH}/masked_${Date.now()}_${Math.floor(Math.random() * 1e4)}.png`
+          wx.getFileSystemManager().writeFile({
+            filePath: fp,
+            data: base64,
+            encoding: 'base64',
+            success: () => resolve(fp),
+            fail: (e2: any) => reject(e2),
+          })
+        } catch (e2) {
+          reject(e2)
+        }
+      },
+    } as any)
   })
   return filePath
   // #endif
