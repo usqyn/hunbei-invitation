@@ -1385,6 +1385,7 @@ async function onAdjusterConfirm(tempPath: string) {
   if ((mask === 'alpha' || mask === 'rounded') && el && !(el as any).maskSrc) {
     ;(el as any).maskSrc = el.text
   }
+  console.log('[onAdjusterConfirm]', 'idx=', idx, 'mask=', mask, 'el.text=', String(el?.text).slice(0, 60), 'maskSrc=', String((el as any)?.maskSrc).slice(0, 60))
   uni.showLoading({ title: '上传中 0%' })
   try {
     // 形状蒙版换图：先把新图与原模板图形状离屏合成（蒙版烘焙进像素，任何渲染器有效）

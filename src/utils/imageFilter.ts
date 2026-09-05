@@ -211,7 +211,7 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
 
   // toDataURL 失败时回退 canvasToTempFilePath
   if (!filePath) {
-    filePath = await new Promise<string>((resolve, reject) => {
+    const tmpPath = await new Promise<string>((resolve, reject) => {
       wx.canvasToTempFilePath({
         canvas,
         fileType: 'png',
@@ -222,6 +222,29 @@ export async function compositeImageWithMask(newImagePath: string, maskSrcUrl: s
         fail: (e: any) => reject(new Error('导出失败: ' + JSON.stringify(e))),
       } as any)
     })
+    // 确保返回路径带 .png 扩展名，否则 uploadImage 会走压缩转 JPEG 丢 alpha
+    if (!/\.png$/i.test(tmpPath)) {
+      const fp = `${wx.env.USER_DATA_PATH}/masked_${Date.now()}_${Math.floor(Math.random() * 1e4)}.png`
+      const buf = await new Promise<ArrayBuffer>((resolve, reject) => {
+        wx.getFileSystemManager().readFile({
+          filePath: tmpPath,
+          success: (r: any) => resolve(r.data),
+          fail: reject,
+        })
+      })
+      await new Promise<void>((resolve, reject) => {
+        wx.getFileSystemManager().writeFile({
+          filePath: fp,
+          data: buf,
+          success: () => resolve(),
+          fail: reject,
+        })
+      })
+      filePath = fp
+      console.log('[composite] 已复制为 .png 路径', fp)
+    } else {
+      filePath = tmpPath
+    }
   }
 
   return filePath
