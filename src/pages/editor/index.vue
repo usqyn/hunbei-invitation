@@ -393,10 +393,13 @@
     </view>
 
   </view>
+
+  <!-- 蒙版合成用隐藏 canvas（真机上离屏 canvas 第二次调用会黑图，改用页面 canvas） -->
+  <canvas type="2d" id="composite-canvas" class="composite-canvas"></canvas>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick, watch, getCurrentInstance } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
@@ -432,6 +435,9 @@ const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
 const worksStore = useWorksStore()
 const userStore = useUserStore()
+
+// 必须在 setup 同步顶层取（回调内取返回 null）
+const compInstance = getCurrentInstance()
 
 const { haptic, feedbackSuccess, feedbackError, feedbackWarning } = useFeedback()
 
@@ -1374,6 +1380,57 @@ function openImageAdjuster(idx: number, imageUrl: string) {
   adjusterVisible.value = true
 }
 
+// 用页面隐藏 canvas 做蒙版合成（真机上 wx.createOffscreenCanvas 第二次调用会黑图）
+async function compositeWithPageCanvas(newImagePath: string, maskSrcUrl: string): Promise<string> {
+  const { downloadToTemp } = await import('@/utils/imageFilter')
+  const maskPath = await downloadToTemp(maskSrcUrl)
+  console.log('[composite-page] maskSrc=', maskSrcUrl.slice(0, 60), 'maskLocal=', maskPath)
+
+  await nextTick()
+  const canvas: any = await new Promise((resolve, reject) => {
+    const query = uni.createSelectorQuery().in(compInstance?.proxy)
+    query.select('#composite-canvas').fields({ node: true, size: true }).exec((res: any) => {
+      const node = res && res[0] ? res[0].node : null
+      if (node) resolve(node)
+      else reject(new Error('composite-canvas 节点未找到'))
+    })
+  })
+
+  const ctx = canvas.getContext('2d')
+  const loadImg = (src: string) => new Promise<any>((ok, fail) => {
+    const img = canvas.createImage ? canvas.createImage() : new Image()
+    img.onload = () => ok(img)
+    img.onerror = fail
+    img.src = src
+  })
+  const [newImg, maskImg] = await Promise.all([loadImg(newImagePath), loadImg(maskPath)])
+  const W = maskImg.width
+  const H = maskImg.height
+  if (!W || !H) throw new Error('蒙版图尺寸异常')
+  console.log('[composite-page] 新图', newImg.width + 'x' + newImg.height, '蒙版', W + 'x' + H)
+
+  canvas.width = W
+  canvas.height = H
+  const scale = Math.max(W / newImg.width, H / newImg.height)
+  const dw = newImg.width * scale
+  const dh = newImg.height * scale
+  ctx.clearRect(0, 0, W, H)
+  ctx.drawImage(newImg, (W - dw) / 2, (H - dh) / 2, dw, dh)
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(maskImg, 0, 0, W, H)
+
+  const tempFilePath = await new Promise<string>((resolve, reject) => {
+    uni.canvasToTempFilePath({
+      canvas,
+      fileType: 'png',
+      success: (r: any) => resolve(r.tempFilePath),
+      fail: (e: any) => reject(e),
+    } as any)
+  })
+  console.log('[composite-page] 导出成功', tempFilePath)
+  return tempFilePath
+}
+
 // 调节完成：上传裁剪后的图片并填充到元素
 async function onAdjusterConfirm(tempPath: string) {
   const idx = adjusterElementIndex
@@ -1393,7 +1450,7 @@ async function onAdjusterConfirm(tempPath: string) {
     if ((mask === 'alpha' || mask === 'rounded') && (el as any)?.maskSrc) {
       try {
         uni.showLoading({ title: '处理蒙版...' })
-        pathToUpload = await compositeImageWithMask(tempPath, (el as any).maskSrc)
+        pathToUpload = await compositeWithPageCanvas(tempPath, (el as any).maskSrc)
       } catch (e) {
         console.warn('[editor] 蒙版合成失败，退回原图上传（渲染时仍有 CSS mask 兜底）:', e)
         uni.showToast({ title: '蒙版处理失败，图片可能不带形状，请重试', icon: 'none' })
@@ -2049,6 +2106,15 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.composite-canvas {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
 .editor-page {
   display: flex;
   flex-direction: column;
