@@ -1,4 +1,6 @@
 // ============ 图片滤镜工具 ============
+import { tempHttpsToCloudFileId } from './url'
+
 // 把元素上的滤镜字段（brightness/contrast/saturate/blur/grayscale）转为 CSS filter 字符串。
 // 在 editor 三种模式（canvas/flip/page）以及 preview 页复用，保证编辑与预览效果一致。
 //
@@ -101,6 +103,47 @@ export function buildImageCssFilterFromElement(el: FilterFields & { style?: Filt
 // 在离屏 canvas 上合成，生成自带蒙版形状的新图再上传。
 // 与 admin 端 PSD 导入 bakeClipMask 逻辑一致，合成结果对
 // webview / skyline / canvas / 导出渲染全部有效，不依赖 CSS mask-image 兼容性。
+
+/**
+ * 把任意图片来源解析为「本地可绘制路径」（供 canvas drawImage 使用）。
+ * 通道优先级：
+ *   本地路径/data URL → 直接返回
+ *   cloud:// → wx.cloud.downloadFile（免域名白名单）
+ *   云存储签名 https（tcb 主机）→ 反推 fileID → wx.cloud.downloadFile
+ *   其它 https → uni.downloadFile（需 downloadFile 白名单，最后兜底）
+ * 真机上 uni.downloadFile 加载云存储 https 需要配置合法域名，未配置必失败；
+ * 云通道按 fileID 下载，不受白名单限制。
+ */
+export function resolveLocalPath(src: string): Promise<string> {
+  if (!src) return Promise.reject(new Error('空 URL'))
+  // 本地 / data URL 直接可用
+  if (/^(wxfile|file):\/\//i.test(src) || /^http:\/\/tmp\//i.test(src) || src.startsWith('data:')) {
+    return Promise.resolve(src)
+  }
+  // #ifdef MP-WEIXIN
+  const viaCloud = (fileID: string) =>
+    new Promise<string>((resolve, reject) => {
+      if (typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.downloadFile !== 'function') {
+        reject(new Error('wx.cloud.downloadFile 不可用'))
+        return
+      }
+      wx.cloud.downloadFile({
+        fileID,
+        success: (r: any) => (r.tempFilePath ? resolve(r.tempFilePath) : reject(new Error('无 tempFilePath'))),
+        fail: reject,
+      })
+    })
+  if (src.startsWith('cloud://')) return viaCloud(src)
+  if (/^https?:\/\//i.test(src)) {
+    // 云存储签名链接：优先反推 fileID 走云通道（免白名单）
+    try {
+      const fileId = tempHttpsToCloudFileId(src)
+      if (fileId) return viaCloud(fileId)
+    } catch { /* 反推失败走 https 兜底 */ }
+  }
+  // #endif
+  return downloadToTemp(src)
+}
 
 /** 下载任意资源 URL 到本地临时文件（cloud:// 走 cloud.downloadFile，免域名白名单） */
 export function downloadToTemp(url: string): Promise<string> {

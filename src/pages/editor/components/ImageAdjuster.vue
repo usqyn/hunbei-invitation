@@ -613,37 +613,40 @@ async function onConfirm() {
 
 .adjuster-header {
   position: relative;
-  height: 48px;
+  /* 避开状态栏/刘海（--status-bar-height 由 uni-app 注入，小程序可用） */
+  height: calc(48px + var(--status-bar-height, 0px));
+  padding-top: var(--status-bar-height, 0px);
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding-left: 16px;
+  padding-right: 16px;
   box-sizing: border-box;
   flex-shrink: 0;
 }
 
-/* 左上角返回按钮：半透明胶囊底 + 箭头 + 文字，位置醒目 */
+/* 左上角返回按钮：实心胶囊底 + 箭头 + 文字，位置醒目 */
 .adjuster-back {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  height: 34px;
-  padding: 0 14px 0 10px;
-  border-radius: 17px;
-  background: rgba(255, 255, 255, 0.18);
+  height: 36px;
+  padding: 0 16px 0 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
   box-sizing: border-box;
 }
 
 .back-arrow {
-  color: #ffffff;
-  font-size: 24px;
+  color: #111111;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1;
   margin-right: 2px;
 }
 
 .back-text {
-  color: #ffffff;
+  color: #111111;
   font-size: 15px;
   font-weight: 600;
   line-height: 1;
@@ -653,6 +656,9 @@ async function onConfirm() {
   position: absolute;
   left: 0;
   right: 0;
+  top: var(--status-bar-height, 0px);
+  height: 48px;
+  line-height: 48px;
   text-align: center;
   color: #fff;
   font-size: 17px;

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 作品封面绘制器：把当前编辑作品（canvas 模式）用 canvas 2d 绘制成一张图片，
  * 用作分享页默认封面（用户编辑后的请柬画面，而非模板原始封面）。
  *
@@ -6,7 +6,7 @@
  * （基准 canvasSize，通常宽 750）；rpx 样式按 width/750 换算。
  * 仅支持 canvas 模式（page/flip 模式回退模板封面）。
  */
-import { downloadToTemp } from './imageFilter'
+import { resolveLocalPath } from './imageFilter'
 
 interface DrawElement {
   type?: string
@@ -116,7 +116,7 @@ async function drawBackground(ctx: any, bg: DrawBackground | undefined, W: numbe
   const bgUrl = bg.image || bg.imageUrl
   if (bg.type === 'image' && bgUrl) {
     try {
-      const local = await downloadToTemp(bgUrl)
+      const local = await resolveLocalPath(bgUrl)
       const img = await loadCanvasImage(canvas, local)
       ctx.save()
       ctx.globalAlpha = typeof bg.imageOpacity === 'number' ? bg.imageOpacity : 1
@@ -140,7 +140,7 @@ async function drawImageElement(ctx: any, el: DrawElement, canvas: any, rpx: num
   const h = el.height
   let img: any
   try {
-    const local = await downloadToTemp(el.text)
+    const local = await resolveLocalPath(el.text)
     img = await loadCanvasImage(canvas, local)
   } catch (e) {
     console.warn('[work-cover] 图片下载失败，跳过:', String(el.text).slice(0, 60), e)
@@ -170,7 +170,7 @@ async function drawImageElement(ctx: any, el: DrawElement, canvas: any, rpx: num
   } else if (mask === 'alpha' && el.maskSrc) {
     // 形状烘焙在 maskSrc 的 alpha 通道：先正常画图，再 destination-in 叠蒙版
     try {
-      const maskLocal = await downloadToTemp(el.maskSrc)
+      const maskLocal = await resolveLocalPath(el.maskSrc)
       alphaMaskImg = await loadCanvasImage(canvas, maskLocal)
     } catch (e) {
       console.warn('[work-cover] 蒙版下载失败，按矩形绘制:', e)

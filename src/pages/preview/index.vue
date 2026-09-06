@@ -127,6 +127,17 @@
           <CloudImage class="rendered-image" :src="editorStore.renderedImage" mode="widthFix" custom-class="rendered-image" :style="previewImageWidthStyle" :custom-style="previewImageWidthStyle" />
         </view>
         <view v-else class="preview-card preview-card--canvas" :style="[canvasCardStyle, canvasBackgroundStyle]">
+          <!-- 独立背景图层（cloud:// 直连），与编辑器渲染一致 -->
+          <CloudImage
+            v-if="canvasBgImageUrl"
+            class="preview-bg-image"
+            :style="canvasBgLayerStyle"
+            :custom-style="canvasBgLayerStyle"
+            :src="canvasBgImageUrl"
+            :mode="canvasBgImageScale"
+            :fade-show="false"
+            custom-class="preview-bg-image"
+          />
           <view
             v-for="(el, idx) in editorStore.editableElements"
             :key="idx"
@@ -345,6 +356,9 @@ const {
   isCanvasMode,
   canvasCardStyle,
   canvasBackgroundStyle,
+  canvasBgImageUrl,
+  canvasBgImageScale,
+  canvasBgImageOpacity,
   updateCardHeight,
   getCanvasElementStyle,
   getTextStyle,
@@ -355,6 +369,18 @@ const {
   getCanvasSize: () => editorStore.canvasSize,
   getBackground: () => editorStore.background as any,
 })
+
+// canvas 模式背景图层样式：独立 CloudImage 绝对铺满（cloud:// 直连），
+// 与编辑器一致，避免逐元素渲染分支丢失背景图
+const canvasBgLayerStyle = computed(() => ({
+  position: 'absolute' as const,
+  left: '0',
+  top: '0',
+  width: '100%',
+  height: '100%',
+  opacity: String(canvasBgImageOpacity.value ?? 1),
+  zIndex: '0',
+}))
 
 const displayTitle = computed(() => {
   const g = templateStore.basicInfo.groomName
