@@ -520,6 +520,32 @@ async function refreshChunkIndividually(chunk: BatchWaiter[]): Promise<void> {
   }))
 }
 
+// 云函数 admin 通道换取（wx-server-sdk 的 getTempFileURL 绕过云存储安全规则，
+// 可读取他人上传的文件——分享接收方场景必需）。批量失败时回退逐个换取。
+async function resolveChunkViaCloud(chunk: BatchWaiter[]): Promise<void> {
+  try {
+    if (_batchEndpointBroken) {
+      await refreshChunkIndividually(chunk)
+      return
+    }
+    const map = await getBatchRefreshFn()(chunk.map(w => w.fileID))
+    for (const w of chunk) {
+      const u = map.get(w.fileID)
+      if (u) {
+        setCachedCloudUrl(w.fileID, u)
+        w.resolve(u)
+      } else {
+        w.reject(new Error('批量刷新 URL 缺少结果: ' + w.fileID))
+      }
+    }
+  } catch (e) {
+    // 批量路由不可用 → 标记并回退逐个换取（本批立即重试）
+    _batchEndpointBroken = true
+    console.warn('[cloud-url] 批量刷新失败，回退逐个换取:', e)
+    await refreshChunkIndividually(chunk)
+  }
+}
+
 function flushCloudUrlBatch(): void {
   _batchTimer = null
   const batch = _batchQueue
@@ -530,42 +556,42 @@ function flushCloudUrlBatch(): void {
     const chunk = batch.slice(i, i + BATCH_MAX_SIZE)
     void (async () => {
       // 1) 优先客户端直连 wx.cloud.getTempFileURL（无云函数依赖、无冷启动）
+      let directMap: Map<string, string> | null = null
       try {
-        const directMap = await getTempFileUrlsDirect()(chunk.map(w => w.fileID))
+        directMap = await getTempFileUrlsDirect()(chunk.map(w => w.fileID))
+      } catch {
+        // 直连不可用（非 MP 环境或 wx.cloud 未初始化），走云函数链路
+        directMap = null
+      }
+
+      if (directMap) {
+        const missing: BatchWaiter[] = []
         for (const w of chunk) {
           const u = directMap.get(w.fileID)
           if (u) {
             setCachedCloudUrl(w.fileID, u)
             w.resolve(u)
+            _inflightCloudUrls.delete(w.fileID)
           } else {
-            // 该 fileID 换取失败（可能文件不存在/无权限）
-            w.reject(new Error('getTempFileURL 缺少结果: ' + w.fileID))
+            // 直连未返回该 fileID：分享接收方场景下多为云存储安全规则拒绝
+            // （客户端 getTempFileURL 只能读本人有权限的文件，他人上传的
+            // user-uploads 文件 status≠0）。回退云函数 admin 通道再试。
+            missing.push(w)
           }
+        }
+        if (!missing.length) return
+        console.warn('[cloud-url] 客户端直连缺失', missing.length, '个 fileID，回退云函数 admin 通道（跨用户分享）')
+        try {
+          await resolveChunkViaCloud(missing)
+        } finally {
+          for (const w of missing) _inflightCloudUrls.delete(w.fileID)
         }
         return
-      } catch {
-        // 直连不可用（非 MP 环境或 wx.cloud 未初始化），继续走云函数链路
       }
+
+      // 2) 直连整体不可用 → 云函数链路
       try {
-        if (_batchEndpointBroken) {
-          await refreshChunkIndividually(chunk)
-          return
-        }
-        const map = await getBatchRefreshFn()(chunk.map(w => w.fileID))
-        for (const w of chunk) {
-          const u = map.get(w.fileID)
-          if (u) {
-            setCachedCloudUrl(w.fileID, u)
-            w.resolve(u)
-          } else {
-            w.reject(new Error('批量刷新 URL 缺少结果: ' + w.fileID))
-          }
-        }
-      } catch (e) {
-        // 批量路由不可用 → 标记并回退逐个换取（本批立即重试）
-        _batchEndpointBroken = true
-        console.warn('[cloud-url] 批量刷新失败，回退逐个换取:', e)
-        await refreshChunkIndividually(chunk)
+        await resolveChunkViaCloud(chunk)
       } finally {
         for (const w of chunk) _inflightCloudUrls.delete(w.fileID)
       }
