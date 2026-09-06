@@ -5,7 +5,7 @@ defineLocale('kk', {
   'cat.wedding': 'توي تاماشا',
   'cat.engagement': 'قۇدا تۇسۋ',
   'cat.consultation-tea': 'اقلداسۋ شايى',
-  'cat.festival': 'سۇننەت توي',
+  'cat.festival': ' سۇندەت توي ',
   'cat.business': 'سرعا توي',
   'cat.baby': 'تۇساۋ كەسەر',
   'cat.graduation': 'وقۋ توي',
