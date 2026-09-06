@@ -667,12 +667,12 @@ export const useEditorStore = defineStore('editor', () => {
     if (data.currentFlipPageIndex != null && data.currentFlipPageIndex >= 0 && data.currentFlipPageIndex < flipPages.length) {
       currentFlipPageIndex.value = data.currentFlipPageIndex
     }
-    // 恢复渲染图（补全相对路径，cloud:// 转 https）；无渲染图时清空以触发重新生成
-    if (data.renderedImage) {
-      renderedImage.value = resolveCloudUrlSync(resolveUrl(data.renderedImage))
-    } else {
-      renderedImage.value = ''
-    }
+    // 恢复渲染图：作品恢复时一律不信任保存的 renderedImage。
+    // 它是模板原始合成快照，用户换图/改文字后即便新编辑已清空快照（见 selectMaterial/
+    // confirmTextEdit），付费用户在修复前保存的作品里仍残留旧快照；恢复后预览页优先
+    // 渲染快照 → 用户改好的照片被盖住（分享看不到照片）。作品数据始终带 elements，
+    // 逐元素渲染即为最新内容，直接清空回退渲染。
+    renderedImage.value = ''
     selectedElement.value = null
     activeSectionId.value = null
     // 重置历史，以当前作品状态为基线
