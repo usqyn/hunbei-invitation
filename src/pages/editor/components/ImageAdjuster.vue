@@ -1,11 +1,12 @@
 <template>
   <view v-if="visible" class="image-adjuster">
-    <!-- 顶部栏 -->
+    <!-- 顶部栏：左上角明显返回按钮 -->
     <view class="adjuster-header">
-      <text class="adjuster-title">调整图片</text>
-      <view class="adjuster-close" @click="onCancel">
-        <text class="close-x">✕</text>
+      <view class="adjuster-back" @click="onCancel">
+        <text class="back-arrow">‹</text>
+        <text class="back-text">返回</text>
       </view>
+      <text class="adjuster-title">调整图片</text>
     </view>
 
     <!-- 裁剪舞台（窗口外四边遮罩变暗） -->
@@ -611,32 +612,52 @@ async function onConfirm() {
 }
 
 .adjuster-header {
+  position: relative;
   height: 48px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 16px;
   box-sizing: border-box;
   flex-shrink: 0;
 }
 
+/* 左上角返回按钮：半透明胶囊底 + 箭头 + 文字，位置醒目 */
+.adjuster-back {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 14px 0 10px;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.18);
+  box-sizing: border-box;
+}
+
+.back-arrow {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  margin-right: 2px;
+}
+
+.back-text {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 .adjuster-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
   color: #fff;
   font-size: 17px;
   font-weight: 600;
-}
-
-.adjuster-close {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.close-x {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 18px;
+  pointer-events: none;
 }
 
 .adjuster-stage {
