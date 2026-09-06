@@ -17,7 +17,7 @@ export const HOME_CATEGORIES: HomeCategory[] = [
   { id: 1, name: '新婚', image: '/static/images/categories/wedding.jpg', categoryId: 'wedding' },
   { id: 2, name: '求婚', image: '/static/images/categories/proposal.jpg', categoryId: 'engagement' },
   { id: 3, name: '商量茶', image: '/static/images/categories/consultation-tea.jpg', categoryId: 'consultation-tea' },
-  { id: 4, name: ' سۇندەت توي ', image: '/static/images/categories/ceremony.jpg', categoryId: 'festival' },
+  { id: 4, name: '割礼', image: '/static/images/categories/ceremony.jpg', categoryId: 'festival' },
   { id: 5, name: '耳环礼', image: '/static/images/categories/earring.jpg', categoryId: 'business' },
   { id: 6, name: '周岁宴', image: '/static/images/categories/baby.jpg', categoryId: 'baby' },
   { id: 7, name: '升学宴', image: '/static/images/categories/graduation.jpg', categoryId: 'graduation' },
