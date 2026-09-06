@@ -138,10 +138,12 @@
       <text class="arrow">></text>
     </view>
   </view>
+  <!-- 封面生成用离屏 canvas（隐藏）：把用户编辑后的作品绘制成分享封面 -->
+  <canvas type="2d" id="work-cover-canvas" class="cover-canvas-hidden"></canvas>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, getCurrentInstance, nextTick } from 'vue'
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import { useTemplateStore } from '@/stores/template'
 import { useEditorStore } from '@/stores/editor'
@@ -155,7 +157,10 @@ import { useUserStore } from '@/stores/user'
 import { runWithExportGate } from '@/composables/useTemplateEntry'
 import { getSceneShareText } from '@/constants/share-text'
 import { request } from '@/utils/request'
+import { drawWorkCover } from '@/utils/workCover'
 import type { TemplateItem } from '@/types'
+
+const instance = getCurrentInstance()
 
 const templateStore = useTemplateStore()
 const editorStore = useEditorStore()
@@ -224,7 +229,54 @@ function initShareDefaults() {
 // 从模板 store 初始化
 onMounted(() => {
   initShareDefaults()
+  void generateWorkCover()
 })
+
+// 用户是否手动更换过封面（手动后不再用作品渲染图覆盖）
+const coverManuallyChanged = ref(false)
+
+/**
+ * 用用户编辑后的作品画面生成分享封面（canvas 模式）。
+ * 默认封面原为模板原始封面，用户换图/改字后仍显示模板图；此处把当前作品
+ * 离屏绘制成 JPG 作为默认封面，失败静默回退模板封面。
+ */
+async function generateWorkCover() {
+  try {
+    // 仅 canvas 模式（page/flip 模式结构不同，回退模板封面）
+    if (editorStore.templateType && editorStore.templateType !== 'canvas') return
+    const elements = editorStore.editableElements || []
+    if (!elements.length) return
+    const size = editorStore.canvasSize
+    if (!size?.width || !size?.height) return
+
+    await nextTick()
+    const canvas: any = await new Promise((resolve, reject) => {
+      uni.createSelectorQuery()
+        .in(instance?.proxy)
+        .select('#work-cover-canvas')
+        .fields({ node: true, size: true })
+        .exec((res: any) => {
+          const node = res && res[0] ? res[0].node : null
+          if (node) resolve(node)
+          else reject(new Error('cover canvas 未找到'))
+        })
+    })
+
+    const tempPath = await drawWorkCover(canvas, {
+      width: size.width,
+      height: size.height,
+      background: editorStore.background,
+      elements,
+    })
+    // 用户已手动换封面 / 已离开页面则不覆盖
+    if (!coverManuallyChanged.value && tempPath) {
+      coverImage.value = tempPath
+    }
+  } catch (e) {
+    // 生成失败静默回退模板封面，不影响分享流程
+    console.warn('[share] 作品封面生成失败，使用模板封面:', e)
+  }
+}
 
 // 页面加载即启用分享菜单（比 onMounted 更早，兼容分包页面）；
 // 作品页深链进入时 store 可能为空，先拉取模板详情补全封面/分类/新人名字
@@ -301,6 +353,7 @@ function onChangeCover() {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFiles && res.tempFiles.length > 0) {
+        coverManuallyChanged.value = true
         coverImage.value = res.tempFiles[0].tempFilePath
         uni.showToast({ title: '封面已更新', icon: 'success' })
       }
@@ -319,6 +372,7 @@ function onChangeCover() {
     sourceType: ['album', 'camera'],
     success: (res: any) => {
       if (res.tempFilePaths && res.tempFilePaths.length > 0) {
+        coverManuallyChanged.value = true
         coverImage.value = res.tempFilePaths[0]
         uni.showToast({ title: '封面已更新', icon: 'success' })
       }
@@ -504,6 +558,14 @@ function goToMall() {
 </script>
 
 <style lang="scss" scoped>
+.cover-canvas-hidden {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+}
 .share-page {
   min-height: 100vh;
   background: var(--color-bg-page);
